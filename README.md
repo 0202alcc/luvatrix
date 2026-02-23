@@ -17,4 +17,3 @@ See `planning.md` for the integrated Phase 1 spec and visual TLDR protocol model
 ## Repository Layout
 
 - Core engine/runtime source lives in `luvatrix_core/`.
-- A filesystem alias `luvatrix-core/` points to the same core source for clarity.
