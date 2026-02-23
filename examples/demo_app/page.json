@@ -1,0 +1,32 @@
+{
+  "page_id": "demo",
+  "viewport": {"width": 640, "height": 360},
+  "background": "#0b1020",
+  "elements": [
+    {
+      "id": "hero",
+      "svg": "assets/hero.svg",
+      "x": 40,
+      "y": 40,
+      "scale": 1.0,
+      "opacity": 1.0
+    },
+    {
+      "id": "button",
+      "svg": "assets/button.svg",
+      "x": 60,
+      "y": 240,
+      "scale": 1.0,
+      "opacity": 1.0
+    },
+    {
+      "id": "orb",
+      "svg": "assets/orb.svg",
+      "x": 420,
+      "y": 210,
+      "scale": 1.0,
+      "opacity": 0.9,
+      "animate": {"type": "float", "amp": 10, "speed": 1.5}
+    }
+  ]
+}
