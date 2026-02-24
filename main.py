@@ -9,8 +9,10 @@ import json
 from luvatrix_core.core import (
     HDIEvent,
     HDIThread,
+    EnergySafetyPolicy,
     JsonlAuditSink,
     SQLiteAuditSink,
+    SensorEnergySafetyController,
     SensorManagerThread,
     UnifiedRuntime,
     WindowMatrix,
@@ -61,6 +63,12 @@ def main() -> None:
     run.add_argument("--sensor-backend", choices=["none", "macos"], default="none")
     run.add_argument("--audit-sqlite", type=Path, default=None)
     run.add_argument("--audit-jsonl", type=Path, default=None)
+    run.add_argument("--energy-safety", choices=["off", "monitor", "enforce"], default="monitor")
+    run.add_argument("--energy-thermal-warn-c", type=float, default=85.0)
+    run.add_argument("--energy-thermal-critical-c", type=float, default=95.0)
+    run.add_argument("--energy-power-warn-w", type=float, default=45.0)
+    run.add_argument("--energy-power-critical-w", type=float, default=65.0)
+    run.add_argument("--energy-critical-streak", type=int, default=3)
 
     report = sub.add_parser("audit-report", help="Print audit summary from SQLite or JSONL sink.")
     report.add_argument("--audit-sqlite", type=Path, default=None)
@@ -94,6 +102,21 @@ def main() -> None:
                 presenter = MacOSVulkanPresenter(width=args.width, height=args.height, title="Luvatrix App")
                 target = VulkanTarget(presenter=presenter)
 
+            energy_safety = None
+            if args.energy_safety != "off":
+                energy_safety = SensorEnergySafetyController(
+                    sensor_manager=sensors,
+                    policy=EnergySafetyPolicy(
+                        thermal_warn_c=args.energy_thermal_warn_c,
+                        thermal_critical_c=args.energy_thermal_critical_c,
+                        power_warn_w=args.energy_power_warn_w,
+                        power_critical_w=args.energy_power_critical_w,
+                        critical_streak_for_shutdown=args.energy_critical_streak,
+                    ),
+                    audit_logger=audit_logger,
+                    enforce_shutdown=args.energy_safety == "enforce",
+                )
+
             runtime = UnifiedRuntime(
                 matrix=matrix,
                 target=target,
@@ -101,11 +124,13 @@ def main() -> None:
                 sensor_manager=sensors,
                 capability_decider=lambda capability: True,
                 capability_audit_logger=audit_logger,
+                energy_safety=energy_safety,
             )
             result = runtime.run_app(args.app_dir, max_ticks=args.ticks, target_fps=args.fps)
             print(
                 f"run complete: ticks={result.ticks_run} frames={result.frames_presented} "
-                f"stopped_by_target_close={result.stopped_by_target_close}"
+                f"stopped_by_target_close={result.stopped_by_target_close} "
+                f"stopped_by_energy_safety={result.stopped_by_energy_safety}"
             )
         finally:
             if audit_sink is not None and hasattr(audit_sink, "close"):

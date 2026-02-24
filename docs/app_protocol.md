@@ -107,7 +107,23 @@ Audit sinks:
 
 Audit events include capability and sensor security decisions.
 
-## 9. CI Smoke Strategy (macOS GUI)
+## 9. Energy Safety Controller
+
+Runtime can consume hardware telemetry and apply protective pacing:
+
+1. Reads `thermal.temperature` and `power.voltage_current`.
+2. Normalizes values to Celsius and Watts.
+3. Applies policy thresholds (`warn`, `critical`).
+4. In `monitor` mode: logs state transitions and throttles loop pacing.
+5. In `enforce` mode: gracefully stops app loop after sustained critical streak.
+
+CLI knobs:
+
+1. `--energy-safety off|monitor|enforce`
+2. `--energy-thermal-warn-c`, `--energy-thermal-critical-c`
+3. `--energy-power-warn-w`, `--energy-power-critical-w`
+4. `--energy-critical-streak`
+## 10. CI Smoke Strategy (macOS GUI)
 
 Use a guarded smoke job:
 

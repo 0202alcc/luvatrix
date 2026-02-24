@@ -9,6 +9,7 @@ from luvatrix_core.targets.base import RenderTarget
 
 from .app_runtime import AppRuntime
 from .display_runtime import DisplayRuntime
+from .energy_safety import EnergySafetyController
 from .hdi_thread import HDIThread
 from .sensor_manager import SensorManagerThread
 from .window_matrix import WindowMatrix
@@ -19,6 +20,7 @@ class UnifiedRunResult:
     ticks_run: int
     frames_presented: int
     stopped_by_target_close: bool
+    stopped_by_energy_safety: bool
 
 
 class UnifiedRuntime:
@@ -32,6 +34,7 @@ class UnifiedRuntime:
         sensor_manager: SensorManagerThread,
         capability_decider: Callable[[str], bool] | None = None,
         capability_audit_logger: Callable[[dict[str, object]], None] | None = None,
+        energy_safety: EnergySafetyController | None = None,
     ) -> None:
         self._matrix = matrix
         self._target = target
@@ -43,6 +46,7 @@ class UnifiedRuntime:
             capability_audit_logger=capability_audit_logger,
         )
         self._display_runtime = DisplayRuntime(matrix=matrix, target=target)
+        self._energy_safety = energy_safety
         self._last_error: Exception | None = None
 
     @property
@@ -72,6 +76,7 @@ class UnifiedRuntime:
         ticks_run = 0
         frames_presented = 0
         stopped_by_target_close = False
+        stopped_by_energy_safety = False
         started = False
         self._target.start()
         started = True
@@ -88,13 +93,20 @@ class UnifiedRuntime:
                 now = time.perf_counter()
                 dt = max(0.0, now - last)
                 last = now
+                throttle_multiplier = 1.0
+                if self._energy_safety is not None:
+                    decision = self._energy_safety.evaluate()
+                    throttle_multiplier = max(1.0, decision.throttle_multiplier)
+                    if decision.should_shutdown:
+                        stopped_by_energy_safety = True
+                        break
                 lifecycle.loop(ctx, dt)
                 ticks_run += 1
                 tick = self._display_runtime.run_once(timeout=display_timeout)
                 if tick is not None:
                     frames_presented += 1
                 elapsed = time.perf_counter() - now
-                sleep_for = target_dt - elapsed
+                sleep_for = (target_dt * throttle_multiplier) - elapsed
                 if sleep_for > 0:
                     time.sleep(sleep_for)
         except Exception as exc:  # noqa: BLE001
@@ -112,6 +124,7 @@ class UnifiedRuntime:
             ticks_run=ticks_run,
             frames_presented=frames_presented,
             stopped_by_target_close=stopped_by_target_close,
+            stopped_by_energy_safety=stopped_by_energy_safety,
         )
 
     def _enable_granted_sensors(self, sensor_manager: SensorManagerThread, granted_capabilities: set[str]) -> None:

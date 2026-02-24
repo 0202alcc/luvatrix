@@ -1,6 +1,7 @@
 from .audit import JsonlAuditSink, SQLiteAuditSink
 from .app_runtime import APP_PROTOCOL_VERSION, AppContext, AppLifecycle, AppManifest, AppRuntime
 from .display_runtime import DisplayRuntime, RenderTick
+from .energy_safety import EnergySafetyController, EnergySafetyDecision, EnergySafetyPolicy, SensorEnergySafetyController
 from .engine import Engine
 from .hdi_thread import HDIEvent, HDIEventSource, HDIThread
 from .events import InputEvent
@@ -54,6 +55,10 @@ __all__ = [
     "ReplaceColumn",
     "ReplaceRow",
     "RenderTick",
+    "EnergySafetyController",
+    "EnergySafetyDecision",
+    "EnergySafetyPolicy",
+    "SensorEnergySafetyController",
     "DEFAULT_ENABLED_SENSORS",
     "CURRENT_PROTOCOL_VERSION",
     "DEPRECATED_PROTOCOL_VERSIONS",

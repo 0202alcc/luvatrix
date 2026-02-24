@@ -90,6 +90,21 @@ Use real macOS sensor providers:
 uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger --render headless --sensor-backend macos
 ```
 
+Enable runtime energy safety monitoring (throttles on warn, can enforce shutdown on sustained critical telemetry):
+```bash
+uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger \
+  --sensor-backend macos \
+  --energy-safety monitor
+```
+
+Enforce shutdown instead of monitor-only mode:
+```bash
+uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger \
+  --sensor-backend macos \
+  --energy-safety enforce \
+  --energy-critical-streak 3
+```
+
 Persist audit events to SQLite or JSONL:
 ```bash
 uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger --audit-sqlite ./.luvatrix/audit.db

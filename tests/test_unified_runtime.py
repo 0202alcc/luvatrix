@@ -7,6 +7,7 @@ import unittest
 import torch
 
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
+from luvatrix_core.core.energy_safety import EnergySafetyDecision
 from luvatrix_core.core.sensor_manager import SensorManagerThread, SensorSample
 from luvatrix_core.core.unified_runtime import UnifiedRuntime
 from luvatrix_core.core.window_matrix import WindowMatrix
@@ -69,6 +70,22 @@ class _RecordingTarget(RenderTarget):
         return False
 
 
+class _CriticalEnergySafety:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def evaluate(self) -> EnergySafetyDecision:
+        self.calls += 1
+        return EnergySafetyDecision(
+            state="CRITICAL",
+            throttle_multiplier=2.0,
+            should_shutdown=True,
+            reason="test",
+            thermal_c=100.0,
+            power_w=100.0,
+        )
+
+
 class UnifiedRuntimeTests(unittest.TestCase):
     def test_unified_runtime_runs_app_and_presents_frames(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -124,6 +141,7 @@ class UnifiedRuntimeTests(unittest.TestCase):
             result = runtime.run_app(app_dir, max_ticks=5, target_fps=1000)
             self.assertEqual(result.ticks_run, 5)
             self.assertGreaterEqual(result.frames_presented, 1)
+            self.assertFalse(result.stopped_by_energy_safety)
             self.assertEqual(target.started, 1)
             self.assertEqual(target.stopped, 1)
             self.assertGreaterEqual(len(target.presented), 1)
@@ -131,6 +149,54 @@ class UnifiedRuntimeTests(unittest.TestCase):
             self.assertEqual(sensors.stopped, 1)
             self.assertEqual(matrix.revision, 5)
             self.assertIn(("thermal.temperature", True, "unified_runtime"), sensors.set_calls)
+
+    def test_unified_runtime_stops_when_energy_safety_requests_shutdown(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            (app_dir / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "test.energy.stop"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'required_capabilities = ["window.write"]',
+                        "optional_capabilities = []",
+                    ]
+                )
+            )
+            (app_dir / "app_main.py").write_text(
+                "\n".join(
+                    [
+                        "class _App:",
+                        "    def init(self, ctx):",
+                        "        pass",
+                        "    def loop(self, ctx, dt):",
+                        "        raise AssertionError('loop should not execute when safety stops run')",
+                        "    def stop(self, ctx):",
+                        "        pass",
+                        "def create():",
+                        "    return _App()",
+                    ]
+                )
+            )
+            matrix = WindowMatrix(height=1, width=1)
+            target = _RecordingTarget()
+            hdi = HDIThread(source=_NoopHDISource())
+            sensors = _FakeSensorManager()
+            safety = _CriticalEnergySafety()
+            runtime = UnifiedRuntime(
+                matrix=matrix,
+                target=target,
+                hdi=hdi,
+                sensor_manager=sensors,
+                capability_decider=lambda cap: True,
+                energy_safety=safety,
+            )
+            result = runtime.run_app(app_dir, max_ticks=5, target_fps=1000)
+            self.assertEqual(result.ticks_run, 0)
+            self.assertEqual(result.frames_presented, 0)
+            self.assertTrue(result.stopped_by_energy_safety)
+            self.assertEqual(safety.calls, 1)
 
 
 if __name__ == "__main__":
