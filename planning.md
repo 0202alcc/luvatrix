@@ -1,253 +1,116 @@
-# Luvatrix Phase 1 Integrated Plan
+# Luvatrix Phase 1 Plan and Status
 
-## TLDR
+## TL;DR
+Luvatrix now has a working app protocol runtime, matrix protocol, HDI/sensor threads, macOS visualizer path (fallback + experimental Vulkan), audit pipeline, and protocol governance. The next major work is production-hardening and platform expansion.
 
-### App Protocol (How To Build a Supported App)
-A Luvatrix app is an in-process Python plugin with a manifest. The runtime loads it, enforces capabilities, and gives it an `AppContext` for HDI events, sensor data, and matrix writes.
+## 1. Current Implemented Scope
 
+### 1.1 Core Runtime
+1. `WindowMatrix` protocol is implemented (`H x W x 4`, `torch.uint8`) with atomic write batches.
+2. `call_blit` event flow is implemented end-to-end through `DisplayRuntime`.
+3. `UnifiedRuntime` runs app lifecycle + display + HDI + sensors in one loop.
+4. App lifecycle contract is implemented: `init(ctx)`, `loop(ctx, dt)`, `stop(ctx)`.
+
+### 1.2 App Protocol
+1. `app.toml` + Python entrypoint loader is implemented.
+2. Capability gating is enforced for matrix writes, HDI events, and sensors.
+3. Protocol version governance is enforced with compatibility checks.
+4. Security controls are implemented:
+- denied capability access returns structured `DENIED` responses.
+- sensor read rate limiting.
+- sensor data sanitization/quantization unless high-precision capability is granted.
+
+### 1.3 Platform Targeting in App Manifests
+1. Apps can declare optional `platform_support` (OS allowlist).
+2. Apps can declare `[[variants]]` with `id`, `os`, optional `arch`, optional `module_root`, optional `entrypoint`.
+3. Runtime resolves and loads only the host-compatible variant.
+4. Variant resolution is deterministic and path-confined (`module_root` cannot escape app dir).
+
+### 1.4 HDI
+1. HDI thread is implemented.
+2. macOS native HDI source exists as a first-class module.
+3. Keyboard/mouse/trackpad events are window-gated.
+4. Pointer coordinates are normalized to window-relative values.
+5. Out-of-window/inactive cases are represented via `NOT_DETECTED`.
+
+### 1.5 Sensors
+1. Sensor manager thread is implemented with polling and status model.
+2. Default safety sensors are enabled by default:
+- `thermal.temperature`
+- `power.voltage_current`
+3. macOS providers exist for:
+- thermal
+- power/voltage/current
+- motion
+4. Sensor state model is implemented: `OK`, `DISABLED`, `UNAVAILABLE`, `DENIED`.
+
+### 1.6 Energy Safety
+1. Runtime energy safety controller is implemented.
+2. It consumes thermal/power telemetry, computes `OK/WARN/CRITICAL`, and throttles frame pacing.
+3. `enforce` mode gracefully stops runtime on sustained critical telemetry.
+4. Policy thresholds are configurable via CLI.
+
+### 1.7 Rendering (macOS)
+1. macOS presenter + target are implemented.
+2. Fallback layer-blit path works for stretch and preserve-aspect examples.
+3. Experimental Vulkan path renders and handles resize flow better than earlier revisions.
+4. Vulkan path remains marked experimental while long-tail stability hardening continues.
+
+### 1.8 Audit Pipeline
+1. JSONL and SQLite sinks are implemented.
+2. Capability, sensor, and energy-safety events can be persisted.
+3. Report/prune CLI commands exist.
+
+### 1.9 Testing and CI
+1. Deterministic unit/integration suite is implemented and passing.
+2. Coverage includes app runtime, protocol governance, sensor manager, HDI behavior, renderer integration with recording backend, and energy safety.
+3. Guarded macOS GUI smoke workflow exists (flag-gated in CI).
+
+## 2. Supported Developer Contract (Phase 1)
+
+### 2.1 Required App Layout
 ```text
-App Folder
-└── my_app/
-    ├── app.toml
-    └── app_main.py
-
-app.toml
-  app_id = "media.simple"
-  protocol_version = "1"
-  entrypoint = "app_main:run"
-  required_capabilities = ["window.write", "hdi.keyboard"]
-  optional_capabilities = ["sensor.thermal", "sensor.power"]
-```
-
-```text
-Build/Run Model
-[app.toml + entrypoint]
-        |
-        v
-[Luvatrix App Loader]
-        |
-        +--> validate manifest + protocol version
-        +--> request runtime permissions
-        v
-[AppContext]
-  - submit_write_batch(...)
-  - poll_hdi_events(...)
-  - read_sensor(...)
-        |
-        v
-[Window Matrix Protocol] -> [Renderer Blit]
-```
-
-### Rendering Protocol (How Matrix Becomes a Window)
-The renderer consumes a canonical RGBA255 matrix (`H x W x 4`, `torch.uint8`) and blits only when `call_blit` is raised by a committed write batch.
-
-```text
-App/Runtime Write Batch
-   (single-writer lock, atomic commit)
-                |
-                v
-      Window Matrix (RGBA255)
-      shape: H x W x 4
-      dtype: torch.uint8
-                |
-                v
-        call_blit event raised
-                |
-                v
-      Vulkan Main Render Loop
-          init -> loop -> stop
-                |
-                v
-        OS Surface Presentation
-```
-
-```text
-OS Mapping (currently supported OS-level backend)
-- macOS:
-  Matrix tensor -> staging/upload -> Vulkan image -> swapchain present -> window
-```
-
-## 1. Goals
-
-1. Standardize project/package name as `luvatrix`.
-2. Deliver a macOS-first OS-level rendering runtime with Vulkan presentation.
-3. Define a stable custom app protocol for compatible apps.
-4. Add HDI and sensor threads with standardized schemas for future cross-device stability.
-5. Keep iOS/android unchanged for now; web prototype is deprecated in-repo.
-
-## 2. Runtime and Package Baseline
-
-1. Python requirement: `>=3.14,<3.15`.
-2. Tensor runtime: PyTorch.
-3. Compute policy:
-- Prefer AMD ROCm where available.
-- Fallback to CPU.
-- For macOS Phase 1, CPU tensor compute is expected while Vulkan handles presentation.
-
-## 3. Rendering Protocol (Normative)
-
-### 3.1 Canonical Window Matrix
-
-1. Shape: `height x width x 4`.
-2. Channels: `R,G,B,A`.
-3. Type: `torch.uint8`.
-4. Valid range: `0..255`.
-
-Invalid channel behavior:
-- Warn once per batch with offending location count.
-- Replace offending pixels with `rgba(255,0,255,255)`.
-
-### 3.2 Read Model
-
-1. Any thread may read live matrix.
-2. Direct no-copy unsafe handle is **internal only**.
-3. App plugins use safe read interfaces.
-
-### 3.3 Write Model
-
-1. Single-writer lock.
-2. Writer requests are validated and queued.
-3. Commit is atomic per batch.
-4. Successful commit raises `call_blit`.
-
-Supported write operations:
-1. `full_rewrite(tensor_h_w_4)`
-2. `push_column(index, column_h_4)` (shift + evict, fixed size)
-3. `replace_column(index, column_h_4)`
-4. `push_row(index, row_w_4)` (shift + evict, fixed size)
-5. `replace_row(index, row_w_4)`
-6. `multiply(color_matrix_4x4)` (per-pixel RGBA transform + clamp)
-
-### 3.4 Render Loop and Limits
-
-1. Main thread runs Vulkan loop (`init`, `loop`, `stop`).
-2. Loop waits for `call_blit`.
-3. If deque empty, no blit.
-4. Blits are event-driven with max FPS cap.
-
-Warnings/errors:
-1. Window larger than display: warning.
-2. Window exceeding feasible compute/render budget (after warmup benchmark): error.
-
-## 4. HDI Thread (macOS Phase 1)
-
-### 4.1 Scope
-
-1. Keyboard capture only while Luvatrix window is focused.
-2. Mouse position only when window active.
-3. If window inactive: return status `NOT_DETECTED`.
-4. Force Touch is part of HDI stream as pressure events.
-
-### 4.2 Event Contract
-
-`HDIEvent` fields:
-1. `event_id`
-2. `ts_ns`
-3. `window_id`
-4. `device` (`keyboard|mouse|trackpad`)
-5. `event_type`
-6. `status` (`OK|NOT_DETECTED|UNAVAILABLE|DENIED`)
-7. `payload` (typed object or `null`)
-
-### 4.3 Concurrency and Throughput
-
-1. Simultaneous inputs are handled via queued event stream.
-2. Use bounded queue + move-event coalescing.
-3. Never drop keyboard down/up transitions.
-
-## 5. Sensor Manager Thread (macOS Phase 1)
-
-### 5.1 Threading Model
-
-1. One sensor manager thread.
-2. Per-sensor async tasks/subscriptions inside manager.
-
-### 5.2 Defaults and Permissions
-
-1. Default enabled:
-- thermal/temperature
-- voltage/current
-2. Other sensors are disabled by default.
-3. App can request enable via manifest + runtime consent.
-4. Disabling default safety sensors requires warning prompt and audit log.
-
-### 5.3 Sensor Contract
-
-`SensorSample` fields:
-1. `sample_id`
-2. `ts_ns`
-3. `sensor_type`
-4. `status` (`OK|DISABLED|UNAVAILABLE|DENIED`)
-5. `value` (typed object or `null`)
-6. `unit`
-
-## 6. App Protocol (Normative)
-
-### 6.1 Required Structure
-
-```text
-app/
+my_app/
 ├── app.toml
 └── app_main.py
 ```
 
-`app.toml` minimum:
+### 2.2 Required Manifest Fields
 1. `app_id`
 2. `protocol_version`
-3. `entrypoint` (`module:function`)
+3. `entrypoint`
 4. `required_capabilities`
 5. `optional_capabilities`
 
-### 6.2 Lifecycle
+### 2.3 Optional Manifest Fields
+1. `min_runtime_protocol_version`
+2. `max_runtime_protocol_version`
+3. `platform_support`
+4. `[[variants]]`
 
-1. `init(ctx)`
-2. `loop(ctx, dt)`
-3. `stop(ctx)`
-
-### 6.3 AppContext APIs
-
+### 2.4 Core AppContext APIs
 1. `submit_write_batch(batch)`
 2. `poll_hdi_events(max_events)`
 3. `read_sensor(sensor_type)`
-4. Safe matrix read views.
+4. `read_matrix_snapshot()`
 
-## 7. Phase 1 Reference App
+## 3. What Is Still Open
 
-1. Build a media app with single file path parameter.
-2. Images: Pillow.
-3. Video frames: imageio-ffmpeg.
-4. Convert decoded frames to RGBA255 and write through protocol ops.
+1. Promote macOS Vulkan path from experimental to production-ready default.
+2. Add robust retention/rotation/reporting tooling for audit stores.
+3. Add richer consent UX and policy lifecycle for capabilities.
+4. Add guarded OS-level end-to-end smoke strategy for more macOS environments.
+5. Prepare shared Vulkan compatibility layer for non-macOS future backends.
+6. Implement additional OS backends by reusing common runtime/protocol and shared Vulkan utilities.
 
-## 8. Security and Stability Rules
+## 4. Non-Goals for Current Phase
 
-1. No global keyboard capture by default.
-2. Unsafe matrix reads are internal-only.
-3. Capability grants/denials are logged.
-4. Status enums are mandatory for missing/unavailable data.
-5. Protocol version mismatch fails fast at app load.
+1. Full web renderer implementation (stub remains acceptable for now).
+2. iOS/Android backend rollout in this phase.
+3. Replacing protocol model with out-of-process app sandboxing in this phase.
 
-## 9. Test and Acceptance Plan
+## 5. Immediate Next Milestones
 
-1. Matrix invariants and invalid pixel replacement.
-2. Atomic write batch correctness.
-3. Blit trigger behavior and FPS cap enforcement.
-4. HDI event ordering and inactive mouse `NOT_DETECTED` handling.
-5. Sensor defaults, enable/disable, and warning/audit on safety disable.
-6. End-to-end media app rendering through matrix protocol.
-
-## 10. Implementation Sequence
-
-1. Rename and package baseline (`luvatrix`, Python 3.14, torch dependency).
-2. Implement matrix protocol core.
-3. Integrate Vulkan main render loop on macOS.
-4. Implement HDI thread.
-5. Implement sensor manager thread.
-6. Implement app protocol loader/lifecycle.
-7. Build and validate media reference app.
-
-## 11. Out of Scope (Phase 1)
-
-1. iOS backend redesign.
-2. Android backend redesign.
-3. Web renderer redesign (legacy web prototype removed).
-4. NVIDIA acceleration path.
+1. Vulkan stabilization pass (surface/swapchain/fence resilience and fallback parity).
+2. Finalize app protocol docs with packaging/variant examples and compatibility policy.
+3. Expand CI matrix with gated macOS GUI smoke and artifacted logs.

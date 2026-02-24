@@ -75,6 +75,8 @@ Notes:
 
 ## Unified Runtime CLI
 
+App manifests can now include optional `platform_support` and `[[variants]]` blocks so runtime picks only the host-compatible variant entrypoint/module root.
+
 Run any app protocol folder (`app.toml` + entrypoint) headless:
 ```bash
 uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger --render headless --ticks 300

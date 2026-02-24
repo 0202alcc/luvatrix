@@ -83,6 +83,136 @@ class _FakeSensor:
 
 
 class AppRuntimeTests(unittest.TestCase):
+    def test_manifest_parses_platform_support_and_variants(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "x"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'platform_support = ["macos", "linux"]',
+                        "required_capabilities = []",
+                        "optional_capabilities = []",
+                        "",
+                        "[[variants]]",
+                        'id = "mac-arm64"',
+                        'os = ["macos"]',
+                        'arch = ["arm64"]',
+                        'module_root = "variants/macos_arm64"',
+                    ]
+                )
+            )
+            (root / "app_main.py").write_text("def create():\n    return object()\n")
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=SensorManagerThread(providers={}),
+            )
+            manifest = runtime.load_manifest(root)
+            self.assertEqual(manifest.platform_support, ["macos", "linux"])
+            self.assertEqual(len(manifest.variants), 1)
+            self.assertEqual(manifest.variants[0].variant_id, "mac-arm64")
+
+    def test_resolve_variant_picks_host_match_with_arch_priority(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "x"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'platform_support = ["macos"]',
+                        "required_capabilities = []",
+                        "optional_capabilities = []",
+                        "",
+                        "[[variants]]",
+                        'id = "mac-any"',
+                        'os = ["macos"]',
+                        "",
+                        "[[variants]]",
+                        'id = "mac-arm64"',
+                        'os = ["macos"]',
+                        'arch = ["arm64"]',
+                        'module_root = "variants/macos_arm64"',
+                        'entrypoint = "variant_main:create"',
+                    ]
+                )
+            )
+            (root / "app_main.py").write_text("def create():\n    return object()\n")
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=SensorManagerThread(providers={}),
+                host_os="macos",
+                host_arch="arm64",
+            )
+            manifest = runtime.load_manifest(root)
+            resolved = runtime.resolve_variant(root, manifest)
+            self.assertEqual(resolved.variant_id, "mac-arm64")
+            self.assertEqual(resolved.entrypoint, "variant_main:create")
+            self.assertEqual(resolved.module_dir, (root / "variants/macos_arm64").resolve())
+
+    def test_resolve_variant_rejects_unsupported_platform(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "x"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'platform_support = ["linux"]',
+                        "required_capabilities = []",
+                        "optional_capabilities = []",
+                    ]
+                )
+            )
+            (root / "app_main.py").write_text("def create():\n    return object()\n")
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=SensorManagerThread(providers={}),
+                host_os="macos",
+                host_arch="arm64",
+            )
+            manifest = runtime.load_manifest(root)
+            with self.assertRaises(RuntimeError):
+                runtime.resolve_variant(root, manifest)
+
+    def test_variant_module_root_cannot_escape_app_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "x"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        "required_capabilities = []",
+                        "optional_capabilities = []",
+                        "",
+                        "[[variants]]",
+                        'id = "bad"',
+                        'os = ["macos"]',
+                        'module_root = "../escape"',
+                    ]
+                )
+            )
+            (root / "app_main.py").write_text("def create():\n    return object()\n")
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=SensorManagerThread(providers={}),
+                host_os="macos",
+                host_arch="arm64",
+            )
+            manifest = runtime.load_manifest(root)
+            with self.assertRaises(ValueError):
+                runtime.resolve_variant(root, manifest)
+
     def test_app_context_hdi_events_denied_without_device_capability(self) -> None:
         from luvatrix_core.core.app_runtime import AppContext
 

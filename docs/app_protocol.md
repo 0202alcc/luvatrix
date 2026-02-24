@@ -21,6 +21,19 @@ Optional protocol governance fields:
 1. `min_runtime_protocol_version`
 2. `max_runtime_protocol_version`
 
+Optional platform routing fields:
+
+1. `platform_support` (list[str], e.g. `["macos", "linux"]`)
+2. `[[variants]]` entries with:
+   `id`, `os`, optional `arch`, optional `module_root`, optional `entrypoint`
+
+Variant routing behavior:
+
+1. Runtime rejects app if host OS is not in `platform_support` (when provided).
+2. Runtime selects the best matching variant for host `os/arch`.
+3. Arch-specific matches are preferred over OS-only matches.
+4. `module_root` is sandboxed to stay within app folder.
+
 ## 2. Lifecycle Contract
 
 Entrypoint resolves to an object with:

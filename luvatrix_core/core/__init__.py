@@ -1,5 +1,13 @@
 from .audit import JsonlAuditSink, SQLiteAuditSink
-from .app_runtime import APP_PROTOCOL_VERSION, AppContext, AppLifecycle, AppManifest, AppRuntime
+from .app_runtime import (
+    APP_PROTOCOL_VERSION,
+    AppContext,
+    AppLifecycle,
+    AppManifest,
+    AppRuntime,
+    AppVariant,
+    ResolvedAppVariant,
+)
 from .display_runtime import DisplayRuntime, RenderTick
 from .energy_safety import EnergySafetyController, EnergySafetyDecision, EnergySafetyPolicy, SensorEnergySafetyController
 from .engine import Engine
@@ -41,6 +49,8 @@ __all__ = [
     "AppLifecycle",
     "AppManifest",
     "AppRuntime",
+    "AppVariant",
+    "ResolvedAppVariant",
     "JsonlAuditSink",
     "DisplayRuntime",
     "Engine",

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import importlib.util
 from pathlib import Path
 import logging
+import platform
 import time
 import tomllib
 from typing import Callable, Protocol
@@ -37,8 +38,26 @@ class AppManifest:
     entrypoint: str
     required_capabilities: list[str]
     optional_capabilities: list[str]
+    platform_support: list[str]
+    variants: list["AppVariant"]
     min_runtime_protocol_version: str | None = None
     max_runtime_protocol_version: str | None = None
+
+
+@dataclass(frozen=True)
+class AppVariant:
+    variant_id: str
+    os: list[str]
+    arch: list[str]
+    module_root: str | None = None
+    entrypoint: str | None = None
+
+
+@dataclass(frozen=True)
+class ResolvedAppVariant:
+    variant_id: str
+    entrypoint: str
+    module_dir: Path
 
 
 @dataclass
@@ -142,12 +161,16 @@ class AppRuntime:
         sensor_manager: SensorManagerThread,
         capability_decider: Callable[[str], bool] | None = None,
         capability_audit_logger: Callable[[dict[str, object]], None] | None = None,
+        host_os: str | None = None,
+        host_arch: str | None = None,
     ) -> None:
         self._matrix = matrix
         self._hdi = hdi
         self._sensor_manager = sensor_manager
         self._capability_decider = capability_decider or (lambda capability: True)
         self._capability_audit_logger = capability_audit_logger
+        self._host_os = _normalize_os_name(host_os or platform.system())
+        self._host_arch = _normalize_arch_name(host_arch or platform.machine())
         self._last_error: Exception | None = None
 
     @property
@@ -169,6 +192,8 @@ class AppRuntime:
             raise ValueError(f"manifest missing required field: {exc.args[0]}") from exc
         required = _coerce_string_list(raw.get("required_capabilities", []), "required_capabilities")
         optional = _coerce_string_list(raw.get("optional_capabilities", []), "optional_capabilities")
+        platform_support = _coerce_string_list(raw.get("platform_support", []), "platform_support")
+        variants = _coerce_variants(raw.get("variants", []))
         min_runtime_protocol_version = _coerce_optional_str(
             raw.get("min_runtime_protocol_version"), "min_runtime_protocol_version"
         )
@@ -181,6 +206,8 @@ class AppRuntime:
             entrypoint=entrypoint,
             required_capabilities=required,
             optional_capabilities=optional,
+            platform_support=platform_support,
+            variants=variants,
             min_runtime_protocol_version=min_runtime_protocol_version,
             max_runtime_protocol_version=max_runtime_protocol_version,
         )
@@ -205,7 +232,8 @@ class AppRuntime:
         manifest = self.load_manifest(app_path)
         granted = self.resolve_capabilities(manifest)
         ctx = self.build_context(granted_capabilities=granted)
-        lifecycle = self.load_lifecycle(app_path, manifest.entrypoint)
+        resolved = self.resolve_variant(app_path, manifest)
+        lifecycle = self.load_lifecycle(resolved.module_dir, resolved.entrypoint)
 
         target_dt = 1.0 / float(target_fps)
         self._hdi.start()
@@ -285,6 +313,46 @@ class AppRuntime:
                 raise ValueError(f"entrypoint lifecycle missing callable `{method_name}`: {entrypoint}")
         return lifecycle
 
+    def resolve_variant(self, app_dir: Path, manifest: AppManifest) -> ResolvedAppVariant:
+        if manifest.platform_support and self._host_os not in manifest.platform_support:
+            raise RuntimeError(
+                f"app `{manifest.app_id}` does not support host os `{self._host_os}`; "
+                f"supported={','.join(sorted(manifest.platform_support))}"
+            )
+        if not manifest.variants:
+            return ResolvedAppVariant(
+                variant_id="default",
+                entrypoint=manifest.entrypoint,
+                module_dir=app_dir,
+            )
+
+        candidates: list[AppVariant] = []
+        for variant in manifest.variants:
+            if self._host_os not in variant.os:
+                continue
+            if variant.arch and self._host_arch not in variant.arch:
+                continue
+            candidates.append(variant)
+        if not candidates:
+            raise RuntimeError(
+                f"no app variant for host os={self._host_os} arch={self._host_arch} in `{manifest.app_id}`"
+            )
+
+        candidates.sort(key=lambda v: (0 if v.arch else 1, v.variant_id))
+        selected = candidates[0]
+        module_dir = app_dir
+        if selected.module_root:
+            candidate = (app_dir / selected.module_root).resolve()
+            app_root = app_dir.resolve()
+            if candidate != app_root and app_root not in candidate.parents:
+                raise ValueError(f"variant `{selected.variant_id}` module_root escapes app directory")
+            module_dir = candidate
+        return ResolvedAppVariant(
+            variant_id=selected.variant_id,
+            entrypoint=selected.entrypoint or manifest.entrypoint,
+            module_dir=module_dir,
+        )
+
     def _validate_manifest(self, manifest: AppManifest) -> None:
         compat = check_protocol_compatibility(
             manifest.protocol_version,
@@ -295,7 +363,23 @@ class AppRuntime:
             raise ValueError(compat.warning or "protocol compatibility check failed")
         if compat.warning:
             LOGGER.warning("%s", compat.warning)
+        for os_name in manifest.platform_support:
+            _normalize_os_name(os_name)
+        variant_ids: set[str] = set()
+        for variant in manifest.variants:
+            if variant.variant_id in variant_ids:
+                raise ValueError(f"duplicate variant id: {variant.variant_id}")
+            variant_ids.add(variant.variant_id)
+            if not variant.os:
+                raise ValueError(f"variant `{variant.variant_id}` must declare at least one os")
+            for os_name in variant.os:
+                _normalize_os_name(os_name)
+            for arch_name in variant.arch:
+                _normalize_arch_name(arch_name)
         _parse_entrypoint(manifest.entrypoint)
+        for variant in manifest.variants:
+            if variant.entrypoint is not None:
+                _parse_entrypoint(variant.entrypoint)
 
     def _audit_capability(self, action: str, capability: str) -> None:
         if self._capability_audit_logger is None:
@@ -327,6 +411,33 @@ def _coerce_optional_str(value: object, field_name: str) -> str | None:
     if not isinstance(value, str):
         raise ValueError(f"{field_name} must be a string if provided")
     return value
+
+
+def _coerce_variants(value: object) -> list[AppVariant]:
+    if not isinstance(value, list):
+        raise ValueError("variants must be a list")
+    variants: list[AppVariant] = []
+    for idx, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise ValueError("variants entries must be tables")
+        try:
+            variant_id = str(item["id"])
+        except KeyError as exc:
+            raise ValueError(f"variants[{idx}] missing required field: {exc.args[0]}") from exc
+        os_list = _coerce_string_list(item.get("os", []), f"variants[{idx}].os")
+        arch_list = _coerce_string_list(item.get("arch", []), f"variants[{idx}].arch")
+        module_root = _coerce_optional_str(item.get("module_root"), f"variants[{idx}].module_root")
+        entrypoint = _coerce_optional_str(item.get("entrypoint"), f"variants[{idx}].entrypoint")
+        variants.append(
+            AppVariant(
+                variant_id=variant_id,
+                os=[_normalize_os_name(x) for x in os_list],
+                arch=[_normalize_arch_name(x) for x in arch_list],
+                module_root=module_root,
+                entrypoint=entrypoint,
+            )
+        )
+    return variants
 
 
 def _parse_entrypoint(entrypoint: str) -> tuple[str, str]:
@@ -386,3 +497,37 @@ def _sanitize_sensor_sample(sample: SensorSample, granted_capabilities: set[str]
         value=value,
         unit=sample.unit,
     )
+
+
+def _normalize_os_name(value: str) -> str:
+    normalized = value.strip().lower().replace("_", "").replace("-", "")
+    aliases = {
+        "darwin": "macos",
+        "macos": "macos",
+        "osx": "macos",
+        "mac": "macos",
+        "windows": "windows",
+        "win": "windows",
+        "linux": "linux",
+        "android": "android",
+        "ios": "ios",
+        "web": "web",
+        "wasm": "web",
+    }
+    if normalized not in aliases:
+        raise ValueError(f"unsupported os identifier: {value}")
+    return aliases[normalized]
+
+
+def _normalize_arch_name(value: str) -> str:
+    normalized = value.strip().lower().replace("_", "").replace("-", "")
+    aliases = {
+        "arm64": "arm64",
+        "aarch64": "arm64",
+        "x8664": "x86_64",
+        "amd64": "x86_64",
+        "x64": "x86_64",
+    }
+    if normalized not in aliases:
+        raise ValueError(f"unsupported arch identifier: {value}")
+    return aliases[normalized]
