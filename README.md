@@ -17,3 +17,31 @@ See `planning.md` for the integrated Phase 1 spec and visual TLDR protocol model
 ## Repository Layout
 
 - Core engine/runtime source lives in `luvatrix_core/`.
+
+## macOS Visualizer Examples
+
+Run stretch mode:
+```bash
+uv run --python 3.14 python examples/macos_visualizer/stretch_mode.py
+```
+
+Run preserve-aspect mode (black bars when needed):
+```bash
+uv run --python 3.14 python examples/macos_visualizer/preserve_aspect_mode.py
+```
+
+Force experimental Vulkan path:
+```bash
+LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN=1 uv run --python 3.14 python examples/macos_visualizer/stretch_mode.py
+```
+
+Force fallback layer-blit path:
+```bash
+unset LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN
+uv run --python 3.14 python examples/macos_visualizer/stretch_mode.py
+```
+
+Quick Vulkan environment probe (no window):
+```bash
+uv run --python 3.14 python examples/macos_visualizer/vulkan_probe.py
+```
