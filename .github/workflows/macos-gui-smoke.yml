@@ -1,0 +1,30 @@
+name: macOS GUI Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  macos-gui-smoke:
+    runs-on: macos-latest
+    if: ${{ vars.LUVATRIX_ENABLE_MACOS_GUI_SMOKE == '1' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+      - name: Set up Python
+        run: uv python install 3.14
+      - name: Sync deps
+        run: uv sync
+      - name: Run deterministic tests
+        run: uv run --python 3.14 python -m unittest discover -s tests -p 'test_*.py'
+      - name: Run macOS window smoke
+        run: |
+          uv run --python 3.14 python main.py run-app \
+            examples/app_protocol/input_sensor_logger \
+            --render macos \
+            --ticks 120 \
+            --fps 30

@@ -1,0 +1,317 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+import tempfile
+import unittest
+
+import torch
+
+from luvatrix_core.core.app_runtime import (
+    APP_PROTOCOL_VERSION,
+    AppRuntime,
+)
+from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
+from luvatrix_core.core.sensor_manager import SensorManagerThread, SensorSample
+from luvatrix_core.core.window_matrix import FullRewrite, WindowMatrix, WriteBatch
+
+
+@dataclass
+class _LifecycleRecorder:
+    init_called: bool = False
+    loop_calls: int = 0
+    stop_called: bool = False
+    saw_sensor_status: str | None = None
+    saw_hdi_count: int | None = None
+
+    def init(self, ctx) -> None:
+        self.init_called = True
+        ctx.submit_write_batch(
+            WriteBatch([FullRewrite(torch.zeros((1, 1, 4), dtype=torch.uint8))])
+        )
+
+    def loop(self, ctx, dt: float) -> None:
+        self.loop_calls += 1
+        self.saw_hdi_count = len(ctx.poll_hdi_events(16))
+        self.saw_sensor_status = ctx.read_sensor("thermal.temperature").status
+
+    def stop(self, ctx) -> None:
+        self.stop_called = True
+
+
+class _LifecycleRaisesInLoop(_LifecycleRecorder):
+    def loop(self, ctx, dt: float) -> None:
+        super().loop(ctx, dt)
+        raise RuntimeError("boom")
+
+
+class _FakeHDI:
+    def __init__(self) -> None:
+        self.started = 0
+        self.stopped = 0
+
+    def start(self) -> None:
+        self.started += 1
+
+    def stop(self) -> None:
+        self.stopped += 1
+
+    def poll_events(self, max_events: int) -> list[HDIEvent]:
+        return [HDIEvent(1, 1, "w", "keyboard", "key_down", "OK", {"key": "a"})]
+
+
+class _FakeSensor:
+    def __init__(self) -> None:
+        self.started = 0
+        self.stopped = 0
+
+    def start(self) -> None:
+        self.started += 1
+
+    def stop(self) -> None:
+        self.stopped += 1
+
+    def read_sensor(self, sensor_type: str) -> SensorSample:
+        return SensorSample(
+            sample_id=1,
+            ts_ns=1,
+            sensor_type=sensor_type,
+            status="OK",
+            value=42,
+            unit="u",
+        )
+
+
+class AppRuntimeTests(unittest.TestCase):
+    def test_app_context_hdi_events_denied_without_device_capability(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        ctx = AppContext(
+            matrix=WindowMatrix(1, 1),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write", "hdi.mouse"},
+        )
+        events = ctx.poll_hdi_events(8)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].device, "keyboard")
+        self.assertEqual(events[0].status, "DENIED")
+        self.assertIsNone(events[0].payload)
+
+    def test_app_context_sensor_denied_without_sensor_capability(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        ctx = AppContext(
+            matrix=WindowMatrix(1, 1),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write"},
+        )
+        sample = ctx.read_sensor("thermal.temperature")
+        self.assertEqual(sample.status, "DENIED")
+        self.assertIsNone(sample.value)
+
+    def test_app_context_sensor_rate_limit_blocks_abusive_reads(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        ctx = AppContext(
+            matrix=WindowMatrix(1, 1),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write", "sensor.thermal"},
+            sensor_read_min_interval_s=5.0,
+        )
+        first = ctx.read_sensor("thermal.temperature")
+        second = ctx.read_sensor("thermal.temperature")
+        self.assertEqual(first.status, "OK")
+        self.assertEqual(second.status, "DENIED")
+
+    def test_manifest_protocol_mismatch_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "x"',
+                        'protocol_version = "999"',
+                        'entrypoint = "app_main:create"',
+                        "required_capabilities = []",
+                        "optional_capabilities = []",
+                    ]
+                )
+            )
+            (root / "app_main.py").write_text("def create():\n    return object()\n")
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=SensorManagerThread(providers={}),
+            )
+            with self.assertRaises(ValueError):
+                runtime.load_manifest(root)
+
+    def test_manifest_runtime_protocol_bounds_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "x"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'min_runtime_protocol_version = "2"',
+                        "required_capabilities = []",
+                        "optional_capabilities = []",
+                    ]
+                )
+            )
+            (root / "app_main.py").write_text("def create():\n    return object()\n")
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=SensorManagerThread(providers={}),
+            )
+            with self.assertRaises(ValueError):
+                runtime.load_manifest(root)
+
+    def test_required_capability_denial_fails_fast(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_app_files(root, lifecycle_expr="_LifecycleRecorder()")
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=_FakeHDI(),  # type: ignore[arg-type]
+                sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+                capability_decider=lambda capability: capability != "window.write",
+            )
+            with self.assertRaises(PermissionError):
+                runtime.run(root, max_ticks=1)
+
+    def test_capability_audit_logger_receives_decisions(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_app_files(root, lifecycle_expr="_LifecycleRecorder()")
+            events: list[dict[str, object]] = []
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=_FakeHDI(),  # type: ignore[arg-type]
+                sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+                capability_decider=lambda capability: capability != "sensor.thermal",
+                capability_audit_logger=events.append,
+            )
+            runtime.run(root, max_ticks=1, target_fps=1000)
+            actions = {str(e.get("action")) for e in events}
+            self.assertIn("granted_required", actions)
+            self.assertIn("denied_optional", actions)
+
+    def test_runtime_wires_context_and_lifecycle(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_app_files(root, lifecycle_expr="_LifecycleRecorder()")
+            hdi = _FakeHDI()
+            sensor = _FakeSensor()
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=hdi,  # type: ignore[arg-type]
+                sensor_manager=sensor,  # type: ignore[arg-type]
+                capability_decider=lambda capability: True,
+            )
+            runtime.run(root, max_ticks=2, target_fps=1000)
+            self.assertEqual(hdi.started, 1)
+            self.assertEqual(hdi.stopped, 1)
+            self.assertEqual(sensor.started, 1)
+            self.assertEqual(sensor.stopped, 1)
+
+    def test_runtime_stop_called_on_loop_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_app_files(root, lifecycle_expr="_LifecycleRaisesInLoop()")
+            hdi = _FakeHDI()
+            sensor = _FakeSensor()
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=hdi,  # type: ignore[arg-type]
+                sensor_manager=sensor,  # type: ignore[arg-type]
+                capability_decider=lambda capability: True,
+            )
+            with self.assertRaises(RuntimeError):
+                runtime.run(root, max_ticks=1, target_fps=1000)
+            self.assertIsNotNone(runtime.last_error)
+            self.assertEqual(hdi.stopped, 1)
+            self.assertEqual(sensor.stopped, 1)
+
+    def test_runtime_calls_on_tick_hook(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_app_files(root, lifecycle_expr="_LifecycleRecorder()")
+            hdi = _FakeHDI()
+            sensor = _FakeSensor()
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=hdi,  # type: ignore[arg-type]
+                sensor_manager=sensor,  # type: ignore[arg-type]
+                capability_decider=lambda capability: True,
+            )
+            ticks = {"n": 0}
+
+            def on_tick() -> None:
+                ticks["n"] += 1
+
+            runtime.run(root, max_ticks=3, target_fps=1000, on_tick=on_tick)
+            self.assertGreaterEqual(ticks["n"], 3)
+
+
+class _NoopHDISource:
+    def poll(self, window_active: bool, ts_ns: int) -> list[HDIEvent]:
+        return []
+
+
+def _write_app_files(root: Path, lifecycle_expr: str) -> None:
+    (root / "app.toml").write_text(
+        "\n".join(
+            [
+                'app_id = "sample.app"',
+                f'protocol_version = "{APP_PROTOCOL_VERSION}"',
+                'entrypoint = "app_main:create"',
+                'required_capabilities = ["window.write"]',
+                'optional_capabilities = ["sensor.thermal"]',
+            ]
+        )
+    )
+    (root / "app_main.py").write_text(
+        "\n".join(
+            [
+                "import torch",
+                "from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch",
+                "",
+                "class _LifecycleRecorder:",
+                "    def __init__(self):",
+                "        self.init_called = False",
+                "        self.loop_calls = 0",
+                "        self.stop_called = False",
+                "",
+                "    def init(self, ctx):",
+                "        self.init_called = True",
+                "        ctx.submit_write_batch(WriteBatch([FullRewrite(torch.zeros((1, 1, 4), dtype=torch.uint8))]))",
+                "",
+                "    def loop(self, ctx, dt):",
+                "        self.loop_calls += 1",
+                "        ctx.poll_hdi_events(16)",
+                "        ctx.read_sensor('thermal.temperature')",
+                "",
+                "    def stop(self, ctx):",
+                "        self.stop_called = True",
+                "",
+                "class _LifecycleRaisesInLoop(_LifecycleRecorder):",
+                "    def loop(self, ctx, dt):",
+                "        super().loop(ctx, dt)",
+                "        raise RuntimeError('boom')",
+                "",
+                "def create():",
+                f"    return {lifecycle_expr}",
+            ]
+        )
+    )
+
+
+if __name__ == "__main__":
+    unittest.main()
