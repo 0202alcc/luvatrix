@@ -114,3 +114,92 @@ my_app/
 1. Vulkan stabilization pass (surface/swapchain/fence resilience and fallback parity).
 2. Finalize app protocol docs with packaging/variant examples and compatibility policy.
 3. Expand CI matrix with gated macOS GUI smoke and artifacted logs.
+
+## 6. Engineering Operating Protocols (Technical)
+
+### 6.1 Why These Protocols Exist
+1. Preserve release quality as team count and AI contribution volume grow.
+2. Keep versioning and branching deterministic for humans and automation.
+3. Enforce test rigor before merge so regressions are caught early.
+4. Separate domain ownership from shared quality governance.
+
+### 6.2 QA Organization Model
+1. **Embedded quality ownership per engineering team**:
+- each team designs and maintains tests for their domain features.
+2. **Central quality governance function**:
+- owns org-wide quality standards, release gates, flake policy, and cross-team/system tests.
+3. **Operational split**:
+- teams own local correctness;
+- central quality owns consistency and system-level confidence.
+
+### 6.3 Mandatory Feature Test Lifecycle
+Every feature/change must follow this order:
+1. Define success criteria.
+2. Define safety tests.
+3. Define implementation tests.
+4. Define edge-case tests.
+5. Build prototype/implementation.
+6. Define and execute performance budget checks.
+7. Define and execute regression checks.
+8. Attach test evidence to PR before merge.
+
+### 6.4 Done Criteria (Technical)
+A PR is merge-eligible only if:
+1. Test lifecycle steps are completed and documented.
+2. Deterministic CI suite passes.
+3. Required review approvals pass.
+4. Security/risk gates pass when applicable.
+5. Linked milestone ID and decision reference exist for major changes.
+
+### 6.5 Versioning Protocol
+Use SemVer-compatible `MAJOR.MINOR.PATCH` with optional prerelease tags.
+1. `MAJOR`: breaking protocol/runtime changes or major stable generation.
+2. `MINOR`: backward-compatible feature additions/improvements.
+3. `PATCH`: backward-compatible fixes.
+4. Prerelease format for beta builds: `vX.Y.Z-beta.N`.
+5. Stable release tags: `vX.Y.Z`.
+
+### 6.6 Branching Protocol
+1. `main` must stay releasable.
+2. Feature branches start from `main`:
+- `feat/<team>/<ticket>-<slug>`
+3. AI implementation attempts use isolated branches:
+- `ai/<agent>/<ticket>/<attempt-n>`
+4. Hotfix branches are cut from latest stable tag:
+- `hotfix/<version>/<slug>`
+5. Optional release stabilization branches:
+- `release/vX.Y.0`
+6. No direct pushes to `main`; changes land through PRs only.
+7. Prefer squash merges for clean history.
+
+### 6.7 Branch Protection and Merge Gates
+1. Required status checks must pass before merge.
+2. Required reviewer approvals must be present.
+3. Stale reviews are dismissed on new commits.
+4. Major changes require linked RFC/ADR references.
+5. PR template requires:
+- milestone ID (`M-###`)
+- test evidence links
+- risk notes (if applicable)
+
+### 6.8 Release Flow
+1. Merge to `main` only after merge gates pass.
+2. Build candidate from `main`.
+3. Run deterministic validation gates.
+4. Tag prerelease or stable version.
+5. Publish release notes with:
+- included features/fixes
+- known issues
+- rollback notes
+
+### 6.9 CI and Quality Gates
+1. Deterministic tests remain the hard gate.
+2. Guarded GUI smoke stays optional/flag-gated but monitored.
+3. Flaky tests are tracked with explicit governance; repeated flakes must be fixed or quarantined by policy.
+4. Security, safety, and performance checks are required for affected change classes.
+
+### 6.10 Milestone and Agile Linkage
+1. High-level milestones are planned in Gantt by CEO + leads.
+2. Teams execute via Agile boards linked to milestone IDs.
+3. Every epic/task maps to one milestone.
+4. Weekly leadership review updates milestone confidence from board + CI evidence.

@@ -1,4 +1,4 @@
-app_id = "examples.input_sensor_logger"
+app_id = "examples.full_suite_interactive"
 protocol_version = "1"
 entrypoint = "app_main:create"
 required_capabilities = ["window.write"]

@@ -69,7 +69,8 @@ class UnifiedRuntime:
         manifest = self._app_runtime.load_manifest(app_path)
         granted = self._app_runtime.resolve_capabilities(manifest)
         ctx = self._app_runtime.build_context(granted_capabilities=granted)
-        lifecycle = self._app_runtime.load_lifecycle(app_path, manifest.entrypoint)
+        resolved = self._app_runtime.resolve_variant(app_path, manifest)
+        lifecycle = self._app_runtime.load_lifecycle(resolved.module_dir, resolved.entrypoint)
         self._enable_granted_sensors(ctx.sensor_manager, granted)
 
         target_dt = 1.0 / float(target_fps)
@@ -132,6 +133,9 @@ class UnifiedRuntime:
             "sensor.thermal": "thermal.temperature",
             "sensor.power": "power.voltage_current",
             "sensor.motion": "sensor.motion",
+            "sensor.camera": "camera.device",
+            "sensor.microphone": "microphone.device",
+            "sensor.speaker": "speaker.device",
         }
         for cap, sensor_type in mapping.items():
             if cap in granted_capabilities:

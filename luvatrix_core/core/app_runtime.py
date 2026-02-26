@@ -5,6 +5,7 @@ import importlib.util
 from pathlib import Path
 import logging
 import platform
+import sys
 import time
 import tomllib
 from typing import Callable, Protocol
@@ -12,6 +13,7 @@ from typing import Callable, Protocol
 import torch
 
 from .hdi_thread import HDIEvent, HDIThread
+from .coordinates import CoordinateFrameRegistry
 from .protocol_governance import CURRENT_PROTOCOL_VERSION, check_protocol_compatibility
 from .sensor_manager import SensorManagerThread, SensorSample
 from .window_matrix import CallBlitEvent, WindowMatrix, WriteBatch
@@ -68,17 +70,23 @@ class AppContext:
     granted_capabilities: set[str]
     security_audit_logger: Callable[[dict[str, object]], None] | None = None
     sensor_read_min_interval_s: float = 0.2
+    coordinate_frames: CoordinateFrameRegistry | None = None
     _last_sensor_read_ns: dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.coordinate_frames is None:
+            self.coordinate_frames = CoordinateFrameRegistry(width=self.matrix.width, height=self.matrix.height)
 
     def submit_write_batch(self, batch: WriteBatch) -> CallBlitEvent:
         self._require_capability("window.write")
         return self.matrix.submit_write_batch(batch)
 
-    def poll_hdi_events(self, max_events: int) -> list[HDIEvent]:
+    def poll_hdi_events(self, max_events: int, frame: str | None = None) -> list[HDIEvent]:
         if max_events <= 0:
             raise ValueError("max_events must be > 0")
         events = self.hdi.poll_events(max_events=max_events)
-        return [self._gate_hdi_event(event) for event in events]
+        gated = [self._gate_hdi_event(event) for event in events]
+        return [self._transform_hdi_event(event, frame=frame) for event in gated]
 
     def read_sensor(self, sensor_type: str) -> SensorSample:
         if not self._has_sensor_capability(sensor_type):
@@ -113,6 +121,33 @@ class AppContext:
 
     def has_capability(self, capability: str) -> bool:
         return capability in self.granted_capabilities
+
+    @property
+    def default_coordinate_frame(self) -> str:
+        assert self.coordinate_frames is not None
+        return self.coordinate_frames.default_frame
+
+    def set_default_coordinate_frame(self, frame_name: str) -> None:
+        assert self.coordinate_frames is not None
+        self.coordinate_frames.set_default_frame(frame_name)
+
+    def define_coordinate_frame(
+        self,
+        name: str,
+        origin: tuple[float, float],
+        basis_x: tuple[float, float],
+        basis_y: tuple[float, float],
+    ) -> None:
+        assert self.coordinate_frames is not None
+        self.coordinate_frames.define_frame(name=name, origin=origin, basis_x=basis_x, basis_y=basis_y)
+
+    def to_render_coords(self, x: float, y: float, frame: str | None = None) -> tuple[float, float]:
+        assert self.coordinate_frames is not None
+        return self.coordinate_frames.to_render_coords((float(x), float(y)), frame=frame)
+
+    def from_render_coords(self, x: float, y: float, frame: str | None = None) -> tuple[float, float]:
+        assert self.coordinate_frames is not None
+        return self.coordinate_frames.from_render_coords((float(x), float(y)), frame=frame)
 
     def _require_capability(self, capability: str) -> None:
         if capability not in self.granted_capabilities:
@@ -150,6 +185,44 @@ class AppContext:
                 "sensor_type": sensor_type,
                 "actor": "app_context",
             }
+        )
+
+    def _transform_hdi_event(self, event: HDIEvent, frame: str | None) -> HDIEvent:
+        if self.coordinate_frames is None:
+            return event
+        if event.payload is None or not isinstance(event.payload, dict):
+            return event
+        payload = dict(event.payload)
+        if "x" in payload and "y" in payload:
+            try:
+                x = float(payload["x"])
+                y = float(payload["y"])
+                tx, ty = self.coordinate_frames.from_render_coords((x, y), frame=frame)
+                payload["x"] = tx
+                payload["y"] = ty
+            except (TypeError, ValueError):
+                return event
+        if "delta_x" in payload and "delta_y" in payload:
+            try:
+                dx = float(payload["delta_x"])
+                dy = float(payload["delta_y"])
+                tdx, tdy = self.coordinate_frames.transform_vector(
+                    (dx, dy),
+                    from_frame="screen_tl",
+                    to_frame=frame,
+                )
+                payload["delta_x"] = tdx
+                payload["delta_y"] = tdy
+            except (TypeError, ValueError):
+                return event
+        return HDIEvent(
+            event_id=event.event_id,
+            ts_ns=event.ts_ns,
+            window_id=event.window_id,
+            device=event.device,
+            event_type=event.event_type,
+            status=event.status,
+            payload=payload,
         )
 
 
@@ -298,6 +371,7 @@ class AppRuntime:
             sensor_manager=self._sensor_manager,
             granted_capabilities=granted_capabilities,
             security_audit_logger=self._capability_audit_logger,
+            coordinate_frames=CoordinateFrameRegistry(width=self._matrix.width, height=self._matrix.height),
         )
 
     def load_lifecycle(self, app_dir: Path, entrypoint: str) -> AppLifecycle:
@@ -461,7 +535,14 @@ def _load_module_from_app_dir(app_dir: Path, module_name: str):
     if spec is None or spec.loader is None:
         raise ValueError(f"unable to load entrypoint module: {module_name}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Register before execution so decorators/introspection (e.g. dataclasses)
+    # can resolve cls.__module__ during module import.
+    sys.modules[unique_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(unique_name, None)
+        raise
     return module
 
 
@@ -489,6 +570,12 @@ def _sanitize_sensor_sample(sample: SensorSample, granted_capabilities: set[str]
             else:
                 out[k] = v
         value = out
+    elif sample.sensor_type in {"camera.device", "microphone.device", "speaker.device"} and isinstance(value, dict):
+        value = {
+            "available": bool(value.get("available", False)),
+            "device_count": int(value.get("device_count", 0)),
+            "default_present": bool(value.get("default_present", False)),
+        }
     return SensorSample(
         sample_id=sample.sample_id,
         ts_ns=sample.ts_ns,

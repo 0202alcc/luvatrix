@@ -17,6 +17,26 @@ See `planning.md` for the integrated Phase 1 spec and visual TLDR protocol model
 ## Repository Layout
 
 - Core engine/runtime source lives in `luvatrix_core/`.
+- In-repo UI contracts/components live in `luvatrix_ui/` (`text/`, `controls/`, `style/`).
+
+## `luvatrix_ui` (In-Repo, v0)
+
+`luvatrix_ui` is a first-party in-repo UI layer with explicit, future-extractable boundaries.
+
+Current v0 surface:
+
+- `TextRenderer` + text command/style contracts in `luvatrix_ui/text/renderer.py`.
+- `SVGRenderer` + SVG command contract in `luvatrix_ui/controls/svg_renderer.py`.
+- `ButtonModel` state machine in `luvatrix_ui/controls/button.py`:
+  `idle`, `hover`, `press_down`, `press_hold`, `disabled`.
+- `ThemeTokens` + validation/default merging in `luvatrix_ui/style/theme.py`.
+
+Interaction model:
+
+- Consumes standardized HDI `press` phases (`down`, `hold_start`, `hold_tick`, `up`, `cancel`, etc.).
+- Keeps runtime/platform internals out of `luvatrix_ui`; integrations should adapt events/renderers at the boundary.
+
+See `docs/ui_component_protocol.md` for the short protocol note.
 
 ## macOS Visualizer Examples
 
@@ -28,6 +48,12 @@ uv run --python 3.14 python examples/macos_visualizer/stretch_mode.py
 Run preserve-aspect mode (black bars when needed):
 ```bash
 uv run --python 3.14 python examples/macos_visualizer/preserve_aspect_mode.py
+```
+
+Run the full interactive suite app-protocol example (runs until window closes):
+```bash
+uv run --python 3.14 python examples/app_protocol/run_full_suite_interactive.py --aspect stretch
+uv run --python 3.14 python examples/app_protocol/run_full_suite_interactive.py --aspect preserve
 ```
 
 Force experimental Vulkan path:
@@ -60,6 +86,9 @@ uv run --python 3.14 python examples/app_protocol/run_input_sensor_logger.py \
   --sensor thermal.temperature \
   --sensor power.voltage_current
 ```
+
+Additional available sensor metadata types:
+`sensor.motion`, `camera.device`, `microphone.device`, `speaker.device`.
 
 Open a macOS logger window and report real mouse hover coordinates (window-relative only, gated by active/focused window):
 ```bash

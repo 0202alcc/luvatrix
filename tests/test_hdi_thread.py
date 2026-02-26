@@ -67,7 +67,10 @@ class HDIThreadTests(unittest.TestCase):
         time.sleep(0.01)
         thread.stop()
         events = thread.poll_events(max_events=10)
-        self.assertEqual([e.event_type for e in events], ["pointer_move", "key_down"])
+        self.assertEqual([e.event_type for e in events], ["pointer_move", "press"])
+        payload = events[1].payload
+        assert isinstance(payload, dict)
+        self.assertEqual(payload.get("phase"), "down")
 
     def test_inactive_window_marks_pointer_not_detected(self) -> None:
         source = _ScriptedHDISource(
@@ -134,6 +137,47 @@ class HDIThreadTests(unittest.TestCase):
         self.assertEqual(payload["button"], 1)
         self.assertNotIn("screen_x", payload)
         self.assertNotIn("screen_y", payload)
+
+    def test_pointer_coords_are_projected_to_target_extent(self) -> None:
+        source = _ScriptedHDISource(
+            [[HDIEvent(1, 1, "w", "mouse", "pointer_move", "OK", {"x": 199.0, "y": 99.0})]]
+        )
+        thread = HDIThread(
+            source=source,
+            max_queue_size=8,
+            poll_interval_s=0.001,
+            window_geometry_provider=lambda: (0.0, 0.0, 200.0, 100.0),
+            target_extent_provider=lambda: (100.0, 50.0),
+        )
+        thread.start()
+        time.sleep(0.01)
+        thread.stop()
+        events = thread.poll_events(max_events=10)
+        self.assertEqual(len(events), 1)
+        payload = events[0].payload
+        assert isinstance(payload, dict)
+        self.assertAlmostEqual(payload["x"], 99.0, places=4)
+        self.assertAlmostEqual(payload["y"], 49.0, places=4)
+
+    def test_pointer_in_letterbox_region_is_not_detected(self) -> None:
+        source = _ScriptedHDISource(
+            [[HDIEvent(1, 1, "w", "mouse", "pointer_move", "OK", {"x": 10.0, "y": 10.0})]]
+        )
+        thread = HDIThread(
+            source=source,
+            max_queue_size=8,
+            poll_interval_s=0.001,
+            window_geometry_provider=lambda: (0.0, 0.0, 300.0, 200.0),
+            target_extent_provider=lambda: (100.0, 100.0),
+            source_content_rect_provider=lambda: (50.0, 20.0, 200.0, 160.0),
+        )
+        thread.start()
+        time.sleep(0.01)
+        thread.stop()
+        events = thread.poll_events(max_events=10)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].status, "NOT_DETECTED")
+        self.assertIsNone(events[0].payload)
 
     def test_pointer_outside_window_is_not_detected(self) -> None:
         source = _ScriptedHDISource(
@@ -216,6 +260,130 @@ class HDIThreadTests(unittest.TestCase):
         thread.stop()
         self.assertIsNotNone(thread.last_error)
         self.assertIn("keyboard transitions", str(thread.last_error))
+
+    def test_keyboard_up_generates_press_release_and_single(self) -> None:
+        source = _ScriptedHDISource(
+            [
+                [
+                    HDIEvent(1, 1, "w", "keyboard", "key_down", "OK", {"key": "a"}),
+                    HDIEvent(2, 2, "w", "keyboard", "key_up", "OK", {"key": "a"}),
+                ]
+            ]
+        )
+        thread = HDIThread(source=source, poll_interval_s=0.001)
+        thread.start()
+        time.sleep(0.01)
+        thread.stop()
+        events = thread.poll_events(max_events=10)
+        press_phases = [
+            e.payload.get("phase")
+            for e in events
+            if e.device == "keyboard" and e.event_type == "press" and isinstance(e.payload, dict)
+        ]
+        self.assertIn("down", press_phases)
+        self.assertIn("up", press_phases)
+        self.assertIn("single", press_phases)
+
+    def test_keyboard_double_press_is_emitted(self) -> None:
+        source = _ScriptedHDISource(
+            [
+                [
+                    HDIEvent(1, 1, "w", "keyboard", "key_down", "OK", {"key": "a"}),
+                    HDIEvent(2, 2, "w", "keyboard", "key_up", "OK", {"key": "a"}),
+                    HDIEvent(3, 3, "w", "keyboard", "key_down", "OK", {"key": "a"}),
+                    HDIEvent(4, 4, "w", "keyboard", "key_up", "OK", {"key": "a"}),
+                ]
+            ]
+        )
+        thread = HDIThread(source=source, poll_interval_s=0.001, double_press_threshold_s=1.0)
+        thread.start()
+        time.sleep(0.01)
+        thread.stop()
+        events = thread.poll_events(max_events=20)
+        phases = [
+            e.payload.get("phase")
+            for e in events
+            if e.device == "keyboard" and e.event_type == "press" and isinstance(e.payload, dict)
+        ]
+        self.assertIn("double", phases)
+
+    def test_keyboard_hold_events_are_emitted(self) -> None:
+        source = _ScriptedHDISource(
+            [
+                [HDIEvent(1, 1, "w", "keyboard", "key_down", "OK", {"key": "a"})],
+                [],
+                [],
+                [],
+            ]
+        )
+        thread = HDIThread(
+            source=source,
+            poll_interval_s=0.005,
+            hold_threshold_s=0.005,
+            hold_tick_interval_s=0.005,
+        )
+        thread.start()
+        time.sleep(0.03)
+        thread.stop()
+        events = thread.poll_events(max_events=50)
+        phases = [
+            e.payload.get("phase")
+            for e in events
+            if e.device == "keyboard" and e.event_type == "press" and isinstance(e.payload, dict)
+        ]
+        self.assertIn("hold_start", phases)
+        self.assertIn("hold_tick", phases)
+
+    def test_multiple_keyboard_down_events_are_preserved(self) -> None:
+        source = _ScriptedHDISource(
+            [
+                [
+                    HDIEvent(1, 1, "w", "keyboard", "key_down", "OK", {"key": "a"}),
+                    HDIEvent(2, 2, "w", "keyboard", "key_down", "OK", {"key": "b"}),
+                ]
+            ]
+        )
+        thread = HDIThread(source=source, poll_interval_s=0.001)
+        thread.start()
+        time.sleep(0.01)
+        thread.stop()
+        events = thread.poll_events(max_events=10)
+        key_downs = [
+            e.payload.get("key")
+            for e in events
+            if e.device == "keyboard"
+            and e.event_type == "press"
+            and isinstance(e.payload, dict)
+            and e.payload.get("phase") == "down"
+        ]
+        self.assertIn("a", key_downs)
+        self.assertIn("b", key_downs)
+
+    def test_keyboard_active_keys_reports_simultaneous_state(self) -> None:
+        source = _ScriptedHDISource(
+            [
+                [
+                    HDIEvent(1, 1, "w", "keyboard", "key_down", "OK", {"key": "a"}),
+                    HDIEvent(2, 2, "w", "keyboard", "key_down", "OK", {"key": "b"}),
+                ]
+            ]
+        )
+        thread = HDIThread(source=source, poll_interval_s=0.001)
+        thread.start()
+        time.sleep(0.01)
+        thread.stop()
+        events = thread.poll_events(max_events=10)
+        press_events = [
+            e
+            for e in events
+            if e.device == "keyboard" and e.event_type == "press" and isinstance(e.payload, dict)
+        ]
+        self.assertGreaterEqual(len(press_events), 2)
+        last = press_events[-1]
+        payload = last.payload
+        assert isinstance(payload, dict)
+        self.assertEqual(payload.get("phase"), "down")
+        self.assertEqual(sorted(payload.get("active_keys", [])), ["a", "b"])
 
 
 if __name__ == "__main__":

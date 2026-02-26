@@ -198,6 +198,51 @@ class UnifiedRuntimeTests(unittest.TestCase):
             self.assertTrue(result.stopped_by_energy_safety)
             self.assertEqual(safety.calls, 1)
 
+    def test_unified_runtime_enables_new_av_sensor_capabilities(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            (app_dir / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "test.av.sensors"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'required_capabilities = ["window.write"]',
+                        'optional_capabilities = ["sensor.camera", "sensor.microphone", "sensor.speaker"]',
+                    ]
+                )
+            )
+            (app_dir / "app_main.py").write_text(
+                "\n".join(
+                    [
+                        "class _App:",
+                        "    def init(self, ctx):",
+                        "        pass",
+                        "    def loop(self, ctx, dt):",
+                        "        pass",
+                        "    def stop(self, ctx):",
+                        "        pass",
+                        "def create():",
+                        "    return _App()",
+                    ]
+                )
+            )
+            matrix = WindowMatrix(height=1, width=1)
+            target = _RecordingTarget()
+            hdi = HDIThread(source=_NoopHDISource())
+            sensors = _FakeSensorManager()
+            runtime = UnifiedRuntime(
+                matrix=matrix,
+                target=target,
+                hdi=hdi,
+                sensor_manager=sensors,
+                capability_decider=lambda cap: True,
+            )
+            runtime.run_app(app_dir, max_ticks=1, target_fps=1000)
+            self.assertIn(("camera.device", True, "unified_runtime"), sensors.set_calls)
+            self.assertIn(("microphone.device", True, "unified_runtime"), sensors.set_calls)
+            self.assertIn(("speaker.device", True, "unified_runtime"), sensors.set_calls)
+
 
 if __name__ == "__main__":
     unittest.main()

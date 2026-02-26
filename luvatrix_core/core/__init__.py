@@ -9,6 +9,13 @@ from .app_runtime import (
     ResolvedAppVariant,
 )
 from .display_runtime import DisplayRuntime, RenderTick
+from .coordinates import (
+    CoordinateFrame,
+    CoordinateFrameRegistry,
+    PRESET_CARTESIAN_BL,
+    PRESET_CARTESIAN_CENTER,
+    PRESET_SCREEN_TL,
+)
 from .energy_safety import EnergySafetyController, EnergySafetyDecision, EnergySafetyPolicy, SensorEnergySafetyController
 from .engine import Engine
 from .hdi_thread import HDIEvent, HDIEventSource, HDIThread
@@ -65,6 +72,11 @@ __all__ = [
     "ReplaceColumn",
     "ReplaceRow",
     "RenderTick",
+    "CoordinateFrame",
+    "CoordinateFrameRegistry",
+    "PRESET_SCREEN_TL",
+    "PRESET_CARTESIAN_BL",
+    "PRESET_CARTESIAN_CENTER",
     "EnergySafetyController",
     "EnergySafetyDecision",
     "EnergySafetyPolicy",

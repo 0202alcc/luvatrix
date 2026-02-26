@@ -57,7 +57,10 @@ class _FakeHDI:
         self.stopped += 1
 
     def poll_events(self, max_events: int) -> list[HDIEvent]:
-        return [HDIEvent(1, 1, "w", "keyboard", "key_down", "OK", {"key": "a"})]
+        return [
+            HDIEvent(1, 1, "w", "keyboard", "key_down", "OK", {"key": "a"}),
+            HDIEvent(2, 2, "w", "mouse", "pointer_move", "OK", {"x": 0.0, "y": 0.0}),
+        ]
 
 
 class _FakeSensor:
@@ -79,6 +82,18 @@ class _FakeSensor:
             status="OK",
             value=42,
             unit="u",
+        )
+
+
+class _CameraMetadataSensor:
+    def read_sensor(self, sensor_type: str) -> SensorSample:
+        return SensorSample(
+            sample_id=1,
+            ts_ns=1,
+            sensor_type=sensor_type,
+            status="OK",
+            value={"available": True, "device_count": 2, "default_present": True, "raw_name": "internal"},
+            unit="metadata",
         )
 
 
@@ -223,10 +238,43 @@ class AppRuntimeTests(unittest.TestCase):
             granted_capabilities={"window.write", "hdi.mouse"},
         )
         events = ctx.poll_hdi_events(8)
-        self.assertEqual(len(events), 1)
+        self.assertEqual(len(events), 2)
         self.assertEqual(events[0].device, "keyboard")
         self.assertEqual(events[0].status, "DENIED")
         self.assertIsNone(events[0].payload)
+        self.assertEqual(events[1].device, "mouse")
+        self.assertEqual(events[1].status, "OK")
+
+    def test_app_context_hdi_coordinates_can_be_requested_in_custom_frame(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        ctx = AppContext(
+            matrix=WindowMatrix(100, 100),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write", "hdi.mouse", "hdi.keyboard"},
+        )
+        ctx.set_default_coordinate_frame("cartesian_bl")
+        events = ctx.poll_hdi_events(8)
+        mouse = [e for e in events if e.device == "mouse"][0]
+        assert isinstance(mouse.payload, dict)
+        self.assertEqual(mouse.payload["x"], 0.0)
+        self.assertEqual(mouse.payload["y"], 99.0)
+
+    def test_app_context_render_coordinate_helpers(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        ctx = AppContext(
+            matrix=WindowMatrix(10, 10),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write"},
+        )
+        ctx.set_default_coordinate_frame("cartesian_bl")
+        rx, ry = ctx.to_render_coords(0.0, 0.0)
+        self.assertEqual((rx, ry), (0.0, 9.0))
+        fx, fy = ctx.from_render_coords(0.0, 9.0)
+        self.assertEqual((fx, fy), (0.0, 0.0))
 
     def test_app_context_sensor_denied_without_sensor_capability(self) -> None:
         from luvatrix_core.core.app_runtime import AppContext
@@ -255,6 +303,34 @@ class AppRuntimeTests(unittest.TestCase):
         second = ctx.read_sensor("thermal.temperature")
         self.assertEqual(first.status, "OK")
         self.assertEqual(second.status, "DENIED")
+
+    def test_app_context_camera_sensor_requires_capability_and_sanitizes(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        denied_ctx = AppContext(
+            matrix=WindowMatrix(1, 1),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_CameraMetadataSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write"},
+        )
+        denied = denied_ctx.read_sensor("camera.device")
+        self.assertEqual(denied.status, "DENIED")
+        self.assertIsNone(denied.value)
+
+        allowed_ctx = AppContext(
+            matrix=WindowMatrix(1, 1),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_CameraMetadataSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write", "sensor.camera"},
+            sensor_read_min_interval_s=0.0,
+        )
+        allowed = allowed_ctx.read_sensor("camera.device")
+        self.assertEqual(allowed.status, "OK")
+        assert isinstance(allowed.value, dict)
+        self.assertEqual(
+            allowed.value,
+            {"available": True, "device_count": 2, "default_present": True},
+        )
 
     def test_manifest_protocol_mismatch_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as td:

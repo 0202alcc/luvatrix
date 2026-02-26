@@ -19,8 +19,11 @@ from luvatrix_core.core import (
 )
 from luvatrix_core.platform.macos import MacOSVulkanPresenter
 from luvatrix_core.platform.macos.sensors import (
+    MacOSCameraDeviceProvider,
+    MacOSMicrophoneDeviceProvider,
     MacOSMotionProvider,
     MacOSPowerVoltageCurrentProvider,
+    MacOSSpeakerDeviceProvider,
     MacOSThermalTemperatureProvider,
 )
 from luvatrix_core.targets.base import DisplayFrame, RenderTarget
@@ -91,6 +94,9 @@ def main() -> None:
                 "thermal.temperature": MacOSThermalTemperatureProvider(),
                 "power.voltage_current": MacOSPowerVoltageCurrentProvider(),
                 "sensor.motion": MacOSMotionProvider(),
+                "camera.device": MacOSCameraDeviceProvider(),
+                "microphone.device": MacOSMicrophoneDeviceProvider(),
+                "speaker.device": MacOSSpeakerDeviceProvider(),
             }
         audit_sink = _build_audit_sink(args.audit_sqlite, args.audit_jsonl)
         try:

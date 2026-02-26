@@ -74,9 +74,11 @@ class MacOSWindowHDISource(HDIEventSource):
                     hdi_type = "scroll"
                     device = "trackpad"
                     loc = event.locationInWindow()
+                    view = self._window_handle.window.contentView()
+                    view_h = float(view.bounds().size.height)
                     payload = {
                         "x": float(loc.x),
-                        "y": float(loc.y),
+                        "y": _to_top_left_y(float(loc.y), view_h),
                         "delta_x": float(event.scrollingDeltaX()),
                         "delta_y": float(event.scrollingDeltaY()),
                     }
@@ -84,24 +86,45 @@ class MacOSWindowHDISource(HDIEventSource):
                     hdi_type = "pressure"
                     device = "trackpad"
                     loc = event.locationInWindow()
-                    payload = {"x": float(loc.x), "y": float(loc.y), "pressure": float(event.pressure()), "stage": int(event.stage())}
+                    view = self._window_handle.window.contentView()
+                    view_h = float(view.bounds().size.height)
+                    payload = {
+                        "x": float(loc.x),
+                        "y": _to_top_left_y(float(loc.y), view_h),
+                        "pressure": float(event.pressure()),
+                        "stage": int(event.stage()),
+                    }
                 elif event_type == int(NSEventTypeMagnify):
                     hdi_type = "pinch"
                     device = "trackpad"
                     loc = event.locationInWindow()
-                    payload = {"x": float(loc.x), "y": float(loc.y), "magnification": float(event.magnification())}
+                    view = self._window_handle.window.contentView()
+                    view_h = float(view.bounds().size.height)
+                    payload = {
+                        "x": float(loc.x),
+                        "y": _to_top_left_y(float(loc.y), view_h),
+                        "magnification": float(event.magnification()),
+                    }
                 elif event_type == int(NSEventTypeRotate):
                     hdi_type = "rotate"
                     device = "trackpad"
                     loc = event.locationInWindow()
-                    payload = {"x": float(loc.x), "y": float(loc.y), "rotation": float(event.rotation())}
+                    view = self._window_handle.window.contentView()
+                    view_h = float(view.bounds().size.height)
+                    payload = {
+                        "x": float(loc.x),
+                        "y": _to_top_left_y(float(loc.y), view_h),
+                        "rotation": float(event.rotation()),
+                    }
                 elif event_type in (int(NSEventTypeLeftMouseDown), int(NSEventTypeRightMouseDown)):
                     hdi_type = "click"
                     device = "trackpad"
                     loc = event.locationInWindow()
+                    view = self._window_handle.window.contentView()
+                    view_h = float(view.bounds().size.height)
                     payload = {
                         "x": float(loc.x),
-                        "y": float(loc.y),
+                        "y": _to_top_left_y(float(loc.y), view_h),
                         "button": 0 if event_type == int(NSEventTypeLeftMouseDown) else 1,
                         "phase": "down",
                         "click_count": int(event.clickCount()),
@@ -110,9 +133,11 @@ class MacOSWindowHDISource(HDIEventSource):
                     hdi_type = "click"
                     device = "trackpad"
                     loc = event.locationInWindow()
+                    view = self._window_handle.window.contentView()
+                    view_h = float(view.bounds().size.height)
                     payload = {
                         "x": float(loc.x),
-                        "y": float(loc.y),
+                        "y": _to_top_left_y(float(loc.y), view_h),
                         "button": 0 if event_type == int(NSEventTypeLeftMouseUp) else 1,
                         "phase": "up",
                         "click_count": int(event.clickCount()),
@@ -150,6 +175,7 @@ class MacOSWindowHDISource(HDIEventSource):
         global_mouse = NSEvent.mouseLocation()
         window_point = window.convertPointFromScreen_(global_mouse)
         local_point = view.convertPoint_fromView_(window_point, None)
+        view_h = float(view.bounds().size.height)
         out.append(
             HDIEvent(
                 event_id=self._next_id,
@@ -158,7 +184,7 @@ class MacOSWindowHDISource(HDIEventSource):
                 device="mouse",
                 event_type="pointer_move",
                 status="OK",
-                payload={"x": float(local_point.x), "y": float(local_point.y)},
+                payload={"x": float(local_point.x), "y": _to_top_left_y(float(local_point.y), view_h)},
             )
         )
         self._next_id += 1
@@ -176,3 +202,12 @@ class MacOSWindowHDISource(HDIEventSource):
             NSEvent.removeMonitor_(self._monitor)
         finally:
             self._monitor = None
+
+def _to_top_left_y(local_y: float, view_height: float) -> float:
+    h = max(1.0, float(view_height))
+    y = (h - 1.0) - float(local_y)
+    if y < 0.0:
+        return 0.0
+    if y > (h - 1.0):
+        return h - 1.0
+    return y

@@ -69,7 +69,10 @@ Examples:
 5. `sensor.thermal`
 6. `sensor.power`
 7. `sensor.motion`
-8. `sensor.high_precision`
+8. `sensor.camera`
+9. `sensor.microphone`
+10. `sensor.speaker`
+11. `sensor.high_precision`
 
 ## 5. Sensor Semantics
 
@@ -85,6 +88,9 @@ macOS backend (current):
 1. `thermal.temperature`
 2. `power.voltage_current`
 3. `sensor.motion`
+4. `camera.device`
+5. `microphone.device`
+6. `speaker.device`
 
 ## 6. HDI Semantics
 
@@ -145,3 +151,9 @@ Use a guarded smoke job:
 3. Run short smoke command:
    `uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger --render macos --ticks 120 --fps 30`
 4. Treat this as smoke (non-deterministic), keep deterministic unit/integration suite as required gate.
+
+## 11. UI Component Protocol Note
+
+For in-repo first-party UI components (`luvatrix_ui`), see:
+
+- `docs/ui_component_protocol.md`
