@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import math
 from pathlib import Path
 import platform
 import json
+import os
 
 from luvatrix_core.core import (
     HDIEvent,
@@ -58,11 +60,26 @@ def main() -> None:
 
     run = sub.add_parser("run-app", help="Run an app protocol folder (app.toml + entrypoint).")
     run.add_argument("app_dir", type=Path)
-    run.add_argument("--ticks", type=int, default=600)
+    run.add_argument(
+        "--ticks",
+        type=int,
+        default=None,
+        help="Max app-loop ticks. Default: run until window close for macos render; 600 for headless render.",
+    )
     run.add_argument("--fps", type=int, default=60)
     run.add_argument("--render", choices=["headless", "macos"], default="headless")
-    run.add_argument("--width", type=int, default=640)
-    run.add_argument("--height", type=int, default=360)
+    run.add_argument(
+        "--width",
+        type=int,
+        default=None,
+        help="Window/matrix width. Default: display-relative for macos render, 640 for headless.",
+    )
+    run.add_argument(
+        "--height",
+        type=int,
+        default=None,
+        help="Window/matrix height. Default: display-relative for macos render, 360 for headless.",
+    )
     run.add_argument("--sensor-backend", choices=["none", "macos"], default="none")
     run.add_argument("--audit-sqlite", type=Path, default=None)
     run.add_argument("--audit-jsonl", type=Path, default=None)
@@ -84,7 +101,8 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "run-app":
-        matrix = WindowMatrix(height=args.height, width=args.width)
+        width, height = _resolve_run_dimensions(args.render, args.width, args.height)
+        matrix = WindowMatrix(height=height, width=width)
         hdi = HDIThread(source=_NoopHDISource())
         providers = {}
         if args.sensor_backend == "macos":
@@ -105,7 +123,9 @@ def main() -> None:
             if args.render == "headless":
                 target: RenderTarget = _HeadlessTarget()
             else:
-                presenter = MacOSVulkanPresenter(width=args.width, height=args.height, title="Luvatrix App")
+                # App protocol on macOS should prefer Vulkan by default.
+                os.environ.setdefault("LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN", "1")
+                presenter = MacOSVulkanPresenter(width=width, height=height, title="Luvatrix App")
                 target = VulkanTarget(presenter=presenter)
 
             energy_safety = None
@@ -132,7 +152,10 @@ def main() -> None:
                 capability_audit_logger=audit_logger,
                 energy_safety=energy_safety,
             )
-            result = runtime.run_app(args.app_dir, max_ticks=args.ticks, target_fps=args.fps)
+            max_ticks = args.ticks
+            if max_ticks is None and args.render == "headless":
+                max_ticks = 600
+            result = runtime.run_app(args.app_dir, max_ticks=max_ticks, target_fps=args.fps)
             print(
                 f"run complete: ticks={result.ticks_run} frames={result.frames_presented} "
                 f"stopped_by_target_close={result.stopped_by_target_close} "
@@ -174,6 +197,57 @@ def _build_audit_sink(audit_sqlite: Path | None, audit_jsonl: Path | None):
         return SQLiteAuditSink(audit_sqlite)
     if audit_jsonl is not None:
         return JsonlAuditSink(audit_jsonl)
+    return None
+
+
+def _resolve_run_dimensions(render: str, width: int | None, height: int | None) -> tuple[int, int]:
+    aspect = 16.0 / 9.0
+    if width is not None and width <= 0:
+        raise ValueError("width must be > 0")
+    if height is not None and height <= 0:
+        raise ValueError("height must be > 0")
+
+    if width is not None and height is not None:
+        return width, height
+    if width is not None:
+        return width, max(1, int(round(width / aspect)))
+    if height is not None:
+        return max(1, int(round(height * aspect))), height
+
+    if render == "macos":
+        display_size = _detect_screen_size()
+        if display_size is not None:
+            return _fit_aspect(display_size[0], display_size[1], scale=0.82, aspect_ratio=aspect)
+        return (1280, 720)
+    return (640, 360)
+
+
+def _fit_aspect(screen_w: int, screen_h: int, *, scale: float, aspect_ratio: float) -> tuple[int, int]:
+    max_w = max(1, int(screen_w * scale))
+    max_h = max(1, int(screen_h * scale))
+    w = max_w
+    h = int(round(w / aspect_ratio))
+    if h > max_h:
+        h = max_h
+        w = int(round(h * aspect_ratio))
+    w = max(w, 960)
+    h = max(h, 540)
+    return (max(1, int(math.floor(w))), max(1, int(math.floor(h))))
+
+
+def _detect_screen_size() -> tuple[int, int] | None:
+    try:
+        import tkinter as tk
+
+        root = tk.Tk()
+        root.withdraw()
+        width = int(root.winfo_screenwidth())
+        height = int(root.winfo_screenheight())
+        root.destroy()
+        if width > 0 and height > 0:
+            return (width, height)
+    except Exception:
+        return None
     return None
 
 
