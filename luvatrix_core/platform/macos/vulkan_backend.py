@@ -61,6 +61,12 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._consecutive_acquire_timeouts = 0
         self._fallback_last_cf_data = None
         self._fallback_last_image = None
+        self._fallback_last_ns_image = None
+        self._fallback_blit_layer = None
+        self._fallback_blit_view = None
+        self._fallback_image_view = None
+        self._fallback_replaced_content_layer = False
+        self._active_present_path: str | None = None
         if self.window_system is None:
             self.window_system = AppKitWindowSystem()
 
@@ -553,6 +559,12 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             raise RuntimeError("Vulkan device not initialized for staging upload")
         vk = self._require_vk()
         rgba_upload = self._prepare_upload_frame(rgba)
+        # Swap R/B when swapchain format is BGRA so colors remain correct.
+        if self._swapchain_image_format in (
+            int(getattr(vk, "VK_FORMAT_B8G8R8A8_UNORM", 44)),
+            int(getattr(vk, "VK_FORMAT_B8G8R8A8_SRGB", 50)),
+        ):
+            rgba_upload = rgba_upload[:, :, [2, 1, 0, 3]].contiguous()
         height, width, _ = rgba_upload.shape
         upload_h, upload_w = height, width
         if self._swapchain_extent is not None:
@@ -727,6 +739,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
 
     def _present_swapchain_image(self) -> None:
         if self._vulkan_available:
+            self._set_active_present_path("vulkan")
             vk = self._require_vk()
             if (
                 self._graphics_queue is None
@@ -843,28 +856,51 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         assert self.window_system is not None
         self.window_system.destroy_window(self._window_handle)
         self._window_handle = None
+        self._fallback_blit_layer = None
+        self._fallback_blit_view = None
+        self._fallback_image_view = None
+        self._fallback_last_ns_image = None
+        self._fallback_replaced_content_layer = False
+        self._active_present_path = None
 
     def _present_fallback_to_layer(self) -> None:
         if self._window_handle is None or self._pending_rgba is None:
             return
-        layer = self._window_handle.layer
+        host_layer = self._window_handle.layer
         try:
             import Quartz  # type: ignore
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError("Quartz not available for fallback layer presentation") from exc
 
+        legacy_enabled = os.getenv("LUVATRIX_ENABLE_LEGACY_CAMETAL_FALLBACK", "0").strip() == "1"
+        target_layer = host_layer
+        is_metal_host = type(host_layer).__name__ == "CAMetalLayer"
+        if legacy_enabled:
+            self._set_active_present_path("fallback_legacy")
+        else:
+            if is_metal_host:
+                target_layer = self._ensure_clean_fallback_surface(Quartz)
+            self._set_active_present_path("fallback_clean")
+
         rgba = self._pending_rgba
         height, width, _ = rgba.shape
         try:
             content_view = self._window_handle.window.contentView()
-            layer.setFrame_(content_view.bounds())
+            bounds = content_view.bounds()
+            host_layer.setFrame_(bounds)
+            if target_layer is not host_layer:
+                target_layer.setFrame_(bounds)
             try:
-                layer.setContentsScale_(float(self._window_handle.window.backingScaleFactor()))
+                scale = float(self._window_handle.window.backingScaleFactor())
+                host_layer.setContentsScale_(scale)
+                if target_layer is not host_layer:
+                    target_layer.setContentsScale_(scale)
             except Exception:
                 pass
         except Exception:
             pass
-        data = bytes(rgba.reshape(-1).tolist())
+        # Fast path: avoid Python per-element conversion when building CGImage bytes.
+        data = rgba.contiguous().cpu().numpy().tobytes(order="C")
         cf_data = Quartz.CFDataCreate(None, data, len(data))
         provider = Quartz.CGDataProviderCreateWithCFData(cf_data)
         color_space = Quartz.CGColorSpaceCreateDeviceRGB()
@@ -886,11 +922,133 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             raise RuntimeError("failed to build fallback CGImage")
         self._fallback_last_cf_data = cf_data
         self._fallback_last_image = image
-        layer.setContents_(image)
+        if is_metal_host and not legacy_enabled:
+            if self._present_fallback_image_view(Quartz, image, width, height):
+                return
+        target_layer.setContents_(image)
         try:
-            layer.setNeedsDisplay()
+            target_layer.setNeedsDisplay()
         except Exception:
             pass
+
+    def _present_fallback_image_view(self, quartz_module, cg_image: object, image_w: int, image_h: int) -> bool:
+        if self._window_handle is None:
+            return False
+        try:
+            from AppKit import (  # type: ignore
+                NSImage,
+                NSImageScaleAxesIndependently,
+                NSImageScaleProportionallyUpOrDown,
+                NSImageView,
+                NSMakeRect,
+                NSViewHeightSizable,
+                NSViewWidthSizable,
+            )
+        except Exception:
+            return False
+        try:
+            content_view = self._window_handle.window.contentView()
+            bounds = content_view.bounds()
+            if self._fallback_image_view is None:
+                image_view = NSImageView.alloc().initWithFrame_(
+                    NSMakeRect(0.0, 0.0, float(bounds.size.width), float(bounds.size.height))
+                )
+                image_view.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
+                image_view.setImageScaling_(
+                    NSImageScaleProportionallyUpOrDown if self.preserve_aspect_ratio else NSImageScaleAxesIndependently
+                )
+                content_view.addSubview_(image_view)
+                self._fallback_image_view = image_view
+                if self.preserve_aspect_ratio:
+                    try:
+                        content_view.setWantsLayer_(True)
+                        content_view.layer().setBackgroundColor_(quartz_module.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0))
+                    except Exception:
+                        pass
+            self._fallback_image_view.setFrame_(bounds)
+            ns_image = NSImage.alloc().initWithCGImage_size_(cg_image, (float(image_w), float(image_h)))
+            self._fallback_last_ns_image = ns_image
+            self._fallback_image_view.setImage_(ns_image)
+            return True
+        except Exception:
+            return False
+
+    def _ensure_clean_fallback_surface(self, quartz_module) -> object:
+        if self._fallback_blit_layer is not None:
+            return self._fallback_blit_layer
+        if self._window_handle is None:
+            raise RuntimeError("window handle missing for clean fallback surface")
+        host_layer = self._window_handle.layer
+        content_view = self._window_handle.window.contentView()
+        bounds = content_view.bounds()
+        # Most robust path: replace content view's layer with a dedicated CALayer
+        # while in fallback mode. This avoids CAMetalLayer contents mutation entirely.
+        try:
+            fallback_layer = quartz_module.CALayer.layer()
+            fallback_layer.setFrame_(bounds)
+            fallback_layer.setContentsGravity_("resizeAspect" if self.preserve_aspect_ratio else "resize")
+            if self.preserve_aspect_ratio:
+                try:
+                    fallback_layer.setBackgroundColor_(quartz_module.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0))
+                except Exception:
+                    pass
+            content_view.setWantsLayer_(True)
+            content_view.setLayer_(fallback_layer)
+            self._fallback_blit_layer = fallback_layer
+            self._fallback_replaced_content_layer = True
+            return self._fallback_blit_layer
+        except Exception:
+            pass
+
+        view_added = False
+        try:
+            from AppKit import NSMakeRect, NSView, NSViewHeightSizable, NSViewWidthSizable  # type: ignore
+
+            fallback_view = NSView.alloc().initWithFrame_(
+                NSMakeRect(0.0, 0.0, float(bounds.size.width), float(bounds.size.height))
+            )
+            fallback_view.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
+            fallback_view.setWantsLayer_(True)
+            fallback_layer = quartz_module.CALayer.layer()
+            fallback_layer.setFrame_(fallback_view.bounds())
+            fallback_layer.setContentsGravity_("resizeAspect" if self.preserve_aspect_ratio else "resize")
+            if self.preserve_aspect_ratio:
+                try:
+                    fallback_layer.setBackgroundColor_(quartz_module.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0))
+                except Exception:
+                    pass
+            fallback_view.setLayer_(fallback_layer)
+            try:
+                from AppKit import NSWindowAbove  # type: ignore
+
+                content_view.addSubview_positioned_relativeTo_(fallback_view, NSWindowAbove, None)
+            except Exception:
+                content_view.addSubview_(fallback_view)
+            self._fallback_blit_view = fallback_view
+            self._fallback_blit_layer = fallback_layer
+            view_added = True
+        except Exception:
+            view_added = False
+
+        if not view_added:
+            # Secondary clean path: child CALayer (still avoids writing host CAMetalLayer contents).
+            fallback_layer = quartz_module.CALayer.layer()
+            fallback_layer.setFrame_(bounds)
+            fallback_layer.setContentsGravity_("resizeAspect" if self.preserve_aspect_ratio else "resize")
+            if self.preserve_aspect_ratio:
+                try:
+                    fallback_layer.setBackgroundColor_(quartz_module.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0))
+                except Exception:
+                    pass
+            host_layer.addSublayer_(fallback_layer)
+            self._fallback_blit_layer = fallback_layer
+        return self._fallback_blit_layer
+
+    def _set_active_present_path(self, path: str) -> None:
+        if path == self._active_present_path:
+            return
+        self._active_present_path = path
+        LOGGER.warning("macOS present path active: %s", path)
 
     def _vk_create_instance(self):
         vk = self._require_vk()

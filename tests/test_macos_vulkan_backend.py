@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 import os
+from unittest.mock import patch
 
 import torch
 
@@ -523,6 +524,324 @@ class MacOSVulkanBackendTests(unittest.TestCase):
         backend._acquire_next_swapchain_image()
 
         self.assertEqual(backend._current_image_index, 2)
+
+    def test_fallback_clean_does_not_mutate_cametal_contents(self) -> None:
+        class _Size:
+            width = 64.0
+            height = 32.0
+
+        class _Bounds:
+            size = _Size()
+
+        class _ContentView:
+            def __init__(self) -> None:
+                self._bounds = _Bounds()
+
+            def bounds(self):
+                return self._bounds
+
+        class _Window:
+            def __init__(self) -> None:
+                self._content = _ContentView()
+
+            def contentView(self):
+                return self._content
+
+            def backingScaleFactor(self):
+                return 2.0
+
+        class CAMetalLayer:
+            def __init__(self) -> None:
+                self.set_contents_calls = 0
+                self.sublayers: list[object] = []
+
+            def setFrame_(self, bounds) -> None:
+                self.bounds = bounds
+
+            def setContentsScale_(self, scale) -> None:
+                self.scale = scale
+
+            def setContents_(self, image) -> None:
+                self.set_contents_calls += 1
+
+            def addSublayer_(self, layer) -> None:
+                self.sublayers.append(layer)
+
+        class _FallbackLayer:
+            def __init__(self) -> None:
+                self.set_contents_calls = 0
+
+            def setFrame_(self, bounds) -> None:
+                self.bounds = bounds
+
+            def setContentsScale_(self, scale) -> None:
+                self.scale = scale
+
+            def setContentsGravity_(self, gravity) -> None:
+                self.gravity = gravity
+
+            def setBackgroundColor_(self, color) -> None:
+                self.bg = color
+
+            def setContents_(self, image) -> None:
+                self.set_contents_calls += 1
+
+            def setNeedsDisplay(self) -> None:
+                pass
+
+        class _CALayerFactory:
+            @staticmethod
+            def layer():
+                return _FallbackLayer()
+
+        class _FakeQuartz:
+            CALayer = _CALayerFactory
+            kCGBitmapByteOrder32Big = 1
+            kCGImageAlphaPremultipliedLast = 2
+            kCGRenderingIntentDefault = 0
+
+            @staticmethod
+            def CFDataCreate(_, data, length):
+                return data[:length]
+
+            @staticmethod
+            def CGDataProviderCreateWithCFData(data):
+                return data
+
+            @staticmethod
+            def CGColorSpaceCreateDeviceRGB():
+                return "rgb"
+
+            @staticmethod
+            def CGImageCreate(*args, **kwargs):
+                return object()
+
+            @staticmethod
+            def CGColorCreateGenericRGB(r, g, b, a):
+                return (r, g, b, a)
+
+        backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+        host_layer = CAMetalLayer()
+        backend._window_handle = MacOSWindowHandle(window=_Window(), layer=host_layer)
+        backend._pending_rgba = torch.zeros((32, 64, 4), dtype=torch.uint8)
+        with patch.dict("sys.modules", {"Quartz": _FakeQuartz}):
+            with patch.dict(os.environ, {"LUVATRIX_ENABLE_LEGACY_CAMETAL_FALLBACK": "0"}, clear=False):
+                backend._present_fallback_to_layer()
+
+        self.assertEqual(backend._active_present_path, "fallback_clean")
+        self.assertEqual(host_layer.set_contents_calls, 0)
+        self.assertIsNotNone(backend._fallback_blit_layer)
+        self.assertEqual(backend._fallback_blit_layer.set_contents_calls, 1)
+
+    def test_fallback_legacy_requires_env_opt_in(self) -> None:
+        class _Size:
+            width = 64.0
+            height = 32.0
+
+        class _Bounds:
+            size = _Size()
+
+        class _ContentView:
+            def __init__(self) -> None:
+                self._bounds = _Bounds()
+
+            def bounds(self):
+                return self._bounds
+
+        class _Window:
+            def __init__(self) -> None:
+                self._content = _ContentView()
+
+            def contentView(self):
+                return self._content
+
+            def backingScaleFactor(self):
+                return 2.0
+
+        class CAMetalLayer:
+            def __init__(self) -> None:
+                self.set_contents_calls = 0
+
+            def setFrame_(self, bounds) -> None:
+                self.bounds = bounds
+
+            def setContentsScale_(self, scale) -> None:
+                self.scale = scale
+
+            def setContents_(self, image) -> None:
+                self.set_contents_calls += 1
+
+            def setNeedsDisplay(self) -> None:
+                pass
+
+        class _FakeQuartz:
+            kCGBitmapByteOrder32Big = 1
+            kCGImageAlphaPremultipliedLast = 2
+            kCGRenderingIntentDefault = 0
+
+            @staticmethod
+            def CFDataCreate(_, data, length):
+                return data[:length]
+
+            @staticmethod
+            def CGDataProviderCreateWithCFData(data):
+                return data
+
+            @staticmethod
+            def CGColorSpaceCreateDeviceRGB():
+                return "rgb"
+
+            @staticmethod
+            def CGImageCreate(*args, **kwargs):
+                return object()
+
+        backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+        host_layer = CAMetalLayer()
+        backend._window_handle = MacOSWindowHandle(window=_Window(), layer=host_layer)
+        backend._pending_rgba = torch.zeros((32, 64, 4), dtype=torch.uint8)
+        with patch.dict("sys.modules", {"Quartz": _FakeQuartz}):
+            with patch.dict(os.environ, {"LUVATRIX_ENABLE_LEGACY_CAMETAL_FALLBACK": "1"}, clear=False):
+                backend._present_fallback_to_layer()
+
+        self.assertEqual(backend._active_present_path, "fallback_legacy")
+        self.assertEqual(host_layer.set_contents_calls, 1)
+
+    def test_fallback_clean_replaces_content_view_layer_when_supported(self) -> None:
+        class _Size:
+            width = 80.0
+            height = 40.0
+
+        class _Bounds:
+            size = _Size()
+
+        class _ContentView:
+            def __init__(self) -> None:
+                self._bounds = _Bounds()
+                self.layer = None
+
+            def bounds(self):
+                return self._bounds
+
+            def setWantsLayer_(self, value) -> None:
+                self.wants_layer = bool(value)
+
+            def setLayer_(self, layer) -> None:
+                self.layer = layer
+
+        class _Window:
+            def __init__(self) -> None:
+                self._content = _ContentView()
+
+            def contentView(self):
+                return self._content
+
+            def backingScaleFactor(self):
+                return 2.0
+
+        class CAMetalLayer:
+            def __init__(self) -> None:
+                self.set_contents_calls = 0
+
+            def setFrame_(self, bounds) -> None:
+                self.bounds = bounds
+
+            def setContentsScale_(self, scale) -> None:
+                self.scale = scale
+
+            def setContents_(self, image) -> None:
+                self.set_contents_calls += 1
+
+        class _FallbackLayer:
+            def __init__(self) -> None:
+                self.set_contents_calls = 0
+
+            def setFrame_(self, bounds) -> None:
+                self.bounds = bounds
+
+            def setContentsScale_(self, scale) -> None:
+                self.scale = scale
+
+            def setContentsGravity_(self, gravity) -> None:
+                self.gravity = gravity
+
+            def setBackgroundColor_(self, color) -> None:
+                self.bg = color
+
+            def setContents_(self, image) -> None:
+                self.set_contents_calls += 1
+
+            def setNeedsDisplay(self) -> None:
+                pass
+
+        class _CALayerFactory:
+            @staticmethod
+            def layer():
+                return _FallbackLayer()
+
+        class _FakeQuartz:
+            CALayer = _CALayerFactory
+            kCGBitmapByteOrder32Big = 1
+            kCGImageAlphaPremultipliedLast = 2
+            kCGRenderingIntentDefault = 0
+
+            @staticmethod
+            def CFDataCreate(_, data, length):
+                return data[:length]
+
+            @staticmethod
+            def CGDataProviderCreateWithCFData(data):
+                return data
+
+            @staticmethod
+            def CGColorSpaceCreateDeviceRGB():
+                return "rgb"
+
+            @staticmethod
+            def CGImageCreate(*args, **kwargs):
+                return object()
+
+            @staticmethod
+            def CGColorCreateGenericRGB(r, g, b, a):
+                return (r, g, b, a)
+
+        backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+        window = _Window()
+        host_layer = CAMetalLayer()
+        backend._window_handle = MacOSWindowHandle(window=window, layer=host_layer)
+        backend._pending_rgba = torch.zeros((40, 80, 4), dtype=torch.uint8)
+        with patch.dict("sys.modules", {"Quartz": _FakeQuartz}):
+            with patch.dict(os.environ, {"LUVATRIX_ENABLE_LEGACY_CAMETAL_FALLBACK": "0"}, clear=False):
+                backend._present_fallback_to_layer()
+
+        self.assertEqual(backend._active_present_path, "fallback_clean")
+        self.assertEqual(host_layer.set_contents_calls, 0)
+        self.assertIsNotNone(window.contentView().layer)
+        self.assertIs(window.contentView().layer, backend._fallback_blit_layer)
+        self.assertTrue(backend._fallback_replaced_content_layer)
+
+    def test_present_swapchain_sets_vulkan_present_path(self) -> None:
+        class _FakeVk:
+            VK_STRUCTURE_TYPE_PRESENT_INFO_KHR = 100
+
+            @staticmethod
+            def VkPresentInfoKHR(**kwargs):
+                return kwargs
+
+        class _Backend(MoltenVKMacOSBackend):
+            def _vk_queue_present(self, queue, present_info) -> None:
+                return
+
+        backend = _Backend(window_system=_FakeWindowSystem())
+        backend._vk = _FakeVk()
+        backend._vulkan_available = True
+        backend._graphics_queue = "queue"
+        backend._swapchain = "swapchain"
+        backend._render_finished_semaphore = "sem"
+        backend._current_image_index = 0
+
+        backend._present_swapchain_image()
+
+        self.assertEqual(backend._active_present_path, "vulkan")
 
     def test_acquire_next_image_suboptimal_recreates_swapchain(self) -> None:
         class _FakeVk:
