@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 
@@ -49,6 +49,14 @@ class FigureStyle:
     background: tuple[int, int, int, int] = (12, 16, 23, 255)
 
 
+@dataclass(frozen=True)
+class ReferenceLine:
+    axis: Literal["x", "y"]
+    value: float
+    color: tuple[int, int, int, int]
+    width: int = 1
+
+
 @dataclass
 class Axes:
     figure: "Figure"
@@ -62,6 +70,7 @@ class Axes:
 
     _series: list[SeriesSpec] = field(default_factory=list)
     _cache: LayerCache = field(default_factory=LayerCache)
+    _previous_limits: DataLimits | None = None
 
     # plot region gutters
     _gutter_left: int = 64
@@ -76,6 +85,12 @@ class Axes:
     minor_dot_grid_color: tuple[int, int, int, int] = (225, 232, 242, 90)
     axis_color: tuple[int, int, int, int] = (124, 138, 156, 255)
     text_color: tuple[int, int, int, int] = (208, 218, 232, 255)
+    limit_hysteresis_enabled: bool = False
+    limit_hysteresis_deadband_ratio: float = 0.1
+    limit_hysteresis_shrink_rate: float = 0.08
+    show_zero_reference_lines: bool = True
+    reference_line_color: tuple[int, int, int, int] = (186, 201, 220, 235)
+    reference_lines: list[ReferenceLine] = field(default_factory=list)
 
     def scatter(
         self,
@@ -135,6 +150,48 @@ class Axes:
         self._series.append(SeriesSpec(data=series_data, style=style))
         return self
 
+    def set_limit_hysteresis(
+        self,
+        *,
+        enabled: bool = True,
+        deadband_ratio: float = 0.1,
+        shrink_rate: float = 0.08,
+    ) -> "Axes":
+        if deadband_ratio < 0:
+            raise ValueError("deadband_ratio must be >= 0")
+        if shrink_rate < 0 or shrink_rate > 1:
+            raise ValueError("shrink_rate must be in [0, 1]")
+        self.limit_hysteresis_enabled = enabled
+        self.limit_hysteresis_deadband_ratio = deadband_ratio
+        self.limit_hysteresis_shrink_rate = shrink_rate
+        return self
+
+    def add_reference_line(
+        self,
+        axis: Literal["x", "y"],
+        value: float,
+        *,
+        color: tuple[int, int, int, int] | None = None,
+        width: int = 1,
+    ) -> "Axes":
+        if axis not in {"x", "y"}:
+            raise ValueError("axis must be 'x' or 'y'")
+        if width <= 0:
+            raise ValueError("width must be > 0")
+        self.reference_lines.append(
+            ReferenceLine(
+                axis=axis,
+                value=float(value),
+                color=self.reference_line_color if color is None else color,
+                width=width,
+            )
+        )
+        return self
+
+    def clear_reference_lines(self) -> "Axes":
+        self.reference_lines.clear()
+        return self
+
     def _plot_viewport(self) -> tuple[int, int, int, int]:
         left = min(self._gutter_left, max(8, self.figure.width // 4))
         right = min(self._gutter_right, max(8, self.figure.width // 8))
@@ -166,6 +223,47 @@ class Axes:
 
         return min(mins_x), max(maxs_x), min(mins_y), max(maxs_y)
 
+    def _apply_limit_hysteresis(self, raw: DataLimits) -> DataLimits:
+        if not self.limit_hysteresis_enabled:
+            self._previous_limits = raw
+            return raw
+        prev = self._previous_limits
+        if prev is None:
+            self._previous_limits = raw
+            return raw
+
+        deadband_x = max(1e-9, (raw.xmax - raw.xmin) * self.limit_hysteresis_deadband_ratio)
+        deadband_y = max(1e-9, (raw.ymax - raw.ymin) * self.limit_hysteresis_deadband_ratio)
+
+        xmin = prev.xmin
+        xmax = prev.xmax
+        ymin = prev.ymin
+        ymax = prev.ymax
+
+        # Expand immediately when new data breaches current limits.
+        if raw.xmin < xmin:
+            xmin = raw.xmin
+        if raw.xmax > xmax:
+            xmax = raw.xmax
+        if raw.ymin < ymin:
+            ymin = raw.ymin
+        if raw.ymax > ymax:
+            ymax = raw.ymax
+
+        # Contract slowly only when raw limits move inward past deadband.
+        if raw.xmin > xmin + deadband_x:
+            xmin = xmin + (raw.xmin - xmin) * self.limit_hysteresis_shrink_rate
+        if raw.xmax < xmax - deadband_x:
+            xmax = xmax - (xmax - raw.xmax) * self.limit_hysteresis_shrink_rate
+        if raw.ymin > ymin + deadband_y:
+            ymin = ymin + (raw.ymin - ymin) * self.limit_hysteresis_shrink_rate
+        if raw.ymax < ymax - deadband_y:
+            ymax = ymax - (ymax - raw.ymax) * self.limit_hysteresis_shrink_rate
+
+        out = DataLimits(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
+        self._previous_limits = out
+        return out
+
     def render(self) -> np.ndarray:
         if not self._series:
             raise PlotDataError("cannot render empty axes")
@@ -177,6 +275,8 @@ class Axes:
         title_font_px = max(12.0, min(30.0, scale_base * 0.038))
         tick_half_h = int(round(tick_font_px * 0.5))
         xmin, xmax, ymin, ymax = self._combined_limits()
+        limits = self._apply_limit_hysteresis(DataLimits(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax))
+        xmin, xmax, ymin, ymax = limits.xmin, limits.xmax, limits.ymin, limits.ymax
         y_all = np.concatenate([spec.data.y[spec.data.mask] for spec in self._series]).astype(np.float64, copy=False)
         y_resolution = infer_resolution(y_all)
         preferred_y_step = preferred_major_step_from_resolution(y_resolution)
@@ -195,9 +295,12 @@ class Axes:
         y_label_w, y_label_h = text_size(self.y_label_left, font_size_px=label_font_px, rotate_deg=270)
         title_h = text_size(self.title, font_size_px=title_font_px)[1] if self.title else 0
 
+        x_tick_pad = int(max(4.0, tick_font_px * 0.5))
+        x_label_gap = int(max(10.0, label_font_px * 0.65))
         y_tick_pad = int(max(4.0, tick_font_px * 0.4))
         y_label_gap = int(max(8.0, label_font_px * 0.45))
-        left = int(max(18, max_y_tick_w + y_tick_pad + y_label_w + y_label_gap + 10))
+        y_axis_label_pad = int(max(12.0, label_font_px * 0.75))
+        left = int(max(18, max_y_tick_w + y_tick_pad + y_label_w + y_label_gap + y_axis_label_pad + 10))
         right_tick_pad = int(max(8, max_x_tick_w // 2 + 6))
         right = int(
             max(
@@ -208,7 +311,7 @@ class Axes:
             )
         )
         top = int(max(10, title_h + 10))
-        bottom = int(max(12, max_x_tick_h + x_label_h + 14))
+        bottom = int(max(12, max_x_tick_h + x_tick_pad + x_label_h + x_label_gap + 10))
 
         # Bound gutters for small figures so we always preserve a drawable plot area.
         left = min(left, max(6, self.figure.width // 3))
@@ -264,6 +367,8 @@ class Axes:
             round(ymin, 12),
             round(ymax, 12),
             self.grid_color,
+            self.show_zero_reference_lines,
+            tuple((line.axis, round(line.value, 12), line.color, line.width) for line in self.reference_lines),
         )
         if self._cache.grid_key != grid_key or self._cache.grid_template is None:
             grid = new_canvas(self.figure.width, self.figure.height, color=(0, 0, 0, 0))
@@ -278,6 +383,37 @@ class Axes:
             for yv in tick_y:
                 _, py = map_to_pixels(np.asarray([xmin], dtype=np.float64), np.asarray([yv], dtype=np.float64), transform, plot_w, plot_h)
                 draw_hline(grid, plot_x0, plot_x0 + plot_w - 1, plot_y0 + int(py[0]), self.grid_color)
+            ref_lines: list[ReferenceLine] = list(self.reference_lines)
+            if self.show_zero_reference_lines:
+                ref_lines.append(ReferenceLine(axis="x", value=0.0, color=self.reference_line_color, width=1))
+                ref_lines.append(ReferenceLine(axis="y", value=0.0, color=self.reference_line_color, width=1))
+            for ref in ref_lines:
+                if ref.axis == "x":
+                    if ref.value < xmin or ref.value > xmax:
+                        continue
+                    px, _ = map_to_pixels(
+                        np.asarray([ref.value], dtype=np.float64),
+                        np.asarray([ymin], dtype=np.float64),
+                        transform,
+                        plot_w,
+                        plot_h,
+                    )
+                    gx = plot_x0 + int(px[0])
+                    for offset in range(max(1, ref.width)):
+                        draw_vline(grid, gx + offset, plot_y0, plot_y0 + plot_h - 1, ref.color)
+                else:
+                    if ref.value < ymin or ref.value > ymax:
+                        continue
+                    _, py = map_to_pixels(
+                        np.asarray([xmin], dtype=np.float64),
+                        np.asarray([ref.value], dtype=np.float64),
+                        transform,
+                        plot_w,
+                        plot_h,
+                    )
+                    gy = plot_y0 + int(py[0])
+                    for offset in range(max(1, ref.width)):
+                        draw_hline(grid, plot_x0, plot_x0 + plot_w - 1, gy + offset, ref.color)
             # Minor dot grid at tenth subdivisions of major steps.
             major_x_step = float(abs(tick_x[1] - tick_x[0])) if tick_x.size > 1 else 1.0
             major_y_step = float(abs(tick_y[1] - tick_y[0])) if tick_y.size > 1 else 1.0
@@ -406,7 +542,7 @@ class Axes:
                 draw_text(
                     text_layer,
                     plot_x0 + int(px[0]) - tx // 2,
-                    int(round(plot_y0 + plot_h + max(4.0, tick_font_px * 0.5))),
+                    int(round(plot_y0 + plot_h + x_tick_pad)),
                     label,
                     self.text_color,
                     font_size_px=tick_font_px,
@@ -429,7 +565,7 @@ class Axes:
             draw_text(
                 text_layer,
                 max(0, plot_x0 + (plot_w // 2) - (x_label_w // 2)),
-                max(2, int(round(self.figure.height - x_label_h - 2))),
+                max(2, int(round(plot_y0 + plot_h + x_tick_pad + max_x_tick_h + x_label_gap))),
                 self.x_label_bottom,
                 self.text_color,
                 font_size_px=label_font_px,
@@ -437,7 +573,7 @@ class Axes:
             )
             draw_text(
                 text_layer,
-                max(2, int(round(plot_x0 - max_y_tick_w - y_tick_pad - y_label_w - y_label_gap))),
+                max(2, int(round(plot_x0 - max_y_tick_w - y_tick_pad - y_label_w - y_label_gap - y_axis_label_pad))),
                 max(2, int(round(plot_y0 + (plot_h // 2) - (y_label_h * 0.5)))),
                 self.y_label_left,
                 self.text_color,

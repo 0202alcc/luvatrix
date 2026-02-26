@@ -35,6 +35,7 @@ class PlotDemoApp:
             x_label_bottom="sample",
             y_label_left="signal",
         )
+        ax.set_limit_hysteresis(enabled=True, deadband_ratio=0.12, shrink_rate=0.06)
         ax.plot(y=self._values, color=(255, 170, 70), width=1)
         ax.scatter(y=self._values, color=(90, 190, 255), size=1, alpha=0.8)
 

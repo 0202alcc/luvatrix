@@ -11,6 +11,7 @@ from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch
 from luvatrix_plot import PlotDataError, figure
 from luvatrix_plot.adapters.normalize import normalize_xy
 from luvatrix_plot.display import resolve_default_figure_size
+from luvatrix_plot.figure import Axes, Figure
 from luvatrix_plot.raster.canvas import new_canvas
 from luvatrix_plot.raster.draw_text import DEFAULT_FONT_FAMILY
 from luvatrix_plot.raster.draw_text import draw_text as raster_draw_text
@@ -68,6 +69,38 @@ class LuvatrixPlotTests(unittest.TestCase):
         self.assertAlmostEqual(preferred or 0.0, 0.5, places=9)
         ticks = generate_nice_ticks(1.795, 6.305, 5, preferred_step=preferred)
         self.assertTrue(np.isclose(abs(ticks[1] - ticks[0]), 0.5))
+
+    def test_limit_hysteresis_expands_immediately_and_shrinks_gradually(self) -> None:
+        ax = Axes(figure=Figure(width=320, height=200))
+        ax.set_limit_hysteresis(enabled=True, deadband_ratio=0.1, shrink_rate=0.2)
+
+        first = ax._apply_limit_hysteresis(DataLimits(xmin=0.0, xmax=10.0, ymin=0.0, ymax=10.0))
+        self.assertEqual(first.ymax, 10.0)
+
+        expanded = ax._apply_limit_hysteresis(DataLimits(xmin=0.0, xmax=10.0, ymin=-2.0, ymax=12.0))
+        self.assertEqual(expanded.ymin, -2.0)
+        self.assertEqual(expanded.ymax, 12.0)
+
+        shrunk = ax._apply_limit_hysteresis(DataLimits(xmin=0.0, xmax=10.0, ymin=1.0, ymax=9.0))
+        self.assertGreater(shrunk.ymax, 9.0)
+        self.assertLess(shrunk.ymax, 12.0)
+
+    def test_zero_reference_lines_enabled_by_default(self) -> None:
+        x = np.asarray([-1.0, 0.0, 1.0], dtype=np.float64)
+        y = np.asarray([-1.0, 0.0, 1.0], dtype=np.float64)
+
+        fig_on = figure(width=220, height=160)
+        ax_on = fig_on.axes(x_label_bottom="x", y_label_left="y")
+        ax_on.plot(x=x, y=y)
+        frame_on = fig_on.to_rgba()
+
+        fig_off = figure(width=220, height=160)
+        ax_off = fig_off.axes(x_label_bottom="x", y_label_left="y")
+        ax_off.show_zero_reference_lines = False
+        ax_off.plot(x=x, y=y)
+        frame_off = fig_off.to_rgba()
+
+        self.assertFalse(np.array_equal(frame_on, frame_off))
 
     def test_normalize_decimal_and_mask(self) -> None:
         data = [Decimal("1.5"), Decimal("2.25"), None, Decimal("3.5")]
