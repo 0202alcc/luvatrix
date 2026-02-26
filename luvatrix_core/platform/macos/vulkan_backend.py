@@ -878,8 +878,6 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         if legacy_enabled:
             self._set_active_present_path("fallback_legacy")
         else:
-            if is_metal_host:
-                target_layer = self._ensure_clean_fallback_surface(Quartz)
             self._set_active_present_path("fallback_clean")
 
         rgba = self._pending_rgba
@@ -923,8 +921,11 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._fallback_last_cf_data = cf_data
         self._fallback_last_image = image
         if is_metal_host and not legacy_enabled:
+            # Preferred clean path for CAMetal-hosted windows.
             if self._present_fallback_image_view(Quartz, image, width, height):
                 return
+            # Secondary clean path when NSImageView bridging is unavailable.
+            target_layer = self._ensure_clean_fallback_surface(Quartz)
         target_layer.setContents_(image)
         try:
             target_layer.setNeedsDisplay()
