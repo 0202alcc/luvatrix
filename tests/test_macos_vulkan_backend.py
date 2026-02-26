@@ -997,6 +997,10 @@ class MacOSVulkanBackendTests(unittest.TestCase):
                 self._staging_size = required_size
                 self._staging_memory = "staging-memory"
 
+            def _ensure_upload_image(self, width: int, height: int) -> None:
+                self._upload_image = "upload-image"
+                self._upload_image_extent = (width, height)
+
         backend = _UploadBackend(window_system=_FakeWindowSystem())
         fake_vk = _FakeVk()
         backend._vk = fake_vk
@@ -1130,6 +1134,157 @@ class MacOSVulkanBackendTests(unittest.TestCase):
                 os.environ.pop("LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN", None)
             else:
                 os.environ["LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN"] = old
+
+    def test_fixed_internal_render_scale_is_parsed_and_quantized(self) -> None:
+        old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = "0.8"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+            self.assertEqual(backend._render_scale_fixed, 0.75)
+            self.assertEqual(backend._effective_render_scale(), 0.75)
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old
+
+    def test_prepare_fallback_frame_applies_render_scale(self) -> None:
+        old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = "0.5"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+            src = torch.zeros((120, 200, 4), dtype=torch.uint8)
+            out = backend._prepare_fallback_frame(src)
+            self.assertEqual(tuple(out.shape), (60, 100, 4))
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old
+
+    def test_prepare_scaled_source_frame_applies_internal_scale(self) -> None:
+        old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = "0.5"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+            src = torch.zeros((120, 200, 4), dtype=torch.uint8)
+            out = backend._prepare_scaled_source_frame(src)
+            self.assertEqual(tuple(out.shape), (60, 100, 4))
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old
+
+    def test_prepare_upload_frame_defaults_to_no_internal_scale_for_vulkan(self) -> None:
+        old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        old_vulkan = os.environ.get("LUVATRIX_VULKAN_INTERNAL_SCALE")
+        os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = "0.5"
+        os.environ["LUVATRIX_VULKAN_INTERNAL_SCALE"] = "0"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem(), preserve_aspect_ratio=False)
+            backend._swapchain_extent = (400, 200)
+            src = torch.zeros((100, 200, 4), dtype=torch.uint8)
+            out = backend._prepare_upload_frame(src)
+            self.assertEqual(tuple(out.shape), (200, 400, 4))
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old
+            if old_vulkan is None:
+                os.environ.pop("LUVATRIX_VULKAN_INTERNAL_SCALE", None)
+            else:
+                os.environ["LUVATRIX_VULKAN_INTERNAL_SCALE"] = old_vulkan
+
+    def test_prepare_upload_frame_applies_internal_scale_when_vulkan_opt_in_enabled(self) -> None:
+        old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        old_vulkan = os.environ.get("LUVATRIX_VULKAN_INTERNAL_SCALE")
+        os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = "0.5"
+        os.environ["LUVATRIX_VULKAN_INTERNAL_SCALE"] = "1"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem(), preserve_aspect_ratio=False)
+            backend._swapchain_extent = (400, 200)
+            src = torch.zeros((100, 200, 4), dtype=torch.uint8)
+            out = backend._prepare_upload_frame(src)
+            self.assertEqual(tuple(out.shape), (200, 400, 4))
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old
+            if old_vulkan is None:
+                os.environ.pop("LUVATRIX_VULKAN_INTERNAL_SCALE", None)
+            else:
+                os.environ["LUVATRIX_VULKAN_INTERNAL_SCALE"] = old_vulkan
+
+    def test_prepare_upload_frame_uses_source_extent_when_gpu_blit_available(self) -> None:
+        old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = "1.0"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem(), preserve_aspect_ratio=False)
+            backend._vulkan_available = True
+            backend._swapchain_extent = (400, 200)
+            backend._vk = type(
+                "_FakeVk",
+                (),
+                {
+                    "vkCmdBlitImage": lambda *args, **kwargs: None,
+                    "VkImageBlit": lambda *args, **kwargs: None,
+                },
+            )()
+            src = torch.zeros((100, 200, 4), dtype=torch.uint8)
+            out = backend._prepare_upload_frame(src)
+            self.assertEqual(tuple(out.shape), (100, 200, 4))
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old
+
+    def test_auto_render_scale_steps_down_on_high_present_cost(self) -> None:
+        old_fixed = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        old_auto = os.environ.get("LUVATRIX_AUTO_RENDER_SCALE")
+        os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+        os.environ["LUVATRIX_AUTO_RENDER_SCALE"] = "1"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+            self.assertEqual(backend._render_scale_current, 1.0)
+            for _ in range(20):
+                backend._update_render_scale(elapsed_ms=24.0, fallback_active=True)
+            self.assertIn(backend._render_scale_current, (0.75, 0.5))
+        finally:
+            if old_fixed is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old_fixed
+            if old_auto is None:
+                os.environ.pop("LUVATRIX_AUTO_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_AUTO_RENDER_SCALE"] = old_auto
+
+    def test_auto_render_scale_steps_up_when_headroom_returns(self) -> None:
+        old_fixed = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        old_auto = os.environ.get("LUVATRIX_AUTO_RENDER_SCALE")
+        os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+        os.environ["LUVATRIX_AUTO_RENDER_SCALE"] = "1"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+            backend._render_scale_current = 0.5
+            backend._render_scale_cooldown_frames = 0
+            backend._present_time_ema_ms = 8.0
+            for _ in range(2):
+                backend._update_render_scale(elapsed_ms=8.0, fallback_active=True)
+            self.assertEqual(backend._render_scale_current, 0.75)
+        finally:
+            if old_fixed is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old_fixed
+            if old_auto is None:
+                os.environ.pop("LUVATRIX_AUTO_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_AUTO_RENDER_SCALE"] = old_auto
 
 
 if __name__ == "__main__":

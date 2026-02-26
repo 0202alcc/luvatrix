@@ -4,11 +4,12 @@ from dataclasses import dataclass
 import ctypes
 import logging
 import os
+import time
 from typing import Any
 
 import torch
 
-from ..frame_pipeline import prepare_frame_for_extent
+from ..frame_pipeline import prepare_frame_for_extent, resize_rgba_bilinear
 from ..vulkan_compat import SwapchainOutOfDateError, VulkanKHRCompatMixin, decode_vk_string
 from .vulkan_presenter import VulkanContext
 from .window_system import AppKitWindowSystem, MacOSWindowHandle, MacOSWindowSystem
@@ -54,6 +55,10 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._staging_buffer = None
         self._staging_memory = None
         self._staging_size = 0
+        self._upload_image = None
+        self._upload_image_memory = None
+        self._upload_image_extent: tuple[int, int] = (0, 0)
+        self._upload_image_layout = None
         self._upload_extent: tuple[int, int] = (0, 0)
         self._clear_color = (0.0, 0.0, 0.0, 1.0)
         self._vk_proc_cache: dict[str, Any] = {}
@@ -67,6 +72,13 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._fallback_image_view = None
         self._fallback_replaced_content_layer = False
         self._active_present_path: str | None = None
+        self._render_scale_levels: tuple[float, ...] = (1.0, 0.75, 0.5)
+        self._render_scale_fixed: float | None = self._parse_fixed_render_scale()
+        self._render_scale_auto_enabled = os.getenv("LUVATRIX_AUTO_RENDER_SCALE", "1").strip() == "1"
+        self._vulkan_internal_scale_enabled = os.getenv("LUVATRIX_VULKAN_INTERNAL_SCALE", "0").strip() == "1"
+        self._render_scale_current = self._render_scale_fixed if self._render_scale_fixed is not None else 1.0
+        self._present_time_ema_ms: float | None = None
+        self._render_scale_cooldown_frames = 0
         if self.window_system is None:
             self.window_system = AppKitWindowSystem()
 
@@ -87,6 +99,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         return VulkanContext(width=width, height=height, title=title)
 
     def present(self, context: VulkanContext, rgba: torch.Tensor, revision: int) -> None:
+        started_at = time.perf_counter()
         self._require_initialized()
         self._validate_frame(rgba, context.width, context.height)
         self._acquire_next_swapchain_image()
@@ -96,6 +109,8 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._record_and_submit_commands(revision=revision)
         self._present_swapchain_image()
         self._frames_presented += 1
+        elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+        self._update_render_scale(elapsed_ms=elapsed_ms, fallback_active=not self._vulkan_available)
 
     def resize(self, context: VulkanContext, width: int, height: int) -> VulkanContext:
         self._require_initialized()
@@ -551,8 +566,11 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         return (1, 1)
 
     def _upload_rgba_to_staging(self, rgba: torch.Tensor) -> None:
-        # Always keep a copy available for fallback layer presentation.
-        self._pending_rgba = rgba.contiguous().clone()
+        # Keep CPU-side frame copy only when fallback presenter is active.
+        if not self._vulkan_available:
+            self._pending_rgba = rgba.contiguous().clone()
+        else:
+            self._pending_rgba = None
         if not self._vulkan_available:
             return
         if self._logical_device is None or self._physical_device is None:
@@ -574,7 +592,8 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         if upload_w <= 0 or upload_h <= 0:
             raise RuntimeError("invalid upload extent for Vulkan staging upload")
         clipped = rgba_upload[:upload_h, :upload_w, :].contiguous()
-        data = bytes(clipped.reshape(-1).tolist())
+        self._ensure_upload_image(upload_w, upload_h)
+        data = clipped.cpu().numpy().tobytes(order="C")
         self._ensure_staging_buffer(len(data))
         mapped_ptr = vk.vkMapMemory(
             self._logical_device,
@@ -594,26 +613,34 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         finally:
             vk.vkUnmapMemory(self._logical_device, self._staging_memory)
         self._upload_extent = (upload_w, upload_h)
-        rgbaf = rgba_upload.to(torch.float32).mean(dim=(0, 1)) / 255.0
-        self._clear_color = (
-            float(rgbaf[0].item()),
-            float(rgbaf[1].item()),
-            float(rgbaf[2].item()),
-            float(rgbaf[3].item()),
-        )
+        self._clear_color = (0.0, 0.0, 0.0, 1.0)
 
     def _prepare_upload_frame(self, rgba: torch.Tensor) -> torch.Tensor:
+        source = rgba
+        if self._vulkan_internal_scale_enabled:
+            source = self._prepare_scaled_source_frame(rgba)
+        if self._can_use_gpu_blit():
+            return source
         if self._swapchain_extent is None:
-            return rgba
+            return source
         swap_w, swap_h = self._swapchain_extent
         if swap_w <= 0 or swap_h <= 0:
-            return rgba
+            return source
         return prepare_frame_for_extent(
-            rgba,
+            source,
             target_w=swap_w,
             target_h=swap_h,
             preserve_aspect_ratio=self.preserve_aspect_ratio,
         )
+
+    def _prepare_scaled_source_frame(self, rgba: torch.Tensor) -> torch.Tensor:
+        scale = self._effective_render_scale()
+        if scale >= 0.999:
+            return rgba
+        src_h, src_w, _ = rgba.shape
+        target_w = max(1, int(round(float(src_w) * scale)))
+        target_h = max(1, int(round(float(src_h) * scale)))
+        return resize_rgba_bilinear(rgba, target_h=target_h, target_w=target_w)
 
     def _record_and_submit_commands(self, revision: int) -> None:
         if not self._vulkan_available:
@@ -626,6 +653,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             or self._in_flight_fence is None
             or self._image_available_semaphore is None
             or self._render_finished_semaphore is None
+            or self._upload_image is None
         ):
             raise RuntimeError("Vulkan submit prerequisites are not initialized")
         if not self._command_buffers:
@@ -679,27 +707,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             [subresource_range],
         )
         if self._staging_buffer is not None and self._upload_extent[0] > 0 and self._upload_extent[1] > 0:
-            copy_region = vk.VkBufferImageCopy(
-                bufferOffset=0,
-                bufferRowLength=0,
-                bufferImageHeight=0,
-                imageSubresource=vk.VkImageSubresourceLayers(
-                    aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
-                    mipLevel=0,
-                    baseArrayLayer=0,
-                    layerCount=1,
-                ),
-                imageOffset=(0, 0, 0),
-                imageExtent=(self._upload_extent[0], self._upload_extent[1], 1),
-            )
-            vk.vkCmdCopyBufferToImage(
-                cmd,
-                self._staging_buffer,
-                image,
-                getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
-                1,
-                [copy_region],
-            )
+            self._record_upload_copy_and_scale(cmd=cmd, swapchain_image=image)
         barrier_to_present = vk.VkImageMemoryBarrier(
             sType=vk.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             srcAccessMask=getattr(vk, "VK_ACCESS_TRANSFER_WRITE_BIT", 0x1000),
@@ -736,6 +744,165 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         )
         self._vk_reset_fence(self._logical_device, self._in_flight_fence)
         vk.vkQueueSubmit(self._graphics_queue, 1, [submit], self._in_flight_fence)
+
+    def _record_upload_copy_and_scale(self, cmd, swapchain_image) -> None:
+        if self._upload_image is None:
+            raise RuntimeError("upload image is not initialized")
+        vk = self._require_vk()
+        subresource_range = vk.VkImageSubresourceRange(
+            aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
+            baseMipLevel=0,
+            levelCount=1,
+            baseArrayLayer=0,
+            layerCount=1,
+        )
+        old_layout = (
+            getattr(vk, "VK_IMAGE_LAYOUT_UNDEFINED", 0)
+            if self._upload_image_layout is None
+            else int(self._upload_image_layout)
+        )
+        to_dst = vk.VkImageMemoryBarrier(
+            sType=vk.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            srcAccessMask=getattr(vk, "VK_ACCESS_TRANSFER_READ_BIT", 0x0800),
+            dstAccessMask=getattr(vk, "VK_ACCESS_TRANSFER_WRITE_BIT", 0x1000),
+            oldLayout=old_layout,
+            newLayout=getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
+            srcQueueFamilyIndex=getattr(vk, "VK_QUEUE_FAMILY_IGNORED", -1),
+            dstQueueFamilyIndex=getattr(vk, "VK_QUEUE_FAMILY_IGNORED", -1),
+            image=self._upload_image,
+            subresourceRange=subresource_range,
+        )
+        vk.vkCmdPipelineBarrier(
+            cmd,
+            getattr(vk, "VK_PIPELINE_STAGE_TRANSFER_BIT", 0x1000),
+            getattr(vk, "VK_PIPELINE_STAGE_TRANSFER_BIT", 0x1000),
+            0,
+            0,
+            None,
+            0,
+            None,
+            1,
+            [to_dst],
+        )
+        copy_region = vk.VkBufferImageCopy(
+            bufferOffset=0,
+            bufferRowLength=0,
+            bufferImageHeight=0,
+            imageSubresource=vk.VkImageSubresourceLayers(
+                aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
+                mipLevel=0,
+                baseArrayLayer=0,
+                layerCount=1,
+            ),
+            imageOffset=(0, 0, 0),
+            imageExtent=(self._upload_extent[0], self._upload_extent[1], 1),
+        )
+        vk.vkCmdCopyBufferToImage(
+            cmd,
+            self._staging_buffer,
+            self._upload_image,
+            getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
+            1,
+            [copy_region],
+        )
+        to_src = vk.VkImageMemoryBarrier(
+            sType=vk.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            srcAccessMask=getattr(vk, "VK_ACCESS_TRANSFER_WRITE_BIT", 0x1000),
+            dstAccessMask=getattr(vk, "VK_ACCESS_TRANSFER_READ_BIT", 0x0800),
+            oldLayout=getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
+            newLayout=getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL", 6),
+            srcQueueFamilyIndex=getattr(vk, "VK_QUEUE_FAMILY_IGNORED", -1),
+            dstQueueFamilyIndex=getattr(vk, "VK_QUEUE_FAMILY_IGNORED", -1),
+            image=self._upload_image,
+            subresourceRange=subresource_range,
+        )
+        vk.vkCmdPipelineBarrier(
+            cmd,
+            getattr(vk, "VK_PIPELINE_STAGE_TRANSFER_BIT", 0x1000),
+            getattr(vk, "VK_PIPELINE_STAGE_TRANSFER_BIT", 0x1000),
+            0,
+            0,
+            None,
+            0,
+            None,
+            1,
+            [to_src],
+        )
+        self._upload_image_layout = getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL", 6)
+        if self._can_use_gpu_blit():
+            self._record_blit_upload_to_swapchain(cmd=cmd, swapchain_image=swapchain_image)
+            return
+        copy_to_swapchain = vk.VkImageCopy(
+            srcSubresource=vk.VkImageSubresourceLayers(
+                aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
+                mipLevel=0,
+                baseArrayLayer=0,
+                layerCount=1,
+            ),
+            srcOffset=(0, 0, 0),
+            dstSubresource=vk.VkImageSubresourceLayers(
+                aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
+                mipLevel=0,
+                baseArrayLayer=0,
+                layerCount=1,
+            ),
+            dstOffset=(0, 0, 0),
+            extent=(self._upload_extent[0], self._upload_extent[1], 1),
+        )
+        vk.vkCmdCopyImage(
+            cmd,
+            self._upload_image,
+            getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL", 6),
+            swapchain_image,
+            getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
+            1,
+            [copy_to_swapchain],
+        )
+
+    def _record_blit_upload_to_swapchain(self, cmd, swapchain_image) -> None:
+        vk = self._require_vk()
+        if self._swapchain_extent is None:
+            raise RuntimeError("swapchain extent missing for GPU blit")
+        src_w, src_h = self._upload_extent
+        dst_w, dst_h = self._swapchain_extent
+        if src_w <= 0 or src_h <= 0 or dst_w <= 0 or dst_h <= 0:
+            return
+        if self.preserve_aspect_ratio:
+            scale = min(float(dst_w) / float(src_w), float(dst_h) / float(src_h))
+            blit_w = max(1, int(round(src_w * scale)))
+            blit_h = max(1, int(round(src_h * scale)))
+            dst_x0 = (dst_w - blit_w) // 2
+            dst_y0 = (dst_h - blit_h) // 2
+            dst_x1 = dst_x0 + blit_w
+            dst_y1 = dst_y0 + blit_h
+        else:
+            dst_x0, dst_y0, dst_x1, dst_y1 = 0, 0, dst_w, dst_h
+        blit = vk.VkImageBlit(
+            srcSubresource=vk.VkImageSubresourceLayers(
+                aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
+                mipLevel=0,
+                baseArrayLayer=0,
+                layerCount=1,
+            ),
+            srcOffsets=((0, 0, 0), (src_w, src_h, 1)),
+            dstSubresource=vk.VkImageSubresourceLayers(
+                aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
+                mipLevel=0,
+                baseArrayLayer=0,
+                layerCount=1,
+            ),
+            dstOffsets=((dst_x0, dst_y0, 0), (dst_x1, dst_y1, 1)),
+        )
+        vk.vkCmdBlitImage(
+            cmd,
+            self._upload_image,
+            getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL", 6),
+            swapchain_image,
+            getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
+            1,
+            [blit],
+            getattr(vk, "VK_FILTER_LINEAR", 1),
+        )
 
     def _present_swapchain_image(self) -> None:
         if self._vulkan_available:
@@ -802,6 +969,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             return
         vk = self._require_vk()
         self._destroy_staging_resources()
+        self._destroy_upload_image_resources()
         if self._command_pool is not None:
             vk.vkDestroyCommandPool(self._logical_device, self._command_pool, None)
             self._command_pool = None
@@ -881,7 +1049,8 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             self._set_active_present_path("fallback_clean")
 
         rgba = self._pending_rgba
-        height, width, _ = rgba.shape
+        rgba_display = self._prepare_fallback_frame(rgba)
+        height, width, _ = rgba_display.shape
         try:
             content_view = self._window_handle.window.contentView()
             bounds = content_view.bounds()
@@ -898,7 +1067,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         except Exception:
             pass
         # Fast path: avoid Python per-element conversion when building CGImage bytes.
-        data = rgba.contiguous().cpu().numpy().tobytes(order="C")
+        data = rgba_display.contiguous().cpu().numpy().tobytes(order="C")
         cf_data = Quartz.CFDataCreate(None, data, len(data))
         provider = Quartz.CGDataProviderCreateWithCFData(cf_data)
         color_space = Quartz.CGColorSpaceCreateDeviceRGB()
@@ -1050,6 +1219,58 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             return
         self._active_present_path = path
         LOGGER.warning("macOS present path active: %s", path)
+
+    def _parse_fixed_render_scale(self) -> float | None:
+        raw = os.getenv("LUVATRIX_INTERNAL_RENDER_SCALE", "").strip()
+        if raw == "":
+            return None
+        try:
+            value = float(raw)
+        except ValueError:
+            LOGGER.warning("invalid LUVATRIX_INTERNAL_RENDER_SCALE=%r; ignoring", raw)
+            return None
+        if value <= 0:
+            LOGGER.warning("non-positive LUVATRIX_INTERNAL_RENDER_SCALE=%r; ignoring", raw)
+            return None
+        return min(self._render_scale_levels, key=lambda x: abs(x - value))
+
+    def _effective_render_scale(self) -> float:
+        if self._render_scale_fixed is not None:
+            return self._render_scale_fixed
+        return self._render_scale_current
+
+    def _prepare_fallback_frame(self, rgba: torch.Tensor) -> torch.Tensor:
+        return self._prepare_scaled_source_frame(rgba)
+
+    def _update_render_scale(self, elapsed_ms: float, fallback_active: bool) -> None:
+        if not fallback_active and not self._vulkan_internal_scale_enabled:
+            return
+        if self._render_scale_fixed is not None:
+            self._render_scale_current = self._render_scale_fixed
+            return
+        if not self._render_scale_auto_enabled:
+            return
+        alpha = 0.15
+        if self._present_time_ema_ms is None:
+            self._present_time_ema_ms = elapsed_ms
+        else:
+            self._present_time_ema_ms = (1.0 - alpha) * self._present_time_ema_ms + alpha * elapsed_ms
+        if self._render_scale_cooldown_frames > 0:
+            self._render_scale_cooldown_frames -= 1
+            return
+        current_idx = self._render_scale_levels.index(self._render_scale_current)
+        assert self._present_time_ema_ms is not None
+        # Step down when presentation is consistently slow.
+        if self._present_time_ema_ms > 17.0 and current_idx < (len(self._render_scale_levels) - 1):
+            self._render_scale_current = self._render_scale_levels[current_idx + 1]
+            self._render_scale_cooldown_frames = 30
+            LOGGER.warning("macOS fallback render scale adjusted: %.2f", self._render_scale_current)
+            return
+        # Step up when presentation has sustained headroom.
+        if self._present_time_ema_ms < 10.0 and current_idx > 0:
+            self._render_scale_current = self._render_scale_levels[current_idx - 1]
+            self._render_scale_cooldown_frames = 60
+            LOGGER.warning("macOS fallback render scale adjusted: %.2f", self._render_scale_current)
 
     def _vk_create_instance(self):
         vk = self._require_vk()
@@ -1257,6 +1478,89 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             self._staging_memory = None
         self._staging_size = 0
         self._upload_extent = (0, 0)
+
+    def _destroy_upload_image_resources(self) -> None:
+        if self._logical_device is None:
+            self._upload_image = None
+            self._upload_image_memory = None
+            self._upload_image_extent = (0, 0)
+            self._upload_image_layout = None
+            return
+        vk = self._require_vk()
+        if self._upload_image is not None:
+            vk.vkDestroyImage(self._logical_device, self._upload_image, None)
+            self._upload_image = None
+        if self._upload_image_memory is not None:
+            vk.vkFreeMemory(self._logical_device, self._upload_image_memory, None)
+            self._upload_image_memory = None
+        self._upload_image_extent = (0, 0)
+        self._upload_image_layout = None
+
+    def _ensure_upload_image(self, width: int, height: int) -> None:
+        if self._logical_device is None or self._physical_device is None:
+            raise RuntimeError("Vulkan device not initialized for upload image")
+        if width <= 0 or height <= 0:
+            raise ValueError("upload image extent must be > 0")
+        vk = self._require_vk()
+        desired_format = int(
+            self._swapchain_image_format
+            if self._swapchain_image_format is not None
+            else getattr(vk, "VK_FORMAT_R8G8B8A8_UNORM", 37)
+        )
+        same_extent = self._upload_image_extent == (width, height)
+        same_format = self._swapchain_image_format is None or desired_format == int(self._swapchain_image_format)
+        if self._upload_image is not None and same_extent and same_format:
+            return
+        self._destroy_upload_image_resources()
+        image_ci = vk.VkImageCreateInfo(
+            sType=vk.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            pNext=None,
+            flags=0,
+            imageType=getattr(vk, "VK_IMAGE_TYPE_2D", 1),
+            format=desired_format,
+            extent=(int(width), int(height), 1),
+            mipLevels=1,
+            arrayLayers=1,
+            samples=getattr(vk, "VK_SAMPLE_COUNT_1_BIT", 1),
+            tiling=getattr(vk, "VK_IMAGE_TILING_OPTIMAL", 0),
+            usage=(
+                getattr(vk, "VK_IMAGE_USAGE_TRANSFER_DST_BIT", 0x00000002)
+                | getattr(vk, "VK_IMAGE_USAGE_TRANSFER_SRC_BIT", 0x00000001)
+            ),
+            sharingMode=getattr(vk, "VK_SHARING_MODE_EXCLUSIVE", 0),
+            queueFamilyIndexCount=0,
+            pQueueFamilyIndices=None,
+            initialLayout=getattr(vk, "VK_IMAGE_LAYOUT_UNDEFINED", 0),
+        )
+        self._upload_image = vk.vkCreateImage(self._logical_device, image_ci, None)
+        req = vk.vkGetImageMemoryRequirements(self._logical_device, self._upload_image)
+        device_local = getattr(vk, "VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT", 0x00000001)
+        try:
+            mem_type = self._find_memory_type(type_bits=int(req.memoryTypeBits), required_flags=device_local)
+        except Exception:
+            mem_type = self._find_memory_type(type_bits=int(req.memoryTypeBits), required_flags=0)
+        alloc_info = vk.VkMemoryAllocateInfo(
+            sType=vk.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            pNext=None,
+            allocationSize=int(req.size),
+            memoryTypeIndex=mem_type,
+        )
+        self._upload_image_memory = vk.vkAllocateMemory(self._logical_device, alloc_info, None)
+        vk.vkBindImageMemory(self._logical_device, self._upload_image, self._upload_image_memory, 0)
+        self._upload_image_extent = (width, height)
+        self._upload_image_layout = getattr(vk, "VK_IMAGE_LAYOUT_UNDEFINED", 0)
+
+    def _can_use_gpu_blit(self) -> bool:
+        if not self._vulkan_available:
+            return False
+        vk = self._require_vk()
+        return all(
+            hasattr(vk, name)
+            for name in (
+                "vkCmdBlitImage",
+                "VkImageBlit",
+            )
+        )
 
     def _find_memory_type(self, type_bits: int, required_flags: int) -> int:
         if self._physical_device is None:
