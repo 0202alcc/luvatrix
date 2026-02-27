@@ -7,7 +7,7 @@ from unittest import mock
 import numpy as np
 import torch
 
-from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch
+from luvatrix_core.core.window_matrix import FullRewrite, ReplaceRect, WriteBatch
 from luvatrix_plot import PlotDataError, figure
 from luvatrix_plot.adapters.normalize import normalize_xy
 from luvatrix_plot.display import resolve_default_figure_size
@@ -147,6 +147,25 @@ class LuvatrixPlotTests(unittest.TestCase):
         self.assertEqual(frame1.dtype, np.uint8)
         self.assertTrue(np.array_equal(frame1, frame2))
 
+    def test_legend_renders_for_multiple_labeled_lines(self) -> None:
+        x = np.asarray([0, 1, 2, 3, 4], dtype=np.float64)
+        y1 = np.asarray([1, 2, 1.5, 2.5, 2.0], dtype=np.float64)
+        y2 = np.asarray([1, 2, 1.5, 2.5, 2.0], dtype=np.float64)
+
+        fig_no_legend = figure(width=260, height=180)
+        ax_no = fig_no_legend.axes()
+        ax_no.plot(x=x, y=y1, color=(255, 170, 70))
+        ax_no.plot(x=x, y=y2, color=(70, 170, 255))
+        frame_no = fig_no_legend.to_rgba()
+
+        fig_legend = figure(width=260, height=180)
+        ax_yes = fig_legend.axes()
+        ax_yes.plot(x=x, y=y1, color=(255, 170, 70), label="A")
+        ax_yes.plot(x=x, y=y2, color=(70, 170, 255), label="B")
+        frame_yes = fig_legend.to_rgba()
+
+        self.assertFalse(np.array_equal(frame_no, frame_yes))
+
     def test_compile_write_batch(self) -> None:
         y = np.asarray([1, 2, 3, 4], dtype=np.float64)
         fig = figure(width=64, height=48)
@@ -159,6 +178,42 @@ class LuvatrixPlotTests(unittest.TestCase):
         op = batch.operations[0]
         self.assertEqual(tuple(op.tensor_h_w_4.shape), (48, 64, 4))
         self.assertEqual(op.tensor_h_w_4.dtype, torch.uint8)
+
+    def test_compile_incremental_write_batch_uses_replace_rect(self) -> None:
+        y = np.asarray([1, 2, 3, 4], dtype=np.float64)
+        fig = figure(width=96, height=64)
+        fig.axes().scatter(y=y)
+        batch = fig.compile_incremental_write_batch((10, 8, 20, 12))
+        self.assertIsInstance(batch, WriteBatch)
+        self.assertEqual(len(batch.operations), 1)
+        op = batch.operations[0]
+        self.assertIsInstance(op, ReplaceRect)
+        assert isinstance(op, ReplaceRect)
+        self.assertEqual((op.x, op.y, op.width, op.height), (10, 8, 20, 12))
+
+    def test_compile_incremental_legend_patch_avoids_full_rerender(self) -> None:
+        x = np.asarray([0, 1, 2, 3, 4], dtype=np.float64)
+        y1 = np.asarray([1, 2, 1.5, 2.5, 2.0], dtype=np.float64)
+        y2 = np.asarray([1.3, 2.1, 1.7, 2.7, 2.1], dtype=np.float64)
+        fig = figure(width=260, height=180)
+        ax = fig.axes()
+        ax.plot(x=x, y=y1, color=(255, 170, 70), label="A")
+        ax.plot(x=x, y=y2, color=(70, 170, 255), label="B")
+        fig.to_rgba()
+
+        bounds = ax.legend_bounds()
+        self.assertIsNotNone(bounds)
+        assert bounds is not None
+        cx = float(bounds[0] + 4)
+        cy = float(bounds[1] + 4)
+        ax.update_legend_drag(cx, cy, True)
+        ax.update_legend_drag(cx - 24.0, cy + 12.0, True)
+        dirty = ax.take_legend_dirty_rect()
+        self.assertIsNotNone(dirty)
+
+        with mock.patch.object(fig, "to_rgba", side_effect=AssertionError("full rerender should not be used")):
+            batch = fig.compile_incremental_write_batch(dirty)
+        self.assertIsInstance(batch.operations[0], ReplaceRect)
 
     def test_series_mode_rejects_invalid_mode(self) -> None:
         fig = figure(width=64, height=48)

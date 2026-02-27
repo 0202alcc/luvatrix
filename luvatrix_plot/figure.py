@@ -6,7 +6,7 @@ from typing import Any, Literal
 import numpy as np
 
 from luvatrix_plot.adapters import normalize_xy
-from luvatrix_plot.compile import compile_full_rewrite_batch
+from luvatrix_plot.compile import compile_full_rewrite_batch, compile_replace_patch_batch, compile_replace_rect_batch
 from luvatrix_plot.errors import PlotDataError
 from luvatrix_plot.raster import (
     LayerCache,
@@ -44,6 +44,25 @@ def _coerce_color(color: tuple[int, int, int] | tuple[int, int, int, int], alpha
     return (r, g, b, out_a)
 
 
+def _union_rect(
+    a: tuple[int, int, int, int] | None,
+    b: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    if a is None:
+        return b
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    ax1 = ax + aw
+    ay1 = ay + ah
+    bx1 = bx + bw
+    by1 = by + bh
+    x0 = min(ax, bx)
+    y0 = min(ay, by)
+    x1 = max(ax1, bx1)
+    y1 = max(ay1, by1)
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
 @dataclass(frozen=True)
 class FigureStyle:
     background: tuple[int, int, int, int] = (12, 16, 23, 255)
@@ -55,6 +74,31 @@ class ReferenceLine:
     value: float
     color: tuple[int, int, int, int]
     width: int = 1
+
+
+@dataclass(frozen=True)
+class LegendEntry:
+    label: str
+    mode: str
+    color: tuple[int, int, int, int]
+    marker_size: int
+
+
+@dataclass(frozen=True)
+class LegendLayout:
+    entries: tuple[LegendEntry, ...]
+    plot_x0: int
+    plot_y0: int
+    plot_w: int
+    plot_h: int
+    legend_font_px: float
+    swatch_w: int
+    swatch_h: int
+    item_gap: int
+    pad: int
+    item_h: int
+    box_w: int
+    box_h: int
 
 
 @dataclass
@@ -91,6 +135,13 @@ class Axes:
     show_zero_reference_lines: bool = True
     reference_line_color: tuple[int, int, int, int] = (186, 201, 220, 235)
     reference_lines: list[ReferenceLine] = field(default_factory=list)
+    legend_position_px: tuple[int, int] | None = None
+    _legend_bounds_px: tuple[int, int, int, int] | None = None
+    _legend_drag_active: bool = False
+    _legend_drag_offset_px: tuple[int, int] = (0, 0)
+    _legend_dirty_rect_px: tuple[int, int, int, int] | None = None
+    _legend_layout: LegendLayout | None = None
+    _last_static_rgba: np.ndarray | None = None
 
     def scatter(
         self,
@@ -98,13 +149,14 @@ class Axes:
         *,
         x: Any = None,
         data: Any = None,
+        label: str | None = None,
         color: tuple[int, int, int] | tuple[int, int, int, int] = (62, 149, 255),
         size: int = 2,
         alpha: float = 1.0,
     ) -> "Axes":
         style = SeriesStyle(mode="markers", color=_coerce_color(color, alpha), marker_size=max(1, size), line_width=1)
         series_data = normalize_xy(y=y, x=x, data=data)
-        self._series.append(SeriesSpec(data=series_data, style=style))
+        self._series.append(SeriesSpec(data=series_data, style=style, label=label))
         return self
 
     def plot(
@@ -113,6 +165,7 @@ class Axes:
         *,
         x: Any = None,
         data: Any = None,
+        label: str | None = None,
         mode: str = "line",
         color: tuple[int, int, int] | tuple[int, int, int, int] = (255, 165, 0),
         width: int = 1,
@@ -123,7 +176,7 @@ class Axes:
         style_mode = "lines+markers" if mode == "lines+markers" else "lines"
         style = SeriesStyle(mode=style_mode, color=_coerce_color(color, alpha), marker_size=1, line_width=max(1, width))
         series_data = normalize_xy(y=y, x=x, data=data)
-        self._series.append(SeriesSpec(data=series_data, style=style))
+        self._series.append(SeriesSpec(data=series_data, style=style, label=label))
         return self
 
     def series(
@@ -132,6 +185,7 @@ class Axes:
         *,
         x: Any = None,
         data: Any = None,
+        label: str | None = None,
         mode: str = "markers",
         color: tuple[int, int, int] | tuple[int, int, int, int] = (62, 149, 255),
         size: int = 1,
@@ -147,7 +201,7 @@ class Axes:
             line_width=max(1, width),
         )
         series_data = normalize_xy(y=y, x=x, data=data)
-        self._series.append(SeriesSpec(data=series_data, style=style))
+        self._series.append(SeriesSpec(data=series_data, style=style, label=label))
         return self
 
     def set_limit_hysteresis(
@@ -191,6 +245,175 @@ class Axes:
     def clear_reference_lines(self) -> "Axes":
         self.reference_lines.clear()
         return self
+
+    def set_legend_position(self, x_px: int, y_px: int) -> "Axes":
+        self.legend_position_px = (int(x_px), int(y_px))
+        return self
+
+    def legend_bounds(self) -> tuple[int, int, int, int] | None:
+        return self._legend_bounds_px
+
+    def update_legend_drag(self, pointer_x: float, pointer_y: float, is_down: bool) -> bool:
+        px = int(round(pointer_x))
+        py = int(round(pointer_y))
+        moved = False
+        bounds = self._legend_bounds_px
+        if is_down:
+            if not self._legend_drag_active and bounds is not None:
+                x, y, w, h = bounds
+                inside = (px >= x) and (px < x + w) and (py >= y) and (py < y + h)
+                if inside:
+                    self._legend_drag_active = True
+                    self._legend_drag_offset_px = (px - x, py - y)
+            if self._legend_drag_active:
+                ox, oy = self._legend_drag_offset_px
+                next_pos = (px - ox, py - oy)
+                if self._legend_layout is not None:
+                    next_pos = self._clamp_legend_position(self._legend_layout, next_pos)
+                if self.legend_position_px != next_pos:
+                    old_bounds = self._legend_bounds_px
+                    self.legend_position_px = next_pos
+                    self._resolve_legend_bounds()
+                    if old_bounds is not None:
+                        ox0, oy0, ow, oh = old_bounds
+                        new_bounds = self._legend_bounds_px or old_bounds
+                        nx0, ny0, nw, nh = new_bounds
+                        rx0 = min(ox0, nx0)
+                        ry0 = min(oy0, ny0)
+                        rx1 = max(ox0 + ow, nx0 + nw)
+                        ry1 = max(oy0 + oh, ny0 + nh)
+                        move_dirty = (rx0, ry0, rx1 - rx0, ry1 - ry0)
+                        self._legend_dirty_rect_px = _union_rect(self._legend_dirty_rect_px, move_dirty)
+                    moved = True
+        else:
+            self._legend_drag_active = False
+        return moved
+
+    def take_legend_dirty_rect(self) -> tuple[int, int, int, int] | None:
+        rect = self._legend_dirty_rect_px
+        self._legend_dirty_rect_px = None
+        return rect
+
+    def _build_legend_layout(
+        self,
+        *,
+        tick_font_px: float,
+        plot_x0: int,
+        plot_y0: int,
+        plot_w: int,
+        plot_h: int,
+    ) -> LegendLayout | None:
+        line_series = [spec for spec in self._series if spec.style.mode in {"lines", "lines+markers"}]
+        if len(line_series) < 2:
+            return None
+        entries = tuple(
+            LegendEntry(
+                label=(spec.label if spec.label is not None and spec.label.strip() else f"series {i+1}"),
+                mode=spec.style.mode,
+                color=spec.style.color,
+                marker_size=max(2, spec.style.marker_size),
+            )
+            for i, spec in enumerate(line_series)
+        )
+        legend_font_px = max(10.0, tick_font_px * 0.9)
+        swatch_w = int(max(10, legend_font_px * 1.6))
+        swatch_h = int(max(6, legend_font_px * 0.9))
+        item_gap = int(max(3, legend_font_px * 0.5))
+        pad = int(max(5, legend_font_px * 0.55))
+        text_w = max((text_size(entry.label, font_size_px=legend_font_px)[0] for entry in entries), default=0)
+        item_h = max(swatch_h, int(round(legend_font_px)))
+        box_w = pad * 2 + swatch_w + 6 + text_w
+        box_h = pad * 2 + len(entries) * item_h + (len(entries) - 1) * item_gap
+        return LegendLayout(
+            entries=entries,
+            plot_x0=plot_x0,
+            plot_y0=plot_y0,
+            plot_w=plot_w,
+            plot_h=plot_h,
+            legend_font_px=legend_font_px,
+            swatch_w=swatch_w,
+            swatch_h=swatch_h,
+            item_gap=item_gap,
+            pad=pad,
+            item_h=item_h,
+            box_w=box_w,
+            box_h=box_h,
+        )
+
+    def _clamp_legend_position(self, layout: LegendLayout, requested: tuple[int, int] | None) -> tuple[int, int]:
+        if requested is None:
+            x = max(layout.plot_x0 + 4, layout.plot_x0 + layout.plot_w - layout.box_w - 6)
+            y = max(layout.plot_y0 + 4, layout.plot_y0 + 6)
+        else:
+            x = int(requested[0])
+            y = int(requested[1])
+        x = max(layout.plot_x0 + 2, min(layout.plot_x0 + layout.plot_w - layout.box_w - 2, x))
+        y = max(layout.plot_y0 + 2, min(layout.plot_y0 + layout.plot_h - layout.box_h - 2, y))
+        return (x, y)
+
+    def _resolve_legend_bounds(self) -> tuple[int, int, int, int] | None:
+        layout = self._legend_layout
+        if layout is None:
+            self._legend_bounds_px = None
+            return None
+        x, y = self._clamp_legend_position(layout, self.legend_position_px)
+        self.legend_position_px = (x, y)
+        self._legend_bounds_px = (x, y, layout.box_w, layout.box_h)
+        return self._legend_bounds_px
+
+    def _draw_legend(self, canvas: np.ndarray, *, x_offset: int = 0, y_offset: int = 0) -> None:
+        layout = self._legend_layout
+        bounds = self._resolve_legend_bounds()
+        if layout is None or bounds is None:
+            return
+        legend_x, legend_y, box_w, box_h = bounds
+        draw_x = legend_x - x_offset
+        draw_y = legend_y - y_offset
+        for yy in range(draw_y, draw_y + box_h):
+            draw_hline(
+                canvas,
+                draw_x,
+                draw_x + box_w - 1,
+                yy,
+                (10, 14, 20, 170),
+            )
+        draw_hline(canvas, draw_x, draw_x + box_w - 1, draw_y, self.frame_color)
+        draw_hline(canvas, draw_x, draw_x + box_w - 1, draw_y + box_h - 1, self.frame_color)
+        draw_vline(canvas, draw_x, draw_y, draw_y + box_h - 1, self.frame_color)
+        draw_vline(canvas, draw_x + box_w - 1, draw_y, draw_y + box_h - 1, self.frame_color)
+
+        for i, entry in enumerate(layout.entries):
+            row_y = draw_y + layout.pad + i * (layout.item_h + layout.item_gap) + layout.item_h // 2
+            sw_x0 = draw_x + layout.pad
+            sw_x1 = sw_x0 + layout.swatch_w - 1
+            if entry.mode in {"lines", "lines+markers"}:
+                draw_hline(canvas, sw_x0, sw_x1, row_y, entry.color)
+            if entry.mode in {"markers", "lines+markers"}:
+                marker_x = np.asarray([sw_x0 + layout.swatch_w // 2], dtype=np.int32)
+                marker_y = np.asarray([row_y], dtype=np.int32)
+                draw_markers(canvas, marker_x, marker_y, color=entry.color, size=entry.marker_size)
+            draw_text(
+                canvas,
+                sw_x1 + 6,
+                int(round(row_y - layout.legend_font_px * 0.5)),
+                entry.label,
+                self.text_color,
+                font_size_px=layout.legend_font_px,
+            )
+
+    def render_legend_patch(self, dirty_rect: tuple[int, int, int, int]) -> tuple[int, int, np.ndarray] | None:
+        if self._last_static_rgba is None:
+            return None
+        x, y, width, height = dirty_rect
+        x0 = max(0, int(x))
+        y0 = max(0, int(y))
+        x1 = min(self.figure.width, x0 + int(width))
+        y1 = min(self.figure.height, y0 + int(height))
+        if x1 <= x0 or y1 <= y0:
+            return None
+        patch = self._last_static_rgba[y0:y1, x0:x1].copy()
+        self._draw_legend(patch, x_offset=x0, y_offset=y0)
+        return (x0, y0, patch)
 
     def _plot_viewport(self) -> tuple[int, int, int, int]:
         left = min(self._gutter_left, max(8, self.figure.width // 4))
@@ -505,6 +728,14 @@ class Axes:
         if self.show_right_axis:
             draw_vline(base, plot_x0 + plot_w - 1, plot_y0, plot_y0 + plot_h - 1, self.axis_color)
 
+        self._legend_layout = self._build_legend_layout(
+            tick_font_px=tick_font_px,
+            plot_x0=plot_x0,
+            plot_y0=plot_y0,
+            plot_w=plot_w,
+            plot_h=plot_h,
+        )
+
         text_key = (
             tuple(x_tick_labels),
             tuple(y_tick_labels),
@@ -608,6 +839,8 @@ class Axes:
             self._cache.text_template = text_layer
 
         blit(base, self._cache.text_template)
+        self._last_static_rgba = base.copy()
+        self._draw_legend(base)
         return base
 
 
@@ -617,6 +850,7 @@ class Figure:
     height: int = 720
     style: FigureStyle = field(default_factory=FigureStyle)
     _axes: Axes | None = None
+    _last_frame_rgba: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         if self.width <= 0 or self.height <= 0:
@@ -650,7 +884,28 @@ class Figure:
     def to_rgba(self) -> np.ndarray:
         if self._axes is None:
             raise PlotDataError("figure has no axes")
-        return self._axes.render()
+        frame = self._axes.render()
+        self._last_frame_rgba = frame.copy()
+        return frame
 
     def compile_write_batch(self):
         return compile_full_rewrite_batch(self.to_rgba())
+
+    def compile_incremental_write_batch(self, dirty_rect: tuple[int, int, int, int] | None = None):
+        if dirty_rect is None:
+            return compile_full_rewrite_batch(self.to_rgba())
+        if self._axes is not None:
+            patch_info = self._axes.render_legend_patch(dirty_rect)
+            if patch_info is not None:
+                x0, y0, patch = patch_info
+                self._last_frame_rgba = None
+                return compile_replace_patch_batch(patch, x=x0, y=y0)
+        frame = self.to_rgba()
+        x, y, width, height = dirty_rect
+        x0 = max(0, int(x))
+        y0 = max(0, int(y))
+        x1 = min(frame.shape[1], x0 + int(width))
+        y1 = min(frame.shape[0], y0 + int(height))
+        if x1 <= x0 or y1 <= y0:
+            return compile_full_rewrite_batch(frame)
+        return compile_replace_rect_batch(frame, x=x0, y=y0, width=(x1 - x0), height=(y1 - y0))
