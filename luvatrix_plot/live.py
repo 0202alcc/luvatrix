@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from luvatrix_plot.dynamic_axis import Dynamic2DIngestResult, Dynamic2DMonotonicAxis
 from luvatrix_plot.raster import draw_markers, draw_polyline
 from luvatrix_plot.scales import DataLimits, build_transform, map_to_pixels
 
@@ -114,3 +115,79 @@ class IncrementalPlotState:
         )
         self.series_values = next_values.copy()
         return self.data_plane
+
+
+@dataclass
+class Dynamic2DStreamBuffer:
+    """Rolling 2-D stream buffer for monotonic x-series (e.g. websocket ticks)."""
+
+    viewport_bins: int
+    dx: float
+    x0: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.viewport_bins <= 1:
+            raise ValueError("viewport_bins must be > 1")
+        if self.dx == 0:
+            raise ValueError("dx must be non-zero")
+        self.axis = Dynamic2DMonotonicAxis(viewport_bins=self.viewport_bins, dx=self.dx, x0=self.x0)
+        self.x_values = np.full(self.viewport_bins, np.nan, dtype=np.float64)
+        self.y_values = np.full(self.viewport_bins, np.nan, dtype=np.float64)
+
+    def reset(self, *, x0: float | None = None, dx: float | None = None) -> None:
+        if x0 is not None:
+            self.x0 = float(x0)
+        if dx is not None:
+            if dx == 0:
+                raise ValueError("dx must be non-zero")
+            self.dx = float(dx)
+        self.axis.reset(x0=self.x0, dx=self.dx)
+        self.x_values[:] = np.nan
+        self.y_values[:] = np.nan
+
+    def ingest(self, x_value: float, y_value: float) -> Dynamic2DIngestResult:
+        out = self.axis.ingest(x_value, y_value)
+        if out.status == "out_of_order":
+            return out
+        if out.status == "update_current":
+            if self.axis.push_from_right:
+                self.x_values[-1] = out.x_value
+                self.y_values[-1] = out.y_value
+            else:
+                self.x_values[0] = out.x_value
+                self.y_values[0] = out.y_value
+            return out
+
+        shift = max(1, int(out.gap_bins) + 1)
+        n = self.viewport_bins
+        if self.axis.push_from_right:
+            if shift >= n:
+                self.x_values[:] = np.nan
+                self.y_values[:] = np.nan
+                self.x_values[-1] = out.x_value
+                self.y_values[-1] = out.y_value
+                return out
+            self.x_values[:] = np.roll(self.x_values, -shift)
+            self.y_values[:] = np.roll(self.y_values, -shift)
+            self.x_values[-shift:] = np.nan
+            self.y_values[-shift:] = np.nan
+            self.x_values[-1] = out.x_value
+            self.y_values[-1] = out.y_value
+            return out
+
+        if shift >= n:
+            self.x_values[:] = np.nan
+            self.y_values[:] = np.nan
+            self.x_values[0] = out.x_value
+            self.y_values[0] = out.y_value
+            return out
+        self.x_values[:] = np.roll(self.x_values, shift)
+        self.y_values[:] = np.roll(self.y_values, shift)
+        self.x_values[:shift] = np.nan
+        self.y_values[:shift] = np.nan
+        self.x_values[0] = out.x_value
+        self.y_values[0] = out.y_value
+        return out
+
+    def finite_count(self) -> int:
+        return int(np.count_nonzero(np.isfinite(self.x_values) & np.isfinite(self.y_values)))

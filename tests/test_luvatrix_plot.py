@@ -15,7 +15,7 @@ from luvatrix_plot.adapters.normalize import normalize_xy
 from luvatrix_plot.display import resolve_default_figure_size
 from luvatrix_plot.figure import Axes, Figure
 from luvatrix_plot.dynamic_axis import Dynamic2DMonotonicAxis, DynamicSampleAxis
-from luvatrix_plot.live import IncrementalPlotState, SampleToXMapper
+from luvatrix_plot.live import Dynamic2DStreamBuffer, IncrementalPlotState, SampleToXMapper
 from luvatrix_plot.raster.canvas import new_canvas
 from luvatrix_plot.raster.draw_text import DEFAULT_FONT_FAMILY
 from luvatrix_plot.raster.draw_text import draw_text as raster_draw_text
@@ -412,6 +412,37 @@ class LuvatrixPlotTests(unittest.TestCase):
         self.assertEqual(next_val.status, "advance")
         self.assertEqual(next_val.bin_index, 2)
         self.assertEqual(next_val.gap_bins, 1)
+
+    def test_dynamic_2d_stream_buffer_ingest_and_update(self) -> None:
+        buf = Dynamic2DStreamBuffer(viewport_bins=6, dx=1.0, x0=0.0)
+        a = buf.ingest(0.0, 1.0)
+        self.assertEqual(a.status, "advance")
+        self.assertAlmostEqual(float(buf.x_values[-1]), 0.0, places=9)
+        self.assertAlmostEqual(float(buf.y_values[-1]), 1.0, places=9)
+        b = buf.ingest(0.2, 2.0)  # same bin
+        self.assertEqual(b.status, "update_current")
+        self.assertAlmostEqual(float(buf.y_values[-1]), 2.0, places=9)
+
+    def test_dynamic_2d_stream_buffer_gap_inserts_nan(self) -> None:
+        buf = Dynamic2DStreamBuffer(viewport_bins=8, dx=1.0, x0=0.0)
+        buf.ingest(0.0, 1.0)
+        out = buf.ingest(3.0, 5.0)
+        self.assertEqual(out.status, "advance")
+        self.assertEqual(out.gap_bins, 2)
+        self.assertTrue(np.isnan(buf.x_values[-2]))
+        self.assertTrue(np.isnan(buf.x_values[-3]))
+        self.assertAlmostEqual(float(buf.x_values[-1]), 3.0, places=9)
+        self.assertAlmostEqual(float(buf.y_values[-1]), 5.0, places=9)
+
+    def test_dynamic_2d_stream_buffer_rejects_out_of_order(self) -> None:
+        buf = Dynamic2DStreamBuffer(viewport_bins=8, dx=1.0, x0=0.0)
+        buf.ingest(2.0, 1.0)
+        prev_x = buf.x_values.copy()
+        prev_y = buf.y_values.copy()
+        out = buf.ingest(1.0, 2.0)
+        self.assertEqual(out.status, "out_of_order")
+        self.assertTrue(np.array_equal(buf.x_values, prev_x, equal_nan=True))
+        self.assertTrue(np.array_equal(buf.y_values, prev_y, equal_nan=True))
 
     def test_dynamic_2d_app_rolling_buffers_shift_in_place(self) -> None:
         app_path = Path(__file__).resolve().parents[1] / "examples" / "plots" / "dynamic_plot_2d" / "app_main.py"
