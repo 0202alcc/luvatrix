@@ -243,6 +243,58 @@ class UnifiedRuntimeTests(unittest.TestCase):
             self.assertIn(("microphone.device", True, "unified_runtime"), sensors.set_calls)
             self.assertIn(("speaker.device", True, "unified_runtime"), sensors.set_calls)
 
+    def test_unified_runtime_can_cap_presentation_rate(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            (app_dir / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "test.present.cap"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'required_capabilities = ["window.write"]',
+                        "optional_capabilities = []",
+                    ]
+                )
+            )
+            (app_dir / "app_main.py").write_text(
+                "\n".join(
+                    [
+                        "import torch",
+                        "from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch",
+                        "",
+                        "class _App:",
+                        "    def __init__(self):",
+                        "        self._t = 0",
+                        "    def init(self, ctx):",
+                        "        pass",
+                        "    def loop(self, ctx, dt):",
+                        "        self._t += 1",
+                        "        frame = torch.tensor([[[self._t % 255, 0, 0, 255]]], dtype=torch.uint8)",
+                        "        ctx.submit_write_batch(WriteBatch([FullRewrite(frame)]))",
+                        "    def stop(self, ctx):",
+                        "        pass",
+                        "def create():",
+                        "    return _App()",
+                    ]
+                )
+            )
+            matrix = WindowMatrix(height=1, width=1)
+            target = _RecordingTarget()
+            hdi = HDIThread(source=_NoopHDISource())
+            sensors = _FakeSensorManager()
+            runtime = UnifiedRuntime(
+                matrix=matrix,
+                target=target,
+                hdi=hdi,
+                sensor_manager=sensors,
+                capability_decider=lambda cap: True,
+            )
+            result = runtime.run_app(app_dir, max_ticks=30, target_fps=120, present_fps=1)
+            self.assertEqual(result.ticks_run, 30)
+            # With a very low present cap, runtime should present far fewer frames than ticks.
+            self.assertLessEqual(result.frames_presented, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

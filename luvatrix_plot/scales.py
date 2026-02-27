@@ -116,12 +116,17 @@ def generate_nice_ticks(vmin: float, vmax: float, target: int, preferred_step: f
     tick_max = np.ceil(vmax / step) * step
 
     ticks = np.arange(tick_min, tick_max + 0.5 * step, step, dtype=np.float64)
+    # Normalize floating-point drift so values like -4.44e-16 become 0.
+    ticks = np.rint(ticks / step) * step
+    ticks[np.isclose(ticks, 0.0, rtol=0.0, atol=step * 1e-9)] = 0.0
     return ticks
 
 
 def format_tick(value: float, *, step: float | None = None) -> str:
     if not np.isfinite(value):
         return str(value)
+    if step is not None and np.isfinite(step) and step > 0 and abs(value) <= step * 1e-9:
+        value = 0.0
     abs_v = abs(value)
     decimals = _decimals_from_step(step) if step is not None else 6
     if abs_v != 0 and (abs_v >= 1e6 or (step is not None and abs(step) < 1e-4) or abs_v < 1e-6):
@@ -133,7 +138,10 @@ def format_tick(value: float, *, step: float | None = None) -> str:
         q = d.quantize(quant)
     except InvalidOperation:
         q = d
-    out = format(q, "f").rstrip("0").rstrip(".")
+    out = format(q, "f")
+    # Only trim trailing zeros for fractional values (preserve integer zeros like 30, 40).
+    if "." in out:
+        out = out.rstrip("0").rstrip(".")
     if out == "-0":
         out = "0"
     return out

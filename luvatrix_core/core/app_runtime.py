@@ -12,11 +12,18 @@ from typing import Callable, Protocol
 
 import torch
 
+from luvatrix_ui.component_schema import ComponentBase, DisplayableArea
+from luvatrix_ui.controls.svg_component import SVGComponent
+from luvatrix_ui.controls.svg_renderer import SVGRenderBatch
+from luvatrix_ui.text.component import TextComponent
+from luvatrix_ui.text.renderer import TextLayoutMetrics, TextMeasureRequest, TextRenderBatch
+
 from .hdi_thread import HDIEvent, HDIThread
 from .coordinates import CoordinateFrameRegistry
+from .frame_rate_controller import FrameRateController
 from .protocol_governance import CURRENT_PROTOCOL_VERSION, check_protocol_compatibility
 from .sensor_manager import SensorManagerThread, SensorSample
-from .window_matrix import CallBlitEvent, WindowMatrix, WriteBatch
+from .window_matrix import CallBlitEvent, FullRewrite, WindowMatrix, WriteBatch
 
 LOGGER = logging.getLogger(__name__)
 APP_PROTOCOL_VERSION = CURRENT_PROTOCOL_VERSION
@@ -30,6 +37,25 @@ class AppLifecycle(Protocol):
         ...
 
     def stop(self, ctx: "AppContext") -> None:
+        ...
+
+
+class AppUIRenderer(Protocol):
+    """Component-to-matrix compiler contract used by first-party app protocol UI frames."""
+
+    def begin_frame(self, display: DisplayableArea, clear_color: tuple[int, int, int, int]) -> None:
+        ...
+
+    def measure_text(self, request: TextMeasureRequest) -> TextLayoutMetrics:
+        ...
+
+    def draw_text_batch(self, batch: TextRenderBatch) -> None:
+        ...
+
+    def draw_svg_batch(self, batch: SVGRenderBatch) -> None:
+        ...
+
+    def end_frame(self) -> torch.Tensor:
         ...
 
 
@@ -72,6 +98,9 @@ class AppContext:
     sensor_read_min_interval_s: float = 0.2
     coordinate_frames: CoordinateFrameRegistry | None = None
     _last_sensor_read_ns: dict[str, int] = field(default_factory=dict)
+    _ui_renderer: AppUIRenderer | None = field(default=None, init=False, repr=False)
+    _ui_display: DisplayableArea | None = field(default=None, init=False, repr=False)
+    _ui_components: list[ComponentBase] = field(default_factory=list, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.coordinate_frames is None:
@@ -148,6 +177,67 @@ class AppContext:
     def from_render_coords(self, x: float, y: float, frame: str | None = None) -> tuple[float, float]:
         assert self.coordinate_frames is not None
         return self.coordinate_frames.from_render_coords((float(x), float(y)), frame=frame)
+
+    def begin_ui_frame(
+        self,
+        renderer: AppUIRenderer,
+        *,
+        content_width_px: float | None = None,
+        content_height_px: float | None = None,
+        clear_color: tuple[int, int, int, int] = (0, 0, 0, 255),
+    ) -> None:
+        if self._ui_renderer is not None:
+            raise RuntimeError("ui frame is already active")
+        width = float(self.matrix.width if content_width_px is None else content_width_px)
+        height = float(self.matrix.height if content_height_px is None else content_height_px)
+        self._ui_display = DisplayableArea(
+            content_width_px=width,
+            content_height_px=height,
+            viewport_width_px=float(self.matrix.width),
+            viewport_height_px=float(self.matrix.height),
+        )
+        self._ui_renderer = renderer
+        self._ui_components = []
+        renderer.begin_frame(self._ui_display, clear_color)
+
+    def mount_component(self, component: ComponentBase) -> None:
+        if self._ui_renderer is None or self._ui_display is None:
+            raise RuntimeError("ui frame is not active; call begin_ui_frame first")
+        self._ui_components.append(component)
+
+    def finalize_ui_frame(self) -> CallBlitEvent:
+        if self._ui_renderer is None or self._ui_display is None:
+            raise RuntimeError("ui frame is not active; call begin_ui_frame first")
+        renderer = self._ui_renderer
+        display = self._ui_display
+        components = list(self._ui_components)
+        try:
+            text_commands = []
+            svg_commands = []
+            for component in components:
+                if isinstance(component, TextComponent):
+                    command, _ = component.layout(
+                        renderer,
+                        display,
+                        transformer=self.coordinate_frames,
+                    )
+                    text_commands.append(command)
+                    continue
+                if isinstance(component, SVGComponent):
+                    command, _ = component.layout()
+                    svg_commands.append(command)
+                    continue
+                raise NotImplementedError(f"unsupported component type for ui frame: {type(component)!r}")
+            if text_commands:
+                renderer.draw_text_batch(TextRenderBatch(commands=tuple(text_commands)))
+            if svg_commands:
+                renderer.draw_svg_batch(SVGRenderBatch(commands=tuple(svg_commands)))
+            frame = renderer.end_frame()
+            return self.submit_write_batch(WriteBatch([FullRewrite(frame)]))
+        finally:
+            self._ui_renderer = None
+            self._ui_display = None
+            self._ui_components = []
 
     def _require_capability(self, capability: str) -> None:
         if capability not in self.granted_capabilities:
@@ -293,13 +383,13 @@ class AppRuntime:
         *,
         max_ticks: int = 1,
         target_fps: int = 60,
+        present_fps: int | None = None,
         on_tick: Callable[[], None] | None = None,
         should_continue: Callable[[], bool] | None = None,
     ) -> None:
         if max_ticks <= 0:
             raise ValueError("max_ticks must be > 0")
-        if target_fps <= 0:
-            raise ValueError("target_fps must be > 0")
+        rate = FrameRateController(target_fps=target_fps, present_fps=present_fps)
 
         app_path = Path(app_dir).resolve()
         manifest = self.load_manifest(app_path)
@@ -308,7 +398,6 @@ class AppRuntime:
         resolved = self.resolve_variant(app_path, manifest)
         lifecycle = self.load_lifecycle(resolved.module_dir, resolved.entrypoint)
 
-        target_dt = 1.0 / float(target_fps)
         self._hdi.start()
         self._sensor_manager.start()
         started = False
@@ -325,8 +414,7 @@ class AppRuntime:
                 dt = max(0.0, now - last)
                 last = now
                 lifecycle.loop(ctx, dt)
-                elapsed = time.perf_counter() - now
-                sleep_for = target_dt - elapsed
+                sleep_for = rate.compute_sleep(loop_started_at=now, loop_finished_at=time.perf_counter())
                 if sleep_for > 0:
                     time.sleep(sleep_for)
         except Exception as exc:  # noqa: BLE001
