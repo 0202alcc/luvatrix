@@ -20,6 +20,7 @@ from luvatrix_core.core import (
     WindowMatrix,
 )
 from luvatrix_core.platform.macos import MacOSVulkanPresenter
+from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource
 from luvatrix_core.platform.macos.sensors import (
     MacOSCameraDeviceProvider,
     MacOSMicrophoneDeviceProvider,
@@ -35,6 +36,51 @@ from luvatrix_core.targets.vulkan_target import VulkanTarget
 class _NoopHDISource:
     def poll(self, window_active: bool, ts_ns: int) -> list[HDIEvent]:
         return []
+
+
+class _MacOSPresenterHDISource:
+    """Lazily binds to the presenter window handle after target start."""
+
+    def __init__(self, presenter: MacOSVulkanPresenter) -> None:
+        self._presenter = presenter
+        self._delegate: MacOSWindowHDISource | None = None
+        self._window_handle = None
+
+    def poll(self, window_active: bool, ts_ns: int) -> list[HDIEvent]:
+        _ = window_active
+        if self._delegate is None:
+            backend = getattr(self._presenter, "backend", None)
+            handle = getattr(backend, "_window_handle", None)
+            if handle is not None:
+                self._window_handle = handle
+                self._delegate = MacOSWindowHDISource(handle)
+        if self._delegate is None:
+            return []
+        return self._delegate.poll(window_active=window_active, ts_ns=ts_ns)
+
+    def window_active(self) -> bool:
+        handle = self._window_handle
+        if handle is None:
+            return True
+        try:
+            return bool(handle.window.isKeyWindow())
+        except Exception:
+            return True
+
+    def window_geometry(self) -> tuple[float, float, float, float]:
+        handle = self._window_handle
+        if handle is None:
+            return (0.0, 0.0, 1.0, 1.0)
+        try:
+            view = handle.window.contentView()
+            bounds = view.bounds()
+            return (0.0, 0.0, float(bounds.size.width), float(bounds.size.height))
+        except Exception:
+            return (0.0, 0.0, 1.0, 1.0)
+
+    def close(self) -> None:
+        if self._delegate is not None:
+            self._delegate.close()
 
 
 @dataclass
@@ -103,8 +149,8 @@ def main() -> None:
     if args.command == "run-app":
         width, height = _resolve_run_dimensions(args.render, args.width, args.height)
         matrix = WindowMatrix(height=height, width=width)
-        hdi = HDIThread(source=_NoopHDISource())
         providers = {}
+        hdi_source = None
         if args.sensor_backend == "macos":
             if platform.system() != "Darwin":
                 raise RuntimeError("sensor-backend=macos is only supported on macOS")
@@ -122,11 +168,21 @@ def main() -> None:
             sensors = SensorManagerThread(providers=providers, audit_logger=audit_logger)
             if args.render == "headless":
                 target: RenderTarget = _HeadlessTarget()
+                hdi_source = _NoopHDISource()
             else:
                 # App protocol on macOS should prefer Vulkan by default.
                 os.environ.setdefault("LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN", "1")
                 presenter = MacOSVulkanPresenter(width=width, height=height, title="Luvatrix App")
                 target = VulkanTarget(presenter=presenter)
+                hdi_source = _MacOSPresenterHDISource(presenter)
+            if isinstance(hdi_source, _MacOSPresenterHDISource):
+                hdi = HDIThread(
+                    source=hdi_source,
+                    window_active_provider=hdi_source.window_active,
+                    window_geometry_provider=hdi_source.window_geometry,
+                )
+            else:
+                hdi = HDIThread(source=hdi_source)
 
             energy_safety = None
             if args.energy_safety != "off":
@@ -162,6 +218,8 @@ def main() -> None:
                 f"stopped_by_energy_safety={result.stopped_by_energy_safety}"
             )
         finally:
+            if hdi_source is not None and hasattr(hdi_source, "close"):
+                hdi_source.close()
             if audit_sink is not None and hasattr(audit_sink, "close"):
                 audit_sink.close()
         return

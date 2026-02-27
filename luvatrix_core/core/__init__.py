@@ -5,10 +5,13 @@ from .app_runtime import (
     AppLifecycle,
     AppManifest,
     AppRuntime,
+    AppUIRenderer,
     AppVariant,
     ResolvedAppVariant,
 )
 from .display_runtime import DisplayRuntime, RenderTick
+from .frame_rate_controller import FrameRateController
+from .ui_frame_renderer import MatrixUIFrameRenderer
 from .coordinates import (
     CoordinateFrame,
     CoordinateFrameRegistry,
@@ -43,6 +46,7 @@ from .window_matrix import (
     Multiply,
     PushColumn,
     PushRow,
+    ReplaceRect,
     ReplaceColumn,
     ReplaceRow,
     WriteBatch,
@@ -56,10 +60,12 @@ __all__ = [
     "AppLifecycle",
     "AppManifest",
     "AppRuntime",
+    "AppUIRenderer",
     "AppVariant",
     "ResolvedAppVariant",
     "JsonlAuditSink",
     "DisplayRuntime",
+    "FrameRateController",
     "Engine",
     "FullRewrite",
     "HDIEvent",
@@ -69,9 +75,11 @@ __all__ = [
     "Multiply",
     "PushColumn",
     "PushRow",
+    "ReplaceRect",
     "ReplaceColumn",
     "ReplaceRow",
     "RenderTick",
+    "MatrixUIFrameRenderer",
     "CoordinateFrame",
     "CoordinateFrameRegistry",
     "PRESET_SCREEN_TL",

@@ -10,7 +10,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from luvatrix_core.core import AppRuntime, HDIEvent, HDIEventSource, HDIThread, SensorManagerThread, WindowMatrix
+from luvatrix_core.core import (
+    AppRuntime,
+    FrameRateController,
+    HDIEvent,
+    HDIEventSource,
+    HDIThread,
+    SensorManagerThread,
+    WindowMatrix,
+)
 from luvatrix_core.core.display_runtime import DisplayRuntime
 from luvatrix_core.platform.macos import (
     MacOSCameraDeviceProvider,
@@ -80,6 +88,12 @@ def main() -> None:
     parser.add_argument("--width", type=int, default=640)
     parser.add_argument("--height", type=int, default=360)
     parser.add_argument("--fps", type=int, default=60)
+    parser.add_argument(
+        "--present-fps",
+        type=int,
+        default=None,
+        help="render presentation cadence cap; defaults to --fps",
+    )
     parser.add_argument("--aspect", choices=["stretch", "preserve"], default="stretch")
     parser.add_argument("--coord-frame", choices=["screen_tl", "cartesian_bl", "cartesian_center"], default="screen_tl")
     parser.add_argument("--force-fallback", action="store_true")
@@ -196,7 +210,7 @@ def main() -> None:
         if not selected_sensors:
             selected_sensors = requested_sensors
     os.environ["LUVATRIX_FSI_SENSORS"] = ",".join(selected_sensors)
-    target_dt = 1.0 / float(args.fps)
+    rate = FrameRateController(target_fps=args.fps, present_fps=args.present_fps)
     last = time.perf_counter()
     try:
         lifecycle.init(ctx)
@@ -206,9 +220,9 @@ def main() -> None:
             dt = max(0.0, now - last)
             last = now
             lifecycle.loop(ctx, dt)
-            display_runtime.run_once(timeout=0.0)
-            elapsed = time.perf_counter() - now
-            sleep_for = target_dt - elapsed
+            if rate.should_present(now):
+                display_runtime.run_once(timeout=0.0)
+            sleep_for = rate.compute_sleep(loop_started_at=now, loop_finished_at=time.perf_counter())
             if sleep_for > 0:
                 time.sleep(sleep_for)
     finally:
