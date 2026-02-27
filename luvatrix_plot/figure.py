@@ -63,6 +63,36 @@ def _union_rect(
     return (x0, y0, x1 - x0, y1 - y0)
 
 
+def _inject_zero_tick(ticks: np.ndarray, *, vmin: float, vmax: float) -> np.ndarray:
+    if ticks.size == 0:
+        return ticks
+    if vmin > 0.0 or vmax < 0.0:
+        return ticks
+    step = float(abs(ticks[1] - ticks[0])) if ticks.size > 1 else 1.0
+    if np.any(np.isclose(ticks, 0.0, rtol=0.0, atol=max(1e-12, step * 1e-9))):
+        return ticks
+    return np.sort(np.append(ticks, 0.0))
+
+
+def _contiguous_true_runs(mask: np.ndarray) -> list[tuple[int, int]]:
+    idx = np.flatnonzero(mask)
+    if idx.size == 0:
+        return []
+    runs: list[tuple[int, int]] = []
+    start = int(idx[0])
+    prev = int(idx[0])
+    for v in idx[1:]:
+        iv = int(v)
+        if iv == prev + 1:
+            prev = iv
+            continue
+        runs.append((start, prev + 1))
+        start = iv
+        prev = iv
+    runs.append((start, prev + 1))
+    return runs
+
+
 @dataclass(frozen=True)
 class FigureStyle:
     background: tuple[int, int, int, int] = (12, 16, 23, 255)
@@ -127,6 +157,8 @@ class Axes:
     plot_bg_color: tuple[int, int, int, int] = (20, 26, 36, 255)
     grid_color: tuple[int, int, int, int] = (44, 53, 66, 255)
     minor_dot_grid_color: tuple[int, int, int, int] = (225, 232, 242, 90)
+    show_minor_dot_grid: bool = True
+    minor_dot_grid_max_points: int = 20000
     axis_color: tuple[int, int, int, int] = (124, 138, 156, 255)
     text_color: tuple[int, int, int, int] = (208, 218, 232, 255)
     limit_hysteresis_enabled: bool = False
@@ -135,6 +167,13 @@ class Axes:
     show_zero_reference_lines: bool = True
     reference_line_color: tuple[int, int, int, int] = (186, 201, 220, 235)
     reference_lines: list[ReferenceLine] = field(default_factory=list)
+    x_major_tick_step: float | None = None
+    y_major_tick_step: float | None = None
+    show_edge_x_tick_labels: bool = True
+    show_edge_y_tick_labels: bool = True
+    include_zero_x_tick: bool = False
+    x_tick_label_scale: float = 1.0
+    x_tick_label_offset: float = 0.0
     legend_position_px: tuple[int, int] | None = None
     _legend_bounds_px: tuple[int, int, int, int] | None = None
     _legend_drag_active: bool = False
@@ -142,6 +181,16 @@ class Axes:
     _legend_dirty_rect_px: tuple[int, int, int, int] | None = None
     _legend_layout: LegendLayout | None = None
     _last_static_rgba: np.ndarray | None = None
+    _last_data_rgba: np.ndarray | None = None
+    _last_plot_rect_px: tuple[int, int, int, int] | None = None
+    _last_limits: DataLimits | None = None
+    _last_x_rule_rect_px: tuple[int, int, int, int] | None = None
+    _last_x_rule_bg: np.ndarray | None = None
+    _last_tick_font_px: float = 12.0
+    _last_label_font_px: float = 12.0
+    _last_x_tick_pad: int = 4
+    _last_max_x_tick_h: int = 12
+    _last_x_label_gap: int = 8
 
     def scatter(
         self,
@@ -219,6 +268,45 @@ class Axes:
         self.limit_hysteresis_deadband_ratio = deadband_ratio
         self.limit_hysteresis_shrink_rate = shrink_rate
         return self
+
+    def set_major_tick_steps(self, *, x: float | None = None, y: float | None = None) -> "Axes":
+        if x is not None and x <= 0:
+            raise ValueError("x major tick step must be > 0")
+        if y is not None and y <= 0:
+            raise ValueError("y major tick step must be > 0")
+        self.x_major_tick_step = x
+        self.y_major_tick_step = y
+        return self
+
+    def set_show_edge_x_tick_labels(self, show: bool) -> "Axes":
+        self.show_edge_x_tick_labels = bool(show)
+        return self
+
+    def set_show_edge_y_tick_labels(self, show: bool) -> "Axes":
+        self.show_edge_y_tick_labels = bool(show)
+        return self
+
+    def set_dynamic_defaults(self) -> "Axes":
+        # Dynamic/live plots typically avoid edge labels to reduce visual jitter at bounds.
+        self.show_edge_x_tick_labels = False
+        self.show_edge_y_tick_labels = False
+        self.include_zero_x_tick = True
+        return self
+
+    def set_include_zero_x_tick(self, include: bool) -> "Axes":
+        self.include_zero_x_tick = bool(include)
+        return self
+
+    def set_x_tick_label_affine(self, *, scale: float = 1.0, offset: float = 0.0) -> "Axes":
+        self.x_tick_label_scale = float(scale)
+        self.x_tick_label_offset = float(offset)
+        return self
+
+    def _format_x_tick_labels(self, tick_x: np.ndarray) -> list[str]:
+        if tick_x.size == 0:
+            return []
+        display_ticks = tick_x.astype(np.float64, copy=False) * self.x_tick_label_scale + self.x_tick_label_offset
+        return format_ticks_for_axis(display_ticks)
 
     def add_reference_line(
         self,
@@ -412,7 +500,92 @@ class Axes:
         if x1 <= x0 or y1 <= y0:
             return None
         patch = self._last_static_rgba[y0:y1, x0:x1].copy()
+        if self._last_data_rgba is not None:
+            blit(patch, self._last_data_rgba[y0:y1, x0:x1])
         self._draw_legend(patch, x_offset=x0, y_offset=y0)
+        return (x0, y0, patch)
+
+    def last_plot_rect(self) -> tuple[int, int, int, int] | None:
+        return self._last_plot_rect_px
+
+    def last_limits(self) -> DataLimits | None:
+        return self._last_limits
+
+    def last_static_rgba(self) -> np.ndarray | None:
+        if self._last_static_rgba is None:
+            return None
+        return self._last_static_rgba.copy()
+
+    def last_data_rgba(self) -> np.ndarray | None:
+        if self._last_data_rgba is None:
+            return None
+        return self._last_data_rgba.copy()
+
+    def last_x_rule_rect(self) -> tuple[int, int, int, int] | None:
+        return self._last_x_rule_rect_px
+
+    def render_x_rule_patch(
+        self,
+        xmin: float,
+        xmax: float,
+        *,
+        visible_min: float | None = None,
+        visible_max: float | None = None,
+    ) -> tuple[int, int, np.ndarray] | None:
+        if self._last_x_rule_bg is None or self._last_x_rule_rect_px is None:
+            return None
+        x0, y0, w, h = self._last_x_rule_rect_px
+        if w <= 0 or h <= 0:
+            return None
+        patch = self._last_x_rule_bg.copy()
+        tick_x = generate_nice_ticks(
+            float(xmin),
+            float(xmax),
+            max(5, w // 120),
+            preferred_step=self.x_major_tick_step,
+        )
+        if self.include_zero_x_tick:
+            tick_x = _inject_zero_tick(tick_x, vmin=float(xmin), vmax=float(xmax))
+        labels = self._format_x_tick_labels(tick_x)
+        transform = build_transform(
+            limits=DataLimits(xmin=float(xmin), xmax=float(xmax), ymin=0.0, ymax=1.0),
+            width=w,
+            height=max(2, h),
+        )
+        for idx, (xv, label) in enumerate(zip(tick_x.tolist(), labels, strict=False)):
+            if visible_min is not None and xv < visible_min:
+                continue
+            if visible_max is not None and xv > visible_max:
+                continue
+            if (not self.show_edge_x_tick_labels) and (idx == 0 or idx == len(labels) - 1):
+                continue
+            px, _ = map_to_pixels(
+                np.asarray([xv], dtype=np.float64),
+                np.asarray([0.0], dtype=np.float64),
+                transform,
+                w,
+                max(2, h),
+            )
+            tx, _ = text_size(label, font_size_px=self._last_tick_font_px)
+            draw_text(
+                patch,
+                int(px[0]) - tx // 2,
+                int(round(self._last_x_tick_pad)),
+                label,
+                self.text_color,
+                font_size_px=self._last_tick_font_px,
+                embolden_px=1,
+            )
+        x_label_w, _ = text_size(self.x_label_bottom, font_size_px=self._last_label_font_px)
+        draw_text(
+            patch,
+            max(0, (w // 2) - (x_label_w // 2)),
+            max(2, int(round(self._last_x_tick_pad + self._last_max_x_tick_h + self._last_x_label_gap))),
+            self.x_label_bottom,
+            self.text_color,
+            font_size_px=self._last_label_font_px,
+            embolden_px=2,
+        )
         return (x0, y0, patch)
 
     def _plot_viewport(self) -> tuple[int, int, int, int]:
@@ -438,7 +611,10 @@ class Axes:
         maxs_y: list[float] = []
 
         for spec in self._series:
-            limits = compute_limits(spec.data.x, spec.data.y, spec.data.mask)
+            # Recompute finiteness mask at render-time so dynamic in-place updates
+            # (rolling windows with NaNs) stay aligned with limits and drawing.
+            live_mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
+            limits = compute_limits(spec.data.x, spec.data.y, live_mask)
             mins_x.append(limits.xmin)
             maxs_x.append(limits.xmax)
             mins_y.append(limits.ymin)
@@ -500,16 +676,27 @@ class Axes:
         xmin, xmax, ymin, ymax = self._combined_limits()
         limits = self._apply_limit_hysteresis(DataLimits(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax))
         xmin, xmax, ymin, ymax = limits.xmin, limits.xmax, limits.ymin, limits.ymax
-        y_all = np.concatenate([spec.data.y[spec.data.mask] for spec in self._series]).astype(np.float64, copy=False)
+        self._last_limits = limits
+        y_chunks: list[np.ndarray] = []
+        for spec in self._series:
+            live_mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
+            if np.any(live_mask):
+                y_chunks.append(spec.data.y[live_mask])
+        if not y_chunks:
+            raise PlotDataError("series contains no finite points")
+        y_all = np.concatenate(y_chunks).astype(np.float64, copy=False)
         y_resolution = infer_resolution(y_all)
-        preferred_y_step = preferred_major_step_from_resolution(y_resolution)
+        preferred_y_step = self.y_major_tick_step if self.y_major_tick_step is not None else preferred_major_step_from_resolution(y_resolution)
+        preferred_x_step = self.x_major_tick_step
 
         # First pass tick estimates for layout sizing.
         provisional_w = max(120, self.figure.width - 80)
         provisional_h = max(80, self.figure.height - 80)
-        tick_x_probe = generate_nice_ticks(xmin, xmax, max(5, provisional_w // 120))
+        tick_x_probe = generate_nice_ticks(xmin, xmax, max(5, provisional_w // 120), preferred_step=preferred_x_step)
+        if self.include_zero_x_tick:
+            tick_x_probe = _inject_zero_tick(tick_x_probe, vmin=xmin, vmax=xmax)
         tick_y_probe = generate_nice_ticks(ymin, ymax, max(4, provisional_h // 140), preferred_step=preferred_y_step)
-        x_tick_labels_probe = format_ticks_for_axis(tick_x_probe)
+        x_tick_labels_probe = self._format_x_tick_labels(tick_x_probe)
         y_tick_labels_probe = format_ticks_for_axis(tick_y_probe)
         max_x_tick_h = max((text_size(lbl, font_size_px=tick_font_px)[1] for lbl in x_tick_labels_probe), default=int(tick_font_px))
         max_x_tick_w = max((text_size(lbl, font_size_px=tick_font_px)[0] for lbl in x_tick_labels_probe), default=0)
@@ -564,6 +751,12 @@ class Axes:
             plot_h = self.figure.height - top - bottom
         if plot_w <= 1 or plot_h <= 1:
             raise PlotDataError("figure too small for plotting viewport")
+        self._last_plot_rect_px = (plot_x0, plot_y0, plot_w, plot_h)
+        self._last_tick_font_px = tick_font_px
+        self._last_label_font_px = label_font_px
+        self._last_x_tick_pad = x_tick_pad
+        self._last_max_x_tick_h = max_x_tick_h
+        self._last_x_label_gap = x_label_gap
 
         frame_key = (self.figure.width, self.figure.height, self.frame_color, self.plot_bg_color, plot_x0, plot_y0, plot_w, plot_h)
         if self._cache.frame_key != frame_key or self._cache.frame_template is None:
@@ -578,9 +771,11 @@ class Axes:
             self._cache.frame_template = frame
 
         # Final ticks based on resolved viewport.
-        tick_x = generate_nice_ticks(xmin, xmax, max(5, plot_w // 120))
+        tick_x = generate_nice_ticks(xmin, xmax, max(5, plot_w // 120), preferred_step=preferred_x_step)
+        if self.include_zero_x_tick:
+            tick_x = _inject_zero_tick(tick_x, vmin=xmin, vmax=xmax)
         tick_y = generate_nice_ticks(ymin, ymax, max(4, plot_h // 140), preferred_step=preferred_y_step)
-        x_tick_labels = format_ticks_for_axis(tick_x)
+        x_tick_labels = self._format_x_tick_labels(tick_x)
         y_tick_labels = format_ticks_for_axis(tick_y)
         grid_key = (
             plot_w,
@@ -591,6 +786,8 @@ class Axes:
             round(ymax, 12),
             self.grid_color,
             self.show_zero_reference_lines,
+            self.show_minor_dot_grid,
+            self.minor_dot_grid_max_points,
             tuple((line.axis, round(line.value, 12), line.color, line.width) for line in self.reference_lines),
         )
         if self._cache.grid_key != grid_key or self._cache.grid_template is None:
@@ -642,7 +839,7 @@ class Axes:
             major_y_step = float(abs(tick_y[1] - tick_y[0])) if tick_y.size > 1 else 1.0
             minor_x_step = major_x_step / 10.0
             minor_y_step = major_y_step / 10.0
-            if minor_x_step > 0 and minor_y_step > 0:
+            if self.show_minor_dot_grid and minor_x_step > 0 and minor_y_step > 0:
                 x_minor = np.arange(
                     np.floor(xmin / minor_x_step) * minor_x_step,
                     np.ceil(xmax / minor_x_step) * minor_x_step + 0.5 * minor_x_step,
@@ -655,28 +852,33 @@ class Axes:
                     minor_y_step,
                     dtype=np.float64,
                 )
-                # Guardrail for very large grids.
-                if x_minor.size * y_minor.size <= 20000:
-                    dot_color = self.minor_dot_grid_color
-                    x_minor_px, _ = map_to_pixels(
-                        x_minor,
-                        np.full(x_minor.shape, ymin, dtype=np.float64),
-                        transform,
-                        plot_w,
-                        plot_h,
-                    )
-                    _, y_minor_px = map_to_pixels(
-                        np.full(y_minor.shape, xmin, dtype=np.float64),
-                        y_minor,
-                        transform,
-                        plot_w,
-                        plot_h,
-                    )
-                    for px in x_minor_px.tolist():
-                        gx = plot_x0 + int(px)
-                        for py in y_minor_px.tolist():
-                            gy = plot_y0 + int(py)
-                            draw_pixel(grid, gx, gy, dot_color)
+                dot_color = self.minor_dot_grid_color
+                x_minor_px, _ = map_to_pixels(
+                    x_minor,
+                    np.full(x_minor.shape, ymin, dtype=np.float64),
+                    transform,
+                    plot_w,
+                    plot_h,
+                )
+                _, y_minor_px = map_to_pixels(
+                    np.full(y_minor.shape, xmin, dtype=np.float64),
+                    y_minor,
+                    transform,
+                    plot_w,
+                    plot_h,
+                )
+                x_unique = np.unique(x_minor_px)
+                y_unique = np.unique(y_minor_px)
+                total = int(x_unique.size * y_unique.size)
+                stride = 1
+                max_points = max(1000, int(self.minor_dot_grid_max_points))
+                if total > max_points:
+                    stride = int(np.ceil(np.sqrt(total / max_points)))
+                for px in x_unique[::stride].tolist():
+                    gx = plot_x0 + int(px)
+                    for py in y_unique[::stride].tolist():
+                        gy = plot_y0 + int(py)
+                        draw_pixel(grid, gx, gy, dot_color)
             self._cache.grid_key = grid_key
             self._cache.grid_template = grid
 
@@ -692,23 +894,24 @@ class Axes:
         drawing = new_canvas(self.figure.width, self.figure.height, color=(0, 0, 0, 0))
         # Pass 1: lines under markers for clear point visibility.
         for spec in self._series:
-            visible_mask = spec.data.mask
-            xvals = spec.data.x[visible_mask]
-            yvals = spec.data.y[visible_mask]
-            px, py = map_to_pixels(xvals, yvals, transform, plot_w, plot_h)
-            if px.size > plot_w:
-                mode = "markers" if spec.style.mode == "markers" else "lines"
-                px, py = downsample_by_pixel_column(px, py, width=plot_w, mode=mode)
-
-            px = px + plot_x0
-            py = py + plot_y0
             if spec.style.mode in {"lines", "lines+markers"}:
-                draw_polyline(drawing, px, py, color=spec.style.color, width=spec.style.line_width)
+                live_mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
+                for seg_start, seg_end in _contiguous_true_runs(live_mask):
+                    xvals = spec.data.x[seg_start:seg_end]
+                    yvals = spec.data.y[seg_start:seg_end]
+                    if xvals.size < 2:
+                        continue
+                    px, py = map_to_pixels(xvals, yvals, transform, plot_w, plot_h)
+                    if px.size > plot_w:
+                        px, py = downsample_by_pixel_column(px, py, width=plot_w, mode="lines")
+                    px = px + plot_x0
+                    py = py + plot_y0
+                    draw_polyline(drawing, px, py, color=spec.style.color, width=spec.style.line_width)
         # Pass 2: markers on top.
         for spec in self._series:
             if spec.style.mode not in {"markers", "lines+markers"}:
                 continue
-            visible_mask = spec.data.mask
+            visible_mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
             xvals = spec.data.x[visible_mask]
             yvals = spec.data.y[visible_mask]
             px, py = map_to_pixels(xvals, yvals, transform, plot_w, plot_h)
@@ -719,14 +922,24 @@ class Axes:
             marker_size = max(2, spec.style.marker_size)
             draw_markers(drawing, px, py, color=spec.style.color, size=marker_size)
 
+        base_no_data = base.copy()
+        self._last_data_rgba = drawing.copy()
         blit(base, drawing)
 
         draw_hline(base, plot_x0, plot_x0 + plot_w - 1, plot_y0 + plot_h - 1, self.axis_color)
         draw_vline(base, plot_x0, plot_y0, plot_y0 + plot_h - 1, self.axis_color)
+        draw_hline(base_no_data, plot_x0, plot_x0 + plot_w - 1, plot_y0 + plot_h - 1, self.axis_color)
+        draw_vline(base_no_data, plot_x0, plot_y0, plot_y0 + plot_h - 1, self.axis_color)
         if self.show_top_axis:
             draw_hline(base, plot_x0, plot_x0 + plot_w - 1, plot_y0, self.axis_color)
+            draw_hline(base_no_data, plot_x0, plot_x0 + plot_w - 1, plot_y0, self.axis_color)
         if self.show_right_axis:
             draw_vline(base, plot_x0 + plot_w - 1, plot_y0, plot_y0 + plot_h - 1, self.axis_color)
+            draw_vline(base_no_data, plot_x0 + plot_w - 1, plot_y0, plot_y0 + plot_h - 1, self.axis_color)
+        x_rule_y0 = min(self.figure.height, plot_y0 + plot_h)
+        x_rule_h = max(0, self.figure.height - x_rule_y0)
+        self._last_x_rule_rect_px = (plot_x0, x_rule_y0, plot_w, x_rule_h)
+        self._last_x_rule_bg = base_no_data[x_rule_y0 : x_rule_y0 + x_rule_h, plot_x0 : plot_x0 + plot_w].copy()
 
         self._legend_layout = self._build_legend_layout(
             tick_font_px=tick_font_px,
@@ -752,6 +965,11 @@ class Axes:
             round(tick_font_px, 2),
             round(label_font_px, 2),
             round(title_font_px, 2),
+            self.show_edge_x_tick_labels,
+            self.show_edge_y_tick_labels,
+            self.include_zero_x_tick,
+            round(self.x_tick_label_scale, 12),
+            round(self.x_tick_label_offset, 12),
         )
         if self._cache.text_key != text_key or self._cache.text_template is None:
             text_layer = new_canvas(self.figure.width, self.figure.height, color=(0, 0, 0, 0))
@@ -767,7 +985,9 @@ class Axes:
                     embolden_px=2,
                 )
 
-            for xv, label in zip(tick_x.tolist(), x_tick_labels, strict=False):
+            for idx, (xv, label) in enumerate(zip(tick_x.tolist(), x_tick_labels, strict=False)):
+                if (not self.show_edge_x_tick_labels) and (idx == 0 or idx == len(x_tick_labels) - 1):
+                    continue
                 px, _ = map_to_pixels(np.asarray([xv], dtype=np.float64), np.asarray([ymin], dtype=np.float64), transform, plot_w, plot_h)
                 tx, _ = text_size(label, font_size_px=tick_font_px)
                 draw_text(
@@ -777,10 +997,12 @@ class Axes:
                     label,
                     self.text_color,
                     font_size_px=tick_font_px,
-                    embolden_px=2,
+                    embolden_px=1,
                 )
 
-            for yv, label in zip(tick_y.tolist(), y_tick_labels, strict=False):
+            for idx, (yv, label) in enumerate(zip(tick_y.tolist(), y_tick_labels, strict=False)):
+                if (not self.show_edge_y_tick_labels) and (idx == 0 or idx == len(y_tick_labels) - 1):
+                    continue
                 _, py = map_to_pixels(np.asarray([xmin], dtype=np.float64), np.asarray([yv], dtype=np.float64), transform, plot_w, plot_h)
                 tx, _ = text_size(label, font_size_px=tick_font_px)
                 draw_text(
@@ -839,7 +1061,8 @@ class Axes:
             self._cache.text_template = text_layer
 
         blit(base, self._cache.text_template)
-        self._last_static_rgba = base.copy()
+        blit(base_no_data, self._cache.text_template)
+        self._last_static_rgba = base_no_data
         self._draw_legend(base)
         return base
 
