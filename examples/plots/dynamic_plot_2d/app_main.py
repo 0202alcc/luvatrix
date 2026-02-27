@@ -14,10 +14,14 @@ from luvatrix_plot.scales import build_transform, map_to_pixels
 class DynamicPlot2DApp:
     def __init__(self) -> None:
         self._t = 0.0
-        self._x_values = np.full(240, np.nan, dtype=np.float64)
-        self._y_values = np.full(240, np.nan, dtype=np.float64)
+        self._window_bins = max(16, int(os.getenv("LUVATRIX_DYNAMIC2D_WINDOW_BINS", "120")))
+        self._x_values = np.full(self._window_bins, np.nan, dtype=np.float64)
+        self._y_values = np.full(self._window_bins, np.nan, dtype=np.float64)
         dx = float(os.getenv("LUVATRIX_DYNAMIC2D_DX", "0.1"))
         self._axis = Dynamic2DMonotonicAxis(viewport_bins=self._y_values.size, dx=dx, x0=0.0)
+        # Optional synthetic gaps for stress testing sparse streams; disabled by default.
+        self._gap_period = int(os.getenv("LUVATRIX_DYNAMIC2D_GAP_PERIOD", "0"))
+        self._gap_bins = int(os.getenv("LUVATRIX_DYNAMIC2D_GAP_BINS", "3"))
         self._x_actual = 0.0
         self._tick = 0
         self._fig = None
@@ -57,11 +61,10 @@ class DynamicPlot2DApp:
 
     def loop(self, ctx, dt: float) -> None:
         self._t += max(0.0, dt)
-        # First sample lands exactly at x0; subsequent samples mostly advance by 1 bin.
-        # Occasionally we insert a larger bin jump to exercise NaN gap rendering.
+        # First sample lands exactly at x0; then one bin per frame by default.
         gap = 0 if self._tick == 0 else 1
-        if self._tick > 0 and self._tick % 45 == 0:
-            gap = 3
+        if self._gap_period > 0 and self._tick > 0 and self._tick % self._gap_period == 0:
+            gap = max(1, self._gap_bins)
         self._x_actual += self._axis.dx * float(gap)
         self._tick += 1
         y = (
@@ -203,7 +206,8 @@ class DynamicPlot2DApp:
             x_label_bottom="x",
             y_label_left="y",
         )
-        self._ax.set_limit_hysteresis(enabled=True, deadband_ratio=0.12, shrink_rate=0.06)
+        # For dynamic debugging, keep limits raw so oldest visible x maps directly to y-axis.
+        self._ax.set_limit_hysteresis(enabled=False)
         self._ax.set_dynamic_defaults()
         self._ax.set_major_tick_steps(x=max(abs(self._axis.dx) * 8.0, abs(self._axis.dx)), y=0.2)
         self._ax.plot(x=self._x_values, y=self._y_values, color=(255, 170, 70), width=1, alpha=0.9)
