@@ -29,3 +29,4 @@ class SeriesStyle:
 class SeriesSpec:
     data: SeriesData
     style: SeriesStyle
+    label: str | None = None

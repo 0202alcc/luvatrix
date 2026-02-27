@@ -157,3 +157,82 @@ Use a guarded smoke job:
 For in-repo first-party UI components (`luvatrix_ui`), see:
 
 - `docs/ui_component_protocol.md`
+
+## 12. First-Party UI Frame API (v0)
+
+Apps can compile first-party UI components into the next matrix frame via `AppContext`:
+
+1. `begin_ui_frame(renderer, content_width_px=?, content_height_px=?, clear_color=?)`
+2. `mount_component(component)` for each component
+3. `finalize_ui_frame()` to compile/render and submit one `WriteBatch`
+
+Notes:
+
+1. This flow is app-protocol-side frame compilation, not display renderer behavior.
+2. `content_width_px` / `content_height_px` should represent the displayable content area
+   (excluding letterbox/black bars in preserve-aspect mode).
+3. Text sizing ratios use displayable area dimensions.
+4. `finalize_ui_frame()` requires `window.write` capability and submits a full-frame write.
+5. SVG components are compiled through batched SVG render commands with explicit target
+   width/height; runtime renderers should rasterize directly at that target size.
+
+## 13. JSON Page Compiler Expansion (Draft)
+
+For JSON-driven app construction and future Figma/Lottie import support, use a compiler
+pipeline that produces first-party component IR for `mount_component(...)`.
+
+Recommended compiler stages:
+
+1. parse JSON source
+2. validate fields and value ranges
+3. normalize defaults (frame, z-index, bounds, opacity)
+4. bind action names to backend handler registry
+5. emit deterministic component IR list
+
+Detailed schema and examples:
+
+- `docs/json_ui_compiler.md`
+
+## 14. Component Ordering and Frame Rules
+
+For compiler-produced components:
+
+1. each component may declare its own coordinate `frame`
+2. each component may declare `z_index` (draw order)
+3. renderer draw order should be `z_index` ascending, then source order ascending
+4. hit-testing order should be reverse draw order
+5. `interaction_bounds` defaults to visual bounds and does not affect paint geometry
+
+## 15. Backend Function Binding Contract
+
+JSON components may define a `functions` object that maps interaction hooks to backend
+function names (for example: `on_press`, `on_press_hold`, `on_hover_start`).
+
+Recommended runtime behavior:
+
+1. compile stores function names in IR
+2. app init resolves names against backend handler registry
+3. strict mode fails when a declared function is missing or non-callable
+4. permissive mode warns and uses no-op handler
+
+## 16. UI Generation Through MatrixUIFrameRenderer
+
+`MatrixUIFrameRenderer` is app-protocol-side component-to-matrix compilation.
+
+Per frame:
+
+1. `begin_ui_frame(renderer, ...)` allocates/clears frame tensor
+2. app mounts first-party components
+3. `finalize_ui_frame()` converts components into text/SVG batch commands
+4. renderer executes batch draws onto one RGBA frame tensor
+5. runtime submits `WriteBatch([FullRewrite(frame)])`
+
+This separation keeps display backend concerns out of component logic.
+
+## 17. Recommended Documentation Set
+
+For protocol/UI work, keep these documents aligned:
+
+1. `docs/app_protocol.md` (runtime contract)
+2. `docs/ui_component_protocol.md` (component contract)
+3. `docs/json_ui_compiler.md` (JSON source and compile rules)

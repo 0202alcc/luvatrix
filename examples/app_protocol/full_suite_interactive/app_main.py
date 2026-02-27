@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
+import html
 import os
 import time
 
-import torch
-from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch
+from luvatrix_core.core.ui_frame_renderer import MatrixUIFrameRenderer
+from luvatrix_ui.component_schema import CoordinatePoint
+from luvatrix_ui.controls.svg_component import SVGComponent
+from luvatrix_ui.text.component import TextComponent
+from luvatrix_ui.text.renderer import FontSpec, TextAppearance, TextSizeSpec
 
 @dataclass
 class InteractionState:
@@ -23,6 +27,7 @@ class InteractionState:
     key_last: str = ""
     key_state: str = ""
     keys_down: list[str] | None = None
+    active_coord_frame: str = "screen_tl"
 
 
 def select_sensors(requested: list[str], available_sensors: list[str]) -> list[str]:
@@ -147,6 +152,7 @@ def format_dashboard(
 
 
 def _apply_hdi_events(state: InteractionState, events: list[object], surface_height: int) -> None:
+    _ = surface_height
     for event in events:
         if event.device == "keyboard":
             if event.status == "OK" and isinstance(event.payload, dict):
@@ -191,37 +197,72 @@ def _apply_hdi_events(state: InteractionState, events: list[object], surface_hei
             state.scroll_y = float(event.payload.get("delta_y", state.scroll_y))
 
 
-def _build_frame(
-    height: int,
-    width: int,
-    state: InteractionState,
-    t: int,
-    xx: torch.Tensor,
-    yy: torch.Tensor,
-) -> torch.Tensor:
-    frame = torch.zeros((height, width, 4), dtype=torch.uint8)
-    base_r = ((xx * 0.6 + t * 1.8) % 255).to(torch.uint8)
-    base_g = ((yy * 0.7 + t * 1.2) % 255).to(torch.uint8)
-    base_b = (((xx + yy) * 0.35 + t * 2.2) % 255).to(torch.uint8)
-    frame[:, :, 0] = base_r
-    frame[:, :, 1] = base_g
-    frame[:, :, 2] = base_b
-    frame[:, :, 3] = 255
+_COORD_FRAME_ORDER = ("screen_tl", "cartesian_bl", "cartesian_center")
 
-    if state.mouse_in_window:
-        radius = 24.0 + min(50.0, 90.0 * state.pressure + 35.0 * abs(state.pinch))
-        dist_sq = (xx - state.mouse_x) ** 2 + (yy - state.mouse_y) ** 2
-        mask = dist_sq <= (radius * radius)
-        intensity = 180 if state.left_down else 110
-        frame[:, :, 0] = torch.where(mask, torch.full_like(frame[:, :, 0], intensity), frame[:, :, 0])
-        frame[:, :, 1] = torch.where(mask, torch.full_like(frame[:, :, 1], 40 if state.right_down else 200), frame[:, :, 1])
-        frame[:, :, 2] = torch.where(mask, torch.full_like(frame[:, :, 2], 255), frame[:, :, 2])
 
-    rotate_boost = int(max(-40.0, min(40.0, state.rotation * 2.0)))
-    scroll_boost = int(max(-50.0, min(50.0, state.scroll_y * 0.5)))
-    frame[:, :, 0] = torch.clamp(frame[:, :, 0].to(torch.int16) + rotate_boost, 0, 255).to(torch.uint8)
-    frame[:, :, 1] = torch.clamp(frame[:, :, 1].to(torch.int16) + scroll_boost, 0, 255).to(torch.uint8)
-    return frame
+def _next_coord_frame(current: str, key: str) -> str | None:
+    k = key.strip().lower()
+    if k == "1":
+        return "screen_tl"
+    if k == "2":
+        return "cartesian_bl"
+    if k == "3":
+        return "cartesian_center"
+    if k in ("c", "f"):
+        if current not in _COORD_FRAME_ORDER:
+            return _COORD_FRAME_ORDER[0]
+        idx = _COORD_FRAME_ORDER.index(current)
+        return _COORD_FRAME_ORDER[(idx + 1) % len(_COORD_FRAME_ORDER)]
+    return None
+
+
+def _detect_frame_switch(events: list[object], current_frame: str) -> str | None:
+    for event in events:
+        if event.device != "keyboard" or event.status != "OK" or not isinstance(event.payload, dict):
+            continue
+        phase = str(event.payload.get("phase", ""))
+        if phase not in ("down", "single"):
+            continue
+        key = str(event.payload.get("key", ""))
+        next_frame = _next_coord_frame(current_frame, key)
+        if next_frame is not None:
+            return next_frame
+    return None
+
+
+def _mouse_label_text(display_frame: str, display_x: float, display_y: float) -> str:
+    return f"{display_frame} x={display_x:.1f}, y={display_y:.1f}"
+
+
+def _frame_clear_color(state: InteractionState, t: int) -> tuple[int, int, int, int]:
+    base_r = int((t * 3 + 35) % 255)
+    base_g = int((t * 2 + 70) % 255)
+    base_b = int((t * 4 + 20) % 255)
+    rotate_boost = int(max(-30.0, min(30.0, state.rotation * 2.0)))
+    scroll_boost = int(max(-40.0, min(40.0, state.scroll_y * 0.5)))
+    r = max(0, min(255, base_r + rotate_boost))
+    g = max(0, min(255, base_g + scroll_boost))
+    b = max(0, min(255, base_b))
+    return (r, g, b, 255)
+
+
+def _build_scene_svg(width: int, height: int, state: InteractionState) -> str:
+    if not state.mouse_in_window:
+        return (
+            f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
+            f'<rect x="0" y="0" width="{width}" height="{height}" fill="none" stroke="#ffffff22" stroke-width="1"/>'
+            "</svg>"
+        )
+    radius = 24.0 + min(50.0, 90.0 * state.pressure + 35.0 * abs(state.pinch))
+    cx = max(0.0, min(float(width), state.mouse_x))
+    cy = max(0.0, min(float(height), state.mouse_y))
+    circle_fill = "#ff66aa66" if state.left_down else "#66ddff66"
+    circle_stroke = "#ff88cc" if state.right_down else "#e8f7ff"
+    return (
+        f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
+        f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{radius:.2f}" fill="{circle_fill}" stroke="{circle_stroke}" stroke-width="2"/>'
+        "</svg>"
+    )
 
 
 class FullSuiteInteractiveApp:
@@ -232,13 +273,12 @@ class FullSuiteInteractiveApp:
         self._dashboard_interval = float(os.getenv("LUVATRIX_FSI_DASHBOARD_INTERVAL", "0.35"))
         self._rewrite_delay = float(os.getenv("LUVATRIX_FSI_REWRITE_DELAY", "0.0"))
         self._state = InteractionState()
-        self._xx: torch.Tensor | None = None
-        self._yy: torch.Tensor | None = None
         self._width = 0
         self._height = 0
         self._frame_count = 0
         self._started = 0.0
         self._last_print = 0.0
+        self._ui_renderer = MatrixUIFrameRenderer()
 
     def init(self, ctx) -> None:
         raw_available = os.getenv("LUVATRIX_FSI_AVAILABLE_SENSORS", "")
@@ -246,14 +286,25 @@ class FullSuiteInteractiveApp:
         raw_sensors = os.getenv("LUVATRIX_FSI_SENSORS", "")
         requested = [x.strip() for x in raw_sensors.split(",") if x.strip()]
         self._sensors = select_sensors(requested, available)
+        if self._coord_frame not in _COORD_FRAME_ORDER:
+            self._coord_frame = "screen_tl"
+        self._state.active_coord_frame = self._coord_frame
         ctx.set_default_coordinate_frame(self._coord_frame)
 
         snap = ctx.read_matrix_snapshot()
         self._height, self._width, _ = snap.shape
-        self._xx = torch.arange(self._width, dtype=torch.float32).unsqueeze(0).expand(self._height, self._width)
-        self._yy = torch.arange(self._height, dtype=torch.float32).unsqueeze(1).expand(self._height, self._width)
         self._started = time.perf_counter()
         self._last_print = 0.0
+        self._ui_renderer.prepare_font(
+            FontSpec(family="Comic Mono"),
+            size_px=12.0,
+            charset="abcdefghijklmnopqrstuvwxyz0123456789:.,_-|= ",
+        )
+        self._ui_renderer.prepare_font(
+            FontSpec(family="Comic Mono"),
+            size_px=14.0,
+            charset="abcdefghijklmnopqrstuvwxyz0123456789:.,_-|= ",
+        )
 
         print("available functional sensors:")
         for sensor in self._sensors:
@@ -262,17 +313,65 @@ class FullSuiteInteractiveApp:
             print(f"  - {sensor}: {'available' if is_functional else sample.status}")
 
     def loop(self, ctx, dt: float) -> None:
-        assert self._xx is not None and self._yy is not None
-        events = ctx.poll_hdi_events(max_events=256)
+        _ = dt
+        events = ctx.poll_hdi_events(max_events=256, frame="screen_tl")
         _apply_hdi_events(self._state, events, self._height)
+        next_frame = _detect_frame_switch(events, self._coord_frame)
+        if next_frame is not None and next_frame != self._coord_frame:
+            self._coord_frame = next_frame
+            self._state.active_coord_frame = next_frame
+            ctx.set_default_coordinate_frame(next_frame)
+
+        clear_color = _frame_clear_color(self._state, self._frame_count)
+        ctx.begin_ui_frame(
+            self._ui_renderer,
+            content_width_px=float(self._width),
+            content_height_px=float(self._height),
+            clear_color=clear_color,
+        )
+        ctx.mount_component(
+            SVGComponent(
+                component_id="mouse_orb",
+                svg_markup=_build_scene_svg(self._width, self._height, self._state),
+                position=CoordinatePoint(0.0, 0.0, "screen_tl"),
+                width=float(self._width),
+                height=float(self._height),
+            )
+        )
         if self._state.mouse_in_window:
-            rx, ry = ctx.to_render_coords(self._state.mouse_x, self._state.mouse_y)
-            render_state = replace(self._state, mouse_x=rx, mouse_y=ry)
-        else:
-            render_state = self._state
-        frame = _build_frame(self._height, self._width, render_state, self._frame_count, self._xx, self._yy)
+            dx, dy = ctx.from_render_coords(self._state.mouse_x, self._state.mouse_y, frame=self._coord_frame)
+            label = _mouse_label_text(self._coord_frame, dx, dy)
+            text_x = max(0.0, min(float(self._width - 180), self._state.mouse_x + 12.0))
+            text_y = max(0.0, min(float(self._height - 24), self._state.mouse_y - 22.0))
+            ctx.mount_component(
+                TextComponent(
+                    component_id="mouse_label",
+                    text=label,
+                    position=CoordinatePoint(text_x, text_y, "screen_tl"),
+                    appearance=TextAppearance(color_hex="#f8fafc"),
+                    size=TextSizeSpec(unit="px", value=14.0),
+                )
+            )
+        ctx.mount_component(
+            TextComponent(
+                component_id="frame_hint",
+                text="keys: 1 screen_tl | 2 cartesian_bl | 3 cartesian_center | c cycle",
+                position=CoordinatePoint(8.0, 8.0, "screen_tl"),
+                appearance=TextAppearance(color_hex="#e2e8f0"),
+                size=TextSizeSpec(unit="px", value=12.0),
+            )
+        )
+        ctx.mount_component(
+            TextComponent(
+                component_id="active_frame",
+                text=f"active frame: {html.escape(self._coord_frame)}",
+                position=CoordinatePoint(8.0, 24.0, "screen_tl"),
+                appearance=TextAppearance(color_hex="#fef08a"),
+                size=TextSizeSpec(unit="px", value=12.0),
+            )
+        )
         self._frame_count += 1
-        ctx.submit_write_batch(WriteBatch([FullRewrite(frame)]))
+        ctx.finalize_ui_frame()
 
         now = time.perf_counter()
         if now - self._last_print >= self._dashboard_interval:
