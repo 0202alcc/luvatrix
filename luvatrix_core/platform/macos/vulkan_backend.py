@@ -9,7 +9,8 @@ from typing import Any
 
 import torch
 
-from ..frame_pipeline import prepare_frame_for_extent, resize_rgba_bilinear
+from ..frame_pipeline import prepare_frame_for_extent
+from ..vulkan_scaling import RenderScaleController, compute_blit_rect
 from ..vulkan_compat import SwapchainOutOfDateError, VulkanKHRCompatMixin, decode_vk_string
 from .vulkan_presenter import VulkanContext
 from .window_system import AppKitWindowSystem, MacOSWindowHandle, MacOSWindowSystem
@@ -72,13 +73,14 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._fallback_image_view = None
         self._fallback_replaced_content_layer = False
         self._active_present_path: str | None = None
-        self._render_scale_levels: tuple[float, ...] = (1.0, 0.75, 0.5)
-        self._render_scale_fixed: float | None = self._parse_fixed_render_scale()
-        self._render_scale_auto_enabled = os.getenv("LUVATRIX_AUTO_RENDER_SCALE", "1").strip() == "1"
+        self._render_scale_controller = RenderScaleController.from_env()
+        self._render_scale_levels: tuple[float, ...] = self._render_scale_controller.levels
+        self._render_scale_fixed: float | None = self._render_scale_controller.fixed_scale
+        self._render_scale_auto_enabled = self._render_scale_controller.auto_enabled
         self._vulkan_internal_scale_enabled = os.getenv("LUVATRIX_VULKAN_INTERNAL_SCALE", "0").strip() == "1"
-        self._render_scale_current = self._render_scale_fixed if self._render_scale_fixed is not None else 1.0
-        self._present_time_ema_ms: float | None = None
-        self._render_scale_cooldown_frames = 0
+        self._render_scale_current = self._render_scale_controller.current_scale
+        self._present_time_ema_ms: float | None = self._render_scale_controller.present_time_ema_ms
+        self._render_scale_cooldown_frames = self._render_scale_controller.cooldown_frames
         if self.window_system is None:
             self.window_system = AppKitWindowSystem()
 
@@ -634,13 +636,10 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         )
 
     def _prepare_scaled_source_frame(self, rgba: torch.Tensor) -> torch.Tensor:
-        scale = self._effective_render_scale()
-        if scale >= 0.999:
-            return rgba
-        src_h, src_w, _ = rgba.shape
-        target_w = max(1, int(round(float(src_w) * scale)))
-        target_h = max(1, int(round(float(src_h) * scale)))
-        return resize_rgba_bilinear(rgba, target_h=target_h, target_w=target_w)
+        self._sync_render_scale_attrs_to_controller()
+        out = self._render_scale_controller.scale_frame(rgba)
+        self._sync_render_scale_attrs_from_controller()
+        return out
 
     def _record_and_submit_commands(self, revision: int) -> None:
         if not self._vulkan_available:
@@ -867,16 +866,13 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         dst_w, dst_h = self._swapchain_extent
         if src_w <= 0 or src_h <= 0 or dst_w <= 0 or dst_h <= 0:
             return
-        if self.preserve_aspect_ratio:
-            scale = min(float(dst_w) / float(src_w), float(dst_h) / float(src_h))
-            blit_w = max(1, int(round(src_w * scale)))
-            blit_h = max(1, int(round(src_h * scale)))
-            dst_x0 = (dst_w - blit_w) // 2
-            dst_y0 = (dst_h - blit_h) // 2
-            dst_x1 = dst_x0 + blit_w
-            dst_y1 = dst_y0 + blit_h
-        else:
-            dst_x0, dst_y0, dst_x1, dst_y1 = 0, 0, dst_w, dst_h
+        dst_x0, dst_y0, dst_x1, dst_y1 = compute_blit_rect(
+            src_w=src_w,
+            src_h=src_h,
+            dst_w=dst_w,
+            dst_h=dst_h,
+            preserve_aspect_ratio=self.preserve_aspect_ratio,
+        )
         blit = vk.VkImageBlit(
             srcSubresource=vk.VkImageSubresourceLayers(
                 aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
@@ -1220,57 +1216,34 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._active_present_path = path
         LOGGER.warning("macOS present path active: %s", path)
 
-    def _parse_fixed_render_scale(self) -> float | None:
-        raw = os.getenv("LUVATRIX_INTERNAL_RENDER_SCALE", "").strip()
-        if raw == "":
-            return None
-        try:
-            value = float(raw)
-        except ValueError:
-            LOGGER.warning("invalid LUVATRIX_INTERNAL_RENDER_SCALE=%r; ignoring", raw)
-            return None
-        if value <= 0:
-            LOGGER.warning("non-positive LUVATRIX_INTERNAL_RENDER_SCALE=%r; ignoring", raw)
-            return None
-        return min(self._render_scale_levels, key=lambda x: abs(x - value))
-
     def _effective_render_scale(self) -> float:
-        if self._render_scale_fixed is not None:
-            return self._render_scale_fixed
-        return self._render_scale_current
+        self._sync_render_scale_attrs_to_controller()
+        return self._render_scale_controller.effective_scale()
 
     def _prepare_fallback_frame(self, rgba: torch.Tensor) -> torch.Tensor:
         return self._prepare_scaled_source_frame(rgba)
 
     def _update_render_scale(self, elapsed_ms: float, fallback_active: bool) -> None:
-        if not fallback_active and not self._vulkan_internal_scale_enabled:
-            return
-        if self._render_scale_fixed is not None:
-            self._render_scale_current = self._render_scale_fixed
-            return
-        if not self._render_scale_auto_enabled:
-            return
-        alpha = 0.15
-        if self._present_time_ema_ms is None:
-            self._present_time_ema_ms = elapsed_ms
-        else:
-            self._present_time_ema_ms = (1.0 - alpha) * self._present_time_ema_ms + alpha * elapsed_ms
-        if self._render_scale_cooldown_frames > 0:
-            self._render_scale_cooldown_frames -= 1
-            return
-        current_idx = self._render_scale_levels.index(self._render_scale_current)
-        assert self._present_time_ema_ms is not None
-        # Step down when presentation is consistently slow.
-        if self._present_time_ema_ms > 17.0 and current_idx < (len(self._render_scale_levels) - 1):
-            self._render_scale_current = self._render_scale_levels[current_idx + 1]
-            self._render_scale_cooldown_frames = 30
-            LOGGER.warning("macOS fallback render scale adjusted: %.2f", self._render_scale_current)
-            return
-        # Step up when presentation has sustained headroom.
-        if self._present_time_ema_ms < 10.0 and current_idx > 0:
-            self._render_scale_current = self._render_scale_levels[current_idx - 1]
-            self._render_scale_cooldown_frames = 60
-            LOGGER.warning("macOS fallback render scale adjusted: %.2f", self._render_scale_current)
+        enabled = fallback_active or self._vulkan_internal_scale_enabled
+        self._sync_render_scale_attrs_to_controller()
+        changed = self._render_scale_controller.update(elapsed_ms=elapsed_ms, enabled=enabled)
+        self._sync_render_scale_attrs_from_controller()
+        if changed:
+            LOGGER.warning("macOS render scale adjusted: %.2f", self._render_scale_current)
+
+    def _sync_render_scale_attrs_to_controller(self) -> None:
+        self._render_scale_controller.fixed_scale = self._render_scale_fixed
+        self._render_scale_controller.auto_enabled = self._render_scale_auto_enabled
+        self._render_scale_controller.current_scale = self._render_scale_current
+        self._render_scale_controller.present_time_ema_ms = self._present_time_ema_ms
+        self._render_scale_controller.cooldown_frames = self._render_scale_cooldown_frames
+
+    def _sync_render_scale_attrs_from_controller(self) -> None:
+        self._render_scale_fixed = self._render_scale_controller.fixed_scale
+        self._render_scale_auto_enabled = self._render_scale_controller.auto_enabled
+        self._render_scale_current = self._render_scale_controller.current_scale
+        self._present_time_ema_ms = self._render_scale_controller.present_time_ema_ms
+        self._render_scale_cooldown_frames = self._render_scale_controller.cooldown_frames
 
     def _vk_create_instance(self):
         vk = self._require_vk()
