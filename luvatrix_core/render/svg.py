@@ -61,6 +61,15 @@ class SvgDocument:
     def from_file(cls, path: Path) -> "SvgDocument":
         tree = ET.parse(path)
         root = tree.getroot()
+        return cls._from_root(root)
+
+    @classmethod
+    def from_markup(cls, svg_markup: str) -> "SvgDocument":
+        root = ET.fromstring(svg_markup)
+        return cls._from_root(root)
+
+    @classmethod
+    def _from_root(cls, root: ET.Element) -> "SvgDocument":
         width = _parse_length(root.attrib.get("width"))
         height = _parse_length(root.attrib.get("height"))
         viewbox = _parse_viewbox(root.attrib.get("viewBox"))
@@ -103,24 +112,41 @@ class SvgDocument:
     def render(
         self, fb: FrameBuffer, x: float, y: float, scale: float, opacity: float
     ) -> None:
+        self.render_to_rect(
+            fb,
+            x=x,
+            y=y,
+            width=self.width * scale,
+            height=self.height * scale,
+            opacity=opacity,
+        )
+
+    def render_to_rect(
+        self,
+        fb: FrameBuffer,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        opacity: float,
+    ) -> None:
         vb_x, vb_y, vb_w, vb_h = self.viewbox
-        scale_x = self.width / vb_w if vb_w else 1.0
-        scale_y = self.height / vb_h if vb_h else 1.0
+        if width <= 0 or height <= 0:
+            return
+        scale_x = width / vb_w if vb_w else 1.0
+        scale_y = height / vb_h if vb_h else 1.0
         for rect in self.rects:
             fill = _apply_opacity(rect.fill, opacity)
             stroke = _apply_opacity(rect.stroke, opacity)
-            rx = (rect.x - vb_x) * scale_x
-            ry = (rect.y - vb_y) * scale_y
-            rw = rect.width * scale_x
-            rh = rect.height * scale_y
-            px = int(x + rx * scale)
-            py = int(y + ry * scale)
-            pw = int(rw * scale)
-            ph = int(rh * scale)
+            px = int(x + (rect.x - vb_x) * scale_x)
+            py = int(y + (rect.y - vb_y) * scale_y)
+            pw = int(rect.width * scale_x)
+            ph = int(rect.height * scale_y)
             if fill:
                 fb.draw_rect(px, py, pw, ph, fill)
             if stroke and rect.stroke_width > 0:
-                sw = max(1, int(rect.stroke_width * scale))
+                sw = max(1, int(rect.stroke_width * ((abs(scale_x) + abs(scale_y)) / 2.0)))
                 fb.draw_rect(px, py, pw, sw, stroke)
                 fb.draw_rect(px, py + ph - sw, pw, sw, stroke)
                 fb.draw_rect(px, py, sw, ph, stroke)
@@ -128,12 +154,9 @@ class SvgDocument:
         for circle in self.circles:
             fill = _apply_opacity(circle.fill, opacity)
             stroke = _apply_opacity(circle.stroke, opacity)
-            cx = (circle.cx - vb_x) * scale_x
-            cy = (circle.cy - vb_y) * scale_y
-            r = circle.r * (scale_x + scale_y) / 2.0
-            px = int(x + cx * scale)
-            py = int(y + cy * scale)
-            pr = max(1, int(r * scale))
+            px = int(x + (circle.cx - vb_x) * scale_x)
+            py = int(y + (circle.cy - vb_y) * scale_y)
+            pr = max(1, int(circle.r * ((abs(scale_x) + abs(scale_y)) / 2.0)))
             if fill:
                 fb.draw_circle(px, py, pr, fill)
             if stroke and circle.stroke_width > 0:
@@ -142,19 +165,19 @@ class SvgDocument:
             stroke = _apply_opacity(line.stroke, opacity)
             if not stroke:
                 continue
-            x0 = int(x + (line.x1 - vb_x) * scale_x * scale)
-            y0 = int(y + (line.y1 - vb_y) * scale_y * scale)
-            x1 = int(x + (line.x2 - vb_x) * scale_x * scale)
-            y1 = int(y + (line.y2 - vb_y) * scale_y * scale)
-            sw = max(1, int(line.stroke_width * scale))
+            x0 = int(x + (line.x1 - vb_x) * scale_x)
+            y0 = int(y + (line.y1 - vb_y) * scale_y)
+            x1 = int(x + (line.x2 - vb_x) * scale_x)
+            y1 = int(y + (line.y2 - vb_y) * scale_y)
+            sw = max(1, int(line.stroke_width * ((abs(scale_x) + abs(scale_y)) / 2.0)))
             fb.draw_line(x0, y0, x1, y1, stroke, thickness=sw)
         for poly in self.polygons:
             fill = _apply_opacity(poly.fill, opacity)
             stroke = _apply_opacity(poly.stroke, opacity)
             pts = [
                 (
-                    int(x + (px - vb_x) * scale_x * scale),
-                    int(y + (py - vb_y) * scale_y * scale),
+                    int(x + (px - vb_x) * scale_x),
+                    int(y + (py - vb_y) * scale_y),
                 )
                 for px, py in poly.points
             ]

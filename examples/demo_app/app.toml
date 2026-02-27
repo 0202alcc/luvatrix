@@ -1,0 +1,9 @@
+app_id = "examples.demo_app"
+protocol_version = "1"
+entrypoint = "app_main:create"
+required_capabilities = ["window.write"]
+optional_capabilities = [
+  "hdi.keyboard",
+  "hdi.mouse",
+  "hdi.trackpad",
+]

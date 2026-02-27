@@ -26,17 +26,27 @@ See `planning.md` for the integrated Phase 1 spec and visual TLDR protocol model
 Current v0 surface:
 
 - `TextRenderer` + text command/style contracts in `luvatrix_ui/text/renderer.py`.
-- `SVGRenderer` + SVG command contract in `luvatrix_ui/controls/svg_renderer.py`.
+- `SVGRenderer` + `SVGComponent` contracts in `luvatrix_ui/controls/svg_renderer.py` and
+  `luvatrix_ui/controls/svg_component.py`.
 - `ButtonModel` state machine in `luvatrix_ui/controls/button.py`:
   `idle`, `hover`, `press_down`, `press_hold`, `disabled`.
 - `ThemeTokens` + validation/default merging in `luvatrix_ui/style/theme.py`.
+
+Runtime-side compiler:
+
+- `MatrixUIFrameRenderer` in `luvatrix_core/core/ui_frame_renderer.py` compiles first-party
+  component batches (including SVG) into matrix frame tensors for `WriteBatch` submission.
 
 Interaction model:
 
 - Consumes standardized HDI `press` phases (`down`, `hold_start`, `hold_tick`, `up`, `cancel`, etc.).
 - Keeps runtime/platform internals out of `luvatrix_ui`; integrations should adapt events/renderers at the boundary.
 
-See `docs/ui_component_protocol.md` for the short protocol note.
+See:
+
+- `docs/ui_component_protocol.md` for component contracts
+- `docs/app_protocol.md` for runtime contract
+- `docs/json_ui_compiler.md` for JSON page/lottie-oriented compiler design
 
 ## macOS Visualizer Examples
 

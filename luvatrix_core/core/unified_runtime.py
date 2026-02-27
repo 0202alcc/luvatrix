@@ -10,6 +10,7 @@ from luvatrix_core.targets.base import RenderTarget
 from .app_runtime import AppRuntime
 from .display_runtime import DisplayRuntime
 from .energy_safety import EnergySafetyController
+from .frame_rate_controller import FrameRateController
 from .hdi_thread import HDIThread
 from .sensor_manager import SensorManagerThread
 from .window_matrix import WindowMatrix
@@ -57,14 +58,14 @@ class UnifiedRuntime:
         self,
         app_dir: str | Path,
         *,
-        max_ticks: int = 1,
+        max_ticks: int | None = 1,
         target_fps: int = 60,
+        present_fps: int | None = None,
         display_timeout: float = 0.0,
     ) -> UnifiedRunResult:
-        if max_ticks <= 0:
+        if max_ticks is not None and max_ticks <= 0:
             raise ValueError("max_ticks must be > 0")
-        if target_fps <= 0:
-            raise ValueError("target_fps must be > 0")
+        rate = FrameRateController(target_fps=target_fps, present_fps=present_fps)
         app_path = Path(app_dir).resolve()
         manifest = self._app_runtime.load_manifest(app_path)
         granted = self._app_runtime.resolve_capabilities(manifest)
@@ -73,7 +74,6 @@ class UnifiedRuntime:
         lifecycle = self._app_runtime.load_lifecycle(resolved.module_dir, resolved.entrypoint)
         self._enable_granted_sensors(ctx.sensor_manager, granted)
 
-        target_dt = 1.0 / float(target_fps)
         ticks_run = 0
         frames_presented = 0
         stopped_by_target_close = False
@@ -86,7 +86,8 @@ class UnifiedRuntime:
         last = time.perf_counter()
         try:
             lifecycle.init(ctx)
-            for _ in range(max_ticks):
+            tick_idx = 0
+            while max_ticks is None or tick_idx < max_ticks:
                 self._target.pump_events()
                 if self._target.should_close():
                     stopped_by_target_close = True
@@ -103,11 +104,16 @@ class UnifiedRuntime:
                         break
                 lifecycle.loop(ctx, dt)
                 ticks_run += 1
-                tick = self._display_runtime.run_once(timeout=display_timeout)
-                if tick is not None:
-                    frames_presented += 1
-                elapsed = time.perf_counter() - now
-                sleep_for = (target_dt * throttle_multiplier) - elapsed
+                tick_idx += 1
+                if rate.should_present(now):
+                    tick = self._display_runtime.run_once(timeout=display_timeout)
+                    if tick is not None:
+                        frames_presented += 1
+                sleep_for = rate.compute_sleep(
+                    loop_started_at=now,
+                    loop_finished_at=time.perf_counter(),
+                    throttle_multiplier=throttle_multiplier,
+                )
                 if sleep_for > 0:
                     time.sleep(sleep_for)
         except Exception as exc:  # noqa: BLE001

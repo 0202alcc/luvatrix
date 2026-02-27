@@ -7,6 +7,12 @@ import unittest
 
 import torch
 
+from luvatrix_ui.component_schema import CoordinatePoint, DisplayableArea
+from luvatrix_ui.controls.svg_component import SVGComponent
+from luvatrix_ui.controls.svg_renderer import SVGRenderBatch
+from luvatrix_ui.text.component import TextComponent
+from luvatrix_ui.text.renderer import TextLayoutMetrics, TextMeasureRequest, TextRenderBatch, TextSizeSpec
+
 from luvatrix_core.core.app_runtime import (
     APP_PROTOCOL_VERSION,
     AppRuntime,
@@ -95,6 +101,38 @@ class _CameraMetadataSensor:
             value={"available": True, "device_count": 2, "default_present": True, "raw_name": "internal"},
             unit="metadata",
         )
+
+
+class _FakeUIRenderer:
+    def __init__(self, width: int, height: int) -> None:
+        self.width = width
+        self.height = height
+        self.started_display: DisplayableArea | None = None
+        self.clear_color: tuple[int, int, int, int] | None = None
+        self.measure_requests: list[TextMeasureRequest] = []
+        self.batches: list[TextRenderBatch] = []
+        self.svg_batches: list[SVGRenderBatch] = []
+
+    def begin_frame(self, display: DisplayableArea, clear_color: tuple[int, int, int, int]) -> None:
+        self.started_display = display
+        self.clear_color = clear_color
+
+    def measure_text(self, request: TextMeasureRequest) -> TextLayoutMetrics:
+        self.measure_requests.append(request)
+        return TextLayoutMetrics(
+            width_px=float(len(request.text)) * request.font_size_px * 0.5,
+            height_px=request.font_size_px,
+            baseline_px=request.font_size_px * 0.8,
+        )
+
+    def draw_text_batch(self, batch: TextRenderBatch) -> None:
+        self.batches.append(batch)
+
+    def draw_svg_batch(self, batch: SVGRenderBatch) -> None:
+        self.svg_batches.append(batch)
+
+    def end_frame(self) -> torch.Tensor:
+        return torch.zeros((self.height, self.width, 4), dtype=torch.uint8)
 
 
 class AppRuntimeTests(unittest.TestCase):
@@ -275,6 +313,100 @@ class AppRuntimeTests(unittest.TestCase):
         self.assertEqual((rx, ry), (0.0, 9.0))
         fx, fy = ctx.from_render_coords(0.0, 9.0)
         self.assertEqual((fx, fy), (0.0, 0.0))
+
+    def test_app_context_ui_frame_compiles_text_components_to_matrix_write(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        matrix = WindowMatrix(20, 30)
+        renderer = _FakeUIRenderer(width=30, height=20)
+        ctx = AppContext(
+            matrix=matrix,
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write"},
+        )
+
+        component = TextComponent(
+            component_id="title",
+            text="Hello",
+            position=CoordinatePoint(2.0, 3.0, "screen_tl"),
+        )
+        ctx.begin_ui_frame(renderer)
+        ctx.mount_component(component)
+        event = ctx.finalize_ui_frame()
+
+        self.assertEqual(event.revision, 1)
+        self.assertEqual(matrix.revision, 1)
+        self.assertEqual(len(renderer.batches), 1)
+        self.assertEqual(len(renderer.batches[0].commands), 1)
+        self.assertEqual(renderer.batches[0].commands[0].text, "Hello")
+        self.assertEqual(renderer.batches[0].commands[0].font.family, "Comic Mono")
+
+    def test_app_context_ui_frame_uses_displayable_area_for_ratio_sizing(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        renderer = _FakeUIRenderer(width=50, height=40)
+        ctx = AppContext(
+            matrix=WindowMatrix(40, 50),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write"},
+        )
+        component = TextComponent(
+            component_id="status",
+            text="ratio",
+            size=TextSizeSpec(unit="ratio_display_height", value=0.25),
+        )
+        ctx.begin_ui_frame(renderer, content_width_px=24, content_height_px=12)
+        ctx.mount_component(component)
+        ctx.finalize_ui_frame()
+
+        self.assertIsNotNone(renderer.started_display)
+        assert renderer.started_display is not None
+        self.assertEqual(renderer.started_display.content_width_px, 24.0)
+        self.assertEqual(renderer.started_display.content_height_px, 12.0)
+        self.assertEqual(renderer.measure_requests[-1].font_size_px, 3.0)
+
+    def test_app_context_ui_frame_requires_begin(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        ctx = AppContext(
+            matrix=WindowMatrix(5, 5),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write"},
+        )
+        with self.assertRaises(RuntimeError):
+            ctx.mount_component(TextComponent(component_id="x", text="x"))
+        with self.assertRaises(RuntimeError):
+            ctx.finalize_ui_frame()
+
+    def test_app_context_ui_frame_compiles_svg_components_with_explicit_size(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        renderer = _FakeUIRenderer(width=64, height=64)
+        ctx = AppContext(
+            matrix=WindowMatrix(64, 64),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write"},
+        )
+        svg = SVGComponent(
+            component_id="logo",
+            svg_markup="""<svg width="8" height="8"><rect x="0" y="0" width="8" height="8" fill="#ff0000"/></svg>""",
+            position=CoordinatePoint(5.0, 7.0, "screen_tl"),
+            width=48.0,
+            height=20.0,
+        )
+        ctx.begin_ui_frame(renderer)
+        ctx.mount_component(svg)
+        ctx.finalize_ui_frame()
+
+        self.assertEqual(len(renderer.svg_batches), 1)
+        self.assertEqual(len(renderer.svg_batches[0].commands), 1)
+        cmd = renderer.svg_batches[0].commands[0]
+        self.assertEqual(cmd.component_id, "logo")
+        self.assertEqual((cmd.width, cmd.height), (48.0, 20.0))
 
     def test_app_context_sensor_denied_without_sensor_capability(self) -> None:
         from luvatrix_core.core.app_runtime import AppContext

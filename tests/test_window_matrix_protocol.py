@@ -11,6 +11,7 @@ from luvatrix_core.core.window_matrix import (
     PushColumn,
     PushRow,
     ReplaceColumn,
+    ReplaceRect,
     ReplaceRow,
     WriteBatch,
     WindowMatrix,
@@ -113,6 +114,27 @@ class WindowMatrixProtocolTests(unittest.TestCase):
         self.assertEqual(snap[0, 0, 0].item(), 7)
         self.assertEqual(snap[1, 0, 0].item(), 8)
         self.assertEqual(snap[1, 1, 0].item(), 6)
+
+    def test_replace_rect_updates_subregion(self) -> None:
+        matrix = WindowMatrix(height=4, width=5)
+        base = torch.zeros((4, 5, 4), dtype=torch.uint8)
+        matrix.submit_write_batch(WriteBatch([FullRewrite(base)]))
+        patch = torch.tensor(
+            [
+                [[10, 0, 0, 255], [11, 0, 0, 255]],
+                [[12, 0, 0, 255], [13, 0, 0, 255]],
+            ],
+            dtype=torch.uint8,
+        )
+        matrix.submit_write_batch(
+            WriteBatch([ReplaceRect(x=2, y=1, width=2, height=2, rect_h_w_4=patch)])
+        )
+        snap = matrix.read_snapshot()
+        self.assertEqual(snap[1, 2, 0].item(), 10)
+        self.assertEqual(snap[1, 3, 0].item(), 11)
+        self.assertEqual(snap[2, 2, 0].item(), 12)
+        self.assertEqual(snap[2, 3, 0].item(), 13)
+        self.assertEqual(snap[0, 0, 0].item(), 0)
 
     def test_multiply_applies_transform_and_clamps(self) -> None:
         matrix = WindowMatrix(height=1, width=1)
