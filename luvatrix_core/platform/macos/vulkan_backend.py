@@ -4,11 +4,13 @@ from dataclasses import dataclass
 import ctypes
 import logging
 import os
+import time
 from typing import Any
 
 import torch
 
 from ..frame_pipeline import prepare_frame_for_extent
+from ..vulkan_scaling import RenderScaleController, compute_blit_rect
 from ..vulkan_compat import SwapchainOutOfDateError, VulkanKHRCompatMixin, decode_vk_string
 from .vulkan_presenter import VulkanContext
 from .window_system import AppKitWindowSystem, MacOSWindowHandle, MacOSWindowSystem
@@ -54,6 +56,10 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._staging_buffer = None
         self._staging_memory = None
         self._staging_size = 0
+        self._upload_image = None
+        self._upload_image_memory = None
+        self._upload_image_extent: tuple[int, int] = (0, 0)
+        self._upload_image_layout = None
         self._upload_extent: tuple[int, int] = (0, 0)
         self._clear_color = (0.0, 0.0, 0.0, 1.0)
         self._vk_proc_cache: dict[str, Any] = {}
@@ -61,6 +67,20 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._consecutive_acquire_timeouts = 0
         self._fallback_last_cf_data = None
         self._fallback_last_image = None
+        self._fallback_last_ns_image = None
+        self._fallback_blit_layer = None
+        self._fallback_blit_view = None
+        self._fallback_image_view = None
+        self._fallback_replaced_content_layer = False
+        self._active_present_path: str | None = None
+        self._render_scale_controller = RenderScaleController.from_env()
+        self._render_scale_levels: tuple[float, ...] = self._render_scale_controller.levels
+        self._render_scale_fixed: float | None = self._render_scale_controller.fixed_scale
+        self._render_scale_auto_enabled = self._render_scale_controller.auto_enabled
+        self._vulkan_internal_scale_enabled = os.getenv("LUVATRIX_VULKAN_INTERNAL_SCALE", "0").strip() == "1"
+        self._render_scale_current = self._render_scale_controller.current_scale
+        self._present_time_ema_ms: float | None = self._render_scale_controller.present_time_ema_ms
+        self._render_scale_cooldown_frames = self._render_scale_controller.cooldown_frames
         if self.window_system is None:
             self.window_system = AppKitWindowSystem()
 
@@ -81,6 +101,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         return VulkanContext(width=width, height=height, title=title)
 
     def present(self, context: VulkanContext, rgba: torch.Tensor, revision: int) -> None:
+        started_at = time.perf_counter()
         self._require_initialized()
         self._validate_frame(rgba, context.width, context.height)
         self._acquire_next_swapchain_image()
@@ -90,6 +111,8 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._record_and_submit_commands(revision=revision)
         self._present_swapchain_image()
         self._frames_presented += 1
+        elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+        self._update_render_scale(elapsed_ms=elapsed_ms, fallback_active=not self._vulkan_available)
 
     def resize(self, context: VulkanContext, width: int, height: int) -> VulkanContext:
         self._require_initialized()
@@ -545,14 +568,23 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         return (1, 1)
 
     def _upload_rgba_to_staging(self, rgba: torch.Tensor) -> None:
-        # Always keep a copy available for fallback layer presentation.
-        self._pending_rgba = rgba.contiguous().clone()
+        # Keep CPU-side frame copy only when fallback presenter is active.
+        if not self._vulkan_available:
+            self._pending_rgba = rgba.contiguous().clone()
+        else:
+            self._pending_rgba = None
         if not self._vulkan_available:
             return
         if self._logical_device is None or self._physical_device is None:
             raise RuntimeError("Vulkan device not initialized for staging upload")
         vk = self._require_vk()
         rgba_upload = self._prepare_upload_frame(rgba)
+        # Swap R/B when swapchain format is BGRA so colors remain correct.
+        if self._swapchain_image_format in (
+            int(getattr(vk, "VK_FORMAT_B8G8R8A8_UNORM", 44)),
+            int(getattr(vk, "VK_FORMAT_B8G8R8A8_SRGB", 50)),
+        ):
+            rgba_upload = rgba_upload[:, :, [2, 1, 0, 3]].contiguous()
         height, width, _ = rgba_upload.shape
         upload_h, upload_w = height, width
         if self._swapchain_extent is not None:
@@ -562,7 +594,8 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         if upload_w <= 0 or upload_h <= 0:
             raise RuntimeError("invalid upload extent for Vulkan staging upload")
         clipped = rgba_upload[:upload_h, :upload_w, :].contiguous()
-        data = bytes(clipped.reshape(-1).tolist())
+        self._ensure_upload_image(upload_w, upload_h)
+        data = clipped.cpu().numpy().tobytes(order="C")
         self._ensure_staging_buffer(len(data))
         mapped_ptr = vk.vkMapMemory(
             self._logical_device,
@@ -582,26 +615,31 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         finally:
             vk.vkUnmapMemory(self._logical_device, self._staging_memory)
         self._upload_extent = (upload_w, upload_h)
-        rgbaf = rgba_upload.to(torch.float32).mean(dim=(0, 1)) / 255.0
-        self._clear_color = (
-            float(rgbaf[0].item()),
-            float(rgbaf[1].item()),
-            float(rgbaf[2].item()),
-            float(rgbaf[3].item()),
-        )
+        self._clear_color = (0.0, 0.0, 0.0, 1.0)
 
     def _prepare_upload_frame(self, rgba: torch.Tensor) -> torch.Tensor:
+        source = rgba
+        if self._vulkan_internal_scale_enabled:
+            source = self._prepare_scaled_source_frame(rgba)
+        if self._can_use_gpu_blit():
+            return source
         if self._swapchain_extent is None:
-            return rgba
+            return source
         swap_w, swap_h = self._swapchain_extent
         if swap_w <= 0 or swap_h <= 0:
-            return rgba
+            return source
         return prepare_frame_for_extent(
-            rgba,
+            source,
             target_w=swap_w,
             target_h=swap_h,
             preserve_aspect_ratio=self.preserve_aspect_ratio,
         )
+
+    def _prepare_scaled_source_frame(self, rgba: torch.Tensor) -> torch.Tensor:
+        self._sync_render_scale_attrs_to_controller()
+        out = self._render_scale_controller.scale_frame(rgba)
+        self._sync_render_scale_attrs_from_controller()
+        return out
 
     def _record_and_submit_commands(self, revision: int) -> None:
         if not self._vulkan_available:
@@ -614,6 +652,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             or self._in_flight_fence is None
             or self._image_available_semaphore is None
             or self._render_finished_semaphore is None
+            or self._upload_image is None
         ):
             raise RuntimeError("Vulkan submit prerequisites are not initialized")
         if not self._command_buffers:
@@ -667,27 +706,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             [subresource_range],
         )
         if self._staging_buffer is not None and self._upload_extent[0] > 0 and self._upload_extent[1] > 0:
-            copy_region = vk.VkBufferImageCopy(
-                bufferOffset=0,
-                bufferRowLength=0,
-                bufferImageHeight=0,
-                imageSubresource=vk.VkImageSubresourceLayers(
-                    aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
-                    mipLevel=0,
-                    baseArrayLayer=0,
-                    layerCount=1,
-                ),
-                imageOffset=(0, 0, 0),
-                imageExtent=(self._upload_extent[0], self._upload_extent[1], 1),
-            )
-            vk.vkCmdCopyBufferToImage(
-                cmd,
-                self._staging_buffer,
-                image,
-                getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
-                1,
-                [copy_region],
-            )
+            self._record_upload_copy_and_scale(cmd=cmd, swapchain_image=image)
         barrier_to_present = vk.VkImageMemoryBarrier(
             sType=vk.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             srcAccessMask=getattr(vk, "VK_ACCESS_TRANSFER_WRITE_BIT", 0x1000),
@@ -725,8 +744,165 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._vk_reset_fence(self._logical_device, self._in_flight_fence)
         vk.vkQueueSubmit(self._graphics_queue, 1, [submit], self._in_flight_fence)
 
+    def _record_upload_copy_and_scale(self, cmd, swapchain_image) -> None:
+        if self._upload_image is None:
+            raise RuntimeError("upload image is not initialized")
+        vk = self._require_vk()
+        subresource_range = vk.VkImageSubresourceRange(
+            aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
+            baseMipLevel=0,
+            levelCount=1,
+            baseArrayLayer=0,
+            layerCount=1,
+        )
+        old_layout = (
+            getattr(vk, "VK_IMAGE_LAYOUT_UNDEFINED", 0)
+            if self._upload_image_layout is None
+            else int(self._upload_image_layout)
+        )
+        to_dst = vk.VkImageMemoryBarrier(
+            sType=vk.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            srcAccessMask=getattr(vk, "VK_ACCESS_TRANSFER_READ_BIT", 0x0800),
+            dstAccessMask=getattr(vk, "VK_ACCESS_TRANSFER_WRITE_BIT", 0x1000),
+            oldLayout=old_layout,
+            newLayout=getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
+            srcQueueFamilyIndex=getattr(vk, "VK_QUEUE_FAMILY_IGNORED", -1),
+            dstQueueFamilyIndex=getattr(vk, "VK_QUEUE_FAMILY_IGNORED", -1),
+            image=self._upload_image,
+            subresourceRange=subresource_range,
+        )
+        vk.vkCmdPipelineBarrier(
+            cmd,
+            getattr(vk, "VK_PIPELINE_STAGE_TRANSFER_BIT", 0x1000),
+            getattr(vk, "VK_PIPELINE_STAGE_TRANSFER_BIT", 0x1000),
+            0,
+            0,
+            None,
+            0,
+            None,
+            1,
+            [to_dst],
+        )
+        copy_region = vk.VkBufferImageCopy(
+            bufferOffset=0,
+            bufferRowLength=0,
+            bufferImageHeight=0,
+            imageSubresource=vk.VkImageSubresourceLayers(
+                aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
+                mipLevel=0,
+                baseArrayLayer=0,
+                layerCount=1,
+            ),
+            imageOffset=(0, 0, 0),
+            imageExtent=(self._upload_extent[0], self._upload_extent[1], 1),
+        )
+        vk.vkCmdCopyBufferToImage(
+            cmd,
+            self._staging_buffer,
+            self._upload_image,
+            getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
+            1,
+            [copy_region],
+        )
+        to_src = vk.VkImageMemoryBarrier(
+            sType=vk.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            srcAccessMask=getattr(vk, "VK_ACCESS_TRANSFER_WRITE_BIT", 0x1000),
+            dstAccessMask=getattr(vk, "VK_ACCESS_TRANSFER_READ_BIT", 0x0800),
+            oldLayout=getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
+            newLayout=getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL", 6),
+            srcQueueFamilyIndex=getattr(vk, "VK_QUEUE_FAMILY_IGNORED", -1),
+            dstQueueFamilyIndex=getattr(vk, "VK_QUEUE_FAMILY_IGNORED", -1),
+            image=self._upload_image,
+            subresourceRange=subresource_range,
+        )
+        vk.vkCmdPipelineBarrier(
+            cmd,
+            getattr(vk, "VK_PIPELINE_STAGE_TRANSFER_BIT", 0x1000),
+            getattr(vk, "VK_PIPELINE_STAGE_TRANSFER_BIT", 0x1000),
+            0,
+            0,
+            None,
+            0,
+            None,
+            1,
+            [to_src],
+        )
+        self._upload_image_layout = getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL", 6)
+        if self._can_use_gpu_blit():
+            self._record_blit_upload_to_swapchain(cmd=cmd, swapchain_image=swapchain_image)
+            return
+        copy_to_swapchain = vk.VkImageCopy(
+            srcSubresource=vk.VkImageSubresourceLayers(
+                aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
+                mipLevel=0,
+                baseArrayLayer=0,
+                layerCount=1,
+            ),
+            srcOffset=(0, 0, 0),
+            dstSubresource=vk.VkImageSubresourceLayers(
+                aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
+                mipLevel=0,
+                baseArrayLayer=0,
+                layerCount=1,
+            ),
+            dstOffset=(0, 0, 0),
+            extent=(self._upload_extent[0], self._upload_extent[1], 1),
+        )
+        vk.vkCmdCopyImage(
+            cmd,
+            self._upload_image,
+            getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL", 6),
+            swapchain_image,
+            getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
+            1,
+            [copy_to_swapchain],
+        )
+
+    def _record_blit_upload_to_swapchain(self, cmd, swapchain_image) -> None:
+        vk = self._require_vk()
+        if self._swapchain_extent is None:
+            raise RuntimeError("swapchain extent missing for GPU blit")
+        src_w, src_h = self._upload_extent
+        dst_w, dst_h = self._swapchain_extent
+        if src_w <= 0 or src_h <= 0 or dst_w <= 0 or dst_h <= 0:
+            return
+        dst_x0, dst_y0, dst_x1, dst_y1 = compute_blit_rect(
+            src_w=src_w,
+            src_h=src_h,
+            dst_w=dst_w,
+            dst_h=dst_h,
+            preserve_aspect_ratio=self.preserve_aspect_ratio,
+        )
+        blit = vk.VkImageBlit(
+            srcSubresource=vk.VkImageSubresourceLayers(
+                aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
+                mipLevel=0,
+                baseArrayLayer=0,
+                layerCount=1,
+            ),
+            srcOffsets=((0, 0, 0), (src_w, src_h, 1)),
+            dstSubresource=vk.VkImageSubresourceLayers(
+                aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
+                mipLevel=0,
+                baseArrayLayer=0,
+                layerCount=1,
+            ),
+            dstOffsets=((dst_x0, dst_y0, 0), (dst_x1, dst_y1, 1)),
+        )
+        vk.vkCmdBlitImage(
+            cmd,
+            self._upload_image,
+            getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL", 6),
+            swapchain_image,
+            getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
+            1,
+            [blit],
+            getattr(vk, "VK_FILTER_LINEAR", 1),
+        )
+
     def _present_swapchain_image(self) -> None:
         if self._vulkan_available:
+            self._set_active_present_path("vulkan")
             vk = self._require_vk()
             if (
                 self._graphics_queue is None
@@ -789,6 +965,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             return
         vk = self._require_vk()
         self._destroy_staging_resources()
+        self._destroy_upload_image_resources()
         if self._command_pool is not None:
             vk.vkDestroyCommandPool(self._logical_device, self._command_pool, None)
             self._command_pool = None
@@ -843,28 +1020,50 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         assert self.window_system is not None
         self.window_system.destroy_window(self._window_handle)
         self._window_handle = None
+        self._fallback_blit_layer = None
+        self._fallback_blit_view = None
+        self._fallback_image_view = None
+        self._fallback_last_ns_image = None
+        self._fallback_replaced_content_layer = False
+        self._active_present_path = None
 
     def _present_fallback_to_layer(self) -> None:
         if self._window_handle is None or self._pending_rgba is None:
             return
-        layer = self._window_handle.layer
+        host_layer = self._window_handle.layer
         try:
             import Quartz  # type: ignore
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError("Quartz not available for fallback layer presentation") from exc
 
+        legacy_enabled = os.getenv("LUVATRIX_ENABLE_LEGACY_CAMETAL_FALLBACK", "0").strip() == "1"
+        target_layer = host_layer
+        is_metal_host = type(host_layer).__name__ == "CAMetalLayer"
+        if legacy_enabled:
+            self._set_active_present_path("fallback_legacy")
+        else:
+            self._set_active_present_path("fallback_clean")
+
         rgba = self._pending_rgba
-        height, width, _ = rgba.shape
+        rgba_display = self._prepare_fallback_frame(rgba)
+        height, width, _ = rgba_display.shape
         try:
             content_view = self._window_handle.window.contentView()
-            layer.setFrame_(content_view.bounds())
+            bounds = content_view.bounds()
+            host_layer.setFrame_(bounds)
+            if target_layer is not host_layer:
+                target_layer.setFrame_(bounds)
             try:
-                layer.setContentsScale_(float(self._window_handle.window.backingScaleFactor()))
+                scale = float(self._window_handle.window.backingScaleFactor())
+                host_layer.setContentsScale_(scale)
+                if target_layer is not host_layer:
+                    target_layer.setContentsScale_(scale)
             except Exception:
                 pass
         except Exception:
             pass
-        data = bytes(rgba.reshape(-1).tolist())
+        # Fast path: avoid Python per-element conversion when building CGImage bytes.
+        data = rgba_display.contiguous().cpu().numpy().tobytes(order="C")
         cf_data = Quartz.CFDataCreate(None, data, len(data))
         provider = Quartz.CGDataProviderCreateWithCFData(cf_data)
         color_space = Quartz.CGColorSpaceCreateDeviceRGB()
@@ -886,11 +1085,165 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             raise RuntimeError("failed to build fallback CGImage")
         self._fallback_last_cf_data = cf_data
         self._fallback_last_image = image
-        layer.setContents_(image)
+        if is_metal_host and not legacy_enabled:
+            # Preferred clean path for CAMetal-hosted windows.
+            if self._present_fallback_image_view(Quartz, image, width, height):
+                return
+            # Secondary clean path when NSImageView bridging is unavailable.
+            target_layer = self._ensure_clean_fallback_surface(Quartz)
+        target_layer.setContents_(image)
         try:
-            layer.setNeedsDisplay()
+            target_layer.setNeedsDisplay()
         except Exception:
             pass
+
+    def _present_fallback_image_view(self, quartz_module, cg_image: object, image_w: int, image_h: int) -> bool:
+        if self._window_handle is None:
+            return False
+        try:
+            from AppKit import (  # type: ignore
+                NSImage,
+                NSImageScaleAxesIndependently,
+                NSImageScaleProportionallyUpOrDown,
+                NSImageView,
+                NSMakeRect,
+                NSViewHeightSizable,
+                NSViewWidthSizable,
+            )
+        except Exception:
+            return False
+        try:
+            content_view = self._window_handle.window.contentView()
+            bounds = content_view.bounds()
+            if self._fallback_image_view is None:
+                image_view = NSImageView.alloc().initWithFrame_(
+                    NSMakeRect(0.0, 0.0, float(bounds.size.width), float(bounds.size.height))
+                )
+                image_view.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
+                image_view.setImageScaling_(
+                    NSImageScaleProportionallyUpOrDown if self.preserve_aspect_ratio else NSImageScaleAxesIndependently
+                )
+                content_view.addSubview_(image_view)
+                self._fallback_image_view = image_view
+                if self.preserve_aspect_ratio:
+                    try:
+                        content_view.setWantsLayer_(True)
+                        content_view.layer().setBackgroundColor_(quartz_module.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0))
+                    except Exception:
+                        pass
+            self._fallback_image_view.setFrame_(bounds)
+            ns_image = NSImage.alloc().initWithCGImage_size_(cg_image, (float(image_w), float(image_h)))
+            self._fallback_last_ns_image = ns_image
+            self._fallback_image_view.setImage_(ns_image)
+            return True
+        except Exception:
+            return False
+
+    def _ensure_clean_fallback_surface(self, quartz_module) -> object:
+        if self._fallback_blit_layer is not None:
+            return self._fallback_blit_layer
+        if self._window_handle is None:
+            raise RuntimeError("window handle missing for clean fallback surface")
+        host_layer = self._window_handle.layer
+        content_view = self._window_handle.window.contentView()
+        bounds = content_view.bounds()
+        # Most robust path: replace content view's layer with a dedicated CALayer
+        # while in fallback mode. This avoids CAMetalLayer contents mutation entirely.
+        try:
+            fallback_layer = quartz_module.CALayer.layer()
+            fallback_layer.setFrame_(bounds)
+            fallback_layer.setContentsGravity_("resizeAspect" if self.preserve_aspect_ratio else "resize")
+            if self.preserve_aspect_ratio:
+                try:
+                    fallback_layer.setBackgroundColor_(quartz_module.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0))
+                except Exception:
+                    pass
+            content_view.setWantsLayer_(True)
+            content_view.setLayer_(fallback_layer)
+            self._fallback_blit_layer = fallback_layer
+            self._fallback_replaced_content_layer = True
+            return self._fallback_blit_layer
+        except Exception:
+            pass
+
+        view_added = False
+        try:
+            from AppKit import NSMakeRect, NSView, NSViewHeightSizable, NSViewWidthSizable  # type: ignore
+
+            fallback_view = NSView.alloc().initWithFrame_(
+                NSMakeRect(0.0, 0.0, float(bounds.size.width), float(bounds.size.height))
+            )
+            fallback_view.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
+            fallback_view.setWantsLayer_(True)
+            fallback_layer = quartz_module.CALayer.layer()
+            fallback_layer.setFrame_(fallback_view.bounds())
+            fallback_layer.setContentsGravity_("resizeAspect" if self.preserve_aspect_ratio else "resize")
+            if self.preserve_aspect_ratio:
+                try:
+                    fallback_layer.setBackgroundColor_(quartz_module.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0))
+                except Exception:
+                    pass
+            fallback_view.setLayer_(fallback_layer)
+            try:
+                from AppKit import NSWindowAbove  # type: ignore
+
+                content_view.addSubview_positioned_relativeTo_(fallback_view, NSWindowAbove, None)
+            except Exception:
+                content_view.addSubview_(fallback_view)
+            self._fallback_blit_view = fallback_view
+            self._fallback_blit_layer = fallback_layer
+            view_added = True
+        except Exception:
+            view_added = False
+
+        if not view_added:
+            # Secondary clean path: child CALayer (still avoids writing host CAMetalLayer contents).
+            fallback_layer = quartz_module.CALayer.layer()
+            fallback_layer.setFrame_(bounds)
+            fallback_layer.setContentsGravity_("resizeAspect" if self.preserve_aspect_ratio else "resize")
+            if self.preserve_aspect_ratio:
+                try:
+                    fallback_layer.setBackgroundColor_(quartz_module.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0))
+                except Exception:
+                    pass
+            host_layer.addSublayer_(fallback_layer)
+            self._fallback_blit_layer = fallback_layer
+        return self._fallback_blit_layer
+
+    def _set_active_present_path(self, path: str) -> None:
+        if path == self._active_present_path:
+            return
+        self._active_present_path = path
+        LOGGER.warning("macOS present path active: %s", path)
+
+    def _effective_render_scale(self) -> float:
+        self._sync_render_scale_attrs_to_controller()
+        return self._render_scale_controller.effective_scale()
+
+    def _prepare_fallback_frame(self, rgba: torch.Tensor) -> torch.Tensor:
+        return self._prepare_scaled_source_frame(rgba)
+
+    def _update_render_scale(self, elapsed_ms: float, fallback_active: bool) -> None:
+        enabled = fallback_active or self._vulkan_internal_scale_enabled
+        self._sync_render_scale_attrs_to_controller()
+        changed = self._render_scale_controller.update(elapsed_ms=elapsed_ms, enabled=enabled)
+        self._sync_render_scale_attrs_from_controller()
+        if changed:
+            LOGGER.warning("macOS render scale adjusted: %.2f", self._render_scale_current)
+
+    def _sync_render_scale_attrs_to_controller(self) -> None:
+        self._render_scale_controller.fixed_scale = self._render_scale_fixed
+        self._render_scale_controller.auto_enabled = self._render_scale_auto_enabled
+        self._render_scale_controller.current_scale = self._render_scale_current
+        self._render_scale_controller.present_time_ema_ms = self._present_time_ema_ms
+        self._render_scale_controller.cooldown_frames = self._render_scale_cooldown_frames
+
+    def _sync_render_scale_attrs_from_controller(self) -> None:
+        self._render_scale_fixed = self._render_scale_controller.fixed_scale
+        self._render_scale_auto_enabled = self._render_scale_controller.auto_enabled
+        self._render_scale_current = self._render_scale_controller.current_scale
+        self._present_time_ema_ms = self._render_scale_controller.present_time_ema_ms
+        self._render_scale_cooldown_frames = self._render_scale_controller.cooldown_frames
 
     def _vk_create_instance(self):
         vk = self._require_vk()
@@ -1098,6 +1451,89 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             self._staging_memory = None
         self._staging_size = 0
         self._upload_extent = (0, 0)
+
+    def _destroy_upload_image_resources(self) -> None:
+        if self._logical_device is None:
+            self._upload_image = None
+            self._upload_image_memory = None
+            self._upload_image_extent = (0, 0)
+            self._upload_image_layout = None
+            return
+        vk = self._require_vk()
+        if self._upload_image is not None:
+            vk.vkDestroyImage(self._logical_device, self._upload_image, None)
+            self._upload_image = None
+        if self._upload_image_memory is not None:
+            vk.vkFreeMemory(self._logical_device, self._upload_image_memory, None)
+            self._upload_image_memory = None
+        self._upload_image_extent = (0, 0)
+        self._upload_image_layout = None
+
+    def _ensure_upload_image(self, width: int, height: int) -> None:
+        if self._logical_device is None or self._physical_device is None:
+            raise RuntimeError("Vulkan device not initialized for upload image")
+        if width <= 0 or height <= 0:
+            raise ValueError("upload image extent must be > 0")
+        vk = self._require_vk()
+        desired_format = int(
+            self._swapchain_image_format
+            if self._swapchain_image_format is not None
+            else getattr(vk, "VK_FORMAT_R8G8B8A8_UNORM", 37)
+        )
+        same_extent = self._upload_image_extent == (width, height)
+        same_format = self._swapchain_image_format is None or desired_format == int(self._swapchain_image_format)
+        if self._upload_image is not None and same_extent and same_format:
+            return
+        self._destroy_upload_image_resources()
+        image_ci = vk.VkImageCreateInfo(
+            sType=vk.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            pNext=None,
+            flags=0,
+            imageType=getattr(vk, "VK_IMAGE_TYPE_2D", 1),
+            format=desired_format,
+            extent=(int(width), int(height), 1),
+            mipLevels=1,
+            arrayLayers=1,
+            samples=getattr(vk, "VK_SAMPLE_COUNT_1_BIT", 1),
+            tiling=getattr(vk, "VK_IMAGE_TILING_OPTIMAL", 0),
+            usage=(
+                getattr(vk, "VK_IMAGE_USAGE_TRANSFER_DST_BIT", 0x00000002)
+                | getattr(vk, "VK_IMAGE_USAGE_TRANSFER_SRC_BIT", 0x00000001)
+            ),
+            sharingMode=getattr(vk, "VK_SHARING_MODE_EXCLUSIVE", 0),
+            queueFamilyIndexCount=0,
+            pQueueFamilyIndices=None,
+            initialLayout=getattr(vk, "VK_IMAGE_LAYOUT_UNDEFINED", 0),
+        )
+        self._upload_image = vk.vkCreateImage(self._logical_device, image_ci, None)
+        req = vk.vkGetImageMemoryRequirements(self._logical_device, self._upload_image)
+        device_local = getattr(vk, "VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT", 0x00000001)
+        try:
+            mem_type = self._find_memory_type(type_bits=int(req.memoryTypeBits), required_flags=device_local)
+        except Exception:
+            mem_type = self._find_memory_type(type_bits=int(req.memoryTypeBits), required_flags=0)
+        alloc_info = vk.VkMemoryAllocateInfo(
+            sType=vk.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            pNext=None,
+            allocationSize=int(req.size),
+            memoryTypeIndex=mem_type,
+        )
+        self._upload_image_memory = vk.vkAllocateMemory(self._logical_device, alloc_info, None)
+        vk.vkBindImageMemory(self._logical_device, self._upload_image, self._upload_image_memory, 0)
+        self._upload_image_extent = (width, height)
+        self._upload_image_layout = getattr(vk, "VK_IMAGE_LAYOUT_UNDEFINED", 0)
+
+    def _can_use_gpu_blit(self) -> bool:
+        if not self._vulkan_available:
+            return False
+        vk = self._require_vk()
+        return all(
+            hasattr(vk, name)
+            for name in (
+                "vkCmdBlitImage",
+                "VkImageBlit",
+            )
+        )
 
     def _find_memory_type(self, type_bits: int, required_flags: int) -> int:
         if self._physical_device is None:

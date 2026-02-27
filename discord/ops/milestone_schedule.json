@@ -1,0 +1,55 @@
+{
+  "title": "Luvatrix Phase 1 Milestone Gantt",
+  "baseline_start_date": "2026-02-23",
+  "milestones": [
+    {
+      "id": "M-001",
+      "name": "Discord operating baseline",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "In Progress"
+    },
+    {
+      "id": "M-002",
+      "name": "App protocol docs finalized",
+      "start_week": 2,
+      "end_week": 3,
+      "status": "Planned"
+    },
+    {
+      "id": "M-003",
+      "name": "Vulkan stabilization",
+      "start_week": 3,
+      "end_week": 6,
+      "status": "Planned"
+    },
+    {
+      "id": "M-004",
+      "name": "CI hardening and flaky governance",
+      "start_week": 4,
+      "end_week": 6,
+      "status": "Planned"
+    },
+    {
+      "id": "M-005",
+      "name": "Audit retention lifecycle",
+      "start_week": 5,
+      "end_week": 7,
+      "status": "Planned"
+    },
+    {
+      "id": "M-006",
+      "name": "Production-hardening go/no-go review",
+      "start_week": 8,
+      "end_week": 10,
+      "status": "Planned"
+    },
+    {
+      "id": "M-007",
+      "name": "Cross-platform full-suite interactive generalization",
+      "start_week": 2,
+      "end_week": 4,
+      "status": "In Progress"
+    }
+  ]
+}

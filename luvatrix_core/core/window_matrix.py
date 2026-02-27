@@ -46,11 +46,20 @@ class ReplaceRow:
 
 
 @dataclass(frozen=True)
+class ReplaceRect:
+    x: int
+    y: int
+    width: int
+    height: int
+    rect_h_w_4: TensorLike
+
+
+@dataclass(frozen=True)
 class Multiply:
     color_matrix_4x4: TensorLike
 
 
-WriteOp: TypeAlias = FullRewrite | PushColumn | ReplaceColumn | PushRow | ReplaceRow | Multiply
+WriteOp: TypeAlias = FullRewrite | PushColumn | ReplaceColumn | PushRow | ReplaceRow | ReplaceRect | Multiply
 
 
 @dataclass(frozen=True)
@@ -149,33 +158,34 @@ class WindowMatrix:
         if isinstance(op, PushColumn):
             _validate_index(op.index, self.width, "column index")
             col, offending = _sanitize_rgba_tensor(op.column_h_4, (self.height, 4))
-            out = matrix.clone()
             if op.index < self.width - 1:
-                src = out[:, op.index : self.width - 1, :].clone()
-                out[:, op.index + 1 :, :] = src
-            out[:, op.index, :] = col
-            return out, offending
+                src = matrix[:, op.index : self.width - 1, :].clone()
+                matrix[:, op.index + 1 :, :] = src
+            matrix[:, op.index, :] = col
+            return matrix, offending
         if isinstance(op, ReplaceColumn):
             _validate_index(op.index, self.width, "column index")
             col, offending = _sanitize_rgba_tensor(op.column_h_4, (self.height, 4))
-            out = matrix.clone()
-            out[:, op.index, :] = col
-            return out, offending
+            matrix[:, op.index, :] = col
+            return matrix, offending
         if isinstance(op, PushRow):
             _validate_index(op.index, self.height, "row index")
             row, offending = _sanitize_rgba_tensor(op.row_w_4, (self.width, 4))
-            out = matrix.clone()
             if op.index < self.height - 1:
-                src = out[op.index : self.height - 1, :, :].clone()
-                out[op.index + 1 :, :, :] = src
-            out[op.index, :, :] = row
-            return out, offending
+                src = matrix[op.index : self.height - 1, :, :].clone()
+                matrix[op.index + 1 :, :, :] = src
+            matrix[op.index, :, :] = row
+            return matrix, offending
         if isinstance(op, ReplaceRow):
             _validate_index(op.index, self.height, "row index")
             row, offending = _sanitize_rgba_tensor(op.row_w_4, (self.width, 4))
-            out = matrix.clone()
-            out[op.index, :, :] = row
-            return out, offending
+            matrix[op.index, :, :] = row
+            return matrix, offending
+        if isinstance(op, ReplaceRect):
+            _validate_rect(op.x, op.y, op.width, op.height, self.width, self.height)
+            patch, offending = _sanitize_rgba_tensor(op.rect_h_w_4, (op.height, op.width, 4))
+            matrix[op.y : op.y + op.height, op.x : op.x + op.width, :] = patch
+            return matrix, offending
         if isinstance(op, Multiply):
             color_matrix = _coerce_numeric(op.color_matrix_4x4, (4, 4), "color_matrix_4x4")
             if not torch.isfinite(color_matrix).all():
@@ -190,6 +200,15 @@ class WindowMatrix:
 def _validate_index(index: int, upper_bound: int, label: str) -> None:
     if index < 0 or index >= upper_bound:
         raise ValueError(f"{label} out of range: {index}")
+
+
+def _validate_rect(x: int, y: int, width: int, height: int, matrix_width: int, matrix_height: int) -> None:
+    if width <= 0 or height <= 0:
+        raise ValueError("rect width/height must be > 0")
+    if x < 0 or y < 0:
+        raise ValueError("rect x/y must be >= 0")
+    if x + width > matrix_width or y + height > matrix_height:
+        raise ValueError("rect exceeds matrix bounds")
 
 
 def _coerce_numeric(value: torch.Tensor, expected_shape: tuple[int, ...], label: str) -> torch.Tensor:

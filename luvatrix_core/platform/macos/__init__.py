@@ -1,4 +1,13 @@
 from .vulkan_backend import MoltenVKMacOSBackend
+from .sensors import (
+    MacOSCameraDeviceProvider,
+    MacOSMicrophoneDeviceProvider,
+    MacOSMotionProvider,
+    MacOSPowerVoltageCurrentProvider,
+    MacOSSpeakerDeviceProvider,
+    MacOSThermalTemperatureProvider,
+)
+from .hdi_source import MacOSWindowHDISource
 from .vulkan_presenter import (
     MacOSVulkanBackend,
     MacOSVulkanPresenter,
@@ -15,6 +24,13 @@ __all__ = [
     "MacOSWindowHandle",
     "MacOSWindowSystem",
     "MoltenVKMacOSBackend",
+    "MacOSThermalTemperatureProvider",
+    "MacOSPowerVoltageCurrentProvider",
+    "MacOSMotionProvider",
+    "MacOSCameraDeviceProvider",
+    "MacOSMicrophoneDeviceProvider",
+    "MacOSSpeakerDeviceProvider",
+    "MacOSWindowHDISource",
     "PresenterState",
     "StubMacOSVulkanBackend",
     "VulkanContext",

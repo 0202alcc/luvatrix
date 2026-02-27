@@ -1,0 +1,1134 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Literal
+
+import numpy as np
+
+from luvatrix_plot.adapters import normalize_xy
+from luvatrix_plot.compile import compile_full_rewrite_batch, compile_replace_patch_batch, compile_replace_rect_batch
+from luvatrix_plot.errors import PlotDataError
+from luvatrix_plot.raster import (
+    LayerCache,
+    blit,
+    draw_hline,
+    draw_markers,
+    draw_polyline,
+    draw_text,
+    draw_vline,
+    new_canvas,
+    text_size,
+)
+from luvatrix_plot.raster.canvas import draw_pixel
+from luvatrix_plot.scales import (
+    DataLimits,
+    build_transform,
+    compute_limits,
+    downsample_by_pixel_column,
+    format_ticks_for_axis,
+    generate_nice_ticks,
+    infer_resolution,
+    map_to_pixels,
+    preferred_major_step_from_resolution,
+)
+from luvatrix_plot.series import SeriesSpec, SeriesStyle
+
+
+def _coerce_color(color: tuple[int, int, int] | tuple[int, int, int, int], alpha: float) -> tuple[int, int, int, int]:
+    if len(color) == 3:
+        r, g, b = color
+        a = int(max(0.0, min(1.0, alpha)) * 255)
+        return (r, g, b, a)
+    r, g, b, a = color
+    out_a = int(max(0.0, min(1.0, alpha)) * a)
+    return (r, g, b, out_a)
+
+
+def _union_rect(
+    a: tuple[int, int, int, int] | None,
+    b: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    if a is None:
+        return b
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    ax1 = ax + aw
+    ay1 = ay + ah
+    bx1 = bx + bw
+    by1 = by + bh
+    x0 = min(ax, bx)
+    y0 = min(ay, by)
+    x1 = max(ax1, bx1)
+    y1 = max(ay1, by1)
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
+def _inject_zero_tick(ticks: np.ndarray, *, vmin: float, vmax: float) -> np.ndarray:
+    if ticks.size == 0:
+        return ticks
+    if vmin > 0.0 or vmax < 0.0:
+        return ticks
+    step = float(abs(ticks[1] - ticks[0])) if ticks.size > 1 else 1.0
+    if np.any(np.isclose(ticks, 0.0, rtol=0.0, atol=max(1e-12, step * 1e-9))):
+        return ticks
+    return np.sort(np.append(ticks, 0.0))
+
+
+def _contiguous_true_runs(mask: np.ndarray) -> list[tuple[int, int]]:
+    idx = np.flatnonzero(mask)
+    if idx.size == 0:
+        return []
+    runs: list[tuple[int, int]] = []
+    start = int(idx[0])
+    prev = int(idx[0])
+    for v in idx[1:]:
+        iv = int(v)
+        if iv == prev + 1:
+            prev = iv
+            continue
+        runs.append((start, prev + 1))
+        start = iv
+        prev = iv
+    runs.append((start, prev + 1))
+    return runs
+
+
+@dataclass(frozen=True)
+class FigureStyle:
+    background: tuple[int, int, int, int] = (12, 16, 23, 255)
+
+
+@dataclass(frozen=True)
+class ReferenceLine:
+    axis: Literal["x", "y"]
+    value: float
+    color: tuple[int, int, int, int]
+    width: int = 1
+
+
+@dataclass(frozen=True)
+class LegendEntry:
+    label: str
+    mode: str
+    color: tuple[int, int, int, int]
+    marker_size: int
+
+
+@dataclass(frozen=True)
+class LegendLayout:
+    entries: tuple[LegendEntry, ...]
+    plot_x0: int
+    plot_y0: int
+    plot_w: int
+    plot_h: int
+    legend_font_px: float
+    swatch_w: int
+    swatch_h: int
+    item_gap: int
+    pad: int
+    item_h: int
+    box_w: int
+    box_h: int
+
+
+@dataclass
+class Axes:
+    figure: "Figure"
+    title: str = ""
+    x_label_bottom: str = "index"
+    y_label_left: str = "value"
+    x_label_top: str | None = None
+    y_label_right: str | None = None
+    show_top_axis: bool = False
+    show_right_axis: bool = False
+
+    _series: list[SeriesSpec] = field(default_factory=list)
+    _cache: LayerCache = field(default_factory=LayerCache)
+    _previous_limits: DataLimits | None = None
+
+    # plot region gutters
+    _gutter_left: int = 64
+    _gutter_right: int = 16
+    _gutter_top: int = 24
+    _gutter_bottom: int = 40
+
+    # style
+    frame_color: tuple[int, int, int, int] = (60, 67, 78, 255)
+    plot_bg_color: tuple[int, int, int, int] = (20, 26, 36, 255)
+    grid_color: tuple[int, int, int, int] = (44, 53, 66, 255)
+    minor_dot_grid_color: tuple[int, int, int, int] = (225, 232, 242, 90)
+    show_minor_dot_grid: bool = True
+    minor_dot_grid_max_points: int = 20000
+    axis_color: tuple[int, int, int, int] = (124, 138, 156, 255)
+    text_color: tuple[int, int, int, int] = (208, 218, 232, 255)
+    limit_hysteresis_enabled: bool = False
+    limit_hysteresis_deadband_ratio: float = 0.1
+    limit_hysteresis_shrink_rate: float = 0.08
+    show_zero_reference_lines: bool = True
+    reference_line_color: tuple[int, int, int, int] = (186, 201, 220, 235)
+    reference_lines: list[ReferenceLine] = field(default_factory=list)
+    x_major_tick_step: float | None = None
+    y_major_tick_step: float | None = None
+    show_edge_x_tick_labels: bool = True
+    show_edge_y_tick_labels: bool = True
+    include_zero_x_tick: bool = False
+    x_tick_label_scale: float = 1.0
+    x_tick_label_offset: float = 0.0
+    legend_position_px: tuple[int, int] | None = None
+    _legend_bounds_px: tuple[int, int, int, int] | None = None
+    _legend_drag_active: bool = False
+    _legend_drag_offset_px: tuple[int, int] = (0, 0)
+    _legend_dirty_rect_px: tuple[int, int, int, int] | None = None
+    _legend_layout: LegendLayout | None = None
+    _last_static_rgba: np.ndarray | None = None
+    _last_data_rgba: np.ndarray | None = None
+    _last_plot_rect_px: tuple[int, int, int, int] | None = None
+    _last_limits: DataLimits | None = None
+    _last_x_rule_rect_px: tuple[int, int, int, int] | None = None
+    _last_x_rule_bg: np.ndarray | None = None
+    _last_tick_font_px: float = 12.0
+    _last_label_font_px: float = 12.0
+    _last_x_tick_pad: int = 4
+    _last_max_x_tick_h: int = 12
+    _last_x_label_gap: int = 8
+
+    def scatter(
+        self,
+        y: Any = None,
+        *,
+        x: Any = None,
+        data: Any = None,
+        label: str | None = None,
+        color: tuple[int, int, int] | tuple[int, int, int, int] = (62, 149, 255),
+        size: int = 2,
+        alpha: float = 1.0,
+    ) -> "Axes":
+        style = SeriesStyle(mode="markers", color=_coerce_color(color, alpha), marker_size=max(1, size), line_width=1)
+        series_data = normalize_xy(y=y, x=x, data=data)
+        self._series.append(SeriesSpec(data=series_data, style=style, label=label))
+        return self
+
+    def plot(
+        self,
+        y: Any = None,
+        *,
+        x: Any = None,
+        data: Any = None,
+        label: str | None = None,
+        mode: str = "line",
+        color: tuple[int, int, int] | tuple[int, int, int, int] = (255, 165, 0),
+        width: int = 1,
+        alpha: float = 1.0,
+    ) -> "Axes":
+        if mode not in {"line", "lines", "lines+markers"}:
+            raise PlotDataError(f"unsupported plot mode: {mode}")
+        style_mode = "lines+markers" if mode == "lines+markers" else "lines"
+        style = SeriesStyle(mode=style_mode, color=_coerce_color(color, alpha), marker_size=1, line_width=max(1, width))
+        series_data = normalize_xy(y=y, x=x, data=data)
+        self._series.append(SeriesSpec(data=series_data, style=style, label=label))
+        return self
+
+    def series(
+        self,
+        y: Any = None,
+        *,
+        x: Any = None,
+        data: Any = None,
+        label: str | None = None,
+        mode: str = "markers",
+        color: tuple[int, int, int] | tuple[int, int, int, int] = (62, 149, 255),
+        size: int = 1,
+        width: int = 1,
+        alpha: float = 1.0,
+    ) -> "Axes":
+        if mode not in {"markers", "lines", "lines+markers"}:
+            raise PlotDataError(f"unsupported mode: {mode}")
+        style = SeriesStyle(
+            mode=mode,  # type: ignore[arg-type]
+            color=_coerce_color(color, alpha),
+            marker_size=max(1, size),
+            line_width=max(1, width),
+        )
+        series_data = normalize_xy(y=y, x=x, data=data)
+        self._series.append(SeriesSpec(data=series_data, style=style, label=label))
+        return self
+
+    def set_limit_hysteresis(
+        self,
+        *,
+        enabled: bool = True,
+        deadband_ratio: float = 0.1,
+        shrink_rate: float = 0.08,
+    ) -> "Axes":
+        if deadband_ratio < 0:
+            raise ValueError("deadband_ratio must be >= 0")
+        if shrink_rate < 0 or shrink_rate > 1:
+            raise ValueError("shrink_rate must be in [0, 1]")
+        self.limit_hysteresis_enabled = enabled
+        self.limit_hysteresis_deadband_ratio = deadband_ratio
+        self.limit_hysteresis_shrink_rate = shrink_rate
+        return self
+
+    def set_major_tick_steps(self, *, x: float | None = None, y: float | None = None) -> "Axes":
+        if x is not None and x <= 0:
+            raise ValueError("x major tick step must be > 0")
+        if y is not None and y <= 0:
+            raise ValueError("y major tick step must be > 0")
+        self.x_major_tick_step = x
+        self.y_major_tick_step = y
+        return self
+
+    def set_show_edge_x_tick_labels(self, show: bool) -> "Axes":
+        self.show_edge_x_tick_labels = bool(show)
+        return self
+
+    def set_show_edge_y_tick_labels(self, show: bool) -> "Axes":
+        self.show_edge_y_tick_labels = bool(show)
+        return self
+
+    def set_dynamic_defaults(self) -> "Axes":
+        # Dynamic/live plots typically avoid edge labels to reduce visual jitter at bounds.
+        self.show_edge_x_tick_labels = False
+        self.show_edge_y_tick_labels = False
+        self.include_zero_x_tick = True
+        return self
+
+    def set_include_zero_x_tick(self, include: bool) -> "Axes":
+        self.include_zero_x_tick = bool(include)
+        return self
+
+    def set_x_tick_label_affine(self, *, scale: float = 1.0, offset: float = 0.0) -> "Axes":
+        self.x_tick_label_scale = float(scale)
+        self.x_tick_label_offset = float(offset)
+        return self
+
+    def _format_x_tick_labels(self, tick_x: np.ndarray) -> list[str]:
+        if tick_x.size == 0:
+            return []
+        display_ticks = tick_x.astype(np.float64, copy=False) * self.x_tick_label_scale + self.x_tick_label_offset
+        return format_ticks_for_axis(display_ticks)
+
+    def add_reference_line(
+        self,
+        axis: Literal["x", "y"],
+        value: float,
+        *,
+        color: tuple[int, int, int, int] | None = None,
+        width: int = 1,
+    ) -> "Axes":
+        if axis not in {"x", "y"}:
+            raise ValueError("axis must be 'x' or 'y'")
+        if width <= 0:
+            raise ValueError("width must be > 0")
+        self.reference_lines.append(
+            ReferenceLine(
+                axis=axis,
+                value=float(value),
+                color=self.reference_line_color if color is None else color,
+                width=width,
+            )
+        )
+        return self
+
+    def clear_reference_lines(self) -> "Axes":
+        self.reference_lines.clear()
+        return self
+
+    def set_legend_position(self, x_px: int, y_px: int) -> "Axes":
+        self.legend_position_px = (int(x_px), int(y_px))
+        return self
+
+    def legend_bounds(self) -> tuple[int, int, int, int] | None:
+        return self._legend_bounds_px
+
+    def update_legend_drag(self, pointer_x: float, pointer_y: float, is_down: bool) -> bool:
+        px = int(round(pointer_x))
+        py = int(round(pointer_y))
+        moved = False
+        bounds = self._legend_bounds_px
+        if is_down:
+            if not self._legend_drag_active and bounds is not None:
+                x, y, w, h = bounds
+                inside = (px >= x) and (px < x + w) and (py >= y) and (py < y + h)
+                if inside:
+                    self._legend_drag_active = True
+                    self._legend_drag_offset_px = (px - x, py - y)
+            if self._legend_drag_active:
+                ox, oy = self._legend_drag_offset_px
+                next_pos = (px - ox, py - oy)
+                if self._legend_layout is not None:
+                    next_pos = self._clamp_legend_position(self._legend_layout, next_pos)
+                if self.legend_position_px != next_pos:
+                    old_bounds = self._legend_bounds_px
+                    self.legend_position_px = next_pos
+                    self._resolve_legend_bounds()
+                    if old_bounds is not None:
+                        ox0, oy0, ow, oh = old_bounds
+                        new_bounds = self._legend_bounds_px or old_bounds
+                        nx0, ny0, nw, nh = new_bounds
+                        rx0 = min(ox0, nx0)
+                        ry0 = min(oy0, ny0)
+                        rx1 = max(ox0 + ow, nx0 + nw)
+                        ry1 = max(oy0 + oh, ny0 + nh)
+                        move_dirty = (rx0, ry0, rx1 - rx0, ry1 - ry0)
+                        self._legend_dirty_rect_px = _union_rect(self._legend_dirty_rect_px, move_dirty)
+                    moved = True
+        else:
+            self._legend_drag_active = False
+        return moved
+
+    def take_legend_dirty_rect(self) -> tuple[int, int, int, int] | None:
+        rect = self._legend_dirty_rect_px
+        self._legend_dirty_rect_px = None
+        return rect
+
+    def _build_legend_layout(
+        self,
+        *,
+        tick_font_px: float,
+        plot_x0: int,
+        plot_y0: int,
+        plot_w: int,
+        plot_h: int,
+    ) -> LegendLayout | None:
+        line_series = [spec for spec in self._series if spec.style.mode in {"lines", "lines+markers"}]
+        if len(line_series) < 2:
+            return None
+        entries = tuple(
+            LegendEntry(
+                label=(spec.label if spec.label is not None and spec.label.strip() else f"series {i+1}"),
+                mode=spec.style.mode,
+                color=spec.style.color,
+                marker_size=max(2, spec.style.marker_size),
+            )
+            for i, spec in enumerate(line_series)
+        )
+        legend_font_px = max(10.0, tick_font_px * 0.9)
+        swatch_w = int(max(10, legend_font_px * 1.6))
+        swatch_h = int(max(6, legend_font_px * 0.9))
+        item_gap = int(max(3, legend_font_px * 0.5))
+        pad = int(max(5, legend_font_px * 0.55))
+        text_w = max((text_size(entry.label, font_size_px=legend_font_px)[0] for entry in entries), default=0)
+        item_h = max(swatch_h, int(round(legend_font_px)))
+        box_w = pad * 2 + swatch_w + 6 + text_w
+        box_h = pad * 2 + len(entries) * item_h + (len(entries) - 1) * item_gap
+        return LegendLayout(
+            entries=entries,
+            plot_x0=plot_x0,
+            plot_y0=plot_y0,
+            plot_w=plot_w,
+            plot_h=plot_h,
+            legend_font_px=legend_font_px,
+            swatch_w=swatch_w,
+            swatch_h=swatch_h,
+            item_gap=item_gap,
+            pad=pad,
+            item_h=item_h,
+            box_w=box_w,
+            box_h=box_h,
+        )
+
+    def _clamp_legend_position(self, layout: LegendLayout, requested: tuple[int, int] | None) -> tuple[int, int]:
+        if requested is None:
+            x = max(layout.plot_x0 + 4, layout.plot_x0 + layout.plot_w - layout.box_w - 6)
+            y = max(layout.plot_y0 + 4, layout.plot_y0 + 6)
+        else:
+            x = int(requested[0])
+            y = int(requested[1])
+        x = max(layout.plot_x0 + 2, min(layout.plot_x0 + layout.plot_w - layout.box_w - 2, x))
+        y = max(layout.plot_y0 + 2, min(layout.plot_y0 + layout.plot_h - layout.box_h - 2, y))
+        return (x, y)
+
+    def _resolve_legend_bounds(self) -> tuple[int, int, int, int] | None:
+        layout = self._legend_layout
+        if layout is None:
+            self._legend_bounds_px = None
+            return None
+        x, y = self._clamp_legend_position(layout, self.legend_position_px)
+        self.legend_position_px = (x, y)
+        self._legend_bounds_px = (x, y, layout.box_w, layout.box_h)
+        return self._legend_bounds_px
+
+    def _draw_legend(self, canvas: np.ndarray, *, x_offset: int = 0, y_offset: int = 0) -> None:
+        layout = self._legend_layout
+        bounds = self._resolve_legend_bounds()
+        if layout is None or bounds is None:
+            return
+        legend_x, legend_y, box_w, box_h = bounds
+        draw_x = legend_x - x_offset
+        draw_y = legend_y - y_offset
+        for yy in range(draw_y, draw_y + box_h):
+            draw_hline(
+                canvas,
+                draw_x,
+                draw_x + box_w - 1,
+                yy,
+                (10, 14, 20, 170),
+            )
+        draw_hline(canvas, draw_x, draw_x + box_w - 1, draw_y, self.frame_color)
+        draw_hline(canvas, draw_x, draw_x + box_w - 1, draw_y + box_h - 1, self.frame_color)
+        draw_vline(canvas, draw_x, draw_y, draw_y + box_h - 1, self.frame_color)
+        draw_vline(canvas, draw_x + box_w - 1, draw_y, draw_y + box_h - 1, self.frame_color)
+
+        for i, entry in enumerate(layout.entries):
+            row_y = draw_y + layout.pad + i * (layout.item_h + layout.item_gap) + layout.item_h // 2
+            sw_x0 = draw_x + layout.pad
+            sw_x1 = sw_x0 + layout.swatch_w - 1
+            if entry.mode in {"lines", "lines+markers"}:
+                draw_hline(canvas, sw_x0, sw_x1, row_y, entry.color)
+            if entry.mode in {"markers", "lines+markers"}:
+                marker_x = np.asarray([sw_x0 + layout.swatch_w // 2], dtype=np.int32)
+                marker_y = np.asarray([row_y], dtype=np.int32)
+                draw_markers(canvas, marker_x, marker_y, color=entry.color, size=entry.marker_size)
+            draw_text(
+                canvas,
+                sw_x1 + 6,
+                int(round(row_y - layout.legend_font_px * 0.5)),
+                entry.label,
+                self.text_color,
+                font_size_px=layout.legend_font_px,
+            )
+
+    def render_legend_patch(self, dirty_rect: tuple[int, int, int, int]) -> tuple[int, int, np.ndarray] | None:
+        if self._last_static_rgba is None:
+            return None
+        x, y, width, height = dirty_rect
+        x0 = max(0, int(x))
+        y0 = max(0, int(y))
+        x1 = min(self.figure.width, x0 + int(width))
+        y1 = min(self.figure.height, y0 + int(height))
+        if x1 <= x0 or y1 <= y0:
+            return None
+        patch = self._last_static_rgba[y0:y1, x0:x1].copy()
+        if self._last_data_rgba is not None:
+            blit(patch, self._last_data_rgba[y0:y1, x0:x1])
+        self._draw_legend(patch, x_offset=x0, y_offset=y0)
+        return (x0, y0, patch)
+
+    def last_plot_rect(self) -> tuple[int, int, int, int] | None:
+        return self._last_plot_rect_px
+
+    def last_limits(self) -> DataLimits | None:
+        return self._last_limits
+
+    def last_static_rgba(self) -> np.ndarray | None:
+        if self._last_static_rgba is None:
+            return None
+        return self._last_static_rgba.copy()
+
+    def last_data_rgba(self) -> np.ndarray | None:
+        if self._last_data_rgba is None:
+            return None
+        return self._last_data_rgba.copy()
+
+    def last_x_rule_rect(self) -> tuple[int, int, int, int] | None:
+        return self._last_x_rule_rect_px
+
+    def render_x_rule_patch(
+        self,
+        xmin: float,
+        xmax: float,
+        *,
+        visible_min: float | None = None,
+        visible_max: float | None = None,
+    ) -> tuple[int, int, np.ndarray] | None:
+        if self._last_x_rule_bg is None or self._last_x_rule_rect_px is None:
+            return None
+        x0, y0, w, h = self._last_x_rule_rect_px
+        if w <= 0 or h <= 0:
+            return None
+        patch = self._last_x_rule_bg.copy()
+        tick_x = generate_nice_ticks(
+            float(xmin),
+            float(xmax),
+            max(5, w // 120),
+            preferred_step=self.x_major_tick_step,
+        )
+        if self.include_zero_x_tick:
+            tick_x = _inject_zero_tick(tick_x, vmin=float(xmin), vmax=float(xmax))
+        labels = self._format_x_tick_labels(tick_x)
+        transform = build_transform(
+            limits=DataLimits(xmin=float(xmin), xmax=float(xmax), ymin=0.0, ymax=1.0),
+            width=w,
+            height=max(2, h),
+        )
+        for idx, (xv, label) in enumerate(zip(tick_x.tolist(), labels, strict=False)):
+            if visible_min is not None and xv < visible_min:
+                continue
+            if visible_max is not None and xv > visible_max:
+                continue
+            if (not self.show_edge_x_tick_labels) and (idx == 0 or idx == len(labels) - 1):
+                continue
+            px, _ = map_to_pixels(
+                np.asarray([xv], dtype=np.float64),
+                np.asarray([0.0], dtype=np.float64),
+                transform,
+                w,
+                max(2, h),
+            )
+            tx, _ = text_size(label, font_size_px=self._last_tick_font_px)
+            draw_text(
+                patch,
+                int(px[0]) - tx // 2,
+                int(round(self._last_x_tick_pad)),
+                label,
+                self.text_color,
+                font_size_px=self._last_tick_font_px,
+                embolden_px=1,
+            )
+        x_label_w, _ = text_size(self.x_label_bottom, font_size_px=self._last_label_font_px)
+        draw_text(
+            patch,
+            max(0, (w // 2) - (x_label_w // 2)),
+            max(2, int(round(self._last_x_tick_pad + self._last_max_x_tick_h + self._last_x_label_gap))),
+            self.x_label_bottom,
+            self.text_color,
+            font_size_px=self._last_label_font_px,
+            embolden_px=2,
+        )
+        return (x0, y0, patch)
+
+    def _plot_viewport(self) -> tuple[int, int, int, int]:
+        left = min(self._gutter_left, max(8, self.figure.width // 4))
+        right = min(self._gutter_right, max(8, self.figure.width // 8))
+        top = min(self._gutter_top, max(8, self.figure.height // 5))
+        bottom = min(self._gutter_bottom, max(8, self.figure.height // 4))
+        x0 = left
+        y0 = top
+        width = self.figure.width - left - right
+        height = self.figure.height - top - bottom
+        if width <= 1 or height <= 1:
+            raise PlotDataError("figure too small for plotting viewport")
+        return x0, y0, width, height
+
+    def _combined_limits(self) -> tuple[float, float, float, float]:
+        if not self._series:
+            raise PlotDataError("no series in axes")
+
+        mins_x: list[float] = []
+        maxs_x: list[float] = []
+        mins_y: list[float] = []
+        maxs_y: list[float] = []
+
+        for spec in self._series:
+            # Recompute finiteness mask at render-time so dynamic in-place updates
+            # (rolling windows with NaNs) stay aligned with limits and drawing.
+            live_mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
+            limits = compute_limits(spec.data.x, spec.data.y, live_mask)
+            mins_x.append(limits.xmin)
+            maxs_x.append(limits.xmax)
+            mins_y.append(limits.ymin)
+            maxs_y.append(limits.ymax)
+
+        return min(mins_x), max(maxs_x), min(mins_y), max(maxs_y)
+
+    def _apply_limit_hysteresis(self, raw: DataLimits) -> DataLimits:
+        if not self.limit_hysteresis_enabled:
+            self._previous_limits = raw
+            return raw
+        prev = self._previous_limits
+        if prev is None:
+            self._previous_limits = raw
+            return raw
+
+        deadband_x = max(1e-9, (raw.xmax - raw.xmin) * self.limit_hysteresis_deadband_ratio)
+        deadband_y = max(1e-9, (raw.ymax - raw.ymin) * self.limit_hysteresis_deadband_ratio)
+
+        xmin = prev.xmin
+        xmax = prev.xmax
+        ymin = prev.ymin
+        ymax = prev.ymax
+
+        # Expand immediately when new data breaches current limits.
+        if raw.xmin < xmin:
+            xmin = raw.xmin
+        if raw.xmax > xmax:
+            xmax = raw.xmax
+        if raw.ymin < ymin:
+            ymin = raw.ymin
+        if raw.ymax > ymax:
+            ymax = raw.ymax
+
+        # Contract slowly only when raw limits move inward past deadband.
+        if raw.xmin > xmin + deadband_x:
+            xmin = xmin + (raw.xmin - xmin) * self.limit_hysteresis_shrink_rate
+        if raw.xmax < xmax - deadband_x:
+            xmax = xmax - (xmax - raw.xmax) * self.limit_hysteresis_shrink_rate
+        if raw.ymin > ymin + deadband_y:
+            ymin = ymin + (raw.ymin - ymin) * self.limit_hysteresis_shrink_rate
+        if raw.ymax < ymax - deadband_y:
+            ymax = ymax - (ymax - raw.ymax) * self.limit_hysteresis_shrink_rate
+
+        out = DataLimits(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
+        self._previous_limits = out
+        return out
+
+    def render(self) -> np.ndarray:
+        if not self._series:
+            raise PlotDataError("cannot render empty axes")
+
+        base = new_canvas(self.figure.width, self.figure.height, color=self.figure.style.background)
+        scale_base = min(self.figure.width, self.figure.height)
+        tick_font_px = max(12.0, min(28.0, scale_base * 0.03))
+        label_font_px = max(11.0, min(24.0, scale_base * 0.032))
+        title_font_px = max(12.0, min(30.0, scale_base * 0.038))
+        tick_half_h = int(round(tick_font_px * 0.5))
+        xmin, xmax, ymin, ymax = self._combined_limits()
+        limits = self._apply_limit_hysteresis(DataLimits(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax))
+        xmin, xmax, ymin, ymax = limits.xmin, limits.xmax, limits.ymin, limits.ymax
+        self._last_limits = limits
+        y_chunks: list[np.ndarray] = []
+        for spec in self._series:
+            live_mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
+            if np.any(live_mask):
+                y_chunks.append(spec.data.y[live_mask])
+        if not y_chunks:
+            raise PlotDataError("series contains no finite points")
+        y_all = np.concatenate(y_chunks).astype(np.float64, copy=False)
+        y_resolution = infer_resolution(y_all)
+        preferred_y_step = self.y_major_tick_step if self.y_major_tick_step is not None else preferred_major_step_from_resolution(y_resolution)
+        preferred_x_step = self.x_major_tick_step
+
+        # First pass tick estimates for layout sizing.
+        provisional_w = max(120, self.figure.width - 80)
+        provisional_h = max(80, self.figure.height - 80)
+        tick_x_probe = generate_nice_ticks(xmin, xmax, max(5, provisional_w // 120), preferred_step=preferred_x_step)
+        if self.include_zero_x_tick:
+            tick_x_probe = _inject_zero_tick(tick_x_probe, vmin=xmin, vmax=xmax)
+        tick_y_probe = generate_nice_ticks(ymin, ymax, max(4, provisional_h // 140), preferred_step=preferred_y_step)
+        x_tick_labels_probe = self._format_x_tick_labels(tick_x_probe)
+        y_tick_labels_probe = format_ticks_for_axis(tick_y_probe)
+        max_x_tick_h = max((text_size(lbl, font_size_px=tick_font_px)[1] for lbl in x_tick_labels_probe), default=int(tick_font_px))
+        max_x_tick_w = max((text_size(lbl, font_size_px=tick_font_px)[0] for lbl in x_tick_labels_probe), default=0)
+        max_y_tick_w = max((text_size(lbl, font_size_px=tick_font_px)[0] for lbl in y_tick_labels_probe), default=0)
+        x_label_w, x_label_h = text_size(self.x_label_bottom, font_size_px=label_font_px)
+        y_label_w, y_label_h = text_size(self.y_label_left, font_size_px=label_font_px, rotate_deg=270)
+        title_h = text_size(self.title, font_size_px=title_font_px)[1] if self.title else 0
+
+        x_tick_pad = int(max(4.0, tick_font_px * 0.5))
+        x_label_gap = int(max(10.0, label_font_px * 0.65))
+        y_tick_pad = int(max(4.0, tick_font_px * 0.4))
+        y_label_gap = int(max(8.0, label_font_px * 0.45))
+        y_axis_label_pad = int(max(12.0, label_font_px * 0.75))
+        left = int(max(18, max_y_tick_w + y_tick_pad + y_label_w + y_label_gap + y_axis_label_pad + 10))
+        right_tick_pad = int(max(8, max_x_tick_w // 2 + 6))
+        right = int(
+            max(
+                right_tick_pad,
+                text_size(self.y_label_right, font_size_px=label_font_px)[0] + 10
+                if self.show_right_axis and self.y_label_right
+                else right_tick_pad,
+            )
+        )
+        top = int(max(10, title_h + 10))
+        bottom = int(max(12, max_x_tick_h + x_tick_pad + x_label_h + x_label_gap + 10))
+
+        # Bound gutters for small figures so we always preserve a drawable plot area.
+        left = min(left, max(6, self.figure.width // 3))
+        right = min(right, max(4, self.figure.width // 4))
+        top = min(top, max(4, self.figure.height // 3))
+        bottom = min(bottom, max(6, self.figure.height // 3))
+
+        plot_x0 = left
+        plot_y0 = top
+        plot_w = self.figure.width - left - right
+        plot_h = self.figure.height - top - bottom
+        if plot_w <= 1:
+            excess = 2 - plot_w
+            trim_left = min(left - 2, max(0, excess))
+            left -= trim_left
+            excess -= trim_left
+            right = max(2, right - excess)
+            plot_x0 = left
+            plot_w = self.figure.width - left - right
+        if plot_h <= 1:
+            excess = 2 - plot_h
+            trim_top = min(top - 2, max(0, excess))
+            top -= trim_top
+            excess -= trim_top
+            bottom = max(2, bottom - excess)
+            plot_y0 = top
+            plot_h = self.figure.height - top - bottom
+        if plot_w <= 1 or plot_h <= 1:
+            raise PlotDataError("figure too small for plotting viewport")
+        self._last_plot_rect_px = (plot_x0, plot_y0, plot_w, plot_h)
+        self._last_tick_font_px = tick_font_px
+        self._last_label_font_px = label_font_px
+        self._last_x_tick_pad = x_tick_pad
+        self._last_max_x_tick_h = max_x_tick_h
+        self._last_x_label_gap = x_label_gap
+
+        frame_key = (self.figure.width, self.figure.height, self.frame_color, self.plot_bg_color, plot_x0, plot_y0, plot_w, plot_h)
+        if self._cache.frame_key != frame_key or self._cache.frame_template is None:
+            frame = new_canvas(self.figure.width, self.figure.height, color=(0, 0, 0, 0))
+            draw_hline(frame, 0, self.figure.width - 1, 0, self.frame_color)
+            draw_hline(frame, 0, self.figure.width - 1, self.figure.height - 1, self.frame_color)
+            draw_vline(frame, 0, 0, self.figure.height - 1, self.frame_color)
+            draw_vline(frame, self.figure.width - 1, 0, self.figure.height - 1, self.frame_color)
+            for yy in range(plot_y0, plot_y0 + plot_h):
+                draw_hline(frame, plot_x0, plot_x0 + plot_w - 1, yy, self.plot_bg_color)
+            self._cache.frame_key = frame_key
+            self._cache.frame_template = frame
+
+        # Final ticks based on resolved viewport.
+        tick_x = generate_nice_ticks(xmin, xmax, max(5, plot_w // 120), preferred_step=preferred_x_step)
+        if self.include_zero_x_tick:
+            tick_x = _inject_zero_tick(tick_x, vmin=xmin, vmax=xmax)
+        tick_y = generate_nice_ticks(ymin, ymax, max(4, plot_h // 140), preferred_step=preferred_y_step)
+        x_tick_labels = self._format_x_tick_labels(tick_x)
+        y_tick_labels = format_ticks_for_axis(tick_y)
+        grid_key = (
+            plot_w,
+            plot_h,
+            round(xmin, 12),
+            round(xmax, 12),
+            round(ymin, 12),
+            round(ymax, 12),
+            self.grid_color,
+            self.show_zero_reference_lines,
+            self.show_minor_dot_grid,
+            self.minor_dot_grid_max_points,
+            tuple((line.axis, round(line.value, 12), line.color, line.width) for line in self.reference_lines),
+        )
+        if self._cache.grid_key != grid_key or self._cache.grid_template is None:
+            grid = new_canvas(self.figure.width, self.figure.height, color=(0, 0, 0, 0))
+            transform = build_transform(
+                limits=DataLimits(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax),
+                width=plot_w,
+                height=plot_h,
+            )
+            for xv in tick_x:
+                px, _ = map_to_pixels(np.asarray([xv], dtype=np.float64), np.asarray([ymin], dtype=np.float64), transform, plot_w, plot_h)
+                draw_vline(grid, plot_x0 + int(px[0]), plot_y0, plot_y0 + plot_h - 1, self.grid_color)
+            for yv in tick_y:
+                _, py = map_to_pixels(np.asarray([xmin], dtype=np.float64), np.asarray([yv], dtype=np.float64), transform, plot_w, plot_h)
+                draw_hline(grid, plot_x0, plot_x0 + plot_w - 1, plot_y0 + int(py[0]), self.grid_color)
+            ref_lines: list[ReferenceLine] = list(self.reference_lines)
+            if self.show_zero_reference_lines:
+                ref_lines.append(ReferenceLine(axis="x", value=0.0, color=self.reference_line_color, width=1))
+                ref_lines.append(ReferenceLine(axis="y", value=0.0, color=self.reference_line_color, width=1))
+            for ref in ref_lines:
+                if ref.axis == "x":
+                    if ref.value < xmin or ref.value > xmax:
+                        continue
+                    px, _ = map_to_pixels(
+                        np.asarray([ref.value], dtype=np.float64),
+                        np.asarray([ymin], dtype=np.float64),
+                        transform,
+                        plot_w,
+                        plot_h,
+                    )
+                    gx = plot_x0 + int(px[0])
+                    for offset in range(max(1, ref.width)):
+                        draw_vline(grid, gx + offset, plot_y0, plot_y0 + plot_h - 1, ref.color)
+                else:
+                    if ref.value < ymin or ref.value > ymax:
+                        continue
+                    _, py = map_to_pixels(
+                        np.asarray([xmin], dtype=np.float64),
+                        np.asarray([ref.value], dtype=np.float64),
+                        transform,
+                        plot_w,
+                        plot_h,
+                    )
+                    gy = plot_y0 + int(py[0])
+                    for offset in range(max(1, ref.width)):
+                        draw_hline(grid, plot_x0, plot_x0 + plot_w - 1, gy + offset, ref.color)
+            # Minor dot grid at tenth subdivisions of major steps.
+            major_x_step = float(abs(tick_x[1] - tick_x[0])) if tick_x.size > 1 else 1.0
+            major_y_step = float(abs(tick_y[1] - tick_y[0])) if tick_y.size > 1 else 1.0
+            minor_x_step = major_x_step / 10.0
+            minor_y_step = major_y_step / 10.0
+            if self.show_minor_dot_grid and minor_x_step > 0 and minor_y_step > 0:
+                x_minor = np.arange(
+                    np.floor(xmin / minor_x_step) * minor_x_step,
+                    np.ceil(xmax / minor_x_step) * minor_x_step + 0.5 * minor_x_step,
+                    minor_x_step,
+                    dtype=np.float64,
+                )
+                y_minor = np.arange(
+                    np.floor(ymin / minor_y_step) * minor_y_step,
+                    np.ceil(ymax / minor_y_step) * minor_y_step + 0.5 * minor_y_step,
+                    minor_y_step,
+                    dtype=np.float64,
+                )
+                dot_color = self.minor_dot_grid_color
+                x_minor_px, _ = map_to_pixels(
+                    x_minor,
+                    np.full(x_minor.shape, ymin, dtype=np.float64),
+                    transform,
+                    plot_w,
+                    plot_h,
+                )
+                _, y_minor_px = map_to_pixels(
+                    np.full(y_minor.shape, xmin, dtype=np.float64),
+                    y_minor,
+                    transform,
+                    plot_w,
+                    plot_h,
+                )
+                x_unique = np.unique(x_minor_px)
+                y_unique = np.unique(y_minor_px)
+                total = int(x_unique.size * y_unique.size)
+                stride = 1
+                max_points = max(1000, int(self.minor_dot_grid_max_points))
+                if total > max_points:
+                    stride = int(np.ceil(np.sqrt(total / max_points)))
+                for px in x_unique[::stride].tolist():
+                    gx = plot_x0 + int(px)
+                    for py in y_unique[::stride].tolist():
+                        gy = plot_y0 + int(py)
+                        draw_pixel(grid, gx, gy, dot_color)
+            self._cache.grid_key = grid_key
+            self._cache.grid_template = grid
+
+        blit(base, self._cache.frame_template)
+        blit(base, self._cache.grid_template)
+
+        transform = build_transform(
+            limits=DataLimits(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax),
+            width=plot_w,
+            height=plot_h,
+        )
+
+        drawing = new_canvas(self.figure.width, self.figure.height, color=(0, 0, 0, 0))
+        # Pass 1: lines under markers for clear point visibility.
+        for spec in self._series:
+            if spec.style.mode in {"lines", "lines+markers"}:
+                live_mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
+                for seg_start, seg_end in _contiguous_true_runs(live_mask):
+                    xvals = spec.data.x[seg_start:seg_end]
+                    yvals = spec.data.y[seg_start:seg_end]
+                    if xvals.size < 2:
+                        continue
+                    px, py = map_to_pixels(xvals, yvals, transform, plot_w, plot_h)
+                    if px.size > plot_w:
+                        px, py = downsample_by_pixel_column(px, py, width=plot_w, mode="lines")
+                    px = px + plot_x0
+                    py = py + plot_y0
+                    draw_polyline(drawing, px, py, color=spec.style.color, width=spec.style.line_width)
+        # Pass 2: markers on top.
+        for spec in self._series:
+            if spec.style.mode not in {"markers", "lines+markers"}:
+                continue
+            visible_mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
+            xvals = spec.data.x[visible_mask]
+            yvals = spec.data.y[visible_mask]
+            px, py = map_to_pixels(xvals, yvals, transform, plot_w, plot_h)
+            if px.size > plot_w:
+                px, py = downsample_by_pixel_column(px, py, width=plot_w, mode="markers")
+            px = px + plot_x0
+            py = py + plot_y0
+            marker_size = max(2, spec.style.marker_size)
+            draw_markers(drawing, px, py, color=spec.style.color, size=marker_size)
+
+        base_no_data = base.copy()
+        self._last_data_rgba = drawing.copy()
+        blit(base, drawing)
+
+        draw_hline(base, plot_x0, plot_x0 + plot_w - 1, plot_y0 + plot_h - 1, self.axis_color)
+        draw_vline(base, plot_x0, plot_y0, plot_y0 + plot_h - 1, self.axis_color)
+        draw_hline(base_no_data, plot_x0, plot_x0 + plot_w - 1, plot_y0 + plot_h - 1, self.axis_color)
+        draw_vline(base_no_data, plot_x0, plot_y0, plot_y0 + plot_h - 1, self.axis_color)
+        if self.show_top_axis:
+            draw_hline(base, plot_x0, plot_x0 + plot_w - 1, plot_y0, self.axis_color)
+            draw_hline(base_no_data, plot_x0, plot_x0 + plot_w - 1, plot_y0, self.axis_color)
+        if self.show_right_axis:
+            draw_vline(base, plot_x0 + plot_w - 1, plot_y0, plot_y0 + plot_h - 1, self.axis_color)
+            draw_vline(base_no_data, plot_x0 + plot_w - 1, plot_y0, plot_y0 + plot_h - 1, self.axis_color)
+        x_rule_y0 = min(self.figure.height, plot_y0 + plot_h)
+        x_rule_h = max(0, self.figure.height - x_rule_y0)
+        self._last_x_rule_rect_px = (plot_x0, x_rule_y0, plot_w, x_rule_h)
+        self._last_x_rule_bg = base_no_data[x_rule_y0 : x_rule_y0 + x_rule_h, plot_x0 : plot_x0 + plot_w].copy()
+
+        self._legend_layout = self._build_legend_layout(
+            tick_font_px=tick_font_px,
+            plot_x0=plot_x0,
+            plot_y0=plot_y0,
+            plot_w=plot_w,
+            plot_h=plot_h,
+        )
+
+        text_key = (
+            tuple(x_tick_labels),
+            tuple(y_tick_labels),
+            self.title,
+            self.x_label_bottom,
+            self.y_label_left,
+            self.x_label_top,
+            self.y_label_right,
+            plot_x0,
+            plot_y0,
+            plot_w,
+            plot_h,
+            self.text_color,
+            round(tick_font_px, 2),
+            round(label_font_px, 2),
+            round(title_font_px, 2),
+            self.show_edge_x_tick_labels,
+            self.show_edge_y_tick_labels,
+            self.include_zero_x_tick,
+            round(self.x_tick_label_scale, 12),
+            round(self.x_tick_label_offset, 12),
+        )
+        if self._cache.text_key != text_key or self._cache.text_template is None:
+            text_layer = new_canvas(self.figure.width, self.figure.height, color=(0, 0, 0, 0))
+            if self.title:
+                tw, th = text_size(self.title, font_size_px=title_font_px)
+                draw_text(
+                    text_layer,
+                    max(2, (self.figure.width - tw) // 2),
+                    max(2, int(round((top - th) * 0.5))),
+                    self.title,
+                    self.text_color,
+                    font_size_px=title_font_px,
+                    embolden_px=2,
+                )
+
+            for idx, (xv, label) in enumerate(zip(tick_x.tolist(), x_tick_labels, strict=False)):
+                if (not self.show_edge_x_tick_labels) and (idx == 0 or idx == len(x_tick_labels) - 1):
+                    continue
+                px, _ = map_to_pixels(np.asarray([xv], dtype=np.float64), np.asarray([ymin], dtype=np.float64), transform, plot_w, plot_h)
+                tx, _ = text_size(label, font_size_px=tick_font_px)
+                draw_text(
+                    text_layer,
+                    plot_x0 + int(px[0]) - tx // 2,
+                    int(round(plot_y0 + plot_h + x_tick_pad)),
+                    label,
+                    self.text_color,
+                    font_size_px=tick_font_px,
+                    embolden_px=1,
+                )
+
+            for idx, (yv, label) in enumerate(zip(tick_y.tolist(), y_tick_labels, strict=False)):
+                if (not self.show_edge_y_tick_labels) and (idx == 0 or idx == len(y_tick_labels) - 1):
+                    continue
+                _, py = map_to_pixels(np.asarray([xmin], dtype=np.float64), np.asarray([yv], dtype=np.float64), transform, plot_w, plot_h)
+                tx, _ = text_size(label, font_size_px=tick_font_px)
+                draw_text(
+                    text_layer,
+                    max(0, int(round(plot_x0 - tx - y_tick_pad))),
+                    int(round(plot_y0 + int(py[0]) - tick_half_h)),
+                    label,
+                    self.text_color,
+                    font_size_px=tick_font_px,
+                    embolden_px=2,
+                )
+
+            draw_text(
+                text_layer,
+                max(0, plot_x0 + (plot_w // 2) - (x_label_w // 2)),
+                max(2, int(round(plot_y0 + plot_h + x_tick_pad + max_x_tick_h + x_label_gap))),
+                self.x_label_bottom,
+                self.text_color,
+                font_size_px=label_font_px,
+                embolden_px=2,
+            )
+            draw_text(
+                text_layer,
+                max(2, int(round(plot_x0 - max_y_tick_w - y_tick_pad - y_label_w - y_label_gap - y_axis_label_pad))),
+                max(2, int(round(plot_y0 + (plot_h // 2) - (y_label_h * 0.5)))),
+                self.y_label_left,
+                self.text_color,
+                font_size_px=label_font_px,
+                embolden_px=2,
+                rotate_deg=90,
+            )
+            if self.show_top_axis and self.x_label_top:
+                top_w, _ = text_size(self.x_label_top, font_size_px=label_font_px)
+                draw_text(
+                    text_layer,
+                    max(0, plot_x0 + (plot_w // 2) - (top_w // 2)),
+                    2,
+                    self.x_label_top,
+                    self.text_color,
+                    font_size_px=label_font_px,
+                    embolden_px=2,
+                )
+            if self.show_right_axis and self.y_label_right:
+                tw, _ = text_size(self.y_label_right, font_size_px=label_font_px)
+                draw_text(
+                    text_layer,
+                    max(0, self.figure.width - tw - 2),
+                    max(2, plot_y0 + (plot_h // 2)),
+                    self.y_label_right,
+                    self.text_color,
+                    font_size_px=label_font_px,
+                    embolden_px=2,
+                )
+
+            self._cache.text_key = text_key
+            self._cache.text_template = text_layer
+
+        blit(base, self._cache.text_template)
+        blit(base_no_data, self._cache.text_template)
+        self._last_static_rgba = base_no_data
+        self._draw_legend(base)
+        return base
+
+
+@dataclass
+class Figure:
+    width: int = 1280
+    height: int = 720
+    style: FigureStyle = field(default_factory=FigureStyle)
+    _axes: Axes | None = None
+    _last_frame_rgba: np.ndarray | None = None
+
+    def __post_init__(self) -> None:
+        if self.width <= 0 or self.height <= 0:
+            raise ValueError("width and height must be > 0")
+
+    def axes(
+        self,
+        *,
+        title: str = "",
+        x_label_bottom: str = "index",
+        y_label_left: str = "value",
+        x_label_top: str | None = None,
+        y_label_right: str | None = None,
+        show_top_axis: bool = False,
+        show_right_axis: bool = False,
+    ) -> Axes:
+        if self._axes is not None:
+            raise PlotDataError("v0 supports a single subplot per figure")
+        self._axes = Axes(
+            figure=self,
+            title=title,
+            x_label_bottom=x_label_bottom,
+            y_label_left=y_label_left,
+            x_label_top=x_label_top,
+            y_label_right=y_label_right,
+            show_top_axis=show_top_axis,
+            show_right_axis=show_right_axis,
+        )
+        return self._axes
+
+    def to_rgba(self) -> np.ndarray:
+        if self._axes is None:
+            raise PlotDataError("figure has no axes")
+        frame = self._axes.render()
+        self._last_frame_rgba = frame.copy()
+        return frame
+
+    def compile_write_batch(self):
+        return compile_full_rewrite_batch(self.to_rgba())
+
+    def compile_incremental_write_batch(self, dirty_rect: tuple[int, int, int, int] | None = None):
+        if dirty_rect is None:
+            return compile_full_rewrite_batch(self.to_rgba())
+        if self._axes is not None:
+            patch_info = self._axes.render_legend_patch(dirty_rect)
+            if patch_info is not None:
+                x0, y0, patch = patch_info
+                self._last_frame_rgba = None
+                return compile_replace_patch_batch(patch, x=x0, y=y0)
+        frame = self.to_rgba()
+        x, y, width, height = dirty_rect
+        x0 = max(0, int(x))
+        y0 = max(0, int(y))
+        x1 = min(frame.shape[1], x0 + int(width))
+        y1 = min(frame.shape[0], y0 + int(height))
+        if x1 <= x0 or y1 <= y0:
+            return compile_full_rewrite_batch(frame)
+        return compile_replace_rect_batch(frame, x=x0, y=y0, width=(x1 - x0), height=(y1 - y0))

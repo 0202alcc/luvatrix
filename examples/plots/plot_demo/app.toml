@@ -1,0 +1,5 @@
+app_id = "examples.plot_demo"
+protocol_version = "1"
+entrypoint = "app_main:create"
+required_capabilities = ["window.write"]
+optional_capabilities = []

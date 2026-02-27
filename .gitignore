@@ -12,3 +12,7 @@ wheels/
 
 # Local tooling state
 .opencode-pipeline/
+.luvatrix/
+
+# Local secrets
+.env

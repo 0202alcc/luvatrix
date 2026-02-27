@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 import os
+from unittest.mock import patch
 
 import torch
 
@@ -524,6 +525,324 @@ class MacOSVulkanBackendTests(unittest.TestCase):
 
         self.assertEqual(backend._current_image_index, 2)
 
+    def test_fallback_clean_does_not_mutate_cametal_contents(self) -> None:
+        class _Size:
+            width = 64.0
+            height = 32.0
+
+        class _Bounds:
+            size = _Size()
+
+        class _ContentView:
+            def __init__(self) -> None:
+                self._bounds = _Bounds()
+
+            def bounds(self):
+                return self._bounds
+
+        class _Window:
+            def __init__(self) -> None:
+                self._content = _ContentView()
+
+            def contentView(self):
+                return self._content
+
+            def backingScaleFactor(self):
+                return 2.0
+
+        class CAMetalLayer:
+            def __init__(self) -> None:
+                self.set_contents_calls = 0
+                self.sublayers: list[object] = []
+
+            def setFrame_(self, bounds) -> None:
+                self.bounds = bounds
+
+            def setContentsScale_(self, scale) -> None:
+                self.scale = scale
+
+            def setContents_(self, image) -> None:
+                self.set_contents_calls += 1
+
+            def addSublayer_(self, layer) -> None:
+                self.sublayers.append(layer)
+
+        class _FallbackLayer:
+            def __init__(self) -> None:
+                self.set_contents_calls = 0
+
+            def setFrame_(self, bounds) -> None:
+                self.bounds = bounds
+
+            def setContentsScale_(self, scale) -> None:
+                self.scale = scale
+
+            def setContentsGravity_(self, gravity) -> None:
+                self.gravity = gravity
+
+            def setBackgroundColor_(self, color) -> None:
+                self.bg = color
+
+            def setContents_(self, image) -> None:
+                self.set_contents_calls += 1
+
+            def setNeedsDisplay(self) -> None:
+                pass
+
+        class _CALayerFactory:
+            @staticmethod
+            def layer():
+                return _FallbackLayer()
+
+        class _FakeQuartz:
+            CALayer = _CALayerFactory
+            kCGBitmapByteOrder32Big = 1
+            kCGImageAlphaPremultipliedLast = 2
+            kCGRenderingIntentDefault = 0
+
+            @staticmethod
+            def CFDataCreate(_, data, length):
+                return data[:length]
+
+            @staticmethod
+            def CGDataProviderCreateWithCFData(data):
+                return data
+
+            @staticmethod
+            def CGColorSpaceCreateDeviceRGB():
+                return "rgb"
+
+            @staticmethod
+            def CGImageCreate(*args, **kwargs):
+                return object()
+
+            @staticmethod
+            def CGColorCreateGenericRGB(r, g, b, a):
+                return (r, g, b, a)
+
+        backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+        host_layer = CAMetalLayer()
+        backend._window_handle = MacOSWindowHandle(window=_Window(), layer=host_layer)
+        backend._pending_rgba = torch.zeros((32, 64, 4), dtype=torch.uint8)
+        with patch.dict("sys.modules", {"Quartz": _FakeQuartz}):
+            with patch.dict(os.environ, {"LUVATRIX_ENABLE_LEGACY_CAMETAL_FALLBACK": "0"}, clear=False):
+                backend._present_fallback_to_layer()
+
+        self.assertEqual(backend._active_present_path, "fallback_clean")
+        self.assertEqual(host_layer.set_contents_calls, 0)
+        self.assertIsNotNone(backend._fallback_blit_layer)
+        self.assertEqual(backend._fallback_blit_layer.set_contents_calls, 1)
+
+    def test_fallback_legacy_requires_env_opt_in(self) -> None:
+        class _Size:
+            width = 64.0
+            height = 32.0
+
+        class _Bounds:
+            size = _Size()
+
+        class _ContentView:
+            def __init__(self) -> None:
+                self._bounds = _Bounds()
+
+            def bounds(self):
+                return self._bounds
+
+        class _Window:
+            def __init__(self) -> None:
+                self._content = _ContentView()
+
+            def contentView(self):
+                return self._content
+
+            def backingScaleFactor(self):
+                return 2.0
+
+        class CAMetalLayer:
+            def __init__(self) -> None:
+                self.set_contents_calls = 0
+
+            def setFrame_(self, bounds) -> None:
+                self.bounds = bounds
+
+            def setContentsScale_(self, scale) -> None:
+                self.scale = scale
+
+            def setContents_(self, image) -> None:
+                self.set_contents_calls += 1
+
+            def setNeedsDisplay(self) -> None:
+                pass
+
+        class _FakeQuartz:
+            kCGBitmapByteOrder32Big = 1
+            kCGImageAlphaPremultipliedLast = 2
+            kCGRenderingIntentDefault = 0
+
+            @staticmethod
+            def CFDataCreate(_, data, length):
+                return data[:length]
+
+            @staticmethod
+            def CGDataProviderCreateWithCFData(data):
+                return data
+
+            @staticmethod
+            def CGColorSpaceCreateDeviceRGB():
+                return "rgb"
+
+            @staticmethod
+            def CGImageCreate(*args, **kwargs):
+                return object()
+
+        backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+        host_layer = CAMetalLayer()
+        backend._window_handle = MacOSWindowHandle(window=_Window(), layer=host_layer)
+        backend._pending_rgba = torch.zeros((32, 64, 4), dtype=torch.uint8)
+        with patch.dict("sys.modules", {"Quartz": _FakeQuartz}):
+            with patch.dict(os.environ, {"LUVATRIX_ENABLE_LEGACY_CAMETAL_FALLBACK": "1"}, clear=False):
+                backend._present_fallback_to_layer()
+
+        self.assertEqual(backend._active_present_path, "fallback_legacy")
+        self.assertEqual(host_layer.set_contents_calls, 1)
+
+    def test_fallback_clean_replaces_content_view_layer_when_supported(self) -> None:
+        class _Size:
+            width = 80.0
+            height = 40.0
+
+        class _Bounds:
+            size = _Size()
+
+        class _ContentView:
+            def __init__(self) -> None:
+                self._bounds = _Bounds()
+                self.layer = None
+
+            def bounds(self):
+                return self._bounds
+
+            def setWantsLayer_(self, value) -> None:
+                self.wants_layer = bool(value)
+
+            def setLayer_(self, layer) -> None:
+                self.layer = layer
+
+        class _Window:
+            def __init__(self) -> None:
+                self._content = _ContentView()
+
+            def contentView(self):
+                return self._content
+
+            def backingScaleFactor(self):
+                return 2.0
+
+        class CAMetalLayer:
+            def __init__(self) -> None:
+                self.set_contents_calls = 0
+
+            def setFrame_(self, bounds) -> None:
+                self.bounds = bounds
+
+            def setContentsScale_(self, scale) -> None:
+                self.scale = scale
+
+            def setContents_(self, image) -> None:
+                self.set_contents_calls += 1
+
+        class _FallbackLayer:
+            def __init__(self) -> None:
+                self.set_contents_calls = 0
+
+            def setFrame_(self, bounds) -> None:
+                self.bounds = bounds
+
+            def setContentsScale_(self, scale) -> None:
+                self.scale = scale
+
+            def setContentsGravity_(self, gravity) -> None:
+                self.gravity = gravity
+
+            def setBackgroundColor_(self, color) -> None:
+                self.bg = color
+
+            def setContents_(self, image) -> None:
+                self.set_contents_calls += 1
+
+            def setNeedsDisplay(self) -> None:
+                pass
+
+        class _CALayerFactory:
+            @staticmethod
+            def layer():
+                return _FallbackLayer()
+
+        class _FakeQuartz:
+            CALayer = _CALayerFactory
+            kCGBitmapByteOrder32Big = 1
+            kCGImageAlphaPremultipliedLast = 2
+            kCGRenderingIntentDefault = 0
+
+            @staticmethod
+            def CFDataCreate(_, data, length):
+                return data[:length]
+
+            @staticmethod
+            def CGDataProviderCreateWithCFData(data):
+                return data
+
+            @staticmethod
+            def CGColorSpaceCreateDeviceRGB():
+                return "rgb"
+
+            @staticmethod
+            def CGImageCreate(*args, **kwargs):
+                return object()
+
+            @staticmethod
+            def CGColorCreateGenericRGB(r, g, b, a):
+                return (r, g, b, a)
+
+        backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+        window = _Window()
+        host_layer = CAMetalLayer()
+        backend._window_handle = MacOSWindowHandle(window=window, layer=host_layer)
+        backend._pending_rgba = torch.zeros((40, 80, 4), dtype=torch.uint8)
+        with patch.dict("sys.modules", {"Quartz": _FakeQuartz}):
+            with patch.dict(os.environ, {"LUVATRIX_ENABLE_LEGACY_CAMETAL_FALLBACK": "0"}, clear=False):
+                backend._present_fallback_to_layer()
+
+        self.assertEqual(backend._active_present_path, "fallback_clean")
+        self.assertEqual(host_layer.set_contents_calls, 0)
+        self.assertIsNotNone(window.contentView().layer)
+        self.assertIs(window.contentView().layer, backend._fallback_blit_layer)
+        self.assertTrue(backend._fallback_replaced_content_layer)
+
+    def test_present_swapchain_sets_vulkan_present_path(self) -> None:
+        class _FakeVk:
+            VK_STRUCTURE_TYPE_PRESENT_INFO_KHR = 100
+
+            @staticmethod
+            def VkPresentInfoKHR(**kwargs):
+                return kwargs
+
+        class _Backend(MoltenVKMacOSBackend):
+            def _vk_queue_present(self, queue, present_info) -> None:
+                return
+
+        backend = _Backend(window_system=_FakeWindowSystem())
+        backend._vk = _FakeVk()
+        backend._vulkan_available = True
+        backend._graphics_queue = "queue"
+        backend._swapchain = "swapchain"
+        backend._render_finished_semaphore = "sem"
+        backend._current_image_index = 0
+
+        backend._present_swapchain_image()
+
+        self.assertEqual(backend._active_present_path, "vulkan")
+
     def test_acquire_next_image_suboptimal_recreates_swapchain(self) -> None:
         class _FakeVk:
             VK_TRUE = 1
@@ -678,6 +997,10 @@ class MacOSVulkanBackendTests(unittest.TestCase):
                 self._staging_size = required_size
                 self._staging_memory = "staging-memory"
 
+            def _ensure_upload_image(self, width: int, height: int) -> None:
+                self._upload_image = "upload-image"
+                self._upload_image_extent = (width, height)
+
         backend = _UploadBackend(window_system=_FakeWindowSystem())
         fake_vk = _FakeVk()
         backend._vk = fake_vk
@@ -811,6 +1134,157 @@ class MacOSVulkanBackendTests(unittest.TestCase):
                 os.environ.pop("LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN", None)
             else:
                 os.environ["LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN"] = old
+
+    def test_fixed_internal_render_scale_is_parsed_and_quantized(self) -> None:
+        old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = "0.8"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+            self.assertEqual(backend._render_scale_fixed, 0.75)
+            self.assertEqual(backend._effective_render_scale(), 0.75)
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old
+
+    def test_prepare_fallback_frame_applies_render_scale(self) -> None:
+        old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = "0.5"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+            src = torch.zeros((120, 200, 4), dtype=torch.uint8)
+            out = backend._prepare_fallback_frame(src)
+            self.assertEqual(tuple(out.shape), (60, 100, 4))
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old
+
+    def test_prepare_scaled_source_frame_applies_internal_scale(self) -> None:
+        old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = "0.5"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+            src = torch.zeros((120, 200, 4), dtype=torch.uint8)
+            out = backend._prepare_scaled_source_frame(src)
+            self.assertEqual(tuple(out.shape), (60, 100, 4))
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old
+
+    def test_prepare_upload_frame_defaults_to_no_internal_scale_for_vulkan(self) -> None:
+        old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        old_vulkan = os.environ.get("LUVATRIX_VULKAN_INTERNAL_SCALE")
+        os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = "0.5"
+        os.environ["LUVATRIX_VULKAN_INTERNAL_SCALE"] = "0"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem(), preserve_aspect_ratio=False)
+            backend._swapchain_extent = (400, 200)
+            src = torch.zeros((100, 200, 4), dtype=torch.uint8)
+            out = backend._prepare_upload_frame(src)
+            self.assertEqual(tuple(out.shape), (200, 400, 4))
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old
+            if old_vulkan is None:
+                os.environ.pop("LUVATRIX_VULKAN_INTERNAL_SCALE", None)
+            else:
+                os.environ["LUVATRIX_VULKAN_INTERNAL_SCALE"] = old_vulkan
+
+    def test_prepare_upload_frame_applies_internal_scale_when_vulkan_opt_in_enabled(self) -> None:
+        old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        old_vulkan = os.environ.get("LUVATRIX_VULKAN_INTERNAL_SCALE")
+        os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = "0.5"
+        os.environ["LUVATRIX_VULKAN_INTERNAL_SCALE"] = "1"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem(), preserve_aspect_ratio=False)
+            backend._swapchain_extent = (400, 200)
+            src = torch.zeros((100, 200, 4), dtype=torch.uint8)
+            out = backend._prepare_upload_frame(src)
+            self.assertEqual(tuple(out.shape), (200, 400, 4))
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old
+            if old_vulkan is None:
+                os.environ.pop("LUVATRIX_VULKAN_INTERNAL_SCALE", None)
+            else:
+                os.environ["LUVATRIX_VULKAN_INTERNAL_SCALE"] = old_vulkan
+
+    def test_prepare_upload_frame_uses_source_extent_when_gpu_blit_available(self) -> None:
+        old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = "1.0"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem(), preserve_aspect_ratio=False)
+            backend._vulkan_available = True
+            backend._swapchain_extent = (400, 200)
+            backend._vk = type(
+                "_FakeVk",
+                (),
+                {
+                    "vkCmdBlitImage": lambda *args, **kwargs: None,
+                    "VkImageBlit": lambda *args, **kwargs: None,
+                },
+            )()
+            src = torch.zeros((100, 200, 4), dtype=torch.uint8)
+            out = backend._prepare_upload_frame(src)
+            self.assertEqual(tuple(out.shape), (100, 200, 4))
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old
+
+    def test_auto_render_scale_steps_down_on_high_present_cost(self) -> None:
+        old_fixed = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        old_auto = os.environ.get("LUVATRIX_AUTO_RENDER_SCALE")
+        os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+        os.environ["LUVATRIX_AUTO_RENDER_SCALE"] = "1"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+            self.assertEqual(backend._render_scale_current, 1.0)
+            for _ in range(20):
+                backend._update_render_scale(elapsed_ms=24.0, fallback_active=True)
+            self.assertIn(backend._render_scale_current, (0.75, 0.5))
+        finally:
+            if old_fixed is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old_fixed
+            if old_auto is None:
+                os.environ.pop("LUVATRIX_AUTO_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_AUTO_RENDER_SCALE"] = old_auto
+
+    def test_auto_render_scale_steps_up_when_headroom_returns(self) -> None:
+        old_fixed = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")
+        old_auto = os.environ.get("LUVATRIX_AUTO_RENDER_SCALE")
+        os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+        os.environ["LUVATRIX_AUTO_RENDER_SCALE"] = "1"
+        try:
+            backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+            backend._render_scale_current = 0.5
+            backend._render_scale_cooldown_frames = 0
+            backend._present_time_ema_ms = 8.0
+            for _ in range(2):
+                backend._update_render_scale(elapsed_ms=8.0, fallback_active=True)
+            self.assertEqual(backend._render_scale_current, 0.75)
+        finally:
+            if old_fixed is None:
+                os.environ.pop("LUVATRIX_INTERNAL_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_INTERNAL_RENDER_SCALE"] = old_fixed
+            if old_auto is None:
+                os.environ.pop("LUVATRIX_AUTO_RENDER_SCALE", None)
+            else:
+                os.environ["LUVATRIX_AUTO_RENDER_SCALE"] = old_auto
 
 
 if __name__ == "__main__":
