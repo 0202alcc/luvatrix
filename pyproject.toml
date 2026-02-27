@@ -4,12 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "luvatrix"
-version = "0.1.0"
+version = "0.1.1"
 description = "Luvatrix runtime and plotting toolkit"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = [
   "numpy>=2.4.2",
+  "Pillow>=10.3.0",
   "torch>=2.4.0",
 ]
 

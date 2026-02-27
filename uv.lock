@@ -188,10 +188,11 @@ wheels = [
 
 [[package]]
 name = "luvatrix"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },
+    { name = "pillow" },
     { name = "torch" },
 ]
 
@@ -212,6 +213,7 @@ vulkan = [
 requires-dist = [
     { name = "matplotlib", marker = "extra == 'dev'", specifier = ">=3.10.8" },
     { name = "numpy", specifier = ">=2.4.2" },
+    { name = "pillow", specifier = ">=10.3.0" },
     { name = "pyobjc-core", marker = "extra == 'macos'", specifier = ">=12.1" },
     { name = "pyobjc-framework-cocoa", marker = "extra == 'macos'", specifier = ">=12.1" },
     { name = "pyobjc-framework-quartz", marker = "extra == 'macos'", specifier = ">=12.1" },
