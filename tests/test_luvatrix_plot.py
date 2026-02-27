@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import importlib.util
+from pathlib import Path
 import unittest
 from unittest import mock
 
@@ -12,6 +14,8 @@ from luvatrix_plot import PlotDataError, figure
 from luvatrix_plot.adapters.normalize import normalize_xy
 from luvatrix_plot.display import resolve_default_figure_size
 from luvatrix_plot.figure import Axes, Figure
+from luvatrix_plot.dynamic_axis import Dynamic2DMonotonicAxis, DynamicSampleAxis
+from luvatrix_plot.live import IncrementalPlotState, SampleToXMapper
 from luvatrix_plot.raster.canvas import new_canvas
 from luvatrix_plot.raster.draw_text import DEFAULT_FONT_FAMILY
 from luvatrix_plot.raster.draw_text import draw_text as raster_draw_text
@@ -61,6 +65,16 @@ class LuvatrixPlotTests(unittest.TestCase):
         labels = format_ticks_for_axis(ticks)
         self.assertEqual(labels, ["1.5", "2", "2.5", "3"])
 
+    def test_tick_formatting_preserves_integer_trailing_zeros(self) -> None:
+        ticks = np.asarray([20.0, 30.0, 40.0], dtype=np.float64)
+        labels = format_ticks_for_axis(ticks)
+        self.assertEqual(labels, ["20", "30", "40"])
+
+    def test_tick_formatting_snaps_near_zero(self) -> None:
+        ticks = np.asarray([-1.0, -4.4409e-16, 1.0], dtype=np.float64)
+        labels = format_ticks_for_axis(ticks)
+        self.assertEqual(labels[1], "0")
+
     def test_resolution_inference_prefers_half_step_for_tenth_data(self) -> None:
         values = np.asarray([2.0, 2.4, 2.1, 3.0, 2.8, 3.2, 3.6, 3.1, 3.9, 4.3], dtype=np.float64)
         resolution = infer_resolution(values)
@@ -84,6 +98,24 @@ class LuvatrixPlotTests(unittest.TestCase):
         shrunk = ax._apply_limit_hysteresis(DataLimits(xmin=0.0, xmax=10.0, ymin=1.0, ymax=9.0))
         self.assertGreater(shrunk.ymax, 9.0)
         self.assertLess(shrunk.ymax, 12.0)
+
+    def test_axes_accepts_major_tick_step_override(self) -> None:
+        ax = Axes(figure=Figure(width=320, height=200))
+        ax.set_major_tick_steps(y=0.2)
+        self.assertAlmostEqual(ax.y_major_tick_step or 0.0, 0.2, places=9)
+
+    def test_axes_dynamic_defaults(self) -> None:
+        ax = Axes(figure=Figure(width=320, height=200))
+        ax.set_dynamic_defaults()
+        self.assertFalse(ax.show_edge_x_tick_labels)
+        self.assertFalse(ax.show_edge_y_tick_labels)
+        self.assertTrue(ax.include_zero_x_tick)
+
+    def test_x_tick_label_affine_affects_labels_only(self) -> None:
+        ax = Axes(figure=Figure(width=320, height=200))
+        ax.set_x_tick_label_affine(scale=0.5, offset=0.0)
+        labels = ax._format_x_tick_labels(np.asarray([0.0, 20.0, 40.0], dtype=np.float64))
+        self.assertEqual(labels, ["0", "10", "20"])
 
     def test_zero_reference_lines_enabled_by_default(self) -> None:
         x = np.asarray([-1.0, 0.0, 1.0], dtype=np.float64)
@@ -146,6 +178,35 @@ class LuvatrixPlotTests(unittest.TestCase):
         self.assertEqual(frame1.shape, (96, 128, 4))
         self.assertEqual(frame1.dtype, np.uint8)
         self.assertTrue(np.array_equal(frame1, frame2))
+
+    def test_line_plot_respects_nan_gaps(self) -> None:
+        y = np.asarray([0.0, 0.5, np.nan, np.nan, 0.0, 0.5], dtype=np.float64)
+        fig = figure(width=160, height=100)
+        ax = fig.axes(title="", x_label_bottom="x", y_label_left="y")
+        ax.plot(y=y, color=(255, 170, 70), width=1)
+        frame = fig.to_rgba()
+        # Pixel near the center gap should remain background-like (no connecting line bridge).
+        mid = frame[50, 80, :3].astype(np.int32)
+        self.assertGreater(int(np.abs(mid - np.asarray([255, 170, 70])).sum()), 120)
+
+    def test_render_recomputes_finite_mask_for_dynamic_arrays(self) -> None:
+        x = np.asarray([np.nan, np.nan, 0.0], dtype=np.float64)
+        y = np.asarray([np.nan, np.nan, 1.0], dtype=np.float64)
+        fig = figure(width=180, height=120)
+        ax = fig.axes(title="", x_label_bottom="x", y_label_left="y")
+        ax.scatter(x=x, y=y, color=(90, 190, 255), size=2)
+        fig.to_rgba()
+
+        # Mutate in place to emulate rolling dynamic buffers.
+        x[:] = np.asarray([0.0, 1.0, 2.0], dtype=np.float64)
+        y[:] = np.asarray([1.0, 2.0, 3.0], dtype=np.float64)
+        fig.to_rgba()
+        limits = ax.last_limits()
+        self.assertIsNotNone(limits)
+        assert limits is not None
+        # If stale mask were used, x range would collapse around the old slot.
+        self.assertAlmostEqual(limits.xmin, 0.0, places=9)
+        self.assertAlmostEqual(limits.xmax, 2.0, places=9)
 
     def test_legend_renders_for_multiple_labeled_lines(self) -> None:
         x = np.asarray([0, 1, 2, 3, 4], dtype=np.float64)
@@ -214,6 +275,185 @@ class LuvatrixPlotTests(unittest.TestCase):
         with mock.patch.object(fig, "to_rgba", side_effect=AssertionError("full rerender should not be used")):
             batch = fig.compile_incremental_write_batch(dirty)
         self.assertIsInstance(batch.operations[0], ReplaceRect)
+
+    def test_incremental_plot_state_fast_path_gating(self) -> None:
+        data_plane = np.zeros((10, 20, 4), dtype=np.uint8)
+        state = IncrementalPlotState(
+            width=80,
+            height=40,
+            plot_rect=(10, 5, 20, 10),
+            y_limits=DataLimits(xmin=0.0, xmax=4.0, ymin=-1.0, ymax=1.0),
+            series_values=np.asarray([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float64),
+            data_plane=data_plane,
+            line_color=(255, 170, 70, 255),
+            line_width=1,
+            marker_color=(90, 190, 255, 204),
+            marker_size=2,
+        )
+        ok = state.can_fast_path(
+            width=80,
+            height=40,
+            next_values=np.asarray([2.0, 3.0, 4.0, 5.0, 6.0], dtype=np.float64),
+            y_limits=DataLimits(xmin=0.0, xmax=4.0, ymin=-1.0, ymax=1.0),
+        )
+        self.assertTrue(ok)
+        not_ok = state.can_fast_path(
+            width=80,
+            height=40,
+            next_values=np.asarray([2.0, 3.1, 4.0, 5.0, 6.0], dtype=np.float64),
+            y_limits=DataLimits(xmin=0.0, xmax=4.0, ymin=-1.0, ymax=1.0),
+        )
+        self.assertFalse(not_ok)
+
+    def test_incremental_plot_state_advance_updates_last_value(self) -> None:
+        data_plane = np.zeros((10, 20, 4), dtype=np.uint8)
+        state = IncrementalPlotState(
+            width=80,
+            height=40,
+            plot_rect=(10, 5, 20, 10),
+            y_limits=DataLimits(xmin=0.0, xmax=4.0, ymin=-1.0, ymax=1.0),
+            series_values=np.asarray([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float64),
+            data_plane=data_plane,
+            line_color=(255, 170, 70, 255),
+            line_width=1,
+            marker_color=(90, 190, 255, 204),
+            marker_size=2,
+        )
+        out = state.advance_one(np.asarray([2.0, 3.0, 4.0, 5.0, 6.0], dtype=np.float64))
+        self.assertEqual(out.shape, (10, 20, 4))
+        self.assertEqual(float(state.series_values[-1]), 6.0)
+        self.assertGreater(int(out[:, :, 3].sum()), 0)
+
+    def test_incremental_plot_state_reverse_direction_fast_path(self) -> None:
+        data_plane = np.zeros((10, 20, 4), dtype=np.uint8)
+        state = IncrementalPlotState(
+            width=80,
+            height=40,
+            plot_rect=(10, 5, 20, 10),
+            y_limits=DataLimits(xmin=0.0, xmax=4.0, ymin=-1.0, ymax=1.0),
+            series_values=np.asarray([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float64),
+            data_plane=data_plane,
+            line_color=(255, 170, 70, 255),
+            line_width=1,
+            marker_color=(90, 190, 255, 204),
+            marker_size=2,
+            push_from_right=False,
+        )
+        ok = state.can_fast_path(
+            width=80,
+            height=40,
+            next_values=np.asarray([6.0, 5.0, 4.0, 3.0, 2.0], dtype=np.float64),
+            y_limits=DataLimits(xmin=0.0, xmax=4.0, ymin=-1.0, ymax=1.0),
+        )
+        self.assertTrue(ok)
+
+    def test_sample_to_x_mapper_reset_and_push(self) -> None:
+        mapper = SampleToXMapper(sample_count=5)
+        mapper.reset(latest_x=1.0, step=0.1)
+        self.assertAlmostEqual(mapper.window()[0], 0.6, places=9)
+        self.assertAlmostEqual(mapper.window()[1], 1.0, places=9)
+        mapper.push(1.2)
+        self.assertAlmostEqual(mapper.window()[0], 0.7, places=9)
+        self.assertAlmostEqual(mapper.window()[1], 1.2, places=9)
+
+    def test_sample_to_x_mapper_rejects_invalid_count(self) -> None:
+        with self.assertRaises(ValueError):
+            SampleToXMapper(sample_count=1)
+
+    def test_dynamic_sample_axis_window_and_visibility(self) -> None:
+        axis = DynamicSampleAxis(sample_count=5, dx=2.0, x0=0.0)
+        axis.on_sample()
+        axis.on_sample()
+        xmin, xmax = axis.x_window_sorted()
+        self.assertLessEqual(xmin, xmax)
+        self.assertEqual(axis.label_visibility_bounds(), (0.0, None))
+
+    def test_dynamic_sample_axis_negative_dx_push_from_left(self) -> None:
+        axis = DynamicSampleAxis(sample_count=5, dx=-1.0, x0=0.0)
+        self.assertFalse(axis.push_from_right)
+        self.assertEqual(axis.label_visibility_bounds(), (None, 0.0))
+
+    def test_dynamic_2d_monotonic_axis_gap_and_update(self) -> None:
+        axis = Dynamic2DMonotonicAxis(viewport_bins=8, dx=1.0, x0=0.0)
+        first = axis.ingest(0.1, 1.0)
+        self.assertEqual(first.status, "advance")
+        self.assertEqual(first.bin_index, 0)
+        self.assertEqual(first.gap_bins, 0)
+
+        jumped = axis.ingest(3.2, 2.0)
+        self.assertEqual(jumped.status, "advance")
+        self.assertEqual(jumped.bin_index, 3)
+        self.assertEqual(jumped.gap_bins, 2)
+
+        same_bin = axis.ingest(3.49, 2.5)
+        self.assertEqual(same_bin.status, "update_current")
+        self.assertEqual(same_bin.bin_index, 3)
+        self.assertAlmostEqual(same_bin.x_quantized, 3.0, places=9)
+
+    def test_dynamic_2d_monotonic_axis_quantizes_non_multiple_x(self) -> None:
+        axis = Dynamic2DMonotonicAxis(viewport_bins=8, dx=0.1, x0=0.0)
+        out = axis.ingest(0.26, 1.0)
+        self.assertEqual(out.bin_index, 3)
+        self.assertAlmostEqual(out.x_quantized, 0.3, places=9)
+        self.assertAlmostEqual(out.residual_bins, -0.4, places=9)
+
+    def test_dynamic_2d_monotonic_axis_rejects_out_of_order(self) -> None:
+        axis = Dynamic2DMonotonicAxis(viewport_bins=8, dx=1.0, x0=0.0)
+        axis.ingest(2.1, 1.0)
+        out = axis.ingest(1.4, 2.0)
+        self.assertEqual(out.status, "out_of_order")
+
+    def test_dynamic_2d_monotonic_axis_negative_dx_progression(self) -> None:
+        axis = Dynamic2DMonotonicAxis(viewport_bins=8, dx=-0.5, x0=0.0)
+        self.assertFalse(axis.push_from_right)
+        first = axis.ingest(-0.1, 1.0)
+        self.assertEqual(first.bin_index, 0)
+        next_val = axis.ingest(-1.2, 2.0)
+        self.assertEqual(next_val.status, "advance")
+        self.assertEqual(next_val.bin_index, 2)
+        self.assertEqual(next_val.gap_bins, 1)
+
+    def test_dynamic_2d_app_rolling_buffers_shift_in_place(self) -> None:
+        app_path = Path(__file__).resolve().parents[1] / "examples" / "plots" / "dynamic_plot_2d" / "app_main.py"
+        spec = importlib.util.spec_from_file_location("dynamic_plot_2d_app_main", app_path)
+        self.assertIsNotNone(spec)
+        assert spec is not None
+        mod = importlib.util.module_from_spec(spec)
+        self.assertIsNotNone(spec.loader)
+        assert spec.loader is not None
+        spec.loader.exec_module(mod)
+        app = mod.DynamicPlot2DApp()
+
+        x_id = id(app._x_values)
+        y_id = id(app._y_values)
+        app._update_value_window(gap_bins=0, x_value=0.0, y_value=1.0, update_only=False)
+        app._update_value_window(gap_bins=0, x_value=0.1, y_value=2.0, update_only=False)
+
+        self.assertEqual(id(app._x_values), x_id)
+        self.assertEqual(id(app._y_values), y_id)
+        self.assertAlmostEqual(float(app._x_values[-2]), 0.0, places=9)
+        self.assertAlmostEqual(float(app._x_values[-1]), 0.1, places=9)
+        self.assertAlmostEqual(float(app._y_values[-2]), 1.0, places=9)
+        self.assertAlmostEqual(float(app._y_values[-1]), 2.0, places=9)
+
+    def test_dynamic_2d_app_gap_inserts_nan_columns_before_new_sample(self) -> None:
+        app_path = Path(__file__).resolve().parents[1] / "examples" / "plots" / "dynamic_plot_2d" / "app_main.py"
+        spec = importlib.util.spec_from_file_location("dynamic_plot_2d_app_main_gap", app_path)
+        self.assertIsNotNone(spec)
+        assert spec is not None
+        mod = importlib.util.module_from_spec(spec)
+        self.assertIsNotNone(spec.loader)
+        assert spec.loader is not None
+        spec.loader.exec_module(mod)
+        app = mod.DynamicPlot2DApp()
+
+        app._update_value_window(gap_bins=2, x_value=0.3, y_value=3.0, update_only=False)
+        self.assertTrue(np.isnan(app._x_values[-2]))
+        self.assertTrue(np.isnan(app._x_values[-3]))
+        self.assertTrue(np.isnan(app._y_values[-2]))
+        self.assertTrue(np.isnan(app._y_values[-3]))
+        self.assertAlmostEqual(float(app._x_values[-1]), 0.3, places=9)
+        self.assertAlmostEqual(float(app._y_values[-1]), 3.0, places=9)
 
     def test_series_mode_rejects_invalid_mode(self) -> None:
         fig = figure(width=64, height=48)
