@@ -189,27 +189,36 @@ wheels = [
 [[package]]
 name = "luvatrix"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
-    { name = "matplotlib" },
     { name = "numpy" },
+    { name = "torch" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "matplotlib" },
+]
+macos = [
     { name = "pyobjc-core" },
     { name = "pyobjc-framework-cocoa" },
     { name = "pyobjc-framework-quartz" },
-    { name = "torch" },
+]
+vulkan = [
     { name = "vulkan" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "matplotlib", specifier = ">=3.10.8" },
+    { name = "matplotlib", marker = "extra == 'dev'", specifier = ">=3.10.8" },
     { name = "numpy", specifier = ">=2.4.2" },
-    { name = "pyobjc-core", specifier = ">=12.1" },
-    { name = "pyobjc-framework-cocoa", specifier = ">=12.1" },
-    { name = "pyobjc-framework-quartz", specifier = ">=12.1" },
+    { name = "pyobjc-core", marker = "extra == 'macos'", specifier = ">=12.1" },
+    { name = "pyobjc-framework-cocoa", marker = "extra == 'macos'", specifier = ">=12.1" },
+    { name = "pyobjc-framework-quartz", marker = "extra == 'macos'", specifier = ">=12.1" },
     { name = "torch", specifier = ">=2.4.0" },
-    { name = "vulkan", specifier = ">=1.3.275.1" },
+    { name = "vulkan", marker = "extra == 'vulkan'", specifier = ">=1.3.275.1" },
 ]
+provides-extras = ["plot", "macos", "vulkan", "dev"]
 
 [[package]]
 name = "markupsafe"
