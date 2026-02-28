@@ -181,7 +181,8 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             except Exception as exc:  # noqa: BLE001
                 self._vulkan_available = False
                 self._vulkan_note = (
-                    "Python Vulkan bindings not available. Install with `uv add vulkan` and ensure MoltenVK "
+                    "Python Vulkan bindings not available. Install with `pip install \"luvatrix[vulkan]\"` "
+                    "(or `pip install vulkan`) and ensure MoltenVK "
                     "runtime is installed. Running in temporary layer-blit mode."
                 )
                 LOGGER.warning("%s (%s)", self._vulkan_note, exc)

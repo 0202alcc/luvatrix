@@ -10,6 +10,23 @@ Phase 1 is a macOS-first OS-level renderer:
 - HDI thread + Sensor manager thread
 - In-process app protocol (`app.toml` + Python entrypoint)
 
+## Install Notes
+
+Base package:
+```bash
+pip install luvatrix
+```
+
+Optional Vulkan Python binding:
+```bash
+pip install "luvatrix[vulkan]"
+```
+
+Important:
+- `pip` can install Python bindings, but it does not install the native Vulkan SDK/loader.
+- On macOS, install Vulkan SDK or MoltenVK + Vulkan loader separately.
+- `luvatrix` now prints a Vulkan preflight notice at runtime if these native components are missing.
+
 ## Planning Document
 
 See `planning.md` for the integrated Phase 1 spec and visual TLDR protocol models.

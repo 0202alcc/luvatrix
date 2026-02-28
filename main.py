@@ -29,6 +29,7 @@ from luvatrix_core.platform.macos.sensors import (
     MacOSSpeakerDeviceProvider,
     MacOSThermalTemperatureProvider,
 )
+from luvatrix_core.platform.vulkan_setup import detect_vulkan_preflight_issue
 from luvatrix_core.targets.base import DisplayFrame, RenderTarget
 from luvatrix_core.targets.vulkan_target import VulkanTarget
 
@@ -172,6 +173,11 @@ def main() -> None:
             else:
                 # App protocol on macOS should prefer Vulkan by default.
                 os.environ.setdefault("LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN", "1")
+                preflight_issue = detect_vulkan_preflight_issue()
+                if preflight_issue is not None:
+                    print("[luvatrix] Vulkan preflight notice:")
+                    print(preflight_issue)
+                    print("[luvatrix] Falling back to layer-blit mode if Vulkan cannot initialize.")
                 presenter = MacOSVulkanPresenter(width=width, height=height, title="Luvatrix App")
                 target = VulkanTarget(presenter=presenter)
                 hdi_source = _MacOSPresenterHDISource(presenter)
