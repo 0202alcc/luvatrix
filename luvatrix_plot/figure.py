@@ -222,6 +222,7 @@ class Axes:
     _last_x_label_gap: int = 8
     _last_x_tick_label_rotate_deg: int = 0
     _last_x_tick_label_stride: int = 1
+    _last_resolved_x_viewport: tuple[float, float] | None = None
 
     def scatter(
         self,
@@ -363,6 +364,56 @@ class Axes:
             return self
         self.x_tick_labels = tuple(str(label) for label in labels)
         return self
+
+    def set_viewport(self, *, xmin: float, xmax: float) -> "Axes":
+        left = float(min(xmin, xmax))
+        right = float(max(xmin, xmax))
+        if right - left <= 1e-12:
+            raise ValueError("viewport span must be > 0")
+        self._viewport_x = (left, right)
+        return self
+
+    def clear_viewport(self) -> "Axes":
+        self._viewport_x = None
+        return self
+
+    def pan_viewport(self, delta_x: float) -> "Axes":
+        if self._viewport_x is None:
+            raise PlotDataError("x viewport is not set")
+        left, right = self._viewport_x
+        delta = float(delta_x)
+        self._viewport_x = (left + delta, right + delta)
+        return self
+
+    def zoom_viewport(self, factor: float, *, anchor_x: float | None = None) -> "Axes":
+        if factor <= 0:
+            raise ValueError("zoom factor must be > 0")
+        source = self._viewport_x
+        if source is None:
+            source = self._last_resolved_x_viewport
+        if source is None:
+            raise PlotDataError("x viewport is not set")
+        left, right = source
+        center = float(anchor_x) if anchor_x is not None else (left + right) * 0.5
+        span = max(1e-12, (right - left) / float(factor))
+        self._viewport_x = (center - span * 0.5, center + span * 0.5)
+        return self
+
+    def last_resolved_viewport(self) -> tuple[float, float] | None:
+        return self._last_resolved_x_viewport
+
+    def _resolve_x_viewport(self, xmin: float, xmax: float) -> tuple[float, float]:
+        if self._viewport_x is None:
+            return (xmin, xmax)
+        data_left = float(min(xmin, xmax))
+        data_right = float(max(xmin, xmax))
+        data_span = max(1e-12, data_right - data_left)
+        requested_left, requested_right = self._viewport_x
+        requested_span = max(1e-12, requested_right - requested_left)
+        span = min(requested_span, data_span)
+        start = max(data_left, min(data_right - span, requested_left))
+        end = start + span
+        return (start, end)
 
     def _format_x_tick_labels(self, tick_x: np.ndarray) -> list[str]:
         if tick_x.size == 0:
@@ -787,9 +838,12 @@ class Axes:
         label_font_px = max(11.0, min(24.0, scale_base * 0.032))
         title_font_px = max(12.0, min(30.0, scale_base * 0.038))
         tick_half_h = int(round(tick_font_px * 0.5))
-        xmin, xmax, ymin, ymax = self._combined_limits()
-        limits = self._apply_limit_hysteresis(DataLimits(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax))
+        data_xmin, data_xmax, ymin, ymax = self._combined_limits()
+        limits = self._apply_limit_hysteresis(DataLimits(xmin=data_xmin, xmax=data_xmax, ymin=ymin, ymax=ymax))
+        xmin, xmax = self._resolve_x_viewport(limits.xmin, limits.xmax)
+        limits = DataLimits(xmin=xmin, xmax=xmax, ymin=limits.ymin, ymax=limits.ymax)
         xmin, xmax, ymin, ymax = limits.xmin, limits.xmax, limits.ymin, limits.ymax
+        self._last_resolved_x_viewport = (xmin, xmax)
         self._last_limits = limits
         y_chunks: list[np.ndarray] = []
         for spec in self._series:

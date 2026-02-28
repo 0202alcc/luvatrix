@@ -282,6 +282,67 @@ class LuvatrixPlotTests(unittest.TestCase):
         with self.assertRaises(PlotDataError):
             fig.axes()
 
+    def test_viewport_pan_is_clamped_and_deterministic(self) -> None:
+        x = np.arange(100, dtype=np.float64)
+        y = np.sin(x * 0.1)
+        fig = figure(width=320, height=180)
+        ax = fig.axes(x_label_bottom="x", y_label_left="y")
+        ax.plot(x=x, y=y, color=(255, 170, 70), width=1)
+        ax.set_viewport(xmin=20.0, xmax=40.0)
+        fig.to_rgba()
+        self.assertEqual(ax.last_resolved_viewport(), (20.0, 40.0))
+
+        ax.pan_viewport(200.0)
+        frame_1 = fig.to_rgba()
+        frame_2 = fig.to_rgba()
+        self.assertTrue(np.array_equal(frame_1, frame_2))
+        viewport = ax.last_resolved_viewport()
+        self.assertIsNotNone(viewport)
+        assert viewport is not None
+        self.assertAlmostEqual(viewport[0], 79.0, places=9)
+        self.assertAlmostEqual(viewport[1], 99.0, places=9)
+
+    def test_viewport_pan_keeps_data_aligned_with_transform(self) -> None:
+        x = np.arange(10, dtype=np.float64)
+        y = np.full(10, 2.0, dtype=np.float64)
+        fig = figure(width=280, height=180)
+        ax = fig.axes(x_label_bottom="x", y_label_left="y")
+        ax.scatter(x=x, y=y, color=(250, 70, 70), size=3)
+        ax.set_viewport(xmin=2.0, xmax=6.0)
+        frame_a = fig.to_rgba()
+
+        plot_rect = ax.last_plot_rect()
+        limits_a = ax.last_limits()
+        self.assertIsNotNone(plot_rect)
+        self.assertIsNotNone(limits_a)
+        assert plot_rect is not None
+        assert limits_a is not None
+        x0, y0, w, h = plot_rect
+        transform_a = build_transform(limits_a, width=w, height=h)
+        px_a, py_a = map_to_pixels(
+            np.asarray([5.0], dtype=np.float64),
+            np.asarray([2.0], dtype=np.float64),
+            transform_a,
+            w,
+            h,
+        )
+        self.assertTrue(np.array_equal(frame_a[y0 + int(py_a[0]), x0 + int(px_a[0]), :3], np.asarray([250, 70, 70], dtype=np.uint8)))
+
+        ax.pan_viewport(2.0)
+        frame_b = fig.to_rgba()
+        limits_b = ax.last_limits()
+        self.assertIsNotNone(limits_b)
+        assert limits_b is not None
+        transform_b = build_transform(limits_b, width=w, height=h)
+        px_b, py_b = map_to_pixels(
+            np.asarray([5.0], dtype=np.float64),
+            np.asarray([2.0], dtype=np.float64),
+            transform_b,
+            w,
+            h,
+        )
+        self.assertTrue(np.array_equal(frame_b[y0 + int(py_b[0]), x0 + int(px_b[0]), :3], np.asarray([250, 70, 70], dtype=np.uint8)))
+
     def test_line_plot_respects_nan_gaps(self) -> None:
         y = np.asarray([0.0, 0.5, np.nan, np.nan, 0.0, 0.5], dtype=np.float64)
         fig = figure(width=160, height=100)
