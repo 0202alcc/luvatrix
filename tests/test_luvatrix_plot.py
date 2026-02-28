@@ -247,6 +247,41 @@ class LuvatrixPlotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ax.bar(y=[1.0, 2.0], width=0.0)
 
+    def test_figure_supports_two_subplots_in_single_frame(self) -> None:
+        fig = figure(width=320, height=200)
+        left_ax, right_ax = fig.subplots(1, 2, titles=("left", "right"), x_label_bottom="x", y_label_left="y")
+        x = np.asarray([0.0, 1.0, 2.0, 3.0], dtype=np.float64)
+        left_ax.plot(x=x, y=np.asarray([0.0, 1.0, 0.5, 1.5], dtype=np.float64), color=(255, 170, 70), width=1)
+        right_ax.bar(x=x, y=np.asarray([1.0, -0.5, 1.3, -1.0], dtype=np.float64), color=(90, 190, 255), width=0.7)
+
+        frame_1 = fig.to_rgba()
+        frame_2 = fig.to_rgba()
+        self.assertEqual(frame_1.shape, (200, 320, 4))
+        self.assertTrue(np.array_equal(frame_1, frame_2))
+        self.assertGreater(float(frame_1[:, :160, :3].std()), 0.0)
+        self.assertGreater(float(frame_1[:, 160:, :3].std()), 0.0)
+
+    def test_subplots_update_one_panel_without_requiring_other_panel_change(self) -> None:
+        fig = figure(width=360, height=220)
+        left_ax, right_ax = fig.subplots(1, 2, x_label_bottom="x", y_label_left="y")
+        x = np.asarray([0.0, 1.0, 2.0, 3.0], dtype=np.float64)
+        left_ax.plot(x=x, y=np.asarray([0.0, 1.0, 0.0, 1.0], dtype=np.float64), color=(255, 170, 70), width=1)
+        right_ax.plot(x=x, y=np.asarray([1.0, 1.0, 1.0, 1.0], dtype=np.float64), color=(90, 190, 255), width=1)
+        frame_before = fig.to_rgba()
+
+        right_ax.plot(x=x, y=np.asarray([0.0, -1.0, 0.5, -0.5], dtype=np.float64), color=(180, 255, 90), width=1)
+        frame_after = fig.to_rgba()
+        diff = np.abs(frame_after.astype(np.int16) - frame_before.astype(np.int16)).sum(axis=2)
+        left_diff = int(diff[:, :180].sum())
+        right_diff = int(diff[:, 180:].sum())
+        self.assertGreater(right_diff, left_diff)
+
+    def test_subplots_and_single_axes_are_mutually_exclusive(self) -> None:
+        fig = figure(width=240, height=160)
+        fig.subplots(1, 2)
+        with self.assertRaises(PlotDataError):
+            fig.axes()
+
     def test_line_plot_respects_nan_gaps(self) -> None:
         y = np.asarray([0.0, 0.5, np.nan, np.nan, 0.0, 0.5], dtype=np.float64)
         fig = figure(width=160, height=100)

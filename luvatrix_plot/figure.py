@@ -1226,6 +1226,10 @@ class Figure:
     height: int = 720
     style: FigureStyle = field(default_factory=FigureStyle)
     _axes: Axes | None = None
+    _subplot_grid: tuple[int, int] | None = None
+    _subplot_children: list["Figure"] = field(default_factory=list)
+    _subplot_gap_px: tuple[int, int] = (12, 12)
+    _subplot_margin_px: tuple[int, int, int, int] = (8, 8, 8, 8)
     _last_frame_rgba: np.ndarray | None = None
 
     def __post_init__(self) -> None:
@@ -1243,6 +1247,8 @@ class Figure:
         show_top_axis: bool = False,
         show_right_axis: bool = False,
     ) -> Axes:
+        if self._subplot_grid is not None:
+            raise PlotDataError("figure already configured for subplot layout")
         if self._axes is not None:
             raise PlotDataError("v0 supports a single subplot per figure")
         self._axes = Axes(
@@ -1257,7 +1263,84 @@ class Figure:
         )
         return self._axes
 
+    def subplots(
+        self,
+        rows: int,
+        cols: int,
+        *,
+        title: str = "",
+        titles: Sequence[str] | None = None,
+        x_label_bottom: str = "index",
+        y_label_left: str = "value",
+    ) -> list[Axes]:
+        if rows <= 0 or cols <= 0:
+            raise ValueError("rows and cols must be > 0")
+        if rows * cols < 2:
+            raise ValueError("subplot layout must include at least 2 panels")
+        if self._axes is not None or self._subplot_grid is not None:
+            raise PlotDataError("figure axes already initialized")
+        title_items: tuple[str, ...] = tuple(titles) if titles is not None else ()
+        self._subplot_grid = (int(rows), int(cols))
+        self._subplot_children = []
+        axes_out: list[Axes] = []
+        for idx in range(rows * cols):
+            child = Figure(width=max(2, self.width), height=max(2, self.height), style=self.style)
+            child_title = title_items[idx] if idx < len(title_items) else title
+            ax = child.axes(
+                title=child_title,
+                x_label_bottom=x_label_bottom,
+                y_label_left=y_label_left,
+            )
+            self._subplot_children.append(child)
+            axes_out.append(ax)
+        return axes_out
+
+    def _subplot_layout(self) -> list[tuple[int, int, int, int, "Figure"]]:
+        if self._subplot_grid is None:
+            return []
+        rows, cols = self._subplot_grid
+        gap_x, gap_y = self._subplot_gap_px
+        margin_left, margin_right, margin_top, margin_bottom = self._subplot_margin_px
+        inner_w = self.width - margin_left - margin_right - gap_x * (cols - 1)
+        inner_h = self.height - margin_top - margin_bottom - gap_y * (rows - 1)
+        if inner_w < cols * 2 or inner_h < rows * 2:
+            raise PlotDataError("figure too small for subplot layout")
+        base_w = inner_w // cols
+        extra_w = inner_w % cols
+        base_h = inner_h // rows
+        extra_h = inner_h % rows
+        col_widths = [base_w + (1 if c < extra_w else 0) for c in range(cols)]
+        row_heights = [base_h + (1 if r < extra_h else 0) for r in range(rows)]
+        if len(self._subplot_children) != rows * cols:
+            raise PlotDataError("subplot configuration is inconsistent")
+        layout: list[tuple[int, int, int, int, Figure]] = []
+        idx = 0
+        y = margin_top
+        for r in range(rows):
+            h = row_heights[r]
+            x = margin_left
+            for c in range(cols):
+                w = col_widths[c]
+                layout.append((x, y, w, h, self._subplot_children[idx]))
+                idx += 1
+                x += w + gap_x
+            y += h + gap_y
+        return layout
+
     def to_rgba(self) -> np.ndarray:
+        if self._subplot_grid is not None:
+            frame = new_canvas(self.width, self.height, color=self.style.background)
+            for x, y, w, h, child in self._subplot_layout():
+                child.width = max(2, int(w))
+                child.height = max(2, int(h))
+                panel = child.to_rgba()
+                patch = frame[y : y + h, x : x + w]
+                alpha = panel[:, :, 3:4].astype(np.float32) / 255.0
+                inv = 1.0 - alpha
+                patch[:, :, :3] = (panel[:, :, :3] * alpha + patch[:, :, :3] * inv).astype(np.uint8)
+                patch[:, :, 3] = 255
+            self._last_frame_rgba = frame.copy()
+            return frame
         if self._axes is None:
             raise PlotDataError("figure has no axes")
         frame = self._axes.render()
@@ -1268,6 +1351,8 @@ class Figure:
         return compile_full_rewrite_batch(self.to_rgba())
 
     def compile_incremental_write_batch(self, dirty_rect: tuple[int, int, int, int] | None = None):
+        if self._subplot_grid is not None:
+            return compile_full_rewrite_batch(self.to_rgba())
         if dirty_rect is None:
             return compile_full_rewrite_batch(self.to_rgba())
         if self._axes is not None:
