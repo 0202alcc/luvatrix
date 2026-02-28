@@ -17,17 +17,17 @@ Last updated: `2026-02-28`
 ## Review
 1. `T-801` Sideways/compact x-axis labels for dense long labels.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py` (pass).
-2. `T-804` Scrolling/viewport controls for dense x-domains (pan/viewport APIs; optional zoom).
+2. `T-802` Bar renderer support (`Axes.bar(...)`) with deterministic behavior + non-edge-touching bar padding.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py` (pass).
 3. `T-805` Table UI component system (sortable columns, pagination/virtualization, keyboard access, csv/pandas ingestion baseline).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_ui_table.py tests/test_luvatrix_plot.py tests/test_plot_app_protocol_example.py` (pass).
-- Demo: `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py` -> `discord/ops/m008_demo_plot_default.png`, `discord/ops/m008_demo_plot_panned.png`, `discord/ops/m008_demo_table.txt`, `discord/ops/m008_demo_positions.csv`.
+- Demo: `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py` -> `discord/ops/m008_demo_plot_default.png`, `discord/ops/m008_demo_plot_panned.png`, `discord/ops/m008_demo_table.txt`, `discord/ops/m008_demo_positions.csv`, `discord/ops/m008_demo_table.png`.
 
 ## Done
-1. `T-802` Bar renderer support (`Axes.bar(...)`) with deterministic behavior.
+1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
 - Accepted in review feedback on `2026-02-28`.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
-2. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
+2. `T-804` Scrolling/viewport controls for dense x-domains (pan/viewport APIs; optional zoom).
 - Accepted in review feedback on `2026-02-28`.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
 
@@ -49,3 +49,7 @@ Last updated: `2026-02-28`
 13. `2026-02-28`: Review feedback received; `T-802` and `T-803` accepted and moved to `Done`.
 14. `2026-02-28`: `T-801`, `T-804`, and `T-805` moved back to `In Progress` for requested fixes (angled/italic compact labels, viewport clipping/tick accuracy, csv/pandas table ingestion).
 15. `2026-02-28`: `T-801`, `T-804`, and `T-805` returned to `Review` after updated tests and demo regeneration passed.
+16. `2026-02-28`: Additional review feedback received; `T-804` accepted and moved to `Done`.
+17. `2026-02-28`: `T-802` reopened after bar-edge spacing feedback; moved from `Done` back to active fix scope.
+18. `2026-02-28`: Implemented label-to-bar emphasized x ticks, bar edge padding, subplot preferred-aspect auto sizing, and Luvatrix-rendered table PNG demo.
+19. `2026-02-28`: `T-802` returned to `Review`; refreshed demo artifacts and reran full M-008 regression test set.

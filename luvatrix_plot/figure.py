@@ -220,6 +220,7 @@ class Axes:
     _last_tick_font_px: float = 12.0
     _last_label_font_px: float = 12.0
     _last_x_tick_pad: int = 4
+    _last_x_tick_mark_len: int = 6
     _last_max_x_tick_h: int = 12
     _last_x_label_gap: int = 8
     _last_x_tick_font_px: float = 12.0
@@ -229,6 +230,7 @@ class Axes:
     _last_resolved_x_viewport: tuple[float, float] | None = None
     _last_tick_x: tuple[float, ...] = ()
     _last_tick_y: tuple[float, ...] = ()
+    preferred_panel_aspect_ratio: float | None = None
 
     def scatter(
         self,
@@ -362,6 +364,15 @@ class Axes:
     def set_x_tick_label_affine(self, *, scale: float = 1.0, offset: float = 0.0) -> "Axes":
         self.x_tick_label_scale = float(scale)
         self.x_tick_label_offset = float(offset)
+        return self
+
+    def set_preferred_panel_aspect_ratio(self, aspect_ratio: float | None) -> "Axes":
+        if aspect_ratio is None:
+            self.preferred_panel_aspect_ratio = None
+            return self
+        if aspect_ratio <= 0:
+            raise ValueError("aspect_ratio must be > 0")
+        self.preferred_panel_aspect_ratio = float(aspect_ratio)
         return self
 
     def set_x_tick_labels(self, labels: Sequence[str] | None) -> "Axes":
@@ -744,6 +755,14 @@ class Axes:
                 w,
                 max(2, h),
             )
+            pxi = int(px[0])
+            draw_vline(
+                patch,
+                pxi,
+                0,
+                min(h - 1, self._last_x_tick_mark_len),
+                self.axis_color,
+            )
             tx, _ = text_size(
                 label,
                 font_size_px=self._last_x_tick_font_px,
@@ -752,8 +771,8 @@ class Axes:
             )
             draw_text(
                 patch,
-                int(px[0]) - tx // 2,
-                int(round(self._last_x_tick_pad)),
+                pxi - tx // 2,
+                int(round(self._last_x_tick_mark_len + self._last_x_tick_pad)),
                 label,
                 self.text_color,
                 font_size_px=self._last_x_tick_font_px,
@@ -765,7 +784,7 @@ class Axes:
         draw_text(
             patch,
             max(0, (w // 2) - (x_label_w // 2)),
-            max(2, int(round(self._last_x_tick_pad + self._last_max_x_tick_h + self._last_x_label_gap))),
+            max(2, int(round(self._last_x_tick_mark_len + self._last_x_tick_pad + self._last_max_x_tick_h + self._last_x_label_gap))),
             self.x_label_bottom,
             self.text_color,
             font_size_px=self._last_label_font_px,
@@ -806,9 +825,10 @@ class Axes:
                 xvals = spec.data.x[live_mask]
                 yvals = spec.data.y[live_mask]
                 half_width = max(1e-9, float(spec.style.bar_width) * 0.5)
+                edge_pad = max(1e-9, half_width * 0.35)
                 limits = DataLimits(
-                    xmin=min(limits.xmin, float(np.min(xvals - half_width))),
-                    xmax=max(limits.xmax, float(np.max(xvals + half_width))),
+                    xmin=min(limits.xmin, float(np.min(xvals - half_width - edge_pad))),
+                    xmax=max(limits.xmax, float(np.max(xvals + half_width + edge_pad))),
                     ymin=min(limits.ymin, 0.0, float(np.min(yvals))),
                     ymax=max(limits.ymax, 0.0, float(np.max(yvals))),
                 )
@@ -910,6 +930,7 @@ class Axes:
         title_h = text_size(self.title, font_size_px=title_font_px)[1] if self.title else 0
 
         x_tick_pad = int(max(4.0, tick_font_px * 0.5))
+        x_tick_mark_len = int(max(5.0, tick_font_px * 0.55))
         x_label_gap = int(max(10.0, label_font_px * 0.65))
         y_tick_pad = int(max(4.0, tick_font_px * 0.4))
         y_label_gap = int(max(8.0, label_font_px * 0.45))
@@ -925,7 +946,8 @@ class Axes:
             )
         )
         top = int(max(10, title_h + 10))
-        bottom = int(max(12, max_x_tick_h + x_tick_pad + x_label_h + x_label_gap + 10))
+        extra_rot_bottom = int(max(0.0, max_x_tick_h * 0.22)) if x_tick_layout_probe.rotate_deg != 0 else 0
+        bottom = int(max(12, x_tick_mark_len + max_x_tick_h + x_tick_pad + x_label_h + x_label_gap + 10 + extra_rot_bottom))
 
         # Bound gutters for small figures so we always preserve a drawable plot area.
         left = min(left, max(6, self.figure.width // 3))
@@ -959,6 +981,7 @@ class Axes:
         self._last_tick_font_px = tick_font_px
         self._last_label_font_px = label_font_px
         self._last_x_tick_pad = x_tick_pad
+        self._last_x_tick_mark_len = x_tick_mark_len
         self._last_max_x_tick_h = max_x_tick_h
         self._last_x_label_gap = x_label_gap
 
@@ -1220,6 +1243,7 @@ class Axes:
             round(title_font_px, 2),
             self.show_edge_x_tick_labels,
             self.show_edge_y_tick_labels,
+            x_tick_mark_len,
             round(x_tick_font_px, 2),
             x_tick_layout.italic,
             x_tick_layout.rotate_deg,
@@ -1248,6 +1272,14 @@ class Axes:
                 if (not self.show_edge_x_tick_labels) and (idx == 0 or idx == len(x_tick_labels) - 1):
                     continue
                 px, _ = map_to_pixels(np.asarray([xv], dtype=np.float64), np.asarray([ymin], dtype=np.float64), transform, plot_w, plot_h)
+                pxi = plot_x0 + int(px[0])
+                draw_vline(
+                    text_layer,
+                    pxi,
+                    plot_y0 + plot_h - 1,
+                    plot_y0 + plot_h + x_tick_mark_len,
+                    self.axis_color,
+                )
                 tx, _ = text_size(
                     label,
                     font_size_px=x_tick_font_px,
@@ -1256,8 +1288,8 @@ class Axes:
                 )
                 draw_text(
                     text_layer,
-                    plot_x0 + int(px[0]) - tx // 2,
-                    int(round(plot_y0 + plot_h + x_tick_pad)),
+                    pxi - tx // 2,
+                    int(round(plot_y0 + plot_h + x_tick_mark_len + x_tick_pad)),
                     label,
                     self.text_color,
                     font_size_px=x_tick_font_px,
@@ -1284,7 +1316,7 @@ class Axes:
             draw_text(
                 text_layer,
                 max(0, plot_x0 + (plot_w // 2) - (x_label_w // 2)),
-                max(2, int(round(plot_y0 + plot_h + x_tick_pad + max_x_tick_h + x_label_gap))),
+                max(2, int(round(plot_y0 + plot_h + x_tick_mark_len + x_tick_pad + max_x_tick_h + x_label_gap))),
                 self.x_label_bottom,
                 self.text_color,
                 font_size_px=label_font_px,
@@ -1440,8 +1472,45 @@ class Figure:
             y += h + gap_y
         return layout
 
+    def _apply_subplot_preferred_aspects(self) -> None:
+        if self._subplot_grid is None or not self._subplot_children:
+            return
+        rows, cols = self._subplot_grid
+        gap_x, gap_y = self._subplot_gap_px
+        margin_left, margin_right, margin_top, margin_bottom = self._subplot_margin_px
+        for _ in range(2):
+            inner_w = self.width - margin_left - margin_right - gap_x * (cols - 1)
+            inner_h = self.height - margin_top - margin_bottom - gap_y * (rows - 1)
+            if inner_w <= 0 or inner_h <= 0:
+                return
+            panel_w = float(inner_w) / float(cols)
+            panel_h = float(inner_h) / float(rows)
+            required_panel_w = panel_w
+            required_panel_h = panel_h
+            for child in self._subplot_children:
+                ax = child._axes
+                if ax is None or ax.preferred_panel_aspect_ratio is None:
+                    continue
+                aspect = max(1e-9, float(ax.preferred_panel_aspect_ratio))
+                required_panel_w = max(required_panel_w, panel_h * aspect)
+                required_panel_h = max(required_panel_h, panel_w / aspect)
+            target_inner_w = int(np.ceil(max(float(inner_w), required_panel_w * cols)))
+            target_inner_h = int(np.ceil(max(float(inner_h), required_panel_h * rows)))
+            target_w = target_inner_w + margin_left + margin_right + gap_x * (cols - 1)
+            target_h = target_inner_h + margin_top + margin_bottom + gap_y * (rows - 1)
+            grew = False
+            if target_w > self.width:
+                self.width = target_w
+                grew = True
+            if target_h > self.height:
+                self.height = target_h
+                grew = True
+            if not grew:
+                break
+
     def to_rgba(self) -> np.ndarray:
         if self._subplot_grid is not None:
+            self._apply_subplot_preferred_aspects()
             frame = new_canvas(self.width, self.height, color=self.style.background)
             for x, y, w, h, child in self._subplot_layout():
                 child.width = max(2, int(w))

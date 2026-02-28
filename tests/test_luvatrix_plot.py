@@ -241,6 +241,8 @@ class LuvatrixPlotTests(unittest.TestCase):
         bar_mask = np.all(rgb == np.asarray([90, 180, 255], dtype=np.uint8).reshape(1, 1, 3), axis=2)
         self.assertTrue(np.any(bar_mask[:baseline_y, :]))
         self.assertTrue(np.any(bar_mask[baseline_y + 1 :, :]))
+        self.assertFalse(np.any(bar_mask[plot_y0 : plot_y0 + plot_h, plot_x0]))
+        self.assertFalse(np.any(bar_mask[plot_y0 : plot_y0 + plot_h, plot_x0 + plot_w - 1]))
 
     def test_bar_rejects_nonpositive_width(self) -> None:
         fig = figure(width=160, height=100)
@@ -282,6 +284,18 @@ class LuvatrixPlotTests(unittest.TestCase):
         fig.subplots(1, 2)
         with self.assertRaises(PlotDataError):
             fig.axes()
+
+    def test_subplots_expand_for_preferred_panel_aspect_ratio(self) -> None:
+        fig = figure(width=320, height=200)
+        left_ax, right_ax = fig.subplots(1, 2, x_label_bottom="x", y_label_left="y")
+        left_ax.set_preferred_panel_aspect_ratio(1.0)
+        right_ax.set_preferred_panel_aspect_ratio(1.8)
+        x = np.asarray([0.0, 1.0, 2.0, 3.0], dtype=np.float64)
+        left_ax.plot(x=x, y=np.asarray([1.0, 2.0, 1.5, 2.0], dtype=np.float64), color=(255, 170, 70), width=1)
+        right_ax.plot(x=x, y=np.asarray([0.0, 1.0, 0.0, 1.0], dtype=np.float64), color=(90, 190, 255), width=1)
+        before_w = fig.width
+        _ = fig.to_rgba()
+        self.assertGreaterEqual(fig.width, before_w)
 
     def test_viewport_pan_is_clamped_and_deterministic(self) -> None:
         x = np.arange(100, dtype=np.float64)
