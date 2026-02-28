@@ -9,7 +9,7 @@ Last updated: `2026-02-28`
 1. None.
 
 ## Ready
-1. `T-805` Table UI component system (sortable columns, pagination/virtualization, keyboard access).
+1. None.
 
 ## In Progress
 1. None.
@@ -23,6 +23,9 @@ Last updated: `2026-02-28`
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
 4. `T-804` Scrolling/viewport controls for dense x-domains (pan/viewport APIs; optional zoom).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
+5. `T-805` Table UI component system (sortable columns, pagination/virtualization, keyboard access).
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_ui_table.py tests/test_luvatrix_plot.py` (pass).
+- Demo: `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py` -> `discord/ops/m008_demo_plot_default.png`, `discord/ops/m008_demo_plot_panned.png`, `discord/ops/m008_demo_table.txt`.
 
 ## Done
 1. None.
@@ -36,3 +39,9 @@ Last updated: `2026-02-28`
 6. `2026-02-28`: `T-803` moved to `Review` after subplot compatibility tests passed.
 7. `2026-02-28`: `T-804` started after `T-803` review handoff.
 8. `2026-02-28`: `T-804` moved to `Review` after viewport clamp/alignment tests passed.
+9. `2026-02-28`: `T-805` started after `T-804` review handoff.
+10. `2026-02-28`: `T-805` moved to `Review` after table sort/pagination/virtualization/keyboard tests passed.
+11. `2026-02-28`: `M-008` runnable demo generated successfully via `examples/m008_plot_data_ux_demo.py`.
+12. `2026-02-28`: Existing Discord Gantt scripts smoke check passed:
+- `PYTHONPATH=. uv run python discord/scripts/generate_gantt_markdown.py --schedule discord/ops/milestone_schedule.json --out /tmp/m008_smoke_gantt.md`
+- `PYTHONPATH=. uv run python discord/scripts/generate_gantt_ascii_detailed.py --schedule discord/ops/milestone_schedule.json --out /tmp/m008_smoke_gantt_detailed.txt`
