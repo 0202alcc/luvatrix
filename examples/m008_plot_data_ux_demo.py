@@ -6,12 +6,12 @@ import numpy as np
 from PIL import Image
 
 from luvatrix_plot import figure
-from luvatrix_ui import TableColumn, TableComponent
+from luvatrix_ui import TableComponent
 from luvatrix_ui.component_schema import BoundingBox
 
 
 def _render_plot_frame(*, panned: bool) -> np.ndarray:
-    fig = figure(width=1280, height=720)
+    fig = figure(width=1600, height=900)
     left_ax, right_ax = fig.subplots(
         1,
         2,
@@ -39,35 +39,27 @@ def _render_plot_frame(*, panned: bool) -> np.ndarray:
     return fig.to_rgba()
 
 
-def _render_table_snapshot() -> str:
-    rows = tuple(
-        {
-            "symbol": symbol,
-            "qty": qty,
-            "pnl": pnl,
-        }
-        for symbol, qty, pnl in (
-            ("AAPL", 50, 1240.5),
-            ("MSFT", 20, -115.2),
-            ("NVDA", 12, 840.4),
-            ("AMD", 35, 210.0),
-            ("TSLA", 9, -450.9),
-            ("META", 15, 330.7),
-            ("AMZN", 18, 145.1),
-            ("GOOGL", 14, 188.6),
-            ("NFLX", 8, -52.2),
-            ("ORCL", 27, 94.0),
-            ("INTC", 60, -18.0),
-        )
-    )
-    table = TableComponent(
+def _render_table_snapshot(out_dir: Path) -> str:
+    csv_lines = [
+        "symbol,qty,pnl",
+        "AAPL,50,1240.5",
+        "MSFT,20,-115.2",
+        "NVDA,12,840.4",
+        "AMD,35,210.0",
+        "TSLA,9,-450.9",
+        "META,15,330.7",
+        "AMZN,18,145.1",
+        "GOOGL,14,188.6",
+        "NFLX,8,-52.2",
+        "ORCL,27,94.0",
+        "INTC,60,-18.0",
+    ]
+    csv_path = out_dir / "m008_demo_positions.csv"
+    csv_path.write_text("\n".join(csv_lines) + "\n", encoding="utf-8")
+
+    table = TableComponent.from_csv(
+        csv_path,
         component_id="positions",
-        columns=(
-            TableColumn(column_id="symbol", label="Symbol", key="symbol"),
-            TableColumn(column_id="qty", label="Qty", key="qty"),
-            TableColumn(column_id="pnl", label="PnL", key="pnl"),
-        ),
-        rows=rows,
         bounds=BoundingBox(x=0.0, y=0.0, width=300.0, height=120.0, frame="screen_tl"),
         page_size=6,
         virtual_window=4,
@@ -92,7 +84,7 @@ def main() -> None:
 
     frame_default = _render_plot_frame(panned=False)
     frame_panned = _render_plot_frame(panned=True)
-    table_snapshot = _render_table_snapshot()
+    table_snapshot = _render_table_snapshot(out_dir)
 
     plot_default_path = out_dir / "m008_demo_plot_default.png"
     plot_panned_path = out_dir / "m008_demo_plot_panned.png"

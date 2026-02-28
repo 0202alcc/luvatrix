@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+import tempfile
 import unittest
 
 from luvatrix_ui import TableColumn, TableComponent
@@ -74,6 +76,38 @@ class TableComponentTests(unittest.TestCase):
         self.assertEqual(table.snapshot_state().virtual_offset, 1)
         self.assertTrue(table.handle_key("PageDown"))
         self.assertEqual(table.snapshot_state().page_index, 1)
+
+    def test_from_csv_loads_rows_and_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "data.csv"
+            csv_path.write_text("symbol,qty\nAAPL,10\nMSFT,20\n", encoding="utf-8")
+            table = TableComponent.from_csv(
+                csv_path,
+                component_id="csv",
+                bounds=BoundingBox(x=0.0, y=0.0, width=100.0, height=40.0, frame="screen_tl"),
+                page_size=10,
+                virtual_window=5,
+            )
+        self.assertEqual([column.column_id for column in table.columns], ["symbol", "qty"])
+        self.assertEqual(len(table.rows), 2)
+        self.assertEqual(str(table.rows[0]["symbol"]), "AAPL")
+
+    def test_from_dataframe_loads_pandas(self) -> None:
+        try:
+            import pandas as pd
+        except Exception:
+            self.skipTest("pandas is not installed")
+        df = pd.DataFrame({"symbol": ["AAPL", "MSFT"], "qty": [10, 20]})
+        table = TableComponent.from_dataframe(
+            df,
+            component_id="df",
+            bounds=BoundingBox(x=0.0, y=0.0, width=100.0, height=40.0, frame="screen_tl"),
+            page_size=10,
+            virtual_window=5,
+        )
+        self.assertEqual([column.column_id for column in table.columns], ["symbol", "qty"])
+        self.assertEqual(len(table.rows), 2)
+        self.assertEqual(int(table.rows[1]["qty"]), 20)
 
 
 if __name__ == "__main__":

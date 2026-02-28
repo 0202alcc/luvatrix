@@ -35,6 +35,7 @@ def draw_text(
     embolden_px: int = 1,
     background_color: RGBA | None = None,
     rotate_deg: int = 0,
+    italic: bool = False,
 ) -> None:
     if not text:
         return
@@ -42,6 +43,8 @@ def draw_text(
     mask = _render_mask(text=text, font=font)
     if embolden_px > 1:
         mask = _embolden(mask, embolden_px)
+    if italic:
+        mask = _italicize(mask)
     mask = _rotate_mask(mask, rotate_deg=rotate_deg)
     _blend_mask(dst, x, y, mask, color, background_color=background_color)
 
@@ -52,18 +55,18 @@ def text_size(
     font_family: str = DEFAULT_FONT_FAMILY,
     font_size_px: float = DEFAULT_FONT_SIZE_PX,
     rotate_deg: int = 0,
+    italic: bool = False,
 ) -> tuple[int, int]:
     font = _load_font(font_family=font_family, font_size_px=font_size_px)
     if not text:
         ascent, descent = font.getmetrics()
         return (0, max(1, int(ascent + descent)))
-    left, top, right, bottom = font.getbbox(text)
-    w = max(0, int(right - left))
-    h = max(1, int(bottom - top))
-    turns = _normalize_quarter_turns(rotate_deg)
-    if turns % 2 == 1:
-        return (h, w)
-    return (w, h)
+    mask = _render_mask(text=text, font=font)
+    if italic:
+        mask = _italicize(mask)
+    mask = _rotate_mask(mask, rotate_deg=rotate_deg)
+    h, w = mask.shape
+    return (int(w), int(h))
 
 
 def _blend_mask(
@@ -137,6 +140,19 @@ def _embolden(mask: np.ndarray, embolden_px: int) -> np.ndarray:
     return out
 
 
+def _italicize(mask: np.ndarray, slant_per_row: float = 0.24) -> np.ndarray:
+    h, w = mask.shape
+    if h <= 1 or w <= 0:
+        return mask
+    max_shift = int(np.ceil((h - 1) * slant_per_row))
+    out = np.zeros((h, w + max_shift), dtype=np.uint8)
+    for y in range(h):
+        # Keep baseline mostly anchored while slanting upper rows to the right.
+        shift = int(round((h - 1 - y) * slant_per_row))
+        out[y, shift : shift + w] = mask[y, :]
+    return out
+
+
 @lru_cache(maxsize=128)
 def _render_mask(text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont) -> np.ndarray:
     if not text:
@@ -199,7 +215,12 @@ def _normalize_quarter_turns(rotate_deg: int) -> int:
 
 
 def _rotate_mask(mask: np.ndarray, *, rotate_deg: int) -> np.ndarray:
-    turns = _normalize_quarter_turns(rotate_deg)
-    if turns == 0:
+    deg = int(rotate_deg) % 360
+    if deg == 0:
         return mask
-    return np.rot90(mask, k=turns)
+    if deg % 90 == 0:
+        turns = _normalize_quarter_turns(deg)
+        return np.rot90(mask, k=turns)
+    image = Image.fromarray(mask, mode="L")
+    rotated = image.rotate(float(deg), resample=Image.Resampling.BICUBIC, expand=True)
+    return np.asarray(rotated, dtype=np.uint8)

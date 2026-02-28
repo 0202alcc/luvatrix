@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass, field
 import math
+from pathlib import Path
 from typing import Literal, Mapping, Sequence
 
 from luvatrix_ui.component_schema import BoundingBox, ComponentBase
@@ -68,6 +70,67 @@ class TableComponent(ComponentBase):
             sortable = [column.column_id for column in self.columns if column.sortable]
             self.sort_column_id = sortable[0] if sortable else None
         self._clamp_state()
+
+    @classmethod
+    def from_csv(
+        cls,
+        csv_path: str | Path,
+        *,
+        component_id: str,
+        bounds: BoundingBox,
+        page_size: int = 50,
+        virtual_window: int = 20,
+        delimiter: str = ",",
+    ) -> "TableComponent":
+        path = Path(csv_path)
+        with path.open("r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f, delimiter=delimiter)
+            fieldnames = list(reader.fieldnames or [])
+            if not fieldnames:
+                raise ValueError("csv has no header columns")
+            rows = [dict(row) for row in reader]
+        columns = tuple(TableColumn(column_id=name, label=name, key=name) for name in fieldnames)
+        return cls(
+            component_id=component_id,
+            columns=columns,
+            rows=tuple(rows),
+            bounds=bounds,
+            page_size=page_size,
+            virtual_window=virtual_window,
+        )
+
+    @classmethod
+    def from_dataframe(
+        cls,
+        dataframe: object,
+        *,
+        component_id: str,
+        bounds: BoundingBox,
+        page_size: int = 50,
+        virtual_window: int = 20,
+    ) -> "TableComponent":
+        columns_attr = getattr(dataframe, "columns", None)
+        to_dict_fn = getattr(dataframe, "to_dict", None)
+        if columns_attr is None or not callable(to_dict_fn):
+            raise TypeError("dataframe must provide columns and to_dict methods")
+        column_names = [str(name) for name in list(columns_attr)]
+        rows_raw = to_dict_fn(orient="records")
+        if not isinstance(rows_raw, list):
+            raise TypeError("dataframe.to_dict(orient='records') must return a list")
+        rows: list[dict[str, object]] = []
+        for item in rows_raw:
+            if not isinstance(item, Mapping):
+                raise TypeError("dataframe record rows must be mappings")
+            rows.append({str(k): v for k, v in item.items()})
+        columns = tuple(TableColumn(column_id=name, label=name, key=name) for name in column_names)
+        return cls(
+            component_id=component_id,
+            columns=columns,
+            rows=tuple(rows),
+            bounds=bounds,
+            page_size=page_size,
+            virtual_window=virtual_window,
+        )
 
     def visual_bounds(self) -> BoundingBox:
         return self.bounds

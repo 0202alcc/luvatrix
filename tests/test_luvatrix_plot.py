@@ -132,7 +132,8 @@ class LuvatrixPlotTests(unittest.TestCase):
 
         self.assertTrue(np.array_equal(frame_small_1, frame_small_2))
         rotate_small, stride_small = ax_small.last_x_tick_label_layout()
-        self.assertEqual(rotate_small, 90)
+        self.assertGreater(rotate_small, 0)
+        self.assertLess(rotate_small, 90)
         self.assertGreaterEqual(stride_small, 1)
 
         fig_large = figure(width=1280, height=720)
@@ -142,7 +143,7 @@ class LuvatrixPlotTests(unittest.TestCase):
         ax_large.plot(x=x, y=y, color=(255, 170, 70), width=1)
         fig_large.to_rgba()
         rotate_large, stride_large = ax_large.last_x_tick_label_layout()
-        self.assertEqual(rotate_large, 90)
+        self.assertEqual(rotate_large, rotate_small)
         self.assertLessEqual(stride_large, stride_small)
 
     def test_zero_reference_lines_enabled_by_default(self) -> None:
@@ -342,6 +343,38 @@ class LuvatrixPlotTests(unittest.TestCase):
             h,
         )
         self.assertTrue(np.array_equal(frame_b[y0 + int(py_b[0]), x0 + int(px_b[0]), :3], np.asarray([250, 70, 70], dtype=np.uint8)))
+
+    def test_viewport_excludes_out_of_range_points_without_edge_collapse(self) -> None:
+        x = np.arange(0.0, 101.0, dtype=np.float64)
+        y = np.sin(x * 0.08)
+        fig = figure(width=360, height=220)
+        ax = fig.axes(x_label_bottom="x", y_label_left="y")
+        ax.scatter(x=x, y=y, color=(90, 190, 255), size=2)
+        ax.set_viewport(xmin=20.0, xmax=70.0)
+        frame = fig.to_rgba()
+        plot_rect = ax.last_plot_rect()
+        self.assertIsNotNone(plot_rect)
+        assert plot_rect is not None
+        x0, y0, w, h = plot_rect
+        right_col = frame[y0 : y0 + h, x0 + w - 1, :3]
+        hits = int(np.count_nonzero(np.all(right_col == np.asarray([90, 190, 255], dtype=np.uint8), axis=1)))
+        self.assertLess(hits, 20)
+
+    def test_viewport_tick_values_stay_within_bounds(self) -> None:
+        x = np.arange(0.0, 121.0, dtype=np.float64)
+        y = np.cos(x * 0.09)
+        fig = figure(width=360, height=220)
+        ax = fig.axes(x_label_bottom="x", y_label_left="y")
+        ax.plot(x=x, y=y, color=(255, 170, 70), width=1)
+        ax.set_major_tick_steps(x=10.0, y=0.2)
+        ax.set_viewport(xmin=44.0, xmax=94.0)
+        fig.to_rgba()
+        tick_x, tick_y = ax.last_tick_values()
+        self.assertTrue(all(44.0 <= value <= 94.0 for value in tick_x))
+        limits = ax.last_limits()
+        self.assertIsNotNone(limits)
+        assert limits is not None
+        self.assertTrue(all(limits.ymin <= value <= limits.ymax for value in tick_y))
 
     def test_line_plot_respects_nan_gaps(self) -> None:
         y = np.asarray([0.0, 0.5, np.nan, np.nan, 0.0, 0.5], dtype=np.float64)

@@ -16,19 +16,20 @@ Last updated: `2026-02-28`
 
 ## Review
 1. `T-801` Sideways/compact x-axis labels for dense long labels.
-- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
-2. `T-802` Bar renderer support (`Axes.bar(...)`) with deterministic behavior.
-- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
-3. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
-- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
-4. `T-804` Scrolling/viewport controls for dense x-domains (pan/viewport APIs; optional zoom).
-- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
-5. `T-805` Table UI component system (sortable columns, pagination/virtualization, keyboard access).
-- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_ui_table.py tests/test_luvatrix_plot.py` (pass).
-- Demo: `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py` -> `discord/ops/m008_demo_plot_default.png`, `discord/ops/m008_demo_plot_panned.png`, `discord/ops/m008_demo_table.txt`.
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py` (pass).
+2. `T-804` Scrolling/viewport controls for dense x-domains (pan/viewport APIs; optional zoom).
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py` (pass).
+3. `T-805` Table UI component system (sortable columns, pagination/virtualization, keyboard access, csv/pandas ingestion baseline).
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_ui_table.py tests/test_luvatrix_plot.py tests/test_plot_app_protocol_example.py` (pass).
+- Demo: `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py` -> `discord/ops/m008_demo_plot_default.png`, `discord/ops/m008_demo_plot_panned.png`, `discord/ops/m008_demo_table.txt`, `discord/ops/m008_demo_positions.csv`.
 
 ## Done
-1. None.
+1. `T-802` Bar renderer support (`Axes.bar(...)`) with deterministic behavior.
+- Accepted in review feedback on `2026-02-28`.
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
+2. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
+- Accepted in review feedback on `2026-02-28`.
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
 
 ## Evidence Log
 1. `2026-02-28`: Board initialized for `M-008`; `T-801` started.
@@ -45,3 +46,6 @@ Last updated: `2026-02-28`
 12. `2026-02-28`: Existing Discord Gantt scripts smoke check passed:
 - `PYTHONPATH=. uv run python discord/scripts/generate_gantt_markdown.py --schedule discord/ops/milestone_schedule.json --out /tmp/m008_smoke_gantt.md`
 - `PYTHONPATH=. uv run python discord/scripts/generate_gantt_ascii_detailed.py --schedule discord/ops/milestone_schedule.json --out /tmp/m008_smoke_gantt_detailed.txt`
+13. `2026-02-28`: Review feedback received; `T-802` and `T-803` accepted and moved to `Done`.
+14. `2026-02-28`: `T-801`, `T-804`, and `T-805` moved back to `In Progress` for requested fixes (angled/italic compact labels, viewport clipping/tick accuracy, csv/pandas table ingestion).
+15. `2026-02-28`: `T-801`, `T-804`, and `T-805` returned to `Review` after updated tests and demo regeneration passed.
