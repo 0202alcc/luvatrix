@@ -93,6 +93,25 @@ def _contiguous_true_runs(mask: np.ndarray) -> list[tuple[int, int]]:
     return runs
 
 
+def _draw_filled_rect(
+    canvas: np.ndarray,
+    *,
+    x0: int,
+    y0: int,
+    x1: int,
+    y1: int,
+    color: tuple[int, int, int, int],
+) -> None:
+    left = max(0, min(int(x0), int(x1)))
+    right = min(canvas.shape[1] - 1, max(int(x0), int(x1)))
+    top = max(0, min(int(y0), int(y1)))
+    bottom = min(canvas.shape[0] - 1, max(int(y0), int(y1)))
+    if right < left or bottom < top:
+        return
+    for yy in range(top, bottom + 1):
+        draw_hline(canvas, left, right, yy, color)
+
+
 @dataclass(frozen=True)
 class FigureStyle:
     background: tuple[int, int, int, int] = (12, 16, 23, 255)
@@ -236,6 +255,30 @@ class Axes:
             raise PlotDataError(f"unsupported plot mode: {mode}")
         style_mode = "lines+markers" if mode == "lines+markers" else "lines"
         style = SeriesStyle(mode=style_mode, color=_coerce_color(color, alpha), marker_size=1, line_width=max(1, width))
+        series_data = normalize_xy(y=y, x=x, data=data)
+        self._series.append(SeriesSpec(data=series_data, style=style, label=label))
+        return self
+
+    def bar(
+        self,
+        y: Any = None,
+        *,
+        x: Any = None,
+        data: Any = None,
+        label: str | None = None,
+        color: tuple[int, int, int] | tuple[int, int, int, int] = (110, 169, 255),
+        width: float = 0.8,
+        alpha: float = 1.0,
+    ) -> "Axes":
+        if width <= 0:
+            raise ValueError("bar width must be > 0")
+        style = SeriesStyle(
+            mode="bars",
+            color=_coerce_color(color, alpha),
+            marker_size=1,
+            line_width=1,
+            bar_width=float(width),
+        )
         series_data = normalize_xy(y=y, x=x, data=data)
         self._series.append(SeriesSpec(data=series_data, style=style, label=label))
         return self
@@ -672,12 +715,25 @@ class Axes:
             # Recompute finiteness mask at render-time so dynamic in-place updates
             # (rolling windows with NaNs) stay aligned with limits and drawing.
             live_mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
+            if not np.any(live_mask):
+                continue
             limits = compute_limits(spec.data.x, spec.data.y, live_mask)
+            if spec.style.mode == "bars":
+                xvals = spec.data.x[live_mask]
+                yvals = spec.data.y[live_mask]
+                half_width = max(1e-9, float(spec.style.bar_width) * 0.5)
+                limits = DataLimits(
+                    xmin=min(limits.xmin, float(np.min(xvals - half_width))),
+                    xmax=max(limits.xmax, float(np.max(xvals + half_width))),
+                    ymin=min(limits.ymin, 0.0, float(np.min(yvals))),
+                    ymax=max(limits.ymax, 0.0, float(np.max(yvals))),
+                )
             mins_x.append(limits.xmin)
             maxs_x.append(limits.xmax)
             mins_y.append(limits.ymin)
             maxs_y.append(limits.ymax)
-
+        if not mins_x:
+            raise PlotDataError("series contains no finite points")
         return min(mins_x), max(maxs_x), min(mins_y), max(maxs_y)
 
     def _apply_limit_hysteresis(self, raw: DataLimits) -> DataLimits:
@@ -954,6 +1010,36 @@ class Axes:
         )
 
         drawing = new_canvas(self.figure.width, self.figure.height, color=(0, 0, 0, 0))
+        # Pass 0: bars at the back so lines/markers remain visible when combined.
+        for spec in self._series:
+            if spec.style.mode != "bars":
+                continue
+            live_mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
+            if not np.any(live_mask):
+                continue
+            xvals = spec.data.x[live_mask]
+            yvals = spec.data.y[live_mask]
+            half_width = max(1e-9, float(spec.style.bar_width) * 0.5)
+            zeros = np.zeros_like(yvals, dtype=np.float64)
+            px_left, _ = map_to_pixels(xvals - half_width, zeros, transform, plot_w, plot_h)
+            px_right, _ = map_to_pixels(xvals + half_width, zeros, transform, plot_w, plot_h)
+            _, py_zero = map_to_pixels(xvals, zeros, transform, plot_w, plot_h)
+            _, py_vals = map_to_pixels(xvals, yvals, transform, plot_w, plot_h)
+            for i in range(xvals.size):
+                x0_bar = int(min(px_left[i], px_right[i]))
+                x1_bar = int(max(px_left[i], px_right[i]))
+                if x1_bar == x0_bar:
+                    x1_bar = min(plot_w - 1, x0_bar + 1)
+                y0_bar = int(min(py_zero[i], py_vals[i]))
+                y1_bar = int(max(py_zero[i], py_vals[i]))
+                _draw_filled_rect(
+                    drawing,
+                    x0=plot_x0 + x0_bar,
+                    y0=plot_y0 + y0_bar,
+                    x1=plot_x0 + x1_bar,
+                    y1=plot_y0 + y1_bar,
+                    color=spec.style.color,
+                )
         # Pass 1: lines under markers for clear point visibility.
         for spec in self._series:
             if spec.style.mode in {"lines", "lines+markers"}:

@@ -207,6 +207,46 @@ class LuvatrixPlotTests(unittest.TestCase):
         self.assertEqual(frame1.dtype, np.uint8)
         self.assertTrue(np.array_equal(frame1, frame2))
 
+    def test_bar_plot_supports_positive_and_negative_values_deterministically(self) -> None:
+        x = np.asarray([0.0, 1.0, 2.0, 3.0], dtype=np.float64)
+        y = np.asarray([2.0, -1.5, 3.5, -2.2], dtype=np.float64)
+        fig = figure(width=240, height=160)
+        ax = fig.axes(title="bars", x_label_bottom="x", y_label_left="value")
+        ax.bar(x=x, y=y, color=(90, 180, 255), width=0.7)
+        frame_1 = fig.to_rgba()
+        frame_2 = fig.to_rgba()
+        self.assertTrue(np.array_equal(frame_1, frame_2))
+
+        limits = ax.last_limits()
+        plot_rect = ax.last_plot_rect()
+        self.assertIsNotNone(limits)
+        self.assertIsNotNone(plot_rect)
+        assert limits is not None
+        assert plot_rect is not None
+        self.assertLess(limits.ymin, 0.0)
+        self.assertGreater(limits.ymax, 0.0)
+
+        plot_x0, plot_y0, plot_w, plot_h = plot_rect
+        transform = build_transform(limits, width=plot_w, height=plot_h)
+        _, py_zero = map_to_pixels(
+            np.asarray([0.0], dtype=np.float64),
+            np.asarray([0.0], dtype=np.float64),
+            transform,
+            plot_w,
+            plot_h,
+        )
+        baseline_y = int(plot_y0 + int(py_zero[0]))
+        rgb = frame_1[:, :, :3]
+        bar_mask = np.all(rgb == np.asarray([90, 180, 255], dtype=np.uint8).reshape(1, 1, 3), axis=2)
+        self.assertTrue(np.any(bar_mask[:baseline_y, :]))
+        self.assertTrue(np.any(bar_mask[baseline_y + 1 :, :]))
+
+    def test_bar_rejects_nonpositive_width(self) -> None:
+        fig = figure(width=160, height=100)
+        ax = fig.axes()
+        with self.assertRaises(ValueError):
+            ax.bar(y=[1.0, 2.0], width=0.0)
+
     def test_line_plot_respects_nan_gaps(self) -> None:
         y = np.asarray([0.0, 0.5, np.nan, np.nan, 0.0, 0.5], dtype=np.float64)
         fig = figure(width=160, height=100)

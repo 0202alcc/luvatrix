@@ -6,18 +6,19 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805`
 Last updated: `2026-02-28`
 
 ## Backlog
-1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
-2. `T-804` Scrolling/viewport controls for dense x-domains (pan/viewport APIs; optional zoom).
-3. `T-805` Table UI component system (sortable columns, pagination/virtualization, keyboard access).
+1. `T-804` Scrolling/viewport controls for dense x-domains (pan/viewport APIs; optional zoom).
+2. `T-805` Table UI component system (sortable columns, pagination/virtualization, keyboard access).
 
 ## Ready
-1. `T-802` Bar renderer support (`Axes.bar(...)`) with deterministic behavior.
+1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
 
 ## In Progress
 1. None.
 
 ## Review
 1. `T-801` Sideways/compact x-axis labels for dense long labels.
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
+2. `T-802` Bar renderer support (`Axes.bar(...)`) with deterministic behavior.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
 
 ## Done
@@ -26,3 +27,5 @@ Last updated: `2026-02-28`
 ## Evidence Log
 1. `2026-02-28`: Board initialized for `M-008`; `T-801` started.
 2. `2026-02-28`: `T-801` moved to `Review` after deterministic x-label layout updates and plot test pass.
+3. `2026-02-28`: `T-802` started after `T-801` review handoff.
+4. `2026-02-28`: `T-802` moved to `Review` after deterministic bar-render tests passed.

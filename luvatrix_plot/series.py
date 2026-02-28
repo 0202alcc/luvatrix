@@ -6,7 +6,7 @@ from typing import Literal
 import numpy as np
 
 
-SeriesMode = Literal["markers", "lines", "lines+markers"]
+SeriesMode = Literal["markers", "lines", "lines+markers", "bars"]
 
 
 @dataclass(frozen=True)
@@ -23,6 +23,7 @@ class SeriesStyle:
     color: tuple[int, int, int, int] = (62, 149, 255, 255)
     marker_size: int = 1
     line_width: int = 1
+    bar_width: float = 0.8
 
 
 @dataclass(frozen=True)
