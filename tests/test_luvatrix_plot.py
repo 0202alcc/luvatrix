@@ -117,6 +117,34 @@ class LuvatrixPlotTests(unittest.TestCase):
         labels = ax._format_x_tick_labels(np.asarray([0.0, 20.0, 40.0], dtype=np.float64))
         self.assertEqual(labels, ["0", "10", "20"])
 
+    def test_dense_long_x_labels_compact_fallback_is_deterministic(self) -> None:
+        x = np.arange(24, dtype=np.float64)
+        y = np.sin(x / 3.0)
+        labels = [f"rule-{i:02d}-very-long-label" for i in range(24)]
+
+        fig_small = figure(width=640, height=360)
+        ax_small = fig_small.axes(x_label_bottom="rule", y_label_left="value")
+        ax_small.set_major_tick_steps(x=1.0)
+        ax_small.set_x_tick_labels(labels)
+        ax_small.plot(x=x, y=y, color=(255, 170, 70), width=1)
+        frame_small_1 = fig_small.to_rgba()
+        frame_small_2 = fig_small.to_rgba()
+
+        self.assertTrue(np.array_equal(frame_small_1, frame_small_2))
+        rotate_small, stride_small = ax_small.last_x_tick_label_layout()
+        self.assertEqual(rotate_small, 90)
+        self.assertGreaterEqual(stride_small, 1)
+
+        fig_large = figure(width=1280, height=720)
+        ax_large = fig_large.axes(x_label_bottom="rule", y_label_left="value")
+        ax_large.set_major_tick_steps(x=1.0)
+        ax_large.set_x_tick_labels(labels)
+        ax_large.plot(x=x, y=y, color=(255, 170, 70), width=1)
+        fig_large.to_rgba()
+        rotate_large, stride_large = ax_large.last_x_tick_label_layout()
+        self.assertEqual(rotate_large, 90)
+        self.assertLessEqual(stride_large, stride_small)
+
     def test_zero_reference_lines_enabled_by_default(self) -> None:
         x = np.asarray([-1.0, 0.0, 1.0], dtype=np.float64)
         y = np.asarray([-1.0, 0.0, 1.0], dtype=np.float64)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, Sequence
 
 import numpy as np
 
@@ -131,6 +131,14 @@ class LegendLayout:
     box_h: int
 
 
+@dataclass(frozen=True)
+class XTickLabelLayout:
+    rotate_deg: int
+    stride: int
+    max_w: int
+    max_h: int
+
+
 @dataclass
 class Axes:
     figure: "Figure"
@@ -174,6 +182,8 @@ class Axes:
     include_zero_x_tick: bool = False
     x_tick_label_scale: float = 1.0
     x_tick_label_offset: float = 0.0
+    x_tick_labels: tuple[str, ...] | None = None
+    _viewport_x: tuple[float, float] | None = None
     legend_position_px: tuple[int, int] | None = None
     _legend_bounds_px: tuple[int, int, int, int] | None = None
     _legend_drag_active: bool = False
@@ -191,6 +201,8 @@ class Axes:
     _last_x_tick_pad: int = 4
     _last_max_x_tick_h: int = 12
     _last_x_label_gap: int = 8
+    _last_x_tick_label_rotate_deg: int = 0
+    _last_x_tick_label_stride: int = 1
 
     def scatter(
         self,
@@ -302,11 +314,50 @@ class Axes:
         self.x_tick_label_offset = float(offset)
         return self
 
+    def set_x_tick_labels(self, labels: Sequence[str] | None) -> "Axes":
+        if labels is None:
+            self.x_tick_labels = None
+            return self
+        self.x_tick_labels = tuple(str(label) for label in labels)
+        return self
+
     def _format_x_tick_labels(self, tick_x: np.ndarray) -> list[str]:
         if tick_x.size == 0:
             return []
+        if self.x_tick_labels is not None:
+            out: list[str] = []
+            for xv in tick_x.tolist():
+                idx = int(round(float(xv)))
+                if abs(float(xv) - float(idx)) <= 1e-9 and 0 <= idx < len(self.x_tick_labels):
+                    out.append(self.x_tick_labels[idx])
+                else:
+                    display = float(xv) * self.x_tick_label_scale + self.x_tick_label_offset
+                    out.append(format_ticks_for_axis(np.asarray([display], dtype=np.float64))[0])
+            return out
         display_ticks = tick_x.astype(np.float64, copy=False) * self.x_tick_label_scale + self.x_tick_label_offset
         return format_ticks_for_axis(display_ticks)
+
+    def _x_tick_label_layout(self, labels: Sequence[str], plot_w: int, tick_font_px: float) -> XTickLabelLayout:
+        if not labels:
+            h = max(1, int(round(tick_font_px)))
+            return XTickLabelLayout(rotate_deg=0, stride=1, max_w=0, max_h=h)
+        natural_sizes = [text_size(lbl, font_size_px=tick_font_px) for lbl in labels]
+        natural_max_w = max((w for w, _ in natural_sizes), default=0)
+        natural_max_h = max((h for _, h in natural_sizes), default=max(1, int(round(tick_font_px))))
+        slots = max(1, len(labels) - 1)
+        spacing = max(1.0, float(plot_w) / float(slots))
+        rotate = natural_max_w > spacing * 0.92
+        rotate_deg = 90 if rotate else 0
+        rotated_sizes = (
+            [text_size(lbl, font_size_px=tick_font_px, rotate_deg=rotate_deg) for lbl in labels]
+            if rotate_deg != 0
+            else natural_sizes
+        )
+        draw_max_w = max((w for w, _ in rotated_sizes), default=0)
+        draw_max_h = max((h for _, h in rotated_sizes), default=natural_max_h)
+        min_gap = max(2, int(round(tick_font_px * 0.2)))
+        stride = max(1, int(np.ceil((draw_max_w + min_gap) / spacing)))
+        return XTickLabelLayout(rotate_deg=rotate_deg, stride=stride, max_w=draw_max_w, max_h=draw_max_h)
 
     def add_reference_line(
         self,
@@ -524,6 +575,9 @@ class Axes:
     def last_x_rule_rect(self) -> tuple[int, int, int, int] | None:
         return self._last_x_rule_rect_px
 
+    def last_x_tick_label_layout(self) -> tuple[int, int]:
+        return (self._last_x_tick_label_rotate_deg, self._last_x_tick_label_stride)
+
     def render_x_rule_patch(
         self,
         xmin: float,
@@ -547,12 +601,15 @@ class Axes:
         if self.include_zero_x_tick:
             tick_x = _inject_zero_tick(tick_x, vmin=float(xmin), vmax=float(xmax))
         labels = self._format_x_tick_labels(tick_x)
+        x_tick_layout = self._x_tick_label_layout(labels, w, self._last_tick_font_px)
         transform = build_transform(
             limits=DataLimits(xmin=float(xmin), xmax=float(xmax), ymin=0.0, ymax=1.0),
             width=w,
             height=max(2, h),
         )
         for idx, (xv, label) in enumerate(zip(tick_x.tolist(), labels, strict=False)):
+            if x_tick_layout.stride > 1 and (idx % x_tick_layout.stride) != 0:
+                continue
             if visible_min is not None and xv < visible_min:
                 continue
             if visible_max is not None and xv > visible_max:
@@ -566,7 +623,7 @@ class Axes:
                 w,
                 max(2, h),
             )
-            tx, _ = text_size(label, font_size_px=self._last_tick_font_px)
+            tx, _ = text_size(label, font_size_px=self._last_tick_font_px, rotate_deg=x_tick_layout.rotate_deg)
             draw_text(
                 patch,
                 int(px[0]) - tx // 2,
@@ -575,6 +632,7 @@ class Axes:
                 self.text_color,
                 font_size_px=self._last_tick_font_px,
                 embolden_px=1,
+                rotate_deg=x_tick_layout.rotate_deg,
             )
         x_label_w, _ = text_size(self.x_label_bottom, font_size_px=self._last_label_font_px)
         draw_text(
@@ -697,9 +755,10 @@ class Axes:
             tick_x_probe = _inject_zero_tick(tick_x_probe, vmin=xmin, vmax=xmax)
         tick_y_probe = generate_nice_ticks(ymin, ymax, max(4, provisional_h // 140), preferred_step=preferred_y_step)
         x_tick_labels_probe = self._format_x_tick_labels(tick_x_probe)
+        x_tick_layout_probe = self._x_tick_label_layout(x_tick_labels_probe, provisional_w, tick_font_px)
         y_tick_labels_probe = format_ticks_for_axis(tick_y_probe)
-        max_x_tick_h = max((text_size(lbl, font_size_px=tick_font_px)[1] for lbl in x_tick_labels_probe), default=int(tick_font_px))
-        max_x_tick_w = max((text_size(lbl, font_size_px=tick_font_px)[0] for lbl in x_tick_labels_probe), default=0)
+        max_x_tick_h = x_tick_layout_probe.max_h
+        max_x_tick_w = x_tick_layout_probe.max_w
         max_y_tick_w = max((text_size(lbl, font_size_px=tick_font_px)[0] for lbl in y_tick_labels_probe), default=0)
         x_label_w, x_label_h = text_size(self.x_label_bottom, font_size_px=label_font_px)
         y_label_w, y_label_h = text_size(self.y_label_left, font_size_px=label_font_px, rotate_deg=270)
@@ -776,6 +835,9 @@ class Axes:
             tick_x = _inject_zero_tick(tick_x, vmin=xmin, vmax=xmax)
         tick_y = generate_nice_ticks(ymin, ymax, max(4, plot_h // 140), preferred_step=preferred_y_step)
         x_tick_labels = self._format_x_tick_labels(tick_x)
+        x_tick_layout = self._x_tick_label_layout(x_tick_labels, plot_w, tick_font_px)
+        self._last_x_tick_label_rotate_deg = x_tick_layout.rotate_deg
+        self._last_x_tick_label_stride = x_tick_layout.stride
         y_tick_labels = format_ticks_for_axis(tick_y)
         grid_key = (
             plot_w,
@@ -967,6 +1029,8 @@ class Axes:
             round(title_font_px, 2),
             self.show_edge_x_tick_labels,
             self.show_edge_y_tick_labels,
+            x_tick_layout.rotate_deg,
+            x_tick_layout.stride,
             self.include_zero_x_tick,
             round(self.x_tick_label_scale, 12),
             round(self.x_tick_label_offset, 12),
@@ -986,10 +1050,12 @@ class Axes:
                 )
 
             for idx, (xv, label) in enumerate(zip(tick_x.tolist(), x_tick_labels, strict=False)):
+                if x_tick_layout.stride > 1 and (idx % x_tick_layout.stride) != 0:
+                    continue
                 if (not self.show_edge_x_tick_labels) and (idx == 0 or idx == len(x_tick_labels) - 1):
                     continue
                 px, _ = map_to_pixels(np.asarray([xv], dtype=np.float64), np.asarray([ymin], dtype=np.float64), transform, plot_w, plot_h)
-                tx, _ = text_size(label, font_size_px=tick_font_px)
+                tx, _ = text_size(label, font_size_px=tick_font_px, rotate_deg=x_tick_layout.rotate_deg)
                 draw_text(
                     text_layer,
                     plot_x0 + int(px[0]) - tx // 2,
@@ -998,6 +1064,7 @@ class Axes:
                     self.text_color,
                     font_size_px=tick_font_px,
                     embolden_px=1,
+                    rotate_deg=x_tick_layout.rotate_deg,
                 )
 
             for idx, (yv, label) in enumerate(zip(tick_y.tolist(), y_tick_labels, strict=False)):
