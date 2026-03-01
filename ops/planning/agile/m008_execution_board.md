@@ -2,11 +2,20 @@
 
 Milestone: `M-008` Plot + data UX foundations
 Epic: `E-801`
-Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> T-807 -> T-808 -> T-809 -> T-810` (scrolling expansion) + `T-811 -> T-812 -> T-813 -> T-814 -> T-815 -> T-816 -> T-817 -> T-818 -> T-819 -> T-820 -> T-821 -> T-822 -> T-823 -> T-824 -> T-825` (architecture/spec extension)
+Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> T-807 -> T-808 -> T-809 -> T-810` (scrolling expansion) + `T-811 -> T-812 -> T-813 -> T-814 -> T-815 -> T-816 -> T-817 -> T-818 -> T-819 -> T-820 -> T-821 -> T-822 -> T-823 -> T-824 -> T-825` (architecture/spec extension) + `T-826 -> T-827 -> T-828 -> T-829 -> T-830 -> T-831 -> T-832 -> T-833 -> T-834 -> T-835` (scroll performance hardening)
 Last updated: `2026-03-01`
 
 ## Backlog
-1. None.
+1. `T-826` Frame-time instrumentation pack (input/hit-test/scroll-update/cull/mount/raster/present + counters).
+2. `T-827` HDI scroll event coalescing + phase/momentum propagation contract.
+3. `T-828` Retained mount graph (incremental node updates, reduced per-frame object churn).
+4. `T-829` Standardized CameraOverlay scrollbar primitives (no per-frame ad-hoc SVG generation).
+5. `T-830` True dirty-region compose path (partial redraw + unchanged-region reuse).
+6. `T-831` Hit-test acceleration index (spatial partitioning).
+7. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
+8. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
+9. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
+10. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
 
 ## Ready
 1. None.
@@ -401,3 +410,4 @@ Last updated: `2026-03-01`
 154. `2026-03-01`: Added/updated regression coverage and verification passed:
 - `PYTHONPATH=. uv run pytest tests/test_planes_protocol.py tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
+155. `2026-03-01`: Performance hardening chain approved and added in strict order: `T-826 -> T-827 -> T-828 -> T-829 -> T-830 -> T-831 -> T-832 -> T-833 -> T-834 -> T-835`.
