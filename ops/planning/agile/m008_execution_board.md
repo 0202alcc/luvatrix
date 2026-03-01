@@ -2,11 +2,21 @@
 
 Milestone: `M-008` Plot + data UX foundations
 Epic: `E-801`
-Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805`
+Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> T-807 -> T-808 -> T-809 -> T-810` (scrolling expansion)
 Last updated: `2026-03-01`
 
 ## Backlog
-1. None.
+1. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
+- Includes camera/viewport model: fixed matrix viewport over a larger Plane.
+2. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
+- Ensures only visible region is rasterized into the matrix frame.
+3. `T-808` Unified input/event plumbing for desktop + touch.
+- `ScrollIntent` abstraction across wheel, keyboard, touch-drag, and touch-fling.
+- Includes future mobile finger-swipe support and deterministic delta normalization.
+4. `T-809` Nested scroll containers + scrollbars/UX affordances.
+- Remainder bubbling for nested containers, thumb geometry, focus behavior.
+5. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
+- Large mixed-content Plane demo proving full-page/canvas scroll (not plot-only/table-only).
 
 ## Ready
 1. None.
@@ -118,3 +128,6 @@ Last updated: `2026-03-01`
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
 52. `2026-03-01`: Final acceptance received for `T-801`, `T-802`, and `T-805`; moved from `Review` to `Done`.
 53. `2026-03-01`: `M-008` marked complete. Dependency note: `M-011` depends on `M-008` only; dependency is now satisfied.
+54. `2026-03-01`: `M-008` reopened for full arbitrary page/canvas scrolling scope expansion.
+55. `2026-03-01`: Added scrolling expansion task breakdown `T-806..T-810`.
+56. `2026-03-01`: Aligned implementation model to Planes "camera over canvas" semantics with mobile-ready touch swipe/fling input in task scope (`T-808`).
