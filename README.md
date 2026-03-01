@@ -68,6 +68,9 @@ See:
 - `docs/app_protocol_compatibility_policy.md` for protocol support/deprecation policy
 - `docs/app_protocol_operator_runbook.md` for operator troubleshooting and audit verification
 - `docs/planes_protocol_v0.md` for the formal Planes JSON app-design schema (metadata, components, interactions, scripts, viewport semantics)
+- `docs/app_protocol_v2_superset_spec.md` for protocol-v2 runtime/adapters/process-lane contract
+- `docs/app_protocol_v2_conformance_matrix.md` for v1/v2 test matrix and CI gate commands
+- `docs/app_protocol_v2_migration.md` for migration path from v1 in-process apps to v2
 
 ## macOS Visualizer Examples
 

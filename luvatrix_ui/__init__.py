@@ -68,6 +68,14 @@ from .ui_ir import (
     default_ui_ir_page_schema,
     validate_ui_ir_payload,
 )
+from .planes_protocol import (
+    SUPPORTED_HDI_HOOKS,
+    PlanesAppMetadata,
+    PlanesValidationError,
+    compile_planes_to_ui_ir,
+    resolve_web_metadata,
+    validate_planes_payload,
+)
 
 __all__ = [
     "BoundingBox",
@@ -138,4 +146,10 @@ __all__ = [
     "validate_ui_ir_payload",
     "validate_theme_tokens",
     "zoom_week_window",
+    "SUPPORTED_HDI_HOOKS",
+    "PlanesAppMetadata",
+    "PlanesValidationError",
+    "compile_planes_to_ui_ir",
+    "resolve_web_metadata",
+    "validate_planes_payload",
 ]

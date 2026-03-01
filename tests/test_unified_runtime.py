@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 
@@ -294,6 +295,64 @@ class UnifiedRuntimeTests(unittest.TestCase):
             self.assertEqual(result.ticks_run, 30)
             # With a very low present cap, runtime should present far fewer frames than ticks.
             self.assertLessEqual(result.frames_presented, 2)
+
+    def test_unified_runtime_supports_v2_python_process_lane(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            worker_cmd = [sys.executable, "-u", "worker.py"]
+            (app_dir / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "test.v2.process"',
+                        'protocol_version = "2"',
+                        'entrypoint = "app_main:create"',
+                        'required_capabilities = ["window.write"]',
+                        "optional_capabilities = []",
+                        "",
+                        "[runtime]",
+                        'kind = "process"',
+                        'transport = "stdio_jsonl"',
+                        f'command = ["{worker_cmd[0]}", "{worker_cmd[1]}", "{worker_cmd[2]}"]',
+                    ]
+                )
+            )
+            (app_dir / "app_main.py").write_text("def create():\n    return object()\n")
+            (app_dir / "worker.py").write_text(
+                "\n".join(
+                    [
+                        "from luvatrix_core.core.process_sdk import TickEvent, HostHello, run_stdio_jsonl",
+                        "",
+                        "class _Worker:",
+                        "    def __init__(self):",
+                        "        self._tick = 0",
+                        "    def init(self, hello: HostHello) -> None:",
+                        "        assert hello.width > 0 and hello.height > 0",
+                        "    def tick(self, event: TickEvent):",
+                        "        _ = event",
+                        "        self._tick += 1",
+                        "        return [{\"op\": \"solid_fill\", \"rgba\": [self._tick % 255, 0, 0, 255]}]",
+                        "    def stop(self) -> None:",
+                        "        pass",
+                        "",
+                        "if __name__ == \"__main__\":",
+                        "    run_stdio_jsonl(_Worker())",
+                    ]
+                )
+            )
+            matrix = WindowMatrix(height=1, width=1)
+            target = _RecordingTarget()
+            hdi = HDIThread(source=_NoopHDISource())
+            sensors = _FakeSensorManager()
+            runtime = UnifiedRuntime(
+                matrix=matrix,
+                target=target,
+                hdi=hdi,
+                sensor_manager=sensors,
+                capability_decider=lambda cap: True,
+            )
+            result = runtime.run_app(app_dir, max_ticks=3, target_fps=1000)
+            self.assertEqual(result.ticks_run, 3)
+            self.assertEqual(matrix.revision, 3)
 
 
 if __name__ == "__main__":

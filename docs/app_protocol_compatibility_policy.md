@@ -8,13 +8,13 @@ Current runtime policy:
 
 | Runtime date | Runtime protocol version | Supported manifest protocol versions | Deprecated but accepted |
 | --- | --- | --- | --- |
-| 2026-03-01 | `1` | `1` | none |
+| 2026-03-01 | `2` | `1`, `2` | `1` |
 
 Interpretation:
 
-1. `protocol_version = "1"` is accepted.
-2. Any other manifest protocol version is rejected.
-3. There are currently no deprecated-but-still-accepted versions.
+1. `protocol_version = "2"` is accepted without warning.
+2. `protocol_version = "1"` is accepted with deprecation warning.
+3. Any other manifest protocol version is rejected.
 
 ## 2. Runtime Bounds Behavior (`min`/`max`)
 
@@ -23,7 +23,7 @@ App manifests may set:
 1. `min_runtime_protocol_version`
 2. `max_runtime_protocol_version`
 
-Current runtime uses protocol `1` and applies checks in this order:
+Current runtime uses protocol `2` and applies checks in this order:
 
 1. reject if `manifest.protocol_version` is unsupported
 2. reject if runtime version is below `min_runtime_protocol_version`
@@ -33,21 +33,21 @@ Current runtime uses protocol `1` and applies checks in this order:
 Examples:
 
 ```toml
-# accepted on runtime protocol 1
-protocol_version = "1"
-min_runtime_protocol_version = "1"
-max_runtime_protocol_version = "1"
-```
-
-```toml
-# rejected on runtime protocol 1 (runtime below app minimum)
-protocol_version = "1"
+# accepted on runtime protocol 2
+protocol_version = "2"
 min_runtime_protocol_version = "2"
+max_runtime_protocol_version = "2"
 ```
 
 ```toml
-# rejected on runtime protocol 1 (runtime above app maximum)
-protocol_version = "1"
+# rejected on runtime protocol 2 (runtime below app minimum)
+protocol_version = "2"
+min_runtime_protocol_version = "3"
+```
+
+```toml
+# rejected on runtime protocol 2 (runtime above app maximum)
+protocol_version = "2"
 max_runtime_protocol_version = "0"
 ```
 

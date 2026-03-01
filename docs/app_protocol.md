@@ -240,6 +240,9 @@ For protocol/UI work, keep these documents aligned:
 5. `docs/app_protocol_compatibility_policy.md` (version compatibility and deprecation policy)
 6. `docs/app_protocol_operator_runbook.md` (operator commands and troubleshooting)
 7. `docs/planes_protocol_v0.md` (JSON-first Plane/component schema standard)
+8. `docs/app_protocol_v2_superset_spec.md` (v2 runtime/adapters/process-lane contract)
+9. `docs/app_protocol_v2_conformance_matrix.md` (required test and CI matrix)
+10. `docs/app_protocol_v2_migration.md` (v1 to v2 migration guide)
 
 ## 18. First-Party App Standardization Checklist
 
@@ -265,3 +268,6 @@ Companion references:
 2. `docs/app_protocol_compatibility_policy.md`
 3. `docs/app_protocol_operator_runbook.md`
 4. `docs/planes_protocol_v0.md`
+5. `docs/app_protocol_v2_superset_spec.md`
+6. `docs/app_protocol_v2_conformance_matrix.md`
+7. `docs/app_protocol_v2_migration.md`

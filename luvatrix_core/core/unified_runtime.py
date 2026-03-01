@@ -12,6 +12,7 @@ from .display_runtime import DisplayRuntime
 from .energy_safety import EnergySafetyController
 from .frame_rate_controller import FrameRateController
 from .hdi_thread import HDIThread
+from .process_runtime import ProcessLifecycleClient
 from .sensor_manager import SensorManagerThread
 from .window_matrix import WindowMatrix
 
@@ -71,7 +72,14 @@ class UnifiedRuntime:
         granted = self._app_runtime.resolve_capabilities(manifest)
         ctx = self._app_runtime.build_context(granted_capabilities=granted)
         resolved = self._app_runtime.resolve_variant(app_path, manifest)
-        lifecycle = self._app_runtime.load_lifecycle(resolved.module_dir, resolved.entrypoint)
+        if manifest.runtime_kind == "process":
+            lifecycle = ProcessLifecycleClient(
+                manifest.process_command,
+                cwd=resolved.module_dir,
+                protocol_version=manifest.protocol_version,
+            )
+        else:
+            lifecycle = self._app_runtime.load_lifecycle(resolved.module_dir, resolved.entrypoint)
         self._enable_granted_sensors(ctx.sensor_manager, granted)
 
         ticks_run = 0
