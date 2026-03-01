@@ -19,7 +19,7 @@ MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
-PlanesV2PocApp = MODULE.PlanesV2PocApp
+create = MODULE.create
 PLANES_JSON = MODULE.PLANES_JSON
 
 
@@ -31,11 +31,11 @@ class _NoopHDISource(HDIEventSource):
 
 class PlanesV2PocExampleTests(unittest.TestCase):
     def test_planes_poc_compiles_and_inherits_web_metadata(self) -> None:
-        app = PlanesV2PocApp()
-        self.assertEqual(app._metadata.title, "Planes v2 Proof")
-        self.assertEqual(app._metadata.tab_title, "Planes v2 Proof")
-        self.assertEqual(app._metadata.icon, "assets/logo.svg")
-        self.assertEqual(app._metadata.tab_icon, "assets/logo.svg")
+        app = create()
+        self.assertEqual(app.metadata.title, "Planes v2 Proof")
+        self.assertEqual(app.metadata.tab_title, "Planes v2 Proof")
+        self.assertEqual(app.metadata.icon, "assets/logo.svg")
+        self.assertEqual(app.metadata.tab_icon, "assets/logo.svg")
         self.assertTrue(PLANES_JSON.exists())
 
     def test_planes_poc_runtime_runs_with_protocol_v2(self) -> None:

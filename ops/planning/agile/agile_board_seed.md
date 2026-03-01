@@ -48,6 +48,9 @@ Every card must include:
 14. `T-214` Define Planes Gantt+Agile feature profile and status-theming contract for first-party planning app templates.
 15. `T-215` Implement deterministic compiler mapping from Planes JSON to shared UI IR (draw/hit-test ordering + frame transforms).
 16. `T-216` Add Planes strict/permissive schema validation and conformance tests (including v1/v2 protocol integration gates).
+17. `T-217` Implement first-party Planes runtime loader API (`load_plane_app`) so apps can run from `plane.json` without custom compile/render boilerplate.
+18. `T-218` Refactor `planes_v2_poc` to tiny `load_plane_app(...)` pattern using framework-managed Planes pipeline.
+19. `T-219` Add Planes runtime tests/docs for handler dispatch, viewport semantics, and proof command coverage.
 
 ### E-701 (M-007): Full-suite interactive cross-platform generalization
 1. `T-701` Add platform-aware runtime path: macOS windowed + non-macOS headless.

@@ -76,6 +76,11 @@ from .planes_protocol import (
     resolve_web_metadata,
     validate_planes_payload,
 )
+from .planes_runtime import (
+    EventHandler,
+    PlaneApp,
+    load_plane_app,
+)
 
 __all__ = [
     "BoundingBox",
@@ -152,4 +157,7 @@ __all__ = [
     "compile_planes_to_ui_ir",
     "resolve_web_metadata",
     "validate_planes_payload",
+    "EventHandler",
+    "PlaneApp",
+    "load_plane_app",
 ]

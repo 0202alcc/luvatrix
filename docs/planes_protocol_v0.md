@@ -294,3 +294,35 @@ Recommended first implementation set:
 2. App manifests SHOULD declare which Planes version they target.
 3. New versions MUST define compatibility and migration notes.
 4. Future `v0.x` changes should remain additive when possible.
+
+## 17. First-Party Runtime Loader (Developer UX)
+
+Apps SHOULD use the first-party loader so they do not implement custom compiler/render boilerplate.
+
+Tiny `app_main.py` pattern:
+
+```python
+from pathlib import Path
+from luvatrix_ui.planes_runtime import load_plane_app
+
+APP_DIR = Path(__file__).resolve().parent
+
+def open_card(event_ctx, app_state):
+    app_state["last_action"] = ("open_card", event_ctx.get("component_id"))
+
+def create():
+    return load_plane_app(
+        APP_DIR / "plane.json",
+        handlers={
+            "handlers::open_card": open_card,
+        },
+        strict=True,
+    )
+```
+
+Loader responsibilities:
+
+1. parse + validate Planes payload
+2. compile Planes to shared UI IR
+3. handle component mounting + frame render pipeline
+4. dispatch HDI-normalized hooks to registered handlers

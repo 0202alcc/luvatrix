@@ -2,7 +2,7 @@
 
 Milestone: `M-002` App protocol docs finalized
 Epic: `E-201`
-Task chain: `T-201 -> T-202 -> T-203 -> T-204 -> T-205 -> T-206 -> T-207 -> T-208 -> T-209 -> T-210 -> T-211 -> T-212 -> T-213 -> T-214 -> T-215 -> T-216`
+Task chain: `T-201 -> T-202 -> T-203 -> T-204 -> T-205 -> T-206 -> T-207 -> T-208 -> T-209 -> T-210 -> T-211 -> T-212 -> T-213 -> T-214 -> T-215 -> T-216 -> T-217 -> T-218 -> T-219`
 Last updated: `2026-03-01`
 
 ## Backlog
@@ -34,12 +34,17 @@ Last updated: `2026-03-01`
 14. `T-214` Define Planes Gantt+Agile feature profile and status-theming contract for first-party planning app templates.
 15. `T-215` Implement deterministic compiler mapping from Planes JSON to shared UI IR (draw/hit-test ordering + frame transforms).
 16. `T-216` Add Planes strict/permissive schema validation and conformance tests (including v1/v2 protocol integration gates).
+17. `T-217` Implement first-party Planes runtime loader API (`load_plane_app`) for framework-managed parse/compile/render flow.
+18. `T-218` Refactor `planes_v2_poc` to tiny `load_plane_app(...)` pattern with app-specific handlers only.
+19. `T-219` Add Planes runtime tests/docs for dispatch behavior, viewport semantics, and PoC proof coverage.
 
 Evidence:
 1. `PYTHONPATH=. uv run pytest tests/test_protocol_governance.py tests/test_app_runtime.py tests/test_unified_runtime.py tests/test_planes_protocol.py` (`40 passed`).
 2. `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_protocol.py tests/test_protocol_governance.py tests/test_app_runtime.py tests/test_unified_runtime.py` (`42 passed`).
 3. `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 5` (`run complete: ticks=5 frames=5 stopped_by_target_close=False stopped_by_energy_safety=False`).
 4. `PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py` (`validation: PASS`).
+5. `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py tests/test_planes_protocol.py tests/test_protocol_governance.py tests/test_app_runtime.py tests/test_unified_runtime.py` (`45 passed`).
+6. `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 10` (`run complete: ticks=10 frames=10 stopped_by_target_close=False stopped_by_energy_safety=False`).
 
 ## Evidence Log
 1. `2026-03-01`: Added formal Planes spec: `docs/planes_protocol_v0.md`.
@@ -57,5 +62,8 @@ Evidence:
 7. `2026-03-01`: Added protocol-v2 + Planes proof-of-concept app:
    - `examples/app_protocol/planes_v2_poc/app.toml` (`protocol_version = "2"`, runtime `python_inproc`)
    - `examples/app_protocol/planes_v2_poc/plane.json` (Planes schema payload)
-   - `examples/app_protocol/planes_v2_poc/app_main.py` (Planes -> UI IR -> frame render)
+   - `examples/app_protocol/planes_v2_poc/app_main.py` (tiny `load_plane_app(...)` entrypoint)
 8. `2026-03-01`: Added proof test `tests/test_planes_v2_poc_example.py` and executed both test and runtime proof commands.
+9. `2026-03-01`: Added first-party Planes runtime loader `luvatrix_ui/planes_runtime.py` and exported `load_plane_app` for app authors.
+10. `2026-03-01`: Added runtime loader tests `tests/test_planes_runtime.py` (render mounting, handler dispatch, strict missing-handler failure).
+11. `2026-03-01`: Updated task statuses via planning API: `T-217..T-219 -> Done`.

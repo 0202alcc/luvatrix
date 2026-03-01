@@ -910,6 +910,54 @@
         "team:protocol",
         "specialist:testing"
       ]
+    },
+    {
+      "id": "T-217",
+      "title": "Implement first-party Planes runtime loader API (load_plane_app) so apps can run from plane.json without custom compile/render boilerplate.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Done",
+      "depends_on": [
+        "T-216"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:runtime",
+        "team:protocol",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-218",
+      "title": "Refactor planes_v2_poc example to tiny load_plane_app(...) pattern using framework-managed Planes compile/render pipeline.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Done",
+      "depends_on": [
+        "T-217"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:runtime",
+        "team:protocol",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-219",
+      "title": "Add Planes runtime tests/docs for handler dispatch, viewport semantics, and proof command coverage.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Done",
+      "depends_on": [
+        "T-218"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:platform-ci",
+        "team:protocol",
+        "specialist:testing"
+      ]
     }
   ]
 }
