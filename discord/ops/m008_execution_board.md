@@ -100,3 +100,7 @@ Last updated: `2026-03-01`
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
 45. `2026-03-01`: `T-801` and `T-805` moved back to `Review`; `T-802` remains in `Review`.
+46. `2026-03-01`: Table selector marker updated from font glyph to custom SVG triangle to avoid font fallback artifacts in Comic Mono.
+47. `2026-03-01`: Verification rerun passed and demo artifacts refreshed:
+- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
+- `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`

@@ -186,13 +186,18 @@ def _render_table_luvatrix_rgba(table: TableComponent) -> np.ndarray:
         x_cursor = table_x + 20.0
         row_color = "#f2f7ff" if focus else "#d0dae8"
         if focus:
-            TextComponent(
+            focus_arrow_svg = """
+<svg width="18" height="24" viewBox="0 0 18 24">
+  <polygon points="2,12 16,4 16,20" fill="#f2f7ff"/>
+</svg>
+""".strip()
+            SVGComponent(
                 component_id=f"table-focus-{row_idx}",
-                text="▶",
-                position=CoordinatePoint(table_x - 6.0, y, "screen_tl"),
-                size=TextSizeSpec(unit="px", value=30.0),
-                appearance=TextAppearance(color_hex="#f2f7ff"),
-            ).render(renderer, display)
+                svg_markup=focus_arrow_svg,
+                position=CoordinatePoint(table_x - 10.0, y + 4.0, "screen_tl"),
+                width=18.0,
+                height=24.0,
+            ).render(renderer)
         for col_idx, column in enumerate(columns):
             raw = row.get(column.key)
             if isinstance(raw, float):
