@@ -6,19 +6,18 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-01`
 
 ## Backlog
-1. `T-813` Compositing ADR (`absolute_rgba` / `delta_rgba` + clamp contract).
-2. `T-814` Input/scroll routing ADR (section-cut pass-through + nested targeting).
-3. `T-815` Camera-relative culling/prefetch ADR.
-4. `T-816` Planes schema vNext spec update.
-5. `T-817` App protocol capability/version update.
-6. `T-818` UI IR gap assessment.
-7. `T-819` UI IR v2 field contract.
-8. `T-820` IR validation plan + snapshot matrix.
-9. `T-821` Compiler upgrade design (schema vNext -> IR v2).
-10. `T-822` Runtime pipeline design (matrix compositing + overlay + clamp).
-11. `T-823` Performance execution plan (culling/prefetch/invalidation/cache).
-12. `T-824` Demo + verification plan.
-13. `T-825` Rollout and compatibility gate plan.
+1. `T-814` Input/scroll routing ADR (section-cut pass-through + nested targeting).
+2. `T-815` Camera-relative culling/prefetch ADR.
+3. `T-816` Planes schema vNext spec update.
+4. `T-817` App protocol capability/version update.
+5. `T-818` UI IR gap assessment.
+6. `T-819` UI IR v2 field contract.
+7. `T-820` IR validation plan + snapshot matrix.
+8. `T-821` Compiler upgrade design (schema vNext -> IR v2).
+9. `T-822` Runtime pipeline design (matrix compositing + overlay + clamp).
+10. `T-823` Performance execution plan (culling/prefetch/invalidation/cache).
+11. `T-824` Demo + verification plan.
+12. `T-825` Rollout and compatibility gate plan.
 
 ## Ready
 1. None.
@@ -35,17 +34,21 @@ Last updated: `2026-03-01`
 - Evidence:
 - `ops/planning/adr/ADR-007-plane-composition-model.md` created (Accepted).
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
-3. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
+3. `T-813` Compositing ADR (`absolute_rgba` / `delta_rgba` + clamp contract).
+- Evidence:
+- `ops/planning/adr/ADR-008-absolute-delta-rgba-compositing.md` created (Accepted).
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+4. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-4. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
+5. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-5. `T-808` Unified input/event plumbing for desktop + touch.
+6. `T-808` Unified input/event plumbing for desktop + touch.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added `ScrollIntent` abstraction path for `scroll` plus touch-compatible event types (`pan`/`swipe`) scaffolding.
-6. `T-809` Nested scroll containers + scrollbars/UX affordances.
+7. `T-809` Nested scroll containers + scrollbars/UX affordances.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added nested viewport scroll remainder bubbling + viewport scrollbars (x/y tracks and thumbs).
-7. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
+8. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
 - Evidence:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
@@ -225,4 +228,12 @@ Last updated: `2026-03-01`
 - deterministic draw and hit-test ordering contracts with worked examples.
 97. `2026-03-01`: Updated ADR index with `ADR-007` entry for composition model traceability.
 98. `2026-03-01`: Verification rerun passed and `T-812` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+99. `2026-03-01`: `T-813` started (`Backlog` -> `In Progress`) for absolute/delta RGBA compositing contract.
+100. `2026-03-01`: Created compositing ADR `ops/planning/adr/ADR-008-absolute-delta-rgba-compositing.md`:
+- `absolute_rgba` and `delta_rgba` mode contracts,
+- deterministic ordering interaction with ADR-007,
+- explicit clamp policy to keep final MatrixBuffer channels within `[0,255]`.
+101. `2026-03-01`: Updated ADR index with `ADR-008` entry for compositing model traceability.
+102. `2026-03-01`: Verification rerun passed and `T-813` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`

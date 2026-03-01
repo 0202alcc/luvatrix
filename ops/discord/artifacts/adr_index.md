@@ -52,6 +52,12 @@ This index tracks major decisions with alternatives and rationale.
 - Summary: Define deterministic composition via global plane z, local component z, and camera-overlay dominance.
 - Linked evidence: `ops/planning/adr/ADR-007-plane-composition-model.md`, `ops/planning/agile/m008_execution_board.md`
 
+8. `ADR-008` Absolute and delta RGBA compositing contract
+- Status: Accepted
+- Date: 2026-03-01
+- Summary: Formalize `absolute_rgba` and `delta_rgba` behavior, deterministic order, and strict `[0,255]` final clamp rules.
+- Linked evidence: `ops/planning/adr/ADR-008-absolute-delta-rgba-compositing.md`, `ops/planning/agile/m008_execution_board.md`
+
 ## New ADR Template
 1. Context
 2. Decision
