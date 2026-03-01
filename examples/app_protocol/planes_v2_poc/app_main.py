@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 from typing import Any
+
+APP_DIR = Path(__file__).resolve().parent
+REPO_ROOT = APP_DIR.parents[2]
+if str(REPO_ROOT) not in sys.path:
+    # Allow running this example from source checkout without installing package.
+    sys.path.insert(0, str(REPO_ROOT))
 
 from luvatrix_core.core.ui_frame_renderer import MatrixUIFrameRenderer
 from luvatrix_ui.component_schema import CoordinatePoint
@@ -12,7 +19,6 @@ from luvatrix_ui.text.component import TextComponent
 from luvatrix_ui.text.renderer import TextAppearance, TextSizeSpec
 
 
-APP_DIR = Path(__file__).resolve().parent
 PLANES_JSON = APP_DIR / "plane.json"
 
 
