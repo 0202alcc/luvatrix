@@ -138,7 +138,7 @@
       "name": "App protocol docs finalized",
       "start_week": 2,
       "end_week": 3,
-      "status": "In Progress",
+      "status": "Complete",
       "task_ids": [
         "T-201",
         "T-202",

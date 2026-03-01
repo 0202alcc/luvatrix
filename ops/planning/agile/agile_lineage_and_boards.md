@@ -1,6 +1,6 @@
 # Agile Lineage and Milestone Boards (Deep Trace)
 
-As-of date: 2026-02-28.
+As-of date: 2026-03-01.
 
 ## 1) Improved Wide ASCII Gantt (Historical + Current Plan)
 
@@ -20,7 +20,7 @@ H-007 🔌 Plot Stabilization + Stream Simulation        |███████�
 H-008 🗂️ Discord Ops Consolidation                     |██████████                                                                                              | Status=Complete (2026-02-26)
 H-009 📦 Packaging + Vulkan Preflight Guidance         |██████████                                                                                              | Status=Complete (2026-02-27)
 M-001 🧱 Discord Governance + Onboarding               |████████████████████                                                                                    | Status=In Progress
-M-002 📜 App Protocol Docs Finalized                   |          ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                                                                            | Status=Planned
+M-002 📜 App Protocol Docs Finalized                   |          ████████████████████                                                                            | Status=Complete
 M-003 🎮 Vulkan Stabilization                          |                    ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                                                | Status=Planned
 M-004 🧪 CI Hardening + Flaky Governance               |                              ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                                                    | Status=Planned
 M-005 🛡️ Audit Retention Lifecycle                     |                                        ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                                          | Status=Planned

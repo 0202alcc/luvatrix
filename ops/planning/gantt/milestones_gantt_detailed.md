@@ -19,7 +19,7 @@ H-007 Plot stabilization and stream simulation integration                      
 H-008 Discord ops consolidation under /discord                                  |=======                                                                                    | Complete (2026-02-26)
 H-009 Packaging metadata and Vulkan runtime preflight guidance                  |=======                                                                                    | Complete (2026-02-27)
 M-001 Discord governance artifacts and onboarding system                        |##############                                                                             | In Progress
-M-002 App protocol docs finalized                                               |       ##############                                                                      | In Progress
+M-002 App protocol docs finalized                                               |       ==============                                                                      | Complete
 M-003 Vulkan stabilization                                                      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                 | Planned
 M-004 CI hardening and flaky governance                                         |                     ~~~~~~~~~~~~~~~~~~~~~                                                 | Planned
 M-005 Audit retention lifecycle                                                 |                            ~~~~~~~~~~~~~~~~~~~~~                                          | Planned
