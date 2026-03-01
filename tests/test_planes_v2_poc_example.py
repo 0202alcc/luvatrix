@@ -32,8 +32,8 @@ class _NoopHDISource(HDIEventSource):
 class PlanesV2PocExampleTests(unittest.TestCase):
     def test_planes_poc_compiles_and_inherits_web_metadata(self) -> None:
         app = create()
-        self.assertEqual(app.metadata.title, "Planes v2 Proof")
-        self.assertEqual(app.metadata.tab_title, "Planes v2 Proof")
+        self.assertEqual(app.metadata.title, "Planes v2 Theme Demo")
+        self.assertEqual(app.metadata.tab_title, "Planes v2 Theme Demo")
         self.assertEqual(app.metadata.icon, "assets/logo.svg")
         self.assertEqual(app.metadata.tab_icon, "assets/logo.svg")
         self.assertTrue(PLANES_JSON.exists())

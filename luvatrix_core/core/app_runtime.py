@@ -215,8 +215,6 @@ class AppContext:
         display = self._ui_display
         components = list(self._ui_components)
         try:
-            text_commands = []
-            svg_commands = []
             for component in components:
                 if isinstance(component, TextComponent):
                     command, _ = component.layout(
@@ -224,17 +222,13 @@ class AppContext:
                         display,
                         transformer=self.coordinate_frames,
                     )
-                    text_commands.append(command)
+                    renderer.draw_text_batch(TextRenderBatch(commands=(command,)))
                     continue
                 if isinstance(component, SVGComponent):
                     command, _ = component.layout()
-                    svg_commands.append(command)
+                    renderer.draw_svg_batch(SVGRenderBatch(commands=(command,)))
                     continue
                 raise NotImplementedError(f"unsupported component type for ui frame: {type(component)!r}")
-            if text_commands:
-                renderer.draw_text_batch(TextRenderBatch(commands=tuple(text_commands)))
-            if svg_commands:
-                renderer.draw_svg_batch(SVGRenderBatch(commands=tuple(svg_commands)))
             frame = renderer.end_frame()
             return self.submit_write_batch(WriteBatch([FullRewrite(frame)]))
         finally:

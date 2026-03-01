@@ -37,6 +37,9 @@ class PlaneApp:
         self.metadata = resolve_web_metadata(self._planes["app"])
         self._ui_page = None
         self._bg_color = (0, 0, 0, 255)
+        self.state.setdefault("active_theme", "default")
+        self.state.setdefault("hover_component_id", None)
+        self.state.setdefault("last_pointer_xy", None)
 
     def register_handler(self, target: str, handler: EventHandler) -> None:
         self._handlers[target] = handler
@@ -48,6 +51,7 @@ class PlaneApp:
         self._ensure_compiled(ctx)
         assert self._ui_page is not None
         self._dispatch_events(ctx, dt)
+        self._bg_color = self._resolve_background()
 
         ctx.begin_ui_frame(
             self._renderer,
@@ -55,14 +59,19 @@ class PlaneApp:
             content_height_px=float(self._ui_page.matrix.height),
             clear_color=self._bg_color,
         )
-        for component in self._ui_page.ordered_components_for_draw():
+        ordered = self._ui_page.ordered_components_for_draw()
+        for component in ordered:
             if not component.visible:
                 continue
+            if component.component_type == "viewport":
+                self._mount_viewport_cutout_mask(ctx, component)
+                continue
             frame = component.resolved_frame(self._ui_page.default_frame)
+            resolved_x, resolved_y = self._resolved_position(component)
             if component.component_type == "text":
                 props = component.style if isinstance(component.style, dict) else {}
                 text = str(props.get("text", component.component_id))
-                color_hex = str(props.get("color_hex", "#f5fbff"))
+                color_hex = self._resolve_text_color(component.component_id, props)
                 font_size_px = float(props.get("font_size_px", 14.0))
                 max_width_px = props.get("max_width_px")
                 if max_width_px is not None:
@@ -71,7 +80,7 @@ class PlaneApp:
                     TextComponent(
                         component_id=component.component_id,
                         text=text,
-                        position=CoordinatePoint(component.position.x, component.position.y, frame),
+                        position=CoordinatePoint(resolved_x, resolved_y, frame),
                         size=TextSizeSpec(unit="px", value=font_size_px),
                         appearance=TextAppearance(color_hex=color_hex, opacity=float(component.opacity)),
                         max_width_px=max_width_px,
@@ -87,7 +96,7 @@ class PlaneApp:
                     SVGComponent(
                         component_id=component.component_id,
                         svg_markup=svg_markup,
-                        position=CoordinatePoint(component.position.x, component.position.y, frame),
+                        position=CoordinatePoint(resolved_x, resolved_y, frame),
                         width=component.width,
                         height=component.height,
                         opacity=float(component.opacity),
@@ -118,45 +127,74 @@ class PlaneApp:
         if not events:
             return
         for event in events:
-            hook = _hook_for_event(event.event_type, event.payload)
+            payload = event.payload if isinstance(event.payload, dict) else {}
+            self._record_pointer_xy(payload)
+            if event.event_type == "pointer_move":
+                self._dispatch_hover(payload, dt)
+                continue
+            hook = _hook_for_event(event.event_type, payload)
             if hook is None:
                 continue
-            payload = event.payload if isinstance(event.payload, dict) else {}
             target_component = self._pick_component_for_event(payload)
             if target_component is None:
                 continue
-            for binding in target_component.interactions:
-                if binding.event != hook:
-                    continue
-                handler = self._resolve_handler(binding.handler)
-                if handler is None:
-                    if self._strict:
-                        raise RuntimeError(f"missing handler for target: {binding.handler}")
-                    continue
-                event_ctx = {
-                    "component_id": target_component.component_id,
-                    "event_type": event.event_type,
-                    "hook": hook,
-                    "payload": payload,
-                    "dt": float(dt),
-                }
-                handler(event_ctx, self.state)
+            self._invoke_bindings(target_component, hook, event.event_type, payload, dt)
+
+    def _dispatch_hover(self, payload: dict[str, Any], dt: float) -> None:
+        if self._ui_page is None:
+            return
+        new_target = self._pick_component_for_event(payload)
+        prev_id = self.state.get("hover_component_id")
+        new_id = new_target.component_id if new_target is not None else None
+        if prev_id == new_id:
+            return
+        prev_target = None
+        if prev_id is not None:
+            prev_target = next((c for c in self._ui_page.components if c.component_id == prev_id), None)
+        if prev_target is not None:
+            self._invoke_bindings(prev_target, "on_hover_end", "pointer_move", payload, dt)
+        if new_target is not None:
+            self._invoke_bindings(new_target, "on_hover_start", "pointer_move", payload, dt)
+        self.state["hover_component_id"] = new_id
 
     def _pick_component_for_event(self, payload: dict[str, Any]):
         if self._ui_page is None:
             return None
-        if "x" not in payload or "y" not in payload:
-            return self._ui_page.ordered_components_for_hit_test()[0] if self._ui_page.components else None
-        try:
-            x = float(payload["x"])
-            y = float(payload["y"])
-        except (TypeError, ValueError):
+        xy = self._extract_event_xy(payload)
+        if xy is None:
             return None
+        x, y = xy
         for component in self._ui_page.ordered_components_for_hit_test():
             bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
-            if bounds.x <= x <= bounds.x + bounds.width and bounds.y <= y <= bounds.y + bounds.height:
+            resolved_x, resolved_y = self._resolved_position(component)
+            if resolved_x <= x <= resolved_x + bounds.width and resolved_y <= y <= resolved_y + bounds.height:
                 return component
         return None
+
+    def _record_pointer_xy(self, payload: dict[str, Any]) -> None:
+        xy = self._extract_xy_from_payload(payload)
+        if xy is not None:
+            self.state["last_pointer_xy"] = xy
+
+    def _extract_event_xy(self, payload: dict[str, Any]) -> tuple[float, float] | None:
+        direct = self._extract_xy_from_payload(payload)
+        if direct is not None:
+            return direct
+        fallback = self.state.get("last_pointer_xy")
+        if isinstance(fallback, tuple) and len(fallback) == 2:
+            try:
+                return (float(fallback[0]), float(fallback[1]))
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    def _extract_xy_from_payload(self, payload: dict[str, Any]) -> tuple[float, float] | None:
+        if "x" not in payload or "y" not in payload:
+            return None
+        try:
+            return (float(payload["x"]), float(payload["y"]))
+        except (TypeError, ValueError):
+            return None
 
     def _resolve_handler(self, target: str) -> EventHandler | None:
         if target in self._handlers:
@@ -167,6 +205,113 @@ class PlaneApp:
                 if key.endswith(f"::{fn_name}"):
                     return handler
         return None
+
+    def _invoke_bindings(
+        self,
+        component,
+        hook: str,
+        event_type: str,
+        payload: dict[str, Any],
+        dt: float,
+    ) -> None:
+        for binding in component.interactions:
+            if binding.event != hook:
+                continue
+            handler = self._resolve_handler(binding.handler)
+            if handler is None:
+                if self._strict:
+                    raise RuntimeError(f"missing handler for target: {binding.handler}")
+                continue
+            event_ctx = {
+                "component_id": component.component_id,
+                "event_type": event_type,
+                "hook": hook,
+                "payload": payload,
+                "dt": float(dt),
+            }
+            handler(event_ctx, self.state)
+
+    def _resolve_background(self) -> tuple[int, int, int, int]:
+        if self._ui_page is None:
+            return self._bg_color
+        theme_name = str(self.state.get("active_theme", "default"))
+        themes = self._planes.get("themes", {})
+        if isinstance(themes, dict):
+            entry = themes.get(theme_name)
+            if isinstance(entry, dict):
+                color = entry.get("background")
+                if isinstance(color, str):
+                    return _parse_hex_rgba(color)
+        return _parse_hex_rgba(self._ui_page.background)
+
+    def _resolve_text_color(self, component_id: str, props: dict[str, Any]) -> str:
+        color_hex = str(props.get("color_hex", "#f5fbff"))
+        theme_name = str(self.state.get("active_theme", "default"))
+        theme_colors = props.get("theme_colors")
+        if isinstance(theme_colors, dict):
+            themed = theme_colors.get(theme_name)
+            if isinstance(themed, str) and themed.strip():
+                color_hex = themed
+        hovered = self.state.get("hover_component_id")
+        hover_hex = props.get("hover_color_hex")
+        if hovered == component_id and isinstance(hover_hex, str) and hover_hex.strip():
+            color_hex = hover_hex
+        return color_hex
+
+    def _resolved_position(self, component) -> tuple[float, float]:
+        if self._ui_page is None:
+            return (float(component.position.x), float(component.position.y))
+        x = float(component.position.x)
+        y = float(component.position.y)
+        props = component.style if isinstance(component.style, dict) else {}
+        align = str(props.get("align", "")).lower()
+        if align == "center":
+            x = (float(self._ui_page.matrix.width) - float(component.width)) / 2.0
+        v_align = str(props.get("v_align", "")).lower()
+        if v_align == "bottom":
+            margin_bottom_px = float(props.get("margin_bottom_px", 0.0))
+            y = float(self._ui_page.matrix.height) - float(component.height) - margin_bottom_px
+        return (x, y)
+
+    def _mount_viewport_cutout_mask(self, ctx, component) -> None:
+        if self._ui_page is None:
+            return
+        frame = component.resolved_frame(self._ui_page.default_frame)
+        bg = _rgba_to_hex(self._bg_color)
+        x, y = self._resolved_position(component)
+        w = float(component.width)
+        h = float(component.height)
+        full_w = float(self._ui_page.matrix.width)
+        full_h = float(self._ui_page.matrix.height)
+
+        # Four rectangles around the viewport create a "cutout window" effect.
+        masks = [
+            (0.0, 0.0, full_w, max(0.0, y)),  # top
+            (0.0, y + h, full_w, max(0.0, full_h - (y + h))),  # bottom
+            (0.0, y, max(0.0, x), h),  # left
+            (x + w, y, max(0.0, full_w - (x + w)), h),  # right
+        ]
+        for i, (mx, my, mw, mh) in enumerate(masks):
+            if mw <= 0 or mh <= 0:
+                continue
+            iw = int(round(mw))
+            ih = int(round(mh))
+            markup = (
+                f'<svg width="{iw}" height="{ih}" '
+                'xmlns="http://www.w3.org/2000/svg">'
+                f'<rect x="0" y="0" width="{iw}" height="{ih}" fill="{bg}"/>'
+                "</svg>"
+            )
+            ctx.mount_component(
+                SVGComponent(
+                    component_id=f"{component.component_id}__mask_{i}",
+                    svg_markup=markup,
+                    position=CoordinatePoint(mx, my, frame),
+                    width=mw,
+                    height=mh,
+                    opacity=1.0,
+                )
+            )
 
 
 def load_plane_app(
@@ -217,3 +362,7 @@ def _parse_hex_rgba(value: str) -> tuple[int, int, int, int]:
     if len(h) == 8:
         return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), int(h[6:8], 16))
     raise ValueError(f"invalid color: {value}")
+
+
+def _rgba_to_hex(value: tuple[int, int, int, int]) -> str:
+    return f"#{value[0]:02x}{value[1]:02x}{value[2]:02x}"

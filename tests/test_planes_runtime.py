@@ -159,6 +159,45 @@ class PlanesRuntimeTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 app.loop(ctx, 0.016)
 
+    def test_plane_runtime_uses_last_pointer_xy_when_click_payload_has_no_coords(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_file(Path(td))
+            app = PlaneApp(plane_path, handlers={})
+            calls: list[tuple[str, str]] = []
+
+            def _on_open(event_ctx, state):
+                state["clicked"] = event_ctx["component_id"]
+                calls.append((event_ctx["hook"], event_ctx["component_id"]))
+
+            app.register_handler("handlers::open", _on_open)
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload={"x": 20.0, "y": 20.0},
+                )
+            )
+            ctx.queue(
+                HDIEvent(
+                    event_id=2,
+                    ts_ns=2,
+                    window_id="w",
+                    device="mouse",
+                    event_type="press",
+                    status="OK",
+                    payload={"phase": "single", "key": ""},
+                )
+            )
+            app.loop(ctx, 0.016)
+            self.assertEqual(calls, [("on_press_single", "title")])
+            self.assertEqual(app.state.get("clicked"), "title")
+
 
 if __name__ == "__main__":
     unittest.main()
