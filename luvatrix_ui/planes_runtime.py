@@ -24,6 +24,8 @@ class ScrollIntent:
     delta_y: float
     source: str
     phase: str = "update"
+    momentum_phase: str | None = None
+    event_count: int = 1
 
 
 class PlaneApp:
@@ -176,6 +178,7 @@ class PlaneApp:
             "events_polled": int(self._frame_counts.get("events_polled", 0)),
             "events_processed": int(self._frame_counts.get("events_processed", 0)),
             "scroll_events": int(self._frame_counts.get("scroll_events", 0)),
+            "scroll_events_coalesced": int(self._frame_counts.get("scroll_events_coalesced", 0)),
             "hit_test_calls": int(self._frame_counts.get("hit_test_calls", 0)),
             "timing_ms": {
                 "input": self._ns_to_ms(self._frame_perf.get("input_ns", 0.0)),
@@ -223,14 +226,38 @@ class PlaneApp:
         self._frame_counts["events_polled"] = int(len(events))
         if not events:
             return
+        scroll_dx = 0.0
+        scroll_dy = 0.0
+        scroll_count = 0
+        scroll_source = "wheel"
+        scroll_phase = "update"
+        scroll_momentum_phase: str | None = None
+        scroll_payload_for_hook: dict[str, Any] | None = None
         for event in events:
             self._frame_counts["events_processed"] = int(self._frame_counts.get("events_processed", 0)) + 1
             payload = event.payload if isinstance(event.payload, dict) else {}
             self._record_pointer_xy(payload)
-            intent = _scroll_intent_from_event(event.event_type, payload)
-            if intent is not None:
-                self._frame_counts["scroll_events"] = int(self._frame_counts.get("scroll_events", 0)) + 1
-                self._dispatch_viewport_scroll(payload, intent)
+            if event.event_type in {"scroll", "pan", "swipe"}:
+                intent = _scroll_intent_from_event(event.event_type, payload)
+                if intent is not None:
+                    self._frame_counts["scroll_events"] = int(self._frame_counts.get("scroll_events", 0)) + 1
+                    scroll_count += 1
+                    scroll_dx += float(intent.delta_x)
+                    scroll_dy += float(intent.delta_y)
+                    scroll_source = intent.source
+                    scroll_phase = intent.phase
+                    scroll_momentum_phase = intent.momentum_phase or scroll_momentum_phase
+                    if scroll_payload_for_hook is None:
+                        scroll_payload_for_hook = {}
+                    if "x" in payload:
+                        scroll_payload_for_hook["x"] = payload["x"]
+                    if "y" in payload:
+                        scroll_payload_for_hook["y"] = payload["y"]
+                    if "phase" in payload:
+                        scroll_payload_for_hook["phase"] = payload["phase"]
+                    if "momentum_phase" in payload:
+                        scroll_payload_for_hook["momentum_phase"] = payload["momentum_phase"]
+                continue
             if event.event_type == "pointer_move":
                 self._dispatch_hover(payload, dt)
                 continue
@@ -241,6 +268,27 @@ class PlaneApp:
             if target_component is None:
                 continue
             self._invoke_bindings(target_component, hook, event.event_type, payload, dt)
+        if scroll_count > 0:
+            self._frame_counts["scroll_events_coalesced"] = int(self._frame_counts.get("scroll_events_coalesced", 0)) + 1
+            intent = ScrollIntent(
+                delta_x=scroll_dx,
+                delta_y=scroll_dy,
+                source=scroll_source,
+                phase=scroll_phase,
+                momentum_phase=scroll_momentum_phase,
+                event_count=scroll_count,
+            )
+            coalesced_payload = dict(scroll_payload_for_hook or {})
+            coalesced_payload["delta_x"] = float(-scroll_dx)
+            coalesced_payload["delta_y"] = float(-scroll_dy)
+            coalesced_payload["coalesced_count"] = int(scroll_count)
+            if scroll_momentum_phase is not None:
+                coalesced_payload["momentum_phase"] = scroll_momentum_phase
+            self._dispatch_viewport_scroll(coalesced_payload, intent)
+            hook = _hook_for_event("scroll", coalesced_payload)
+            target_component = self._pick_component_for_event(coalesced_payload)
+            if hook is not None and target_component is not None:
+                self._invoke_bindings(target_component, hook, "scroll", coalesced_payload, dt)
 
     def _dispatch_hover(self, payload: dict[str, Any], dt: float) -> None:
         if self._ui_page is None:
@@ -308,14 +356,30 @@ class PlaneApp:
         for viewport in stack:
             consumed_x, consumed_y = self._apply_viewport_scroll_intent(
                 viewport,
-                ScrollIntent(delta_x=rem_x, delta_y=rem_y, source=intent.source, phase=intent.phase),
+                ScrollIntent(
+                    delta_x=rem_x,
+                    delta_y=rem_y,
+                    source=intent.source,
+                    phase=intent.phase,
+                    momentum_phase=intent.momentum_phase,
+                    event_count=intent.event_count,
+                ),
             )
             rem_x -= consumed_x
             rem_y -= consumed_y
             if abs(rem_x) <= 1e-9 and abs(rem_y) <= 1e-9:
                 break
         if abs(rem_x) > 1e-9 or abs(rem_y) > 1e-9:
-            self._apply_plane_scroll_intent(ScrollIntent(delta_x=rem_x, delta_y=rem_y, source=intent.source, phase=intent.phase))
+            self._apply_plane_scroll_intent(
+                ScrollIntent(
+                    delta_x=rem_x,
+                    delta_y=rem_y,
+                    source=intent.source,
+                    phase=intent.phase,
+                    momentum_phase=intent.momentum_phase,
+                    event_count=intent.event_count,
+                )
+            )
         self._add_perf_ns("scroll_update_ns", time.perf_counter_ns() - scroll_start_ns)
 
     def _record_pointer_xy(self, payload: dict[str, Any]) -> None:
@@ -467,6 +531,7 @@ class PlaneApp:
             "events_polled": 0,
             "events_processed": 0,
             "scroll_events": 0,
+            "scroll_events_coalesced": 0,
             "hit_test_calls": 0,
         }
 
@@ -1001,16 +1066,22 @@ def _scroll_intent_from_event(event_type: str, payload: dict[str, Any]) -> Scrol
             dy = float(payload.get("delta_y", 0.0))
         except (TypeError, ValueError):
             return None
+        phase = str(payload.get("phase", "update"))
+        momentum_phase = payload.get("momentum_phase")
+        momentum = str(momentum_phase) if isinstance(momentum_phase, str) and momentum_phase else None
         # Match system-native scroll direction expectations by treating positive
         # wheel deltas as moving the viewport camera in the opposite direction.
-        return ScrollIntent(delta_x=-dx, delta_y=-dy, source="wheel", phase="update")
+        return ScrollIntent(delta_x=-dx, delta_y=-dy, source="wheel", phase=phase, momentum_phase=momentum)
     if event_type in {"pan", "swipe"}:
         try:
             dx = float(payload.get("delta_x", 0.0))
             dy = float(payload.get("delta_y", 0.0))
         except (TypeError, ValueError):
             return None
-        return ScrollIntent(delta_x=-dx, delta_y=-dy, source="touch_drag", phase="update")
+        phase = str(payload.get("phase", "update"))
+        momentum_phase = payload.get("momentum_phase")
+        momentum = str(momentum_phase) if isinstance(momentum_phase, str) and momentum_phase else None
+        return ScrollIntent(delta_x=-dx, delta_y=-dy, source="touch_drag", phase=phase, momentum_phase=momentum)
     return None
 
 

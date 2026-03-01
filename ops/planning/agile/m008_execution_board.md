@@ -6,15 +6,14 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-01`
 
 ## Backlog
-1. `T-827` HDI scroll event coalescing + phase/momentum propagation contract.
-2. `T-828` Retained mount graph (incremental node updates, reduced per-frame object churn).
-3. `T-829` Standardized CameraOverlay scrollbar primitives (no per-frame ad-hoc SVG generation).
-4. `T-830` True dirty-region compose path (partial redraw + unchanged-region reuse).
-5. `T-831` Hit-test acceleration index (spatial partitioning).
-6. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
-7. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
-8. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
-9. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
+1. `T-828` Retained mount graph (incremental node updates, reduced per-frame object churn).
+2. `T-829` Standardized CameraOverlay scrollbar primitives (no per-frame ad-hoc SVG generation).
+3. `T-830` True dirty-region compose path (partial redraw + unchanged-region reuse).
+4. `T-831` Hit-test acceleration index (spatial partitioning).
+5. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
+6. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
+7. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
+8. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
 
 ## Ready
 1. None.
@@ -118,6 +117,13 @@ Last updated: `2026-03-01`
 - Evidence:
 - `luvatrix_ui/planes_runtime.py` now records per-frame timing buckets (`input`, `hit_test`, `scroll_update`, `cull`, `mount`, `raster`, `present`, `frame_total`) plus frame counters (`events_polled`, `events_processed`, `scroll_events`, `hit_test_calls`) in `state["perf"]`.
 - `tests/test_planes_runtime.py` adds metrics contract coverage for stage keys and non-negative timing/counter values.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+22. `T-827` HDI scroll event coalescing + phase/momentum propagation contract.
+- Evidence:
+- `luvatrix_ui/planes_runtime.py` now coalesces per-frame `scroll`/`pan`/`swipe` events into one intent update and one `on_scroll` dispatch while preserving aggregated deltas.
+- Coalesced payloads now carry `coalesced_count` and phase metadata (`phase`, `momentum_phase`) through to handlers; perf counters include `scroll_events_coalesced`.
+- `luvatrix_core/platform/macos/hdi_source.py` now emits native scroll metadata (`phase`, `momentum_phase`, `precise`) for protocol consumers.
+- `tests/test_planes_runtime.py` adds coalescing + metadata propagation coverage (`2 events -> 1 handler call` with summed deltas).
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 
 ## Done
@@ -421,4 +427,11 @@ Last updated: `2026-03-01`
 - per-frame counters for events and hit-test usage.
 158. `2026-03-01`: Added regression coverage in `tests/test_planes_runtime.py` for instrumentation contract (required stage keys and non-negative values).
 159. `2026-03-01`: Verification rerun passed and `T-826` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+160. `2026-03-01`: `T-827` started (`Backlog` -> `In Progress`) for HDI scroll coalescing + phase/momentum propagation.
+161. `2026-03-01`: Implemented per-frame scroll coalescing in `luvatrix_ui/planes_runtime.py`:
+- aggregates `scroll`/`pan`/`swipe` events into one deterministic intent update and one `on_scroll` dispatch per frame,
+- propagates metadata (`phase`, `momentum_phase`, `coalesced_count`) and adds `scroll_events_coalesced` perf counter.
+162. `2026-03-01`: Added macOS source metadata for scroll protocol payloads in `luvatrix_core/platform/macos/hdi_source.py` (`phase`, `momentum_phase`, `precise`) and added regression coverage in `tests/test_planes_runtime.py`.
+163. `2026-03-01`: Verification rerun passed and `T-827` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`

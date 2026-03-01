@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 import tempfile
+from typing import Any
 import unittest
 
 from luvatrix_core.core.hdi_thread import HDIEvent
@@ -355,6 +356,39 @@ def _build_plane_v2_multi_file(root: Path) -> Path:
     return plane_path
 
 
+def _build_scroll_hook_plane_file(root: Path) -> Path:
+    payload = {
+        "planes_protocol_version": "0.1.0",
+        "app": {
+            "id": "x.scroll_hook",
+            "title": "Scroll Hook",
+            "icon": "assets/logo.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "plane": {"id": "main", "default_frame": "screen_tl", "background": {"color": "#112233"}},
+        "scripts": [{"id": "handlers", "lang": "python", "src": "scripts/handlers.py"}],
+        "components": [
+            {
+                "id": "hook_target",
+                "type": "text",
+                "position": {"x": 10, "y": 10},
+                "size": {"width": {"unit": "px", "value": 220}, "height": {"unit": "px", "value": 24}},
+                "z_index": 2,
+                "functions": {"on_scroll": "handlers::on_scroll"},
+                "props": {"text": "scroll target"},
+            }
+        ],
+    }
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "logo.svg").write_text(
+        "<svg width=\"10\" height=\"10\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#ffffff\"/></svg>",
+        encoding="utf-8",
+    )
+    plane_path = root / "plane_scroll_hook.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
 class PlanesRuntimeTests(unittest.TestCase):
     def test_load_plane_app_renders_components(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -656,6 +690,61 @@ class PlanesRuntimeTests(unittest.TestCase):
             for key in expected_keys:
                 value = float(timing.get(key, 0.0))
                 self.assertGreaterEqual(value, 0.0)
+
+    def test_plane_runtime_coalesces_scroll_events_and_preserves_phases(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_scroll_hook_plane_file(Path(td))
+            calls: list[dict[str, Any]] = []
+
+            def _on_scroll(event_ctx, state):
+                _ = state
+                calls.append(dict(event_ctx.get("payload", {})))
+
+            app = load_plane_app(plane_path, handlers={"handlers::on_scroll": _on_scroll})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="trackpad",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 20.0, "y": 20.0, "delta_x": -4.0, "delta_y": -2.0, "phase": "changed"},
+                )
+            )
+            ctx.queue(
+                HDIEvent(
+                    event_id=2,
+                    ts_ns=2,
+                    window_id="w",
+                    device="trackpad",
+                    event_type="scroll",
+                    status="OK",
+                    payload={
+                        "x": 22.0,
+                        "y": 21.0,
+                        "delta_x": -6.0,
+                        "delta_y": -3.0,
+                        "phase": "ended",
+                        "momentum_phase": "none",
+                    },
+                )
+            )
+            app.loop(ctx, 0.016)
+
+            self.assertEqual(len(calls), 1)
+            payload = calls[0]
+            self.assertEqual(int(payload.get("coalesced_count", 0)), 2)
+            self.assertAlmostEqual(float(payload.get("delta_x", 0.0)), -10.0, places=6)
+            self.assertAlmostEqual(float(payload.get("delta_y", 0.0)), -5.0, places=6)
+            self.assertEqual(str(payload.get("phase", "")), "ended")
+            self.assertEqual(str(payload.get("momentum_phase", "")), "none")
+
+            perf = app.state.get("perf", {})
+            self.assertEqual(int(perf.get("scroll_events", 0)), 2)
+            self.assertEqual(int(perf.get("scroll_events_coalesced", 0)), 1)
 
     def test_plane_runtime_supports_v2_attachment_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as td:
