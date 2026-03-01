@@ -64,7 +64,7 @@
       "title": "Add complete variant-routing examples to protocol docs.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:M-002",
@@ -77,7 +77,7 @@
       "title": "Add compatibility/deprecation matrix and migration notes.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-201"
       ],
@@ -92,7 +92,7 @@
       "title": "Add operator runbook examples and troubleshooting appendix.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-202"
       ],
@@ -697,6 +697,217 @@
       "board_refs": [
         "milestone:M-011",
         "team:platform-ci",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-204",
+      "title": "Define App Protocol v2 superset wire spec with v1 backward-compatibility guarantees.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Ready",
+      "depends_on": [
+        "T-203"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-205",
+      "title": "Implement runtime adapter layer (python in-process baseline + process runtime hooks) for protocol v2 execution.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-204"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-206",
+      "title": "Deliver Python-first protocol v2 process lane (stdio transport + reference worker SDK/client) while keeping v1 behavior unchanged.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-205"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:runtime",
+        "team:protocol",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-207",
+      "title": "Extend app manifest/governance for v2 runtime fields with strict compatibility policy and v1-safe defaults.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-204"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "specialist:architecture",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-208",
+      "title": "Add protocol v1/v2 conformance matrix and CI gates for adapter/runtime compatibility and deterministic render outputs.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-205",
+        "T-206",
+        "T-207"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:platform-ci",
+        "team:protocol",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-209",
+      "title": "Publish v1-to-v2 migration guide and runbook updates for first-party app teams (Python-first, multi-language ready).",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-208"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "team:security-quality",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-210",
+      "title": "Finalize Planes Protocol v0 core schema (app/plane/component contracts, metadata inheritance, unit normalization).",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Ready",
+      "depends_on": [
+        "T-209"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-211",
+      "title": "Standardize Planes interaction hooks against HDI-normalized phases and event payload contracts.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-210"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-212",
+      "title": "Define Planes script registry and deterministic function target resolution (<script_id>::<function_name>) with strict-mode failures.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-210"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "team:security-quality",
+        "specialist:safety"
+      ]
+    },
+    {
+      "id": "T-213",
+      "title": "Specify Planes viewport clipping and scroll-window semantics (coordinate remap, bounds, deterministic pan behavior).",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-210"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:rendering",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-214",
+      "title": "Define Planes Gantt+Agile feature profile and status-theming contract for first-party planning app templates.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-210",
+        "T-213"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "team:rendering",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-215",
+      "title": "Implement deterministic compiler mapping from Planes JSON to shared UI IR (draw/hit-test ordering + frame transforms).",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-211",
+        "T-212",
+        "T-213",
+        "T-214"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:runtime",
+        "team:protocol",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-216",
+      "title": "Add Planes strict/permissive schema validation and conformance tests (including v1/v2 protocol integration gates).",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-215"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:platform-ci",
+        "team:protocol",
         "specialist:testing"
       ]
     }

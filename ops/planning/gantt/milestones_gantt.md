@@ -15,7 +15,7 @@ H-007 🔌 Plot stabilization and stream simulation integration                 
 H-008 🗂️ Discord ops consolidation under /discord                                 █············  🟢 Complete (2026-02-26)
 H-009 📦 Packaging metadata and Vulkan runtime preflight guidance                  █············  🟢 Complete (2026-02-27)
 M-001 🧱 Discord governance artifacts and onboarding system                        ██···········  🔵 In Progress
-M-002 📜 App protocol docs finalized                                               ·██··········  ⚪ Planned
+M-002 📜 App protocol docs finalized                                               ·██··········  🔵 In Progress
 M-003 🎮 Vulkan stabilization                                                      ··████·······  ⚪ Planned
 M-004 🧪 CI hardening and flaky governance                                         ···███·······  ⚪ Planned
 M-005 🛡️ Audit retention lifecycle                                                ····███······  ⚪ Planned
@@ -91,9 +91,9 @@ Canonical schedule source: `ops/planning/gantt/milestone_schedule.json`
 - Tasks: `T-101, T-102, T-103`
 
 ### M-002 📜 App protocol docs finalized
-- Status: Planned
+- Status: In Progress
 - Target window: Week 2-3
-- Tasks: `T-201, T-202, T-203`
+- Tasks: `T-201, T-202, T-203, T-204, T-205, T-206, T-207, T-208, T-209, T-210, T-211, T-212, T-213, T-214, T-215, T-216`
 
 ### M-003 🎮 Vulkan stabilization
 - Status: Planned

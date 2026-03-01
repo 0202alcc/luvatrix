@@ -35,6 +35,19 @@ Every card must include:
 1. `T-201` Add complete variant-routing examples to protocol docs.
 2. `T-202` Add compatibility/deprecation matrix and migration notes.
 3. `T-203` Add operator runbook examples and troubleshooting appendix.
+4. `T-204` Define App Protocol v2 superset wire spec with v1 backward-compatibility guarantees.
+5. `T-205` Implement runtime adapter layer (python in-process baseline + process runtime hooks) for protocol v2 execution.
+6. `T-206` Deliver Python-first protocol v2 process lane (stdio transport + reference worker SDK/client) while keeping v1 behavior unchanged.
+7. `T-207` Extend app manifest/governance for v2 runtime fields with strict compatibility policy and v1-safe defaults.
+8. `T-208` Add protocol v1/v2 conformance matrix and CI gates for adapter/runtime compatibility and deterministic render outputs.
+9. `T-209` Publish v1-to-v2 migration guide and runbook updates for first-party app teams (Python-first, multi-language ready).
+10. `T-210` Finalize Planes Protocol v0 core schema (app/plane/component contracts, metadata inheritance, unit normalization).
+11. `T-211` Standardize Planes interaction hooks against HDI-normalized phases and event payload contracts.
+12. `T-212` Define Planes script registry and deterministic function target resolution (`<script_id>::<function_name>`) with strict-mode failures.
+13. `T-213` Specify Planes viewport clipping and scroll-window semantics (coordinate remap, bounds, deterministic pan behavior).
+14. `T-214` Define Planes Gantt+Agile feature profile and status-theming contract for first-party planning app templates.
+15. `T-215` Implement deterministic compiler mapping from Planes JSON to shared UI IR (draw/hit-test ordering + frame transforms).
+16. `T-216` Add Planes strict/permissive schema validation and conformance tests (including v1/v2 protocol integration gates).
 
 ### E-701 (M-007): Full-suite interactive cross-platform generalization
 1. `T-701` Add platform-aware runtime path: macOS windowed + non-macOS headless.
