@@ -336,36 +336,37 @@ class PlaneApp:
         h = float(component.height)
         full_w = float(self._ui_page.matrix.width)
         full_h = float(self._ui_page.matrix.height)
-        self._mount_viewport_content(ctx, component, x=x, y=y, frame=frame)
+        clipped = self._mount_viewport_content(ctx, component, x=x, y=y, frame=frame)
 
-        # Four rectangles around the viewport create a "cutout window" effect.
-        masks = [
-            (0.0, 0.0, full_w, max(0.0, y)),  # top
-            (0.0, y + h, full_w, max(0.0, full_h - (y + h))),  # bottom
-            (0.0, y, max(0.0, x), h),  # left
-            (x + w, y, max(0.0, full_w - (x + w)), h),  # right
-        ]
-        for i, (mx, my, mw, mh) in enumerate(masks):
-            if mw <= 0 or mh <= 0:
-                continue
-            iw = int(round(mw))
-            ih = int(round(mh))
-            markup = (
-                f'<svg width="{iw}" height="{ih}" '
-                'xmlns="http://www.w3.org/2000/svg">'
-                f'<rect x="0" y="0" width="{iw}" height="{ih}" fill="{bg}"/>'
-                "</svg>"
-            )
-            ctx.mount_component(
-                SVGComponent(
-                    component_id=f"{component.component_id}__mask_{i}",
-                    svg_markup=markup,
-                    position=CoordinatePoint(mx, my, frame),
-                    width=mw,
-                    height=mh,
-                    opacity=1.0,
+        if not clipped:
+            # Fallback path for non-SVG content: cutout masks emulate clipping.
+            masks = [
+                (0.0, 0.0, full_w, max(0.0, y)),  # top
+                (0.0, y + h, full_w, max(0.0, full_h - (y + h))),  # bottom
+                (0.0, y, max(0.0, x), h),  # left
+                (x + w, y, max(0.0, full_w - (x + w)), h),  # right
+            ]
+            for i, (mx, my, mw, mh) in enumerate(masks):
+                if mw <= 0 or mh <= 0:
+                    continue
+                iw = int(round(mw))
+                ih = int(round(mh))
+                markup = (
+                    f'<svg width="{iw}" height="{ih}" '
+                    'xmlns="http://www.w3.org/2000/svg">'
+                    f'<rect x="0" y="0" width="{iw}" height="{ih}" fill="{bg}"/>'
+                    "</svg>"
                 )
-            )
+                ctx.mount_component(
+                    SVGComponent(
+                        component_id=f"{component.component_id}__mask_{i}",
+                        svg_markup=markup,
+                        position=CoordinatePoint(mx, my, frame),
+                        width=mw,
+                        height=mh,
+                        opacity=1.0,
+                    )
+                )
         self._mount_viewport_scrollbars(ctx, component, x=x, y=y, frame=frame)
 
 
@@ -458,20 +459,41 @@ class PlaneApp:
         consumed_y = (clamped_y - cur_y) / speed_y if abs(speed_y) > 1e-12 else 0.0
         return (consumed_x, consumed_y)
 
-    def _mount_viewport_content(self, ctx, viewport_component, *, x: float, y: float, frame: str) -> None:
+    def _mount_viewport_content(self, ctx, viewport_component, *, x: float, y: float, frame: str) -> bool:
         style = viewport_component.style if isinstance(viewport_component.style, dict) else {}
         ref = style.get("content_ref")
         if not isinstance(ref, str) or ref not in self._component_index:
-            return
+            return False
         content = self._component_index[ref]
         scroll_x, scroll_y = self._viewport_scroll_position(viewport_component)
         content_x = x - scroll_x
         content_y = y - scroll_y
         if content.component_type == "svg":
             if content.asset is None:
-                return
+                return False
             svg_path = (self._plane_dir / content.asset.source).resolve()
             svg_markup = svg_path.read_text(encoding="utf-8")
+            view_w = max(1, int(round(float(viewport_component.width))))
+            view_h = max(1, int(round(float(viewport_component.height))))
+            clipped_markup = _build_clipped_svg_markup(
+                svg_markup,
+                offset_x=float(scroll_x),
+                offset_y=float(scroll_y),
+                view_w=view_w,
+                view_h=view_h,
+            )
+            if clipped_markup is not None:
+                ctx.mount_component(
+                    SVGComponent(
+                        component_id=f"{viewport_component.component_id}__content",
+                        svg_markup=clipped_markup,
+                        position=CoordinatePoint(x, y, frame),
+                        width=float(view_w),
+                        height=float(view_h),
+                        opacity=float(content.opacity),
+                    )
+                )
+                return True
             ctx.mount_component(
                 SVGComponent(
                     component_id=f"{viewport_component.component_id}__content",
@@ -482,11 +504,11 @@ class PlaneApp:
                     opacity=float(content.opacity),
                 )
             )
-            return
+            return False
         if content.component_type == "viewport":
             self._mount_viewport_content(ctx, content, x=content_x, y=content_y, frame=frame)
             self._mount_viewport_scrollbars(ctx, content, x=content_x, y=content_y, frame=frame)
-            return
+            return False
         if content.component_type == "text":
             props = content.style if isinstance(content.style, dict) else {}
             text = str(props.get("text", content.component_id))
@@ -505,6 +527,8 @@ class PlaneApp:
                     max_width_px=max_width_px,
                 )
             )
+            return False
+        return False
 
     def _mount_viewport_scrollbars(self, ctx, viewport_component, *, x: float, y: float, frame: str) -> None:
         style = viewport_component.style if isinstance(viewport_component.style, dict) else {}
@@ -657,6 +681,41 @@ def _scroll_intent_from_event(event_type: str, payload: dict[str, Any]) -> Scrol
             return None
         return ScrollIntent(delta_x=-dx, delta_y=-dy, source="touch_drag", phase="update")
     return None
+
+
+def _extract_svg_inner(svg_markup: str) -> str | None:
+    text = svg_markup.strip()
+    if not text:
+        return None
+    start = text.find(">")
+    if start < 0:
+        return None
+    end = text.rfind("</svg>")
+    if end < 0 or end <= start:
+        return None
+    inner = text[start + 1 : end].strip()
+    return inner if inner else None
+
+
+def _build_clipped_svg_markup(
+    svg_markup: str,
+    *,
+    offset_x: float,
+    offset_y: float,
+    view_w: int,
+    view_h: int,
+) -> str | None:
+    inner = _extract_svg_inner(svg_markup)
+    if inner is None:
+        return None
+    tx = -float(offset_x)
+    ty = -float(offset_y)
+    return (
+        f'<svg width="{view_w}" height="{view_h}" viewBox="0 0 {view_w} {view_h}" '
+        'xmlns="http://www.w3.org/2000/svg">'
+        f'<g transform="translate({tx:.3f} {ty:.3f})">{inner}</g>'
+        "</svg>"
+    )
 
 
 def _parse_hex_rgba(value: str) -> tuple[int, int, int, int]:

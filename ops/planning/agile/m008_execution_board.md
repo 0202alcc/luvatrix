@@ -174,3 +174,7 @@ Last updated: `2026-03-01`
 80. `2026-03-01`: Verification rerun passed:
 - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
 81. `2026-03-01`: `T-810` remains in `Review` with expanded multi-scroll scenario coverage.
+82. `2026-03-01`: Fixed multi-viewport clipping behavior: SVG viewport content now renders via per-viewport clipped composition instead of global cutout masks, preventing one viewport from erasing others.
+83. `2026-03-01`: Verification rerun passed:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
