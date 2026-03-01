@@ -15,13 +15,7 @@ Last updated: `2026-03-01`
 1. None.
 
 ## Review
-1. `T-801` Sideways/compact x-axis labels for dense long labels.
-- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py` (pass).
-2. `T-802` Bar renderer support (`Axes.bar(...)`) with deterministic behavior + non-edge-touching bar padding.
-- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py` (pass).
-3. `T-805` Table UI component system (sortable columns, pagination/virtualization, keyboard access, csv/pandas ingestion baseline).
-- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_ui_table.py tests/test_luvatrix_plot.py tests/test_plot_app_protocol_example.py` (pass).
-- Demo: `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py` -> `discord/ops/m008_demo_plot_default.png`, `discord/ops/m008_demo_plot_panned.png`, `discord/ops/m008_demo_table.txt`, `discord/ops/m008_demo_positions.csv`, `discord/ops/m008_demo_table.png`.
+1. None.
 
 ## Done
 1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
@@ -30,6 +24,16 @@ Last updated: `2026-03-01`
 2. `T-804` Scrolling/viewport controls for dense x-domains (pan/viewport APIs; optional zoom).
 - Accepted in review feedback on `2026-02-28`.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py` (pass).
+3. `T-801` Sideways/compact x-axis labels for dense long labels.
+- Accepted in review feedback on `2026-03-01`.
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py` (pass).
+4. `T-802` Bar renderer support (`Axes.bar(...)`) with deterministic behavior + non-edge-touching bar padding.
+- Accepted in review feedback on `2026-03-01`.
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py` (pass).
+5. `T-805` Table UI component system (sortable columns, pagination/virtualization, keyboard access, csv/pandas ingestion baseline).
+- Accepted in review feedback on `2026-03-01`.
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_luvatrix_ui_table.py tests/test_luvatrix_plot.py tests/test_plot_app_protocol_example.py` (pass).
+- Demo: `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py` -> `discord/ops/m008_demo_plot_default.png`, `discord/ops/m008_demo_plot_panned.png`, `discord/ops/m008_demo_table.txt`, `discord/ops/m008_demo_positions.csv`, `discord/ops/m008_demo_table.png`.
 
 ## Evidence Log
 1. `2026-02-28`: Board initialized for `M-008`; `T-801` started.
@@ -112,3 +116,5 @@ Last updated: `2026-03-01`
 51. `2026-03-01`: Verification rerun passed and demo artifacts refreshed:
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
+52. `2026-03-01`: Final acceptance received for `T-801`, `T-802`, and `T-805`; moved from `Review` to `Done`.
+53. `2026-03-01`: `M-008` marked complete. Dependency note: `M-011` depends on `M-008` only; dependency is now satisfied.
