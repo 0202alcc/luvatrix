@@ -253,6 +253,46 @@ class LuvatrixPlotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ax.bar(y=[1.0, 2.0], width=0.0)
 
+    def test_horizontal_bar_supports_positive_and_negative_values(self) -> None:
+        widths = np.asarray([2.0, -1.5, 3.4, -0.7], dtype=np.float64)
+        y_pos = np.asarray([0.0, 1.0, 2.0, 3.0], dtype=np.float64)
+        fig = figure(width=260, height=170)
+        ax = fig.axes(title="barh", x_label_bottom="value", y_label_left="row")
+        ax.barh(width=widths, y=y_pos, color=(90, 180, 255), height=0.7)
+        frame_1 = fig.to_rgba()
+        frame_2 = fig.to_rgba()
+        self.assertTrue(np.array_equal(frame_1, frame_2))
+
+        limits = ax.last_limits()
+        self.assertIsNotNone(limits)
+        assert limits is not None
+        self.assertLess(limits.xmin, 0.0)
+        self.assertGreater(limits.xmax, 0.0)
+
+    def test_zero_x_reference_line_uses_displayed_tick_value(self) -> None:
+        fig = figure(width=260, height=180)
+        ax = fig.axes(x_label_bottom="x", y_label_left="y")
+        ax.set_major_tick_steps(x=1.0)
+        tick_x = np.asarray([0.0, 1.0, 2.0], dtype=np.float64)
+        ax.set_x_tick_labels(["rule-0", "rule-1", "rule-2"])
+        self.assertFalse(ax._contains_display_zero_x_tick(tick_x))
+        ax.set_x_tick_labels(["0", "rule-1", "rule-2"])
+        self.assertTrue(ax._contains_display_zero_x_tick(tick_x))
+
+    def test_preferred_plot_aspect_ratio_applies_to_plot_rect(self) -> None:
+        fig = figure(width=420, height=300)
+        ax = fig.axes(x_label_bottom="x", y_label_left="y")
+        x = np.asarray([0.0, 1.0, 2.0, 3.0], dtype=np.float64)
+        y = np.asarray([1.0, 0.5, 1.5, 1.0], dtype=np.float64)
+        ax.plot(x=x, y=y, color=(255, 170, 70), width=1)
+        ax.set_preferred_plot_aspect_ratio(4.0 / 3.0)
+        _ = fig.to_rgba()
+        rect = ax.last_plot_rect()
+        self.assertIsNotNone(rect)
+        assert rect is not None
+        _, _, w, h = rect
+        self.assertAlmostEqual(float(w) / float(h), 4.0 / 3.0, delta=0.03)
+
     def test_figure_supports_two_subplots_in_single_frame(self) -> None:
         fig = figure(width=320, height=200)
         left_ax, right_ax = fig.subplots(1, 2, titles=("left", "right"), x_label_bottom="x", y_label_left="y")

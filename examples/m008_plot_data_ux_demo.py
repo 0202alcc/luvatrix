@@ -20,15 +20,15 @@ from luvatrix_ui.component_schema import BoundingBox
 
 
 def _render_plot_frame(*, panned: bool) -> np.ndarray:
-    fig = figure(width=1800, height=1080)
-    left_ax, right_ax = fig.subplots(
+    top_fig = figure(width=1800, height=760)
+    left_ax, right_ax = top_fig.subplots(
         1,
         2,
         titles=("Dense Labels + Bars", "Viewport + Pan"),
         x_label_bottom="x",
         y_label_left="value",
     )
-    left_ax.set_preferred_panel_aspect_ratio(1.10)
+    left_ax.set_preferred_panel_aspect_ratio(1.20)
 
     x_left = np.arange(18, dtype=np.float64)
     y_left = np.asarray([4, -2, 5, 3, -3, 2, 4, -1, 3, -4, 5, 2, -2, 4, 1, -3, 2, 5], dtype=np.float64)
@@ -42,11 +42,30 @@ def _render_plot_frame(*, panned: bool) -> np.ndarray:
     y_right = 0.65 * np.sin(x_right * 0.16) + 0.22 * np.cos(x_right * 0.05)
     right_ax.plot(x=x_right, y=y_right, color=(255, 170, 70), width=1)
     right_ax.scatter(x=x_right, y=y_right, color=(90, 190, 255), size=2, alpha=0.9)
+    right_ax.set_preferred_plot_aspect_ratio(4.0 / 3.0)
     right_ax.set_viewport(xmin=20.0, xmax=70.0)
     if panned:
         right_ax.pan_viewport(24.0)
 
-    return fig.to_rgba()
+    bottom_fig = figure(width=1800, height=500)
+    bottom_ax = bottom_fig.axes(title="Horizontal Bars", x_label_bottom="value", y_label_left="bucket")
+    y_pos = np.arange(8, dtype=np.float64)
+    widths = np.asarray([2.2, -1.4, 3.1, -2.0, 4.2, -0.8, 1.7, 2.9], dtype=np.float64)
+    bottom_ax.set_major_tick_steps(y=1.0)
+    bottom_ax.barh(width=widths, y=y_pos, height=0.72, color=(104, 190, 255))
+    bottom_ax.plot(x=np.linspace(-2.5, 4.5, y_pos.size, dtype=np.float64), y=y_pos, color=(255, 186, 75), width=1)
+
+    top_rgba = top_fig.to_rgba()
+    bottom_rgba = bottom_fig.to_rgba()
+    gap = 12
+    out_h = top_rgba.shape[0] + gap + bottom_rgba.shape[0]
+    out_w = max(top_rgba.shape[1], bottom_rgba.shape[1])
+    out = np.zeros((out_h, out_w, 4), dtype=np.uint8)
+    out[:, :, :] = np.asarray([12, 16, 23, 255], dtype=np.uint8)
+    out[0 : top_rgba.shape[0], 0 : top_rgba.shape[1], :] = top_rgba
+    y0 = top_rgba.shape[0] + gap
+    out[y0 : y0 + bottom_rgba.shape[0], 0 : bottom_rgba.shape[1], :] = bottom_rgba
+    return out
 
 
 def _build_demo_table(out_dir: Path) -> TableComponent:
@@ -171,7 +190,7 @@ def _render_table_luvatrix_rgba(table: TableComponent) -> np.ndarray:
             TextComponent(
                 component_id=f"table-focus-{row_idx}",
                 text=">",
-                position=CoordinatePoint(table_x + 4.0, y, "screen_tl"),
+                position=CoordinatePoint(table_x - 6.0, y, "screen_tl"),
                 size=TextSizeSpec(unit="px", value=30.0),
                 appearance=TextAppearance(color_hex="#f2f7ff"),
             ).render(renderer, display)

@@ -231,6 +231,7 @@ class Axes:
     _last_tick_x: tuple[float, ...] = ()
     _last_tick_y: tuple[float, ...] = ()
     preferred_panel_aspect_ratio: float | None = None
+    preferred_plot_aspect_ratio: float | None = None
 
     def scatter(
         self,
@@ -289,6 +290,38 @@ class Axes:
             bar_width=float(width),
         )
         series_data = normalize_xy(y=y, x=x, data=data)
+        self._series.append(SeriesSpec(data=series_data, style=style, label=label))
+        return self
+
+    def barh(
+        self,
+        width: Any = None,
+        *,
+        y: Any = None,
+        data: Any = None,
+        label: str | None = None,
+        color: tuple[int, int, int] | tuple[int, int, int, int] = (110, 169, 255),
+        height: float = 0.8,
+        alpha: float = 1.0,
+    ) -> "Axes":
+        if height <= 0:
+            raise ValueError("bar height must be > 0")
+        style = SeriesStyle(
+            mode="bars-horizontal",
+            color=_coerce_color(color, alpha),
+            marker_size=1,
+            line_width=1,
+            bar_width=float(height),
+        )
+        # Horizontal bars use x=width values and y=bar positions.
+        # normalize_xy is used with swapped inputs to keep axes semantics consistent.
+        series_data_raw = normalize_xy(y=width, x=y, data=data)
+        series_data = series_data_raw.__class__(
+            x=series_data_raw.y,
+            y=series_data_raw.x,
+            mask=series_data_raw.mask,
+            source_name=series_data_raw.source_name,
+        )
         self._series.append(SeriesSpec(data=series_data, style=style, label=label))
         return self
 
@@ -373,6 +406,15 @@ class Axes:
         if aspect_ratio <= 0:
             raise ValueError("aspect_ratio must be > 0")
         self.preferred_panel_aspect_ratio = float(aspect_ratio)
+        return self
+
+    def set_preferred_plot_aspect_ratio(self, aspect_ratio: float | None) -> "Axes":
+        if aspect_ratio is None:
+            self.preferred_plot_aspect_ratio = None
+            return self
+        if aspect_ratio <= 0:
+            raise ValueError("aspect_ratio must be > 0")
+        self.preferred_plot_aspect_ratio = float(aspect_ratio)
         return self
 
     def set_x_tick_labels(self, labels: Sequence[str] | None) -> "Axes":
@@ -494,6 +536,26 @@ class Axes:
         step = float(abs(ticks[1] - ticks[0])) if ticks.size > 1 else 1.0
         eps = max(1e-12, step * 1e-6)
         return bool(np.any(np.isclose(ticks, 0.0, rtol=0.0, atol=eps)))
+
+    def _contains_display_zero_x_tick(self, tick_x: np.ndarray) -> bool:
+        if tick_x.size == 0:
+            return False
+        labels = self._format_x_tick_labels(tick_x)
+        if not labels:
+            return False
+        step = float(abs(tick_x[1] - tick_x[0])) if tick_x.size > 1 else 1.0
+        eps = max(1e-12, step * max(1.0, abs(self.x_tick_label_scale)) * 1e-6)
+        for label in labels:
+            text = label.strip()
+            if not text:
+                continue
+            try:
+                value = float(text)
+            except ValueError:
+                continue
+            if abs(value) <= eps:
+                return True
+        return False
 
     def add_reference_line(
         self,
@@ -918,6 +980,7 @@ class Axes:
         y_resolution = infer_resolution(y_all)
         preferred_y_step = self.y_major_tick_step if self.y_major_tick_step is not None else preferred_major_step_from_resolution(y_resolution)
         preferred_x_step = self.x_major_tick_step
+        bar_major_x_ticks: np.ndarray | None = None
         if preferred_x_step is None:
             bar_x_values: list[np.ndarray] = []
             for spec in self._series:
@@ -928,6 +991,7 @@ class Axes:
                     bar_x_values.append(spec.data.x[mask].astype(np.float64, copy=False))
             if bar_x_values:
                 bx = np.unique(np.concatenate(bar_x_values))
+                bar_major_x_ticks = bx.copy()
                 if bx.size >= 2:
                     diffs = np.diff(bx)
                     positive = diffs[diffs > 1e-12]
@@ -937,7 +1001,10 @@ class Axes:
         # First pass tick estimates for layout sizing.
         provisional_w = max(120, self.figure.width - 80)
         provisional_h = max(80, self.figure.height - 80)
-        tick_x_probe = generate_nice_ticks(xmin, xmax, max(5, provisional_w // 120), preferred_step=preferred_x_step)
+        if bar_major_x_ticks is not None:
+            tick_x_probe = self._ticks_within_range(bar_major_x_ticks, vmin=xmin, vmax=xmax)
+        else:
+            tick_x_probe = generate_nice_ticks(xmin, xmax, max(5, provisional_w // 120), preferred_step=preferred_x_step)
         if self.include_zero_x_tick:
             tick_x_probe = _inject_zero_tick(tick_x_probe, vmin=xmin, vmax=xmax)
         tick_x_probe = self._ticks_within_range(tick_x_probe, vmin=xmin, vmax=xmax)
@@ -1003,6 +1070,31 @@ class Axes:
             plot_h = self.figure.height - top - bottom
         if plot_w <= 1 or plot_h <= 1:
             raise PlotDataError("figure too small for plotting viewport")
+
+        if self.preferred_plot_aspect_ratio is not None:
+            target = max(1e-9, float(self.preferred_plot_aspect_ratio))
+            current = float(plot_w) / float(max(1, plot_h))
+            if current > target + 1e-9:
+                target_w = max(2, int(round(float(plot_h) * target)))
+                delta = max(0, plot_w - target_w)
+                add_left = delta // 2
+                add_right = delta - add_left
+                left += add_left
+                right += add_right
+            elif current < target - 1e-9:
+                target_h = max(2, int(round(float(plot_w) / target)))
+                delta = max(0, plot_h - target_h)
+                add_top = delta // 2
+                add_bottom = delta - add_top
+                top += add_top
+                bottom += add_bottom
+            plot_x0 = left
+            plot_y0 = top
+            plot_w = self.figure.width - left - right
+            plot_h = self.figure.height - top - bottom
+            if plot_w <= 1 or plot_h <= 1:
+                raise PlotDataError("figure too small for preferred plot aspect")
+
         self._last_plot_rect_px = (plot_x0, plot_y0, plot_w, plot_h)
         self._last_tick_font_px = tick_font_px
         self._last_label_font_px = label_font_px
@@ -1024,7 +1116,10 @@ class Axes:
             self._cache.frame_template = frame
 
         # Final ticks based on resolved viewport.
-        tick_x = generate_nice_ticks(xmin, xmax, max(5, plot_w // 120), preferred_step=preferred_x_step)
+        if bar_major_x_ticks is not None:
+            tick_x = self._ticks_within_range(bar_major_x_ticks, vmin=xmin, vmax=xmax)
+        else:
+            tick_x = generate_nice_ticks(xmin, xmax, max(5, plot_w // 120), preferred_step=preferred_x_step)
         if self.include_zero_x_tick:
             tick_x = _inject_zero_tick(tick_x, vmin=xmin, vmax=xmax)
         tick_x = self._ticks_within_range(tick_x, vmin=xmin, vmax=xmax)
@@ -1068,7 +1163,7 @@ class Axes:
                 draw_hline(grid, plot_x0, plot_x0 + plot_w - 1, plot_y0 + int(py[0]), self.grid_color)
             ref_lines: list[ReferenceLine] = list(self.reference_lines)
             if self.show_zero_reference_lines:
-                if self._contains_zero_tick(tick_x):
+                if self._contains_display_zero_x_tick(tick_x):
                     ref_lines.append(ReferenceLine(axis="x", value=0.0, color=self.reference_line_color, width=1))
                 if self._contains_zero_tick(tick_y):
                     ref_lines.append(ReferenceLine(axis="y", value=0.0, color=self.reference_line_color, width=1))
@@ -1159,7 +1254,7 @@ class Axes:
         drawing = new_canvas(self.figure.width, self.figure.height, color=(0, 0, 0, 0))
         # Pass 0: bars at the back so lines/markers remain visible when combined.
         for spec in self._series:
-            if spec.style.mode != "bars":
+            if spec.style.mode not in {"bars", "bars-horizontal"}:
                 continue
             live_mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
             if not np.any(live_mask):
@@ -1167,23 +1262,40 @@ class Axes:
             xvals = spec.data.x[live_mask]
             yvals = spec.data.y[live_mask]
             half_width = max(1e-9, float(spec.style.bar_width) * 0.5)
-            view_mask = (xvals + half_width >= xmin) & (xvals - half_width <= xmax)
+            if spec.style.mode == "bars-horizontal":
+                x_left = np.minimum(0.0, xvals)
+                x_right = np.maximum(0.0, xvals)
+                view_mask = (yvals + half_width >= ymin) & (yvals - half_width <= ymax) & (x_right >= xmin) & (x_left <= xmax)
+            else:
+                view_mask = (xvals + half_width >= xmin) & (xvals - half_width <= xmax)
             if not np.any(view_mask):
                 continue
             xvals = xvals[view_mask]
             yvals = yvals[view_mask]
             zeros = np.zeros_like(yvals, dtype=np.float64)
-            px_left, _ = map_to_pixels(xvals - half_width, zeros, transform, plot_w, plot_h)
-            px_right, _ = map_to_pixels(xvals + half_width, zeros, transform, plot_w, plot_h)
-            _, py_zero = map_to_pixels(xvals, zeros, transform, plot_w, plot_h)
-            _, py_vals = map_to_pixels(xvals, yvals, transform, plot_w, plot_h)
+            if spec.style.mode == "bars-horizontal":
+                px_zero, py_top = map_to_pixels(zeros, yvals + half_width, transform, plot_w, plot_h)
+                px_vals, py_bottom = map_to_pixels(xvals, yvals - half_width, transform, plot_w, plot_h)
+                px_left = np.minimum(px_zero, px_vals)
+                px_right = np.maximum(px_zero, px_vals)
+                py_upper = np.minimum(py_top, py_bottom)
+                py_lower = np.maximum(py_top, py_bottom)
+            else:
+                px_left, _ = map_to_pixels(xvals - half_width, zeros, transform, plot_w, plot_h)
+                px_right, _ = map_to_pixels(xvals + half_width, zeros, transform, plot_w, plot_h)
+                _, py_zero = map_to_pixels(xvals, zeros, transform, plot_w, plot_h)
+                _, py_vals = map_to_pixels(xvals, yvals, transform, plot_w, plot_h)
             for i in range(xvals.size):
                 x0_bar = int(min(px_left[i], px_right[i]))
                 x1_bar = int(max(px_left[i], px_right[i]))
                 if x1_bar == x0_bar:
                     x1_bar = min(plot_w - 1, x0_bar + 1)
-                y0_bar = int(min(py_zero[i], py_vals[i]))
-                y1_bar = int(max(py_zero[i], py_vals[i]))
+                if spec.style.mode == "bars-horizontal":
+                    y0_bar = int(py_upper[i])
+                    y1_bar = int(py_lower[i])
+                else:
+                    y0_bar = int(min(py_zero[i], py_vals[i]))
+                    y1_bar = int(max(py_zero[i], py_vals[i]))
                 _draw_filled_rect(
                     drawing,
                     x0=plot_x0 + x0_bar,

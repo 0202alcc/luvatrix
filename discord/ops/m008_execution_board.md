@@ -73,3 +73,12 @@ Last updated: `2026-03-01`
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
 28. `2026-03-01`: Per review feedback, `T-801`, `T-802`, and `T-805` were moved from `Review` to `In Progress` for label-anchor, bar tick/reference-line, aspect/size, and Luvatrix table visual-output fixes.
 29. `2026-03-01`: After test+demo verification passed, `T-801`, `T-802`, and `T-805` were moved back to `Review` pending acceptance.
+30. `2026-03-01`: New feedback cycle started; `T-801`, `T-802`, and `T-805` moved from `Review` to `In Progress` for:
+- per-bar solid x-grid/tick density enforcement,
+- x=0 reference-line gating based on displayed x-rule values only,
+- table row-selector positioning refinements.
+31. `2026-03-01`: Added strict preferred plot-area aspect control and updated the `M-008` demo to an `AB / C` mosaic with horizontal bar support (`Axes.barh(...)`).
+32. `2026-03-01`: Verification rerun passed:
+- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
+- `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
+33. `2026-03-01`: `T-801`, `T-802`, and `T-805` moved back to `Review` pending acceptance after latest fixes and demo refresh.

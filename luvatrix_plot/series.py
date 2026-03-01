@@ -6,7 +6,7 @@ from typing import Literal
 import numpy as np
 
 
-SeriesMode = Literal["markers", "lines", "lines+markers", "bars"]
+SeriesMode = Literal["markers", "lines", "lines+markers", "bars", "bars-horizontal"]
 
 
 @dataclass(frozen=True)
