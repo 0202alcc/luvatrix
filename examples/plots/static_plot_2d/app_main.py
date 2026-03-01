@@ -5,6 +5,24 @@ import time
 import numpy as np
 
 from luvatrix_plot import figure
+from luvatrix_ui.component_schema import BoundingBox, ComponentBase, CoordinatePoint
+
+
+class _LegendDragHandle(ComponentBase):
+    def __init__(self, axes) -> None:
+        super().__init__(component_id="plot_legend_drag", draggable=True)
+        self._axes = axes
+
+    def visual_bounds(self) -> BoundingBox:
+        bounds = self._axes.legend_bounds()
+        if bounds is None:
+            return BoundingBox(x=0.0, y=0.0, width=0.0, height=0.0, frame=self.default_frame)
+        x, y, w, h = bounds
+        return BoundingBox(x=float(x), y=float(y), width=float(w), height=float(h), frame=self.default_frame)
+
+    def on_drag_to(self, x: float, y: float, *, frame: str) -> bool:
+        _ = frame
+        return self._axes.move_legend_to(int(round(x)), int(round(y)))
 
 
 class StaticPlot2DApp:
@@ -85,6 +103,7 @@ class StaticPlot2DApp:
         self._last_render_ns = 0
         self._drag_render_interval_ns = int(1_000_000_000 / 45)  # cap drag redraws at ~45 FPS
         self._debug = os.getenv("LUVATRIX_PLOT_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+        self._legend_drag: _LegendDragHandle | None = None
 
     def init(self, ctx) -> None:
         snapshot = ctx.read_matrix_snapshot()
@@ -100,6 +119,7 @@ class StaticPlot2DApp:
         self._ax.scatter(x=self._x, y=self._y, color=(90, 190, 255), size=2)
         self._ax.plot(x=self._x, y=self._y_2, color=(103, 204, 131), width=1, label="lower arc")
         self._ax.scatter(x=self._x, y=self._y_2, color=(241, 227, 145), size=2)
+        self._legend_drag = _LegendDragHandle(self._ax)
 
         self._submit_frame(ctx)
         self._last_render_ns = time.time_ns()
@@ -144,7 +164,12 @@ class StaticPlot2DApp:
                 f"down={self._pointer_down}",
                 f"legend_bounds={self._ax.legend_bounds()}",
             )
-        moved = self._ax.update_legend_drag(self._pointer_x, self._pointer_y, self._pointer_down)
+        moved = False
+        if self._legend_drag is not None:
+            moved = self._legend_drag.update_drag(
+                CoordinatePoint(self._pointer_x, self._pointer_y, "screen_tl"),
+                is_down=self._pointer_down,
+            )
         if moved:
             self._legend_dirty = True
             if self._debug:

@@ -51,6 +51,28 @@ class ComponentSchemaTests(unittest.TestCase):
         self.assertTrue(consumed)
         self.assertEqual(component.press_state, "press_down")
 
+    def test_drag_is_opt_in_and_moves_component_when_enabled(self) -> None:
+        component = TextComponent(
+            component_id="label",
+            text="drag me",
+            position=CoordinatePoint(2.0, 3.0),
+            draggable=True,
+        )
+        component.drag_bounds_override = BoundingBox(x=2.0, y=3.0, width=20.0, height=8.0, frame="screen_tl")
+
+        started = component.update_drag(CoordinatePoint(3.0, 4.0, "screen_tl"), is_down=True)
+        self.assertFalse(started)
+        moved = component.update_drag(CoordinatePoint(13.0, 10.0, "screen_tl"), is_down=True)
+        self.assertTrue(moved)
+        self.assertEqual((component.position.x, component.position.y), (12.0, 9.0))
+
+    def test_drag_disabled_by_default(self) -> None:
+        component = TextComponent(component_id="label", text="drag me", position=CoordinatePoint(2.0, 3.0))
+        component.drag_bounds_override = BoundingBox(x=2.0, y=3.0, width=20.0, height=8.0, frame="screen_tl")
+        moved = component.update_drag(CoordinatePoint(13.0, 10.0, "screen_tl"), is_down=True)
+        self.assertFalse(moved)
+        self.assertEqual((component.position.x, component.position.y), (2.0, 3.0))
+
 
 if __name__ == "__main__":
     unittest.main()

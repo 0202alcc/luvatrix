@@ -605,26 +605,32 @@ class Axes:
             if self._legend_drag_active:
                 ox, oy = self._legend_drag_offset_px
                 next_pos = (px - ox, py - oy)
-                if self._legend_layout is not None:
-                    next_pos = self._clamp_legend_position(self._legend_layout, next_pos)
-                if self.legend_position_px != next_pos:
-                    old_bounds = self._legend_bounds_px
-                    self.legend_position_px = next_pos
-                    self._resolve_legend_bounds()
-                    if old_bounds is not None:
-                        ox0, oy0, ow, oh = old_bounds
-                        new_bounds = self._legend_bounds_px or old_bounds
-                        nx0, ny0, nw, nh = new_bounds
-                        rx0 = min(ox0, nx0)
-                        ry0 = min(oy0, ny0)
-                        rx1 = max(ox0 + ow, nx0 + nw)
-                        ry1 = max(oy0 + oh, ny0 + nh)
-                        move_dirty = (rx0, ry0, rx1 - rx0, ry1 - ry0)
-                        self._legend_dirty_rect_px = _union_rect(self._legend_dirty_rect_px, move_dirty)
+                if self.move_legend_to(next_pos[0], next_pos[1]):
                     moved = True
         else:
             self._legend_drag_active = False
         return moved
+
+    def move_legend_to(self, x_px: int, y_px: int) -> bool:
+        next_pos = (int(x_px), int(y_px))
+        if self._legend_layout is not None:
+            next_pos = self._clamp_legend_position(self._legend_layout, next_pos)
+        if self.legend_position_px == next_pos:
+            return False
+        old_bounds = self._legend_bounds_px
+        self.legend_position_px = next_pos
+        self._resolve_legend_bounds()
+        if old_bounds is not None:
+            ox0, oy0, ow, oh = old_bounds
+            new_bounds = self._legend_bounds_px or old_bounds
+            nx0, ny0, nw, nh = new_bounds
+            rx0 = min(ox0, nx0)
+            ry0 = min(oy0, ny0)
+            rx1 = max(ox0 + ow, nx0 + nw)
+            ry1 = max(oy0 + oh, ny0 + nh)
+            move_dirty = (rx0, ry0, rx1 - rx0, ry1 - ry0)
+            self._legend_dirty_rect_px = _union_rect(self._legend_dirty_rect_px, move_dirty)
+        return True
 
     def take_legend_dirty_rect(self) -> tuple[int, int, int, int] | None:
         rect = self._legend_dirty_rect_px

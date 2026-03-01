@@ -104,3 +104,19 @@ class TextComponent(ComponentBase):
                 frame=self._resolved_frame(),
             )
         return self._visual_bounds_cache
+
+    def on_drag_to(self, x: float, y: float, *, frame: str) -> bool:
+        current_frame = self.position.frame or self.default_frame
+        if self.position.x == float(x) and self.position.y == float(y) and current_frame == frame:
+            return False
+        next_position = CoordinatePoint(x=float(x), y=float(y), frame=frame)
+        self.position = next_position
+        if self._visual_bounds_cache is not None:
+            self._visual_bounds_cache = BoundingBox(
+                x=float(x),
+                y=float(y),
+                width=self._visual_bounds_cache.width,
+                height=self._visual_bounds_cache.height,
+                frame=frame,
+            )
+        return True

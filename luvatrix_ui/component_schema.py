@@ -105,7 +105,11 @@ class ComponentBase:
     default_frame: str = DEFAULT_FRAME
     disabled: bool = False
     interaction_bounds_override: BoundingBox | None = None
+    drag_bounds_override: BoundingBox | None = None
+    draggable: bool = False
     _button_model: ButtonModel = field(default_factory=ButtonModel, init=False, repr=False)
+    _drag_active: bool = field(default=False, init=False, repr=False)
+    _drag_pointer_offset: tuple[float, float] = field(default=(0.0, 0.0), init=False, repr=False)
 
     def visual_bounds(self) -> BoundingBox:
         raise NotImplementedError
@@ -123,6 +127,9 @@ class ComponentBase:
 
     def interaction_bounds(self) -> BoundingBox:
         return self.interaction_bounds_override or self.visual_bounds()
+
+    def drag_bounds(self) -> BoundingBox:
+        return self.drag_bounds_override or self.interaction_bounds()
 
     def hit_test(
         self,
@@ -152,3 +159,53 @@ class ComponentBase:
         if prev in ("press_down", "press_hold"):
             return True
         return new_state in ("press_down", "press_hold")
+
+    def on_drag_to(self, x: float, y: float, *, frame: str) -> bool:
+        """Apply a drag-position update.
+
+        Components that support drag should override this hook to update their own
+        position model. Return True when a state mutation occurred.
+        """
+
+        _ = (x, y, frame)
+        return False
+
+    def update_drag(
+        self,
+        point: CoordinatePoint,
+        *,
+        is_down: bool,
+        transformer: CoordinateTransformer | None = None,
+    ) -> bool:
+        """Standardized opt-in drag flow for components.
+
+        - Drag is active only when `draggable=True`.
+        - Drag begins on pointer-down inside drag bounds.
+        - While active and down, calls `on_drag_to(...)`.
+        - Pointer-up ends drag.
+        """
+
+        if not self.draggable or self.disabled:
+            if not is_down:
+                self._drag_active = False
+            return False
+
+        bounds = self.drag_bounds()
+        bx, by = transform_point_to_frame(
+            point,
+            target_frame=bounds.frame or self.default_frame,
+            transformer=transformer,
+            fallback_frame=self.default_frame,
+        )
+        if is_down:
+            if not self._drag_active and bounds.contains(bx, by):
+                self._drag_active = True
+                self._drag_pointer_offset = (bx - bounds.x, by - bounds.y)
+            if self._drag_active:
+                ox, oy = self._drag_pointer_offset
+                next_x = bx - ox
+                next_y = by - oy
+                return self.on_drag_to(next_x, next_y, frame=bounds.frame or self.default_frame)
+            return False
+        self._drag_active = False
+        return False
