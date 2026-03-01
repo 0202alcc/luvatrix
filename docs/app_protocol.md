@@ -239,3 +239,27 @@ For protocol/UI work, keep these documents aligned:
 4. `docs/app_protocol_variants_guide.md` (variant routing and failure cases)
 5. `docs/app_protocol_compatibility_policy.md` (version compatibility and deprecation policy)
 6. `docs/app_protocol_operator_runbook.md` (operator commands and troubleshooting)
+
+## 18. First-Party App Standardization Checklist
+
+A first-party app is considered protocol-standardized only when all items below are true:
+
+1. Manifest includes required fields:
+   `app_id`, `protocol_version`, `entrypoint`, `required_capabilities`, `optional_capabilities`.
+2. Protocol governance is explicit:
+   use `min_runtime_protocol_version` / `max_runtime_protocol_version` when release bounds are required.
+3. Variant routing is deterministic:
+   use normalized `platform_support` and `[[variants]]` entries with stable IDs and non-escaping `module_root`.
+4. Lifecycle object implements:
+   `init(ctx)`, `loop(ctx, dt)`, `stop(ctx)`.
+5. Capability gating assumptions are documented:
+   expected `DENIED` behavior for missing HDI/sensor permissions is intentional and tested.
+6. Operator runbook coverage exists:
+   run commands, troubleshooting, and audit verification are documented.
+7. CI/verification evidence includes protocol governance and app runtime variant tests.
+
+Companion references:
+
+1. `docs/app_protocol_variants_guide.md`
+2. `docs/app_protocol_compatibility_policy.md`
+3. `docs/app_protocol_operator_runbook.md`

@@ -64,7 +64,7 @@
       "title": "Add complete variant-routing examples to protocol docs.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:M-002",
@@ -77,7 +77,7 @@
       "title": "Add compatibility/deprecation matrix and migration notes.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-201"
       ],
@@ -92,7 +92,7 @@
       "title": "Add operator runbook examples and troubleshooting appendix.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-202"
       ],
