@@ -20,7 +20,7 @@ from luvatrix_ui.component_schema import BoundingBox
 
 
 def _render_plot_frame(*, panned: bool) -> np.ndarray:
-    top_fig = figure(width=1800, height=760)
+    top_fig = figure(width=1920, height=760)
     left_ax, right_ax = top_fig.subplots(
         1,
         2,
@@ -28,7 +28,7 @@ def _render_plot_frame(*, panned: bool) -> np.ndarray:
         x_label_bottom="x",
         y_label_left="value",
     )
-    left_ax.set_preferred_panel_aspect_ratio(1.20)
+    left_ax.set_preferred_panel_aspect_ratio(1.25)
 
     x_left = np.arange(18, dtype=np.float64)
     y_left = np.asarray([4, -2, 5, 3, -3, 2, 4, -1, 3, -4, 5, 2, -2, 4, 1, -3, 2, 5], dtype=np.float64)
@@ -36,12 +36,12 @@ def _render_plot_frame(*, panned: bool) -> np.ndarray:
     left_ax.set_major_tick_steps(x=1.0)
     left_ax.set_x_tick_labels(labels)
     left_ax.bar(x=x_left, y=y_left, width=0.75, color=(96, 182, 255))
-    left_ax.plot(x=x_left, y=np.cumsum(y_left) * 0.08, color=(255, 184, 70), width=1)
 
     x_right = np.linspace(0.0, 120.0, 121, dtype=np.float64)
     y_right = 0.65 * np.sin(x_right * 0.16) + 0.22 * np.cos(x_right * 0.05)
     right_ax.plot(x=x_right, y=y_right, color=(255, 170, 70), width=1)
     right_ax.scatter(x=x_right, y=y_right, color=(90, 190, 255), size=2, alpha=0.9)
+    right_ax.set_preferred_panel_aspect_ratio(1.6)
     right_ax.set_preferred_plot_aspect_ratio(4.0 / 3.0)
     right_ax.set_viewport(xmin=20.0, xmax=70.0)
     if panned:
@@ -53,7 +53,6 @@ def _render_plot_frame(*, panned: bool) -> np.ndarray:
     widths = np.asarray([2.2, -1.4, 3.1, -2.0, 4.2, -0.8, 1.7, 2.9], dtype=np.float64)
     bottom_ax.set_major_tick_steps(y=1.0)
     bottom_ax.barh(width=widths, y=y_pos, height=0.72, color=(104, 190, 255))
-    bottom_ax.plot(x=np.linspace(-2.5, 4.5, y_pos.size, dtype=np.float64), y=y_pos, color=(255, 186, 75), width=1)
 
     top_rgba = top_fig.to_rgba()
     bottom_rgba = bottom_fig.to_rgba()

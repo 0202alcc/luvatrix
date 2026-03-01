@@ -247,6 +247,18 @@ class LuvatrixPlotTests(unittest.TestCase):
         self.assertFalse(np.any(bar_mask[plot_y0 : plot_y0 + plot_h, plot_x0]))
         self.assertFalse(np.any(bar_mask[plot_y0 : plot_y0 + plot_h, plot_x0 + plot_w - 1]))
 
+    def test_bar_ticks_follow_each_bar_even_with_explicit_major_tick_step(self) -> None:
+        x = np.arange(8, dtype=np.float64)
+        y = np.asarray([1.0, -2.0, 3.0, -1.0, 2.0, -3.0, 2.5, 1.5], dtype=np.float64)
+        fig = figure(width=360, height=220)
+        ax = fig.axes(x_label_bottom="x", y_label_left="value")
+        ax.set_major_tick_steps(x=2.0)
+        ax.bar(x=x, y=y, width=0.7, color=(90, 180, 255))
+        _ = fig.to_rgba()
+        tick_x, _ = ax.last_tick_values()
+        self.assertEqual(len(tick_x), len(x))
+        self.assertTrue(all(any(abs(tv - float(xv)) <= 1e-9 for tv in tick_x) for xv in x.tolist()))
+
     def test_bar_rejects_nonpositive_width(self) -> None:
         fig = figure(width=160, height=100)
         ax = fig.axes()

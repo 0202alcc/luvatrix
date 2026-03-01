@@ -82,3 +82,9 @@ Last updated: `2026-03-01`
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
 33. `2026-03-01`: `T-801`, `T-802`, and `T-805` moved back to `Review` pending acceptance after latest fixes and demo refresh.
+34. `2026-03-01`: Next feedback cycle started; `T-801` and `T-802` moved from `Review` to `In Progress` for per-bar major tick/grid density restoration and chart-A parity with chart-C bar presentation.
+35. `2026-03-01`: Refined viewport panel framing with stronger right-side panel space while preserving strict `4:3` plot-area aspect on the viewport chart.
+36. `2026-03-01`: Verification rerun passed and demos refreshed:
+- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
+- `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
+37. `2026-03-01`: `T-801` and `T-802` moved back to `Review`; `T-805` remains in `Review`.

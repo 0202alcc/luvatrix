@@ -981,22 +981,21 @@ class Axes:
         preferred_y_step = self.y_major_tick_step if self.y_major_tick_step is not None else preferred_major_step_from_resolution(y_resolution)
         preferred_x_step = self.x_major_tick_step
         bar_major_x_ticks: np.ndarray | None = None
-        if preferred_x_step is None:
-            bar_x_values: list[np.ndarray] = []
-            for spec in self._series:
-                if spec.style.mode != "bars":
-                    continue
-                mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
-                if np.any(mask):
-                    bar_x_values.append(spec.data.x[mask].astype(np.float64, copy=False))
-            if bar_x_values:
-                bx = np.unique(np.concatenate(bar_x_values))
-                bar_major_x_ticks = bx.copy()
-                if bx.size >= 2:
-                    diffs = np.diff(bx)
-                    positive = diffs[diffs > 1e-12]
-                    if positive.size > 0:
-                        preferred_x_step = float(np.min(positive))
+        bar_x_values: list[np.ndarray] = []
+        for spec in self._series:
+            if spec.style.mode != "bars":
+                continue
+            mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
+            if np.any(mask):
+                bar_x_values.append(spec.data.x[mask].astype(np.float64, copy=False))
+        if bar_x_values:
+            bx = np.unique(np.concatenate(bar_x_values))
+            bar_major_x_ticks = bx.copy()
+            if preferred_x_step is None and bx.size >= 2:
+                diffs = np.diff(bx)
+                positive = diffs[diffs > 1e-12]
+                if positive.size > 0:
+                    preferred_x_step = float(np.min(positive))
 
         # First pass tick estimates for layout sizing.
         provisional_w = max(120, self.figure.width - 80)
