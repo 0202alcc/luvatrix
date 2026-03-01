@@ -211,6 +211,47 @@ def _build_nested_scroll_plane_file(root: Path) -> Path:
     return plane_path
 
 
+def _build_plane_camera_scroll_file(root: Path) -> Path:
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "panel.svg").write_text(
+        "<svg width=\"800\" height=\"600\" xmlns=\"http://www.w3.org/2000/svg\">"
+        "<rect x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#2a77b8\"/></svg>",
+        encoding="utf-8",
+    )
+    payload = {
+        "planes_protocol_version": "0.1.0",
+        "app": {
+            "id": "x.plane_scroll",
+            "title": "Plane Scroll",
+            "icon": "assets/panel.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "plane": {"id": "main", "default_frame": "screen_tl", "background": {"color": "#111111"}},
+        "scripts": [{"id": "handlers", "lang": "python", "src": "scripts/handlers.py"}],
+        "components": [
+            {
+                "id": "panel",
+                "type": "svg",
+                "position": {"x": 220, "y": 160},
+                "size": {"width": {"unit": "px", "value": 800}, "height": {"unit": "px", "value": 600}},
+                "z_index": 0,
+                "props": {"svg": "assets/panel.svg"},
+            },
+            {
+                "id": "fixed_title",
+                "type": "text",
+                "position": {"x": 12, "y": 8},
+                "size": {"width": {"unit": "px", "value": 120}, "height": {"unit": "px", "value": 24}},
+                "z_index": 10,
+                "props": {"text": "fixed", "camera_fixed": True},
+            },
+        ],
+    }
+    plane_path = root / "plane_camera_scroll.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
 class PlanesRuntimeTests(unittest.TestCase):
     def test_load_plane_app_renders_components(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -407,6 +448,41 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertIn("viewport__scrollbar_x_thumb", ids)
             self.assertIn("viewport__scrollbar_y_track", ids)
             self.assertIn("viewport__scrollbar_y_thumb", ids)
+
+    def test_plane_runtime_scrolls_main_plane_when_no_viewport_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_camera_scroll_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 40.0, "y": 40.0, "delta_x": -140.0, "delta_y": -100.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+
+            plane_scroll = app.state.get("plane_scroll", {})
+            self.assertIsInstance(plane_scroll, dict)
+            self.assertAlmostEqual(float(plane_scroll.get("x", 0.0)), 140.0, places=6)
+            self.assertAlmostEqual(float(plane_scroll.get("y", 0.0)), 100.0, places=6)
+
+            panel = next((comp for comp in ctx.mounted if comp.component_id == "panel"), None)
+            fixed = next((comp for comp in ctx.mounted if comp.component_id == "fixed_title"), None)
+            self.assertIsNotNone(panel)
+            self.assertIsNotNone(fixed)
+            assert panel is not None
+            assert fixed is not None
+            self.assertAlmostEqual(float(panel.position.x), 80.0, places=6)  # 220 - scroll_x(140)
+            self.assertAlmostEqual(float(panel.position.y), 60.0, places=6)  # 160 - scroll_y(100)
+            self.assertAlmostEqual(float(fixed.position.x), 12.0, places=6)  # fixed to camera
+            self.assertAlmostEqual(float(fixed.position.y), 8.0, places=6)
 
 
 if __name__ == "__main__":

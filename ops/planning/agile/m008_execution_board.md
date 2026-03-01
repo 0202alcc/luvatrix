@@ -29,7 +29,7 @@ Last updated: `2026-03-01`
 - Evidence:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
-- Demo: `examples/app_protocol/planes_v2_poc` simplified to a single main-plane scrolling surface (no nested/containerized scrolling viewport).
+- Demo: `examples/app_protocol/planes_v2_poc` now uses full-plane camera scrolling (no viewport container); components are positioned beyond initial screen bounds and become visible via scroll.
 
 ## Done
 1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
@@ -173,5 +173,15 @@ Last updated: `2026-03-01`
 - resized to one near full-page viewport camera (`content_viewport`) with no framed nested/inset viewport,
 - refreshed scroll canvas art with deterministic grid/text landmarks for obvious movement cues.
 81. `2026-03-01`: Verification rerun passed and `T-810` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
+82. `2026-03-01`: Reviewer requested true full-page camera model (no inner scroll container); `T-810` moved from `Review` back to `In Progress`.
+83. `2026-03-01`: Implemented plane-level camera scrolling fallback in runtime:
+- wheel/trackpad scroll now applies to whole plane when no viewport consumes the event,
+- non-fixed components render/hit-test through camera offset; `camera_fixed` components stay pinned to screen UI.
+84. `2026-03-01`: Rewrote `planes_v2_poc` to camera-over-plane demonstration:
+- removed scrollable viewport container from demo,
+- added out-of-bounds world components directly in `plane.json` for right/bottom exploration by scroll.
+85. `2026-03-01`: Verification rerun passed and `T-810` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`

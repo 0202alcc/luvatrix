@@ -23,9 +23,10 @@ def toggle_theme(event_ctx: dict[str, Any], app_state: dict[str, Any]) -> None:
 
 def reset_scroll(event_ctx: dict[str, Any], app_state: dict[str, Any]) -> None:
     _ = event_ctx
-    viewport_scroll = app_state.setdefault("viewport_scroll", {})
-    if isinstance(viewport_scroll, dict):
-        viewport_scroll["content_viewport"] = {"x": 0.0, "y": 0.0}
+    plane_scroll = app_state.setdefault("plane_scroll", {})
+    if isinstance(plane_scroll, dict):
+        plane_scroll["x"] = 0.0
+        plane_scroll["y"] = 0.0
 
 
 def record_scroll(event_ctx: dict[str, Any], app_state: dict[str, Any]) -> None:

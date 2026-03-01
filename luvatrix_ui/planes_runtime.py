@@ -50,6 +50,7 @@ class PlaneApp:
         self.state.setdefault("hover_component_id", None)
         self.state.setdefault("last_pointer_xy", None)
         self.state.setdefault("viewport_scroll", {})
+        self.state.setdefault("plane_scroll", {"x": 0.0, "y": 0.0})
         self._component_index: dict[str, Any] = {}
 
     def register_handler(self, target: str, handler: EventHandler) -> None:
@@ -135,6 +136,7 @@ class PlaneApp:
         )
         self._component_index = {component.component_id: component for component in self._ui_page.components}
         self._initialize_viewport_scroll_state()
+        self._initialize_plane_scroll_state()
         self._bg_color = _parse_hex_rgba(self._ui_page.background)
 
     def _dispatch_events(self, ctx, dt: float) -> None:
@@ -210,8 +212,6 @@ class PlaneApp:
             return
         px, py = xy
         stack = self._viewport_stack_for_point(px, py)
-        if not stack:
-            return
         rem_x = float(intent.delta_x)
         rem_y = float(intent.delta_y)
         for viewport in stack:
@@ -223,6 +223,8 @@ class PlaneApp:
             rem_y -= consumed_y
             if abs(rem_x) <= 1e-9 and abs(rem_y) <= 1e-9:
                 break
+        if abs(rem_x) > 1e-9 or abs(rem_y) > 1e-9:
+            self._apply_plane_scroll_intent(ScrollIntent(delta_x=rem_x, delta_y=rem_y, source=intent.source, phase=intent.phase))
 
     def _record_pointer_xy(self, payload: dict[str, Any]) -> None:
         xy = self._extract_xy_from_payload(payload)
@@ -312,6 +314,13 @@ class PlaneApp:
         return color_hex
 
     def _resolved_position(self, component) -> tuple[float, float]:
+        x, y = self._resolved_position_base(component)
+        if self._is_camera_fixed(component):
+            return (x, y)
+        plane_x, plane_y = self._plane_scroll_position()
+        return (x - plane_x, y - plane_y)
+
+    def _resolved_position_base(self, component) -> tuple[float, float]:
         if self._ui_page is None:
             return (float(component.position.x), float(component.position.y))
         x = float(component.position.x)
@@ -325,6 +334,10 @@ class PlaneApp:
             margin_bottom_px = float(props.get("margin_bottom_px", 0.0))
             y = float(self._ui_page.matrix.height) - float(component.height) - margin_bottom_px
         return (x, y)
+
+    def _is_camera_fixed(self, component) -> bool:
+        props = component.style if isinstance(component.style, dict) else {}
+        return bool(props.get("camera_fixed", False))
 
     def _mount_viewport_cutout_mask(self, ctx, component) -> None:
         if self._ui_page is None:
@@ -388,6 +401,65 @@ class PlaneApp:
                 sy = float(scroll.get("y", 0.0))
             cx, cy = self._clamp_viewport_scroll(component, sx, sy)
             state[component.component_id] = {"x": cx, "y": cy}
+
+    def _initialize_plane_scroll_state(self) -> None:
+        state = self.state.setdefault("plane_scroll", {"x": 0.0, "y": 0.0})
+        if not isinstance(state, dict):
+            state = {"x": 0.0, "y": 0.0}
+            self.state["plane_scroll"] = state
+        try:
+            sx = float(state.get("x", 0.0))
+            sy = float(state.get("y", 0.0))
+        except (TypeError, ValueError):
+            sx = 0.0
+            sy = 0.0
+        cx, cy = self._clamp_plane_scroll(sx, sy)
+        state["x"] = cx
+        state["y"] = cy
+
+    def _plane_scroll_position(self) -> tuple[float, float]:
+        state = self.state.get("plane_scroll")
+        if isinstance(state, dict):
+            try:
+                return (float(state.get("x", 0.0)), float(state.get("y", 0.0)))
+            except (TypeError, ValueError):
+                return (0.0, 0.0)
+        return (0.0, 0.0)
+
+    def _clamp_plane_scroll(self, x: float, y: float) -> tuple[float, float]:
+        if self._ui_page is None:
+            return (0.0, 0.0)
+        max_x = 0.0
+        max_y = 0.0
+        refs = self._viewport_content_refs()
+        for component in self._ui_page.components:
+            if not component.visible:
+                continue
+            if component.component_id in refs:
+                continue
+            if self._is_camera_fixed(component):
+                continue
+            base_x, base_y = self._resolved_position_base(component)
+            right = base_x + float(component.width)
+            bottom = base_y + float(component.height)
+            max_x = max(max_x, right - float(self._ui_page.matrix.width))
+            max_y = max(max_y, bottom - float(self._ui_page.matrix.height))
+        cx = min(max(0.0, float(x)), max_x)
+        cy = min(max(0.0, float(y)), max_y)
+        return (cx, cy)
+
+    def _apply_plane_scroll_intent(self, intent: ScrollIntent) -> tuple[float, float]:
+        state = self.state.setdefault("plane_scroll", {"x": 0.0, "y": 0.0})
+        if not isinstance(state, dict):
+            state = {"x": 0.0, "y": 0.0}
+            self.state["plane_scroll"] = state
+        cur_x, cur_y = self._plane_scroll_position()
+        next_x = cur_x + float(intent.delta_x)
+        next_y = cur_y + float(intent.delta_y)
+        clamped_x, clamped_y = self._clamp_plane_scroll(next_x, next_y)
+        state["x"] = clamped_x
+        state["y"] = clamped_y
+        return (clamped_x - cur_x, clamped_y - cur_y)
 
     def _viewport_content_refs(self) -> set[str]:
         refs: set[str] = set()
