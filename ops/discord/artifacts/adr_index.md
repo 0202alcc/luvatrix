@@ -46,6 +46,12 @@ This index tracks major decisions with alternatives and rationale.
 - Summary: Standardize naming so visible output is always `MatrixBuffer` and top-pinned UI is `CameraOverlayLayer`.
 - Linked evidence: `ops/planning/adr/ADR-006-matrixbuffer-cameraoverlay-terminology.md`, `ops/planning/agile/m008_execution_board.md`
 
+7. `ADR-007` Plane composition model
+- Status: Accepted
+- Date: 2026-03-01
+- Summary: Define deterministic composition via global plane z, local component z, and camera-overlay dominance.
+- Linked evidence: `ops/planning/adr/ADR-007-plane-composition-model.md`, `ops/planning/agile/m008_execution_board.md`
+
 ## New ADR Template
 1. Context
 2. Decision
