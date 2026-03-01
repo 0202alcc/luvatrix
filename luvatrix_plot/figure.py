@@ -1018,6 +1018,9 @@ class Axes:
         x_label_w, x_label_h = text_size(self.x_label_bottom, font_size_px=label_font_px)
         y_label_w, y_label_h = text_size(self.y_label_left, font_size_px=label_font_px, rotate_deg=270)
         title_h = text_size(self.title, font_size_px=title_font_px)[1] if self.title else 0
+        side_title_reserve_w = text_size("value", font_size_px=label_font_px, rotate_deg=270)[0]
+        top_title_reserve_h = text_size("title", font_size_px=title_font_px)[1]
+        bottom_title_reserve_h = text_size("x", font_size_px=label_font_px)[1]
 
         x_tick_pad = int(max(4.0, tick_font_px * 0.5))
         x_tick_mark_len = int(max(5.0, tick_font_px * 0.55))
@@ -1040,6 +1043,16 @@ class Axes:
         top = int(max(10, title_h + 10))
         extra_rot_bottom = int(max(0.0, max_x_tick_h * 0.22)) if x_tick_layout_probe.rotate_deg != 0 else 0
         bottom = int(max(12, x_tick_mark_len + max_x_tick_h + x_tick_pad + x_label_h + x_label_gap + 10 + extra_rot_bottom))
+
+        # Reserve baseline framing space on all sides as if side titles were present,
+        # so subplot framing remains visually balanced even when optional titles/labels are omitted.
+        side_reserve = int(max(10, side_title_reserve_w + y_label_gap + y_axis_label_pad + 4))
+        top_reserve = int(max(10, top_title_reserve_h + 10))
+        bottom_reserve = int(max(12, x_tick_mark_len + max_x_tick_h + x_tick_pad + bottom_title_reserve_h + x_label_gap + 10 + extra_rot_bottom))
+        left = max(left, side_reserve)
+        right = max(right, side_reserve)
+        top = max(top, top_reserve)
+        bottom = max(bottom, bottom_reserve)
 
         # Bound gutters for small figures so we always preserve a drawable plot area.
         left = min(left, max(6, self.figure.width // 3))

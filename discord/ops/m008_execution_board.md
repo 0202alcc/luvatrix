@@ -88,3 +88,8 @@ Last updated: `2026-03-01`
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
 37. `2026-03-01`: `T-801` and `T-802` moved back to `Review`; `T-805` remains in `Review`.
+38. `2026-03-01`: Follow-up feedback cycle started; `T-801` and `T-802` moved from `Review` to `In Progress` for four-side framing reserves (top/right/bottom/left) to ensure consistent panel breathing room, including chart-B right-side spacing.
+39. `2026-03-01`: Verification rerun passed and demos refreshed:
+- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
+- `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
+40. `2026-03-01`: `T-801` and `T-802` moved back to `Review`; `T-805` remains in `Review` pending final acceptance pass.
