@@ -1,0 +1,139 @@
+{
+  "planes_protocol_version": "0.1.0",
+  "app": {
+    "id": "examples.planes_v2_poc",
+    "title": "Planes v2 Proof",
+    "icon": "assets/logo.svg",
+    "web": {
+      "tab_title": null,
+      "tab_icon": null
+    }
+  },
+  "plane": {
+    "id": "main",
+    "default_frame": "screen_tl",
+    "background": {
+      "color": "#0d1720"
+    }
+  },
+  "scripts": [
+    {
+      "id": "handlers",
+      "lang": "python",
+      "src": "scripts/handlers.py"
+    }
+  ],
+  "components": [
+    {
+      "id": "title",
+      "type": "text",
+      "position": {
+        "x": 24,
+        "y": 20,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "vw",
+          "value": 80
+        },
+        "height": {
+          "unit": "px",
+          "value": 28
+        }
+      },
+      "z_index": 10,
+      "functions": {
+        "on_press_single": "handlers::open_card"
+      },
+      "props": {
+        "text": "Planes v2 + App Protocol v2",
+        "color_hex": "#f5fbff",
+        "font_size_px": 20
+      }
+    },
+    {
+      "id": "hero_logo",
+      "type": "svg",
+      "position": {
+        "x": 24,
+        "y": 64,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 96
+        },
+        "height": {
+          "unit": "px",
+          "value": 96
+        }
+      },
+      "z_index": 8,
+      "functions": {
+        "on_hover_start": "handlers::hover_logo"
+      },
+      "props": {
+        "svg": "assets/logo.svg"
+      }
+    },
+    {
+      "id": "board_viewport",
+      "type": "viewport",
+      "position": {
+        "x": 150,
+        "y": 64,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 420
+        },
+        "height": {
+          "unit": "px",
+          "value": 220
+        }
+      },
+      "z_index": 5,
+      "functions": {
+        "on_scroll": "handlers::pan_timeline",
+        "on_press_single": "handlers::select_task"
+      },
+      "props": {
+        "clip": true,
+        "content_ref": "timeline_content",
+        "scroll": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": "timeline_content",
+      "type": "text",
+      "position": {
+        "x": 160,
+        "y": 86,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 640
+        },
+        "height": {
+          "unit": "px",
+          "value": 120
+        }
+      },
+      "z_index": 6,
+      "props": {
+        "text": "Gantt/Agile viewport placeholder content (scroll target)",
+        "color_hex": "#9fc7db",
+        "font_size_px": 14
+      }
+    }
+  ]
+}

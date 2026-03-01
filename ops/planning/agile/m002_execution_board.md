@@ -37,7 +37,9 @@ Last updated: `2026-03-01`
 
 Evidence:
 1. `PYTHONPATH=. uv run pytest tests/test_protocol_governance.py tests/test_app_runtime.py tests/test_unified_runtime.py tests/test_planes_protocol.py` (`40 passed`).
-2. `PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py` (`validation: PASS`).
+2. `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_protocol.py tests/test_protocol_governance.py tests/test_app_runtime.py tests/test_unified_runtime.py` (`42 passed`).
+3. `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 5` (`run complete: ticks=5 frames=5 stopped_by_target_close=False stopped_by_energy_safety=False`).
+4. `PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py` (`validation: PASS`).
 
 ## Evidence Log
 1. `2026-03-01`: Added formal Planes spec: `docs/planes_protocol_v0.md`.
@@ -52,3 +54,8 @@ Evidence:
 4. `2026-03-01`: Implemented Planes validation + compiler mapping to shared UI IR, including HDI hook validation, script target resolution, unit normalization, and viewport contract checks.
 5. `2026-03-01`: Added conformance tests for protocol governance/runtime/process lane and Planes compiler/validation.
 6. `2026-03-01`: Updated task statuses via planning API: `T-204..T-216 -> Done`.
+7. `2026-03-01`: Added protocol-v2 + Planes proof-of-concept app:
+   - `examples/app_protocol/planes_v2_poc/app.toml` (`protocol_version = "2"`, runtime `python_inproc`)
+   - `examples/app_protocol/planes_v2_poc/plane.json` (Planes schema payload)
+   - `examples/app_protocol/planes_v2_poc/app_main.py` (Planes -> UI IR -> frame render)
+8. `2026-03-01`: Added proof test `tests/test_planes_v2_poc_example.py` and executed both test and runtime proof commands.

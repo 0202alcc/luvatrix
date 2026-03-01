@@ -1,0 +1,9 @@
+app_id = "examples.planes_v2_poc"
+protocol_version = "2"
+entrypoint = "app_main:create"
+required_capabilities = ["window.write"]
+optional_capabilities = ["hdi.mouse"]
+
+[runtime]
+kind = "python_inproc"
+transport = "stdio_jsonl"
