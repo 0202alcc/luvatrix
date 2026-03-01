@@ -93,3 +93,10 @@ Last updated: `2026-03-01`
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
 40. `2026-03-01`: `T-801` and `T-802` moved back to `Review`; `T-805` remains in `Review` pending final acceptance pass.
+41. `2026-03-01`: Final polish cycle started; `T-801` and `T-805` moved from `Review` to `In Progress` for chart-A x-title visibility and table selector symbol refinement.
+42. `2026-03-01`: Updated plot gutter clamping to preserve additional bottom headroom for dense rotated x labels so x-axis titles remain visible.
+43. `2026-03-01`: Table demo selector glyph changed from open arrow to closed arrow (`▶`) for row focus.
+44. `2026-03-01`: Verification rerun passed and demos refreshed:
+- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
+- `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
+45. `2026-03-01`: `T-801` and `T-805` moved back to `Review`; `T-802` remains in `Review`.

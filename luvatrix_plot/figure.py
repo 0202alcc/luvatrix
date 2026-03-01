@@ -1057,8 +1057,8 @@ class Axes:
         # Bound gutters for small figures so we always preserve a drawable plot area.
         left = min(left, max(6, self.figure.width // 3))
         right = min(right, max(4, self.figure.width // 4))
-        top = min(top, max(4, self.figure.height // 3))
-        bottom = min(bottom, max(6, self.figure.height // 3))
+        top = min(top, max(4, int(self.figure.height * 0.4)))
+        bottom = min(bottom, max(6, int(self.figure.height * 0.55)))
 
         plot_x0 = left
         plot_y0 = top

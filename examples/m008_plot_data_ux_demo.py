@@ -188,7 +188,7 @@ def _render_table_luvatrix_rgba(table: TableComponent) -> np.ndarray:
         if focus:
             TextComponent(
                 component_id=f"table-focus-{row_idx}",
-                text=">",
+                text="▶",
                 position=CoordinatePoint(table_x - 6.0, y, "screen_tl"),
                 size=TextSizeSpec(unit="px", value=30.0),
                 appearance=TextAppearance(color_hex="#f2f7ff"),
