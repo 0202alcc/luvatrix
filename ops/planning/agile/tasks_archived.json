@@ -1,0 +1,135 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Archived historical tasks retained for milestone traceability.",
+  "status_values": [
+    "Archived"
+  ],
+  "tasks": [
+    {
+      "id": "A-H001-01",
+      "title": "Finalize package layout migration and remove obsolete entry points.",
+      "milestone_id": "H-001",
+      "status": "Archived",
+      "archived_on": "2026-02-23"
+    },
+    {
+      "id": "A-H001-02",
+      "title": "Clean repository structure and align initial docs to new package layout.",
+      "milestone_id": "H-001",
+      "status": "Archived",
+      "archived_on": "2026-02-23"
+    },
+    {
+      "id": "A-H002-01",
+      "title": "Establish macOS visual runtime scaffold and rendering loop baseline.",
+      "milestone_id": "H-002",
+      "status": "Archived",
+      "archived_on": "2026-02-23"
+    },
+    {
+      "id": "A-H002-02",
+      "title": "Merge runtime foundation branch and validate baseline behavior on main.",
+      "milestone_id": "H-002",
+      "status": "Archived",
+      "archived_on": "2026-02-23"
+    },
+    {
+      "id": "A-H003-01",
+      "title": "Implement runtime safety controller with deterministic fail-safe paths.",
+      "milestone_id": "H-003",
+      "status": "Archived",
+      "archived_on": "2026-02-24"
+    },
+    {
+      "id": "A-H003-02",
+      "title": "Harden audit pipeline and confirm safety events are persisted correctly.",
+      "milestone_id": "H-003",
+      "status": "Archived",
+      "archived_on": "2026-02-24"
+    },
+    {
+      "id": "A-H004-01",
+      "title": "Implement platform variant routing for runtime/device-specific paths.",
+      "milestone_id": "H-004",
+      "status": "Archived",
+      "archived_on": "2026-02-26"
+    },
+    {
+      "id": "A-H004-02",
+      "title": "Standardize HDI phases and align instrumentation expectations.",
+      "milestone_id": "H-004",
+      "status": "Archived",
+      "archived_on": "2026-02-26"
+    },
+    {
+      "id": "A-H005-01",
+      "title": "Implement rendering fallback path for unsupported/unstable contexts.",
+      "milestone_id": "H-005",
+      "status": "Archived",
+      "archived_on": "2026-02-26"
+    },
+    {
+      "id": "A-H005-02",
+      "title": "Add smoke docs and GPU blit rendering path validation.",
+      "milestone_id": "H-005",
+      "status": "Archived",
+      "archived_on": "2026-02-26"
+    },
+    {
+      "id": "A-H006-01",
+      "title": "Add interactive plot module primitives for core dashboard views.",
+      "milestone_id": "H-006",
+      "status": "Archived",
+      "archived_on": "2026-02-26"
+    },
+    {
+      "id": "A-H006-02",
+      "title": "Integrate UI IR pipeline with plot module for dynamic updates.",
+      "milestone_id": "H-006",
+      "status": "Archived",
+      "archived_on": "2026-02-26"
+    },
+    {
+      "id": "A-H007-01",
+      "title": "Stabilize plotting interactions under streaming update conditions.",
+      "milestone_id": "H-007",
+      "status": "Archived",
+      "archived_on": "2026-02-27"
+    },
+    {
+      "id": "A-H007-02",
+      "title": "Integrate stream simulation path for reproducible telemetry playback.",
+      "milestone_id": "H-007",
+      "status": "Archived",
+      "archived_on": "2026-02-27"
+    },
+    {
+      "id": "A-H008-01",
+      "title": "Consolidate Discord operations assets into dedicated ops directory.",
+      "milestone_id": "H-008",
+      "status": "Archived",
+      "archived_on": "2026-02-26"
+    },
+    {
+      "id": "A-H008-02",
+      "title": "Update script/docs references after Discord ops reorganization.",
+      "milestone_id": "H-008",
+      "status": "Archived",
+      "archived_on": "2026-02-26"
+    },
+    {
+      "id": "A-H009-01",
+      "title": "Define packaging metadata and baseline build expectations.",
+      "milestone_id": "H-009",
+      "status": "Archived",
+      "archived_on": "2026-02-27"
+    },
+    {
+      "id": "A-H009-02",
+      "title": "Document Vulkan runtime preflight checks and troubleshooting guidance.",
+      "milestone_id": "H-009",
+      "status": "Archived",
+      "archived_on": "2026-02-27"
+    }
+  ]
+}

@@ -1,0 +1,293 @@
+{
+  "title": "Luvatrix Milestone Gantt (Historical + Active + Planned)",
+  "baseline_start_date": "2026-02-23",
+  "milestones": [
+    {
+      "id": "H-001",
+      "emoji": "\ud83e\uddec",
+      "name": "Core package transition and repository cleanup",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H001-01",
+        "A-H001-02"
+      ],
+      "completed_on": "2026-02-23"
+    },
+    {
+      "id": "H-002",
+      "emoji": "\ud83d\udda5\ufe0f",
+      "name": "macOS visual runtime foundation merged to main",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H002-01",
+        "A-H002-02"
+      ],
+      "completed_on": "2026-02-23"
+    },
+    {
+      "id": "H-003",
+      "emoji": "\u26a1",
+      "name": "Runtime safety controller and audit pipeline hardening",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H003-01",
+        "A-H003-02"
+      ],
+      "completed_on": "2026-02-24"
+    },
+    {
+      "id": "H-004",
+      "emoji": "\ud83e\udded",
+      "name": "Platform variant routing and HDI phase standardization",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H004-01",
+        "A-H004-02"
+      ],
+      "completed_on": "2026-02-26"
+    },
+    {
+      "id": "H-005",
+      "emoji": "\ud83c\udfaf",
+      "name": "Rendering fallback, smoke docs, and GPU blit path",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H005-01",
+        "A-H005-02"
+      ],
+      "completed_on": "2026-02-26"
+    },
+    {
+      "id": "H-006",
+      "emoji": "\ud83d\udcc8",
+      "name": "Interactive plot module and UI IR integration",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H006-01",
+        "A-H006-02"
+      ],
+      "completed_on": "2026-02-26"
+    },
+    {
+      "id": "H-007",
+      "emoji": "\ud83d\udd0c",
+      "name": "Plot stabilization and stream simulation integration",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H007-01",
+        "A-H007-02"
+      ],
+      "completed_on": "2026-02-27"
+    },
+    {
+      "id": "H-008",
+      "emoji": "\ud83d\uddc2\ufe0f",
+      "name": "Discord ops consolidation under /discord",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H008-01",
+        "A-H008-02"
+      ],
+      "completed_on": "2026-02-26"
+    },
+    {
+      "id": "H-009",
+      "emoji": "\ud83d\udce6",
+      "name": "Packaging metadata and Vulkan runtime preflight guidance",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H009-01",
+        "A-H009-02"
+      ],
+      "completed_on": "2026-02-27"
+    },
+    {
+      "id": "M-001",
+      "emoji": "\ud83e\uddf1",
+      "name": "Discord governance artifacts and onboarding system",
+      "start_week": 1,
+      "end_week": 2,
+      "status": "In Progress",
+      "task_ids": [
+        "T-101",
+        "T-102",
+        "T-103"
+      ]
+    },
+    {
+      "id": "M-002",
+      "emoji": "\ud83d\udcdc",
+      "name": "App protocol docs finalized",
+      "start_week": 2,
+      "end_week": 3,
+      "status": "Planned",
+      "task_ids": [
+        "T-201",
+        "T-202",
+        "T-203"
+      ]
+    },
+    {
+      "id": "M-003",
+      "emoji": "\ud83c\udfae",
+      "name": "Vulkan stabilization",
+      "start_week": 3,
+      "end_week": 6,
+      "status": "Planned",
+      "task_ids": [
+        "T-301",
+        "T-302",
+        "T-303",
+        "T-304"
+      ]
+    },
+    {
+      "id": "M-004",
+      "emoji": "\ud83e\uddea",
+      "name": "CI hardening and flaky governance",
+      "start_week": 4,
+      "end_week": 6,
+      "status": "Planned",
+      "task_ids": [
+        "T-401",
+        "T-402",
+        "T-403"
+      ]
+    },
+    {
+      "id": "M-005",
+      "emoji": "\ud83d\udee1\ufe0f",
+      "name": "Audit retention lifecycle",
+      "start_week": 5,
+      "end_week": 7,
+      "status": "Planned",
+      "task_ids": [
+        "T-501",
+        "T-502",
+        "T-503"
+      ]
+    },
+    {
+      "id": "M-006",
+      "emoji": "\ud83d\ude80",
+      "name": "Production-hardening go/no-go review",
+      "start_week": 8,
+      "end_week": 10,
+      "status": "Planned",
+      "task_ids": [
+        "T-601",
+        "T-602",
+        "T-603"
+      ]
+    },
+    {
+      "id": "M-007",
+      "emoji": "\ud83c\udf10",
+      "name": "Cross-platform full-suite interactive generalization",
+      "start_week": 1,
+      "end_week": 4,
+      "status": "In Progress",
+      "task_ids": [
+        "T-701",
+        "T-702",
+        "T-703",
+        "T-704"
+      ]
+    },
+    {
+      "id": "M-008",
+      "emoji": "\ud83d\udcca",
+      "name": "Plot + data UX foundations (labels, bars, subplots, scrolling, table UI)",
+      "start_week": 4,
+      "end_week": 8,
+      "status": "In Progress",
+      "task_ids": [
+        "T-801",
+        "T-802",
+        "T-803",
+        "T-804",
+        "T-805"
+      ]
+    },
+    {
+      "id": "M-009",
+      "emoji": "\ud83d\uddd3\ufe0f",
+      "name": "Data workspace UI (calendar app)",
+      "start_week": 8,
+      "end_week": 9,
+      "status": "Planned",
+      "task_ids": [
+        "T-901",
+        "T-902"
+      ]
+    },
+    {
+      "id": "M-010",
+      "emoji": "\ud83d\udcc8",
+      "name": "Custom marketbook dynamic plotting system",
+      "start_week": 9,
+      "end_week": 12,
+      "status": "Planned",
+      "task_ids": [
+        "T-1001",
+        "T-1002",
+        "T-1003",
+        "T-1004"
+      ]
+    },
+    {
+      "id": "M-011",
+      "emoji": "\ud83e\udded",
+      "name": "Native Gantt + Agile visualization in Luvatrix",
+      "start_week": 10,
+      "end_week": 13,
+      "status": "In Progress",
+      "task_ids": [
+        "T-1101",
+        "T-1102",
+        "T-1103",
+        "T-1104",
+        "T-1105",
+        "T-1106",
+        "T-1107",
+        "T-1108",
+        "T-1109",
+        "T-1110",
+        "T-1111",
+        "T-1112",
+        "T-1113"
+      ],
+      "success_criteria": [
+        "Must comply with first-party Luvatrix App Protocol contracts.",
+        "Schema, renderer, interaction, export, and validation flows must remain first-party module driven and deterministic.",
+        "Do not mark complete without task-level App Protocol compliance evidence plus passing test/demo evidence."
+      ],
+      "acceptance_checks": {
+        "T-1101": "Schema contract includes milestone/task/dependency/owner fields with strict status validation; tests prove canonical parse/load and first-party type export.",
+        "T-1102": "Gantt renderer produces deterministic axis/status/dependency output with collapsed/expanded lanes and is callable from first-party planning modules.",
+        "T-1103": "Agile renderer produces deterministic board columns/swimlanes/blocker views and has no third-party UI runtime dependency.",
+        "T-1104": "Filtering/zoom/scroll/click-through interactions are deterministic, clamped, and compatible with first-party planning state types.",
+        "T-1105": "Export adapters produce ASCII/Markdown/PNG artifacts and Discord payload manifests from first-party planning models.",
+        "T-1106": "Validation suite enforces dependency integrity and render consistency; App Protocol compliance evidence is required to clear completion."
+      }
+    }
+  ]
+}

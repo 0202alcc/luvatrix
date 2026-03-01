@@ -1,0 +1,321 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Canonical board definitions and rendering rules. Tasks are selected from tasks_master.json via board type/id filters.",
+  "render_defaults": {
+    "status_columns": [
+      "Backlog",
+      "Ready",
+      "In Progress",
+      "Review",
+      "Done",
+      "Blocked"
+    ],
+    "sort_order": [
+      "priority",
+      "id"
+    ],
+    "card_fields": [
+      "id",
+      "title",
+      "status",
+      "milestone_id",
+      "depends_on"
+    ],
+    "wip_limits": {
+      "In Progress": 3,
+      "Review": 2
+    }
+  },
+  "board_types": {
+    "milestone": {
+      "description": "One board per milestone for execution tracking.",
+      "default_swimlane": "specialist"
+    },
+    "team": {
+      "description": "Cross-milestone board for domain teams.",
+      "default_swimlane": "milestone_id"
+    },
+    "specialist": {
+      "description": "Cross-milestone board for specialist roles.",
+      "default_swimlane": "milestone_id"
+    }
+  },
+  "boards": [
+    {
+      "id": "milestone:M-001",
+      "title": "M-001 Discord Infrastructure",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "M-001"
+      },
+      "discord": {
+        "channel": "#milestone-m-001-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:M-002",
+      "title": "M-002 Documentation Completion",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "M-002"
+      },
+      "discord": {
+        "channel": "#milestone-m-002-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:M-003",
+      "title": "M-003 Vulkan Stabilization",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "M-003"
+      },
+      "discord": {
+        "channel": "#milestone-m-003-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:M-004",
+      "title": "M-004 CI Hardening",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "M-004"
+      },
+      "discord": {
+        "channel": "#milestone-m-004-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:M-005",
+      "title": "M-005 Retention and Records",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "M-005"
+      },
+      "discord": {
+        "channel": "#milestone-m-005-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:M-006",
+      "title": "M-006 Release Readiness",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "M-006"
+      },
+      "discord": {
+        "channel": "#milestone-m-006-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:M-007",
+      "title": "M-007 Cross-Platform Full Suite",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "M-007"
+      },
+      "discord": {
+        "channel": "#milestone-m-007-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:M-008",
+      "title": "M-008 Visualization UX Expansion",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "M-008"
+      },
+      "discord": {
+        "channel": "#milestone-m-008-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:M-009",
+      "title": "M-009 Calendar App",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "M-009"
+      },
+      "discord": {
+        "channel": "#milestone-m-009-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:M-010",
+      "title": "M-010 Marketbook Plotter",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "M-010"
+      },
+      "discord": {
+        "channel": "#milestone-m-010-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:M-011",
+      "title": "M-011 Native Gantt and Agile Visualization",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "M-011"
+      },
+      "discord": {
+        "channel": "#milestone-m-011-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "team:runtime",
+      "title": "Team Runtime Board",
+      "type": "team",
+      "source_filter": {
+        "board_ref": "team:runtime"
+      },
+      "discord": {
+        "channel": "#team-runtime-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "team:protocol",
+      "title": "Team Protocol Board",
+      "type": "team",
+      "source_filter": {
+        "board_ref": "team:protocol"
+      },
+      "discord": {
+        "channel": "#team-protocol-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "team:rendering",
+      "title": "Team Rendering Board",
+      "type": "team",
+      "source_filter": {
+        "board_ref": "team:rendering"
+      },
+      "discord": {
+        "channel": "#team-rendering-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "team:platform-ci",
+      "title": "Team Platform and CI Board",
+      "type": "team",
+      "source_filter": {
+        "board_ref": "team:platform-ci"
+      },
+      "discord": {
+        "channel": "#team-platform-ci-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "team:security-quality",
+      "title": "Team Security and Quality Board",
+      "type": "team",
+      "source_filter": {
+        "board_ref": "team:security-quality"
+      },
+      "discord": {
+        "channel": "#team-security-quality-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "specialist:pm",
+      "title": "Specialist PM Board",
+      "type": "specialist",
+      "source_filter": {
+        "board_ref": "specialist:pm"
+      },
+      "discord": {
+        "channel": "#specialist-pm-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "specialist:architecture",
+      "title": "Specialist Architecture Board",
+      "type": "specialist",
+      "source_filter": {
+        "board_ref": "specialist:architecture"
+      },
+      "discord": {
+        "channel": "#specialist-architecture-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "specialist:development",
+      "title": "Specialist Development Board",
+      "type": "specialist",
+      "source_filter": {
+        "board_ref": "specialist:development"
+      },
+      "discord": {
+        "channel": "#specialist-development-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "specialist:testing",
+      "title": "Specialist Testing Board",
+      "type": "specialist",
+      "source_filter": {
+        "board_ref": "specialist:testing"
+      },
+      "discord": {
+        "channel": "#specialist-testing-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "specialist:qa",
+      "title": "Specialist QA Board",
+      "type": "specialist",
+      "source_filter": {
+        "board_ref": "specialist:qa"
+      },
+      "discord": {
+        "channel": "#specialist-qa-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "specialist:safety",
+      "title": "Specialist Safety Board",
+      "type": "specialist",
+      "source_filter": {
+        "board_ref": "specialist:safety"
+      },
+      "discord": {
+        "channel": "#specialist-safety-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "specialist:release",
+      "title": "Specialist Release Board",
+      "type": "specialist",
+      "source_filter": {
+        "board_ref": "specialist:release"
+      },
+      "discord": {
+        "channel": "#specialist-release-board",
+        "threads_enabled": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+M-011 Native Planning Demo
+Export root: ops/discord/ops/m011_native_exports
+
+Artifacts:
+- ascii_gantt_expanded: ops/discord/ops/m011_native_exports/m011_native_gantt_expanded.txt
+- ascii_gantt_collapsed: ops/discord/ops/m011_native_exports/m011_native_gantt_collapsed.txt
+- ascii_agile: ops/discord/ops/m011_native_exports/m011_native_agile_board.txt
+- markdown_overview: ops/discord/ops/m011_native_exports/m011_native_overview.md
+- markdown_agile: ops/discord/ops/m011_native_exports/m011_native_agile_board.md
+- png_overview: ops/discord/ops/m011_native_exports/m011_native_overview.png
+
+Discord payload preview:
+{'content': '**M-011 Native Planning Export**\nASCII/Markdown/PNG artifacts generated from milestone_schedule.json.', 'allowed_mentions': {'parse': []}, 'attachments': [{'id': 0, 'filename': 'm011_native_overview.md'}, {'id': 1, 'filename': 'm011_native_agile_board.md'}, {'id': 2, 'filename': 'm011_native_gantt_expanded.txt'}, {'id': 3, 'filename': 'm011_native_gantt_collapsed.txt'}, {'id': 4, 'filename': 'm011_native_agile_board.txt'}, {'id': 5, 'filename': 'm011_native_overview.png'}], 'files': ['ops/discord/ops/m011_native_exports/m011_native_overview.md', 'ops/discord/ops/m011_native_exports/m011_native_agile_board.md', 'ops/discord/ops/m011_native_exports/m011_native_gantt_expanded.txt', 'ops/discord/ops/m011_native_exports/m011_native_gantt_collapsed.txt', 'ops/discord/ops/m011_native_exports/m011_native_agile_board.txt', 'ops/discord/ops/m011_native_exports/m011_native_overview.png']}

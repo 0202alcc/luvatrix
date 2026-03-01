@@ -1,0 +1,16 @@
+Luvatrix Milestone Gantt (Historical + Active + Planned) - Agile Board
+Columns: Backlog | Ready | In Progress | Review | Done
+Status colors: Backlog=#9CA3AF, Ready=#0EA5E9, In Progress=#2563EB, Review=#8B5CF6, Done=#16A34A
+
+[swimlane:M-011]
+Backlog: -
+Ready: -
+In Progress:
+  - T-1101 Define canonical timeline/task schema for Gantt + Agile c…
+  - T-1102 Build native Luvatrix Gantt renderer. (deps=T-1101)
+  - T-1103 Build native Luvatrix Agile board renderer. (deps=T-1102)
+  - T-1104 Add interaction layer (filtering, zoom/scroll, click-thro… (deps=T-1103)
+  - T-1105 Add export adapters (ASCII/Markdown/PNG) and Discord payl… (deps=T-1104)
+  - T-1106 Add validation suite for render correctness and dependenc… (deps=T-1105)
+Review: -
+Done: -

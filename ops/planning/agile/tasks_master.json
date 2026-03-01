@@ -1,0 +1,704 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Canonical task source of truth. Each task may appear on multiple agile boards via board_refs.",
+  "board_ref_format": "<board_type>:<board_id>",
+  "board_ref_types": {
+    "milestone": "Milestone-specific execution boards (one per milestone).",
+    "team": "Engineering team boards (cross-milestone by domain).",
+    "specialist": "Specialist role boards (cross-milestone by function)."
+  },
+  "status_values": [
+    "Backlog",
+    "Ready",
+    "In Progress",
+    "Review",
+    "Done",
+    "Blocked"
+  ],
+  "tasks": [
+    {
+      "id": "T-101",
+      "title": "Post artifact pack to mapped channels and pin baselines where allowed.",
+      "epic_id": "E-101",
+      "milestone_id": "M-001",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:M-001",
+        "team:platform-ci",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-102",
+      "title": "Configure essential defaults for Carl-bot/sesh/MyRepoBot/Ticket Tool.",
+      "epic_id": "E-101",
+      "milestone_id": "M-001",
+      "status": "Backlog",
+      "depends_on": [
+        "T-101"
+      ],
+      "board_refs": [
+        "milestone:M-001",
+        "team:platform-ci",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-103",
+      "title": "Run rollout checker and publish pass report in #iteration-reviews.",
+      "epic_id": "E-101",
+      "milestone_id": "M-001",
+      "status": "Backlog",
+      "depends_on": [
+        "T-102"
+      ],
+      "board_refs": [
+        "milestone:M-001",
+        "team:platform-ci",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-201",
+      "title": "Add complete variant-routing examples to protocol docs.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-202",
+      "title": "Add compatibility/deprecation matrix and migration notes.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-201"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-203",
+      "title": "Add operator runbook examples and troubleshooting appendix.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-202"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-301",
+      "title": "Collect and classify top swapchain/surface/fence failure modes.",
+      "epic_id": "E-301",
+      "milestone_id": "M-003",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:M-003",
+        "team:rendering",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-302",
+      "title": "Add targeted regression tests for each failure class.",
+      "epic_id": "E-301",
+      "milestone_id": "M-003",
+      "status": "Backlog",
+      "depends_on": [
+        "T-301"
+      ],
+      "board_refs": [
+        "milestone:M-003",
+        "team:rendering",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-303",
+      "title": "Implement resiliency fixes and fallback parity checks.",
+      "epic_id": "E-301",
+      "milestone_id": "M-003",
+      "status": "Backlog",
+      "depends_on": [
+        "T-302"
+      ],
+      "board_refs": [
+        "milestone:M-003",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-304",
+      "title": "Run stability soak and publish defect burn-down.",
+      "epic_id": "E-301",
+      "milestone_id": "M-003",
+      "status": "Backlog",
+      "depends_on": [
+        "T-303"
+      ],
+      "board_refs": [
+        "milestone:M-003",
+        "team:runtime",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-401",
+      "title": "Define deterministic gate ownership and required pass criteria.",
+      "epic_id": "E-401",
+      "milestone_id": "M-004",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:M-004",
+        "team:platform-ci",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-402",
+      "title": "Add flaky test quarantine + remediation workflow.",
+      "epic_id": "E-401",
+      "milestone_id": "M-004",
+      "status": "Backlog",
+      "depends_on": [
+        "T-401"
+      ],
+      "board_refs": [
+        "milestone:M-004",
+        "team:platform-ci",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-403",
+      "title": "Improve smoke signal visibility and artifact links.",
+      "epic_id": "E-401",
+      "milestone_id": "M-004",
+      "status": "Backlog",
+      "depends_on": [
+        "T-401"
+      ],
+      "board_refs": [
+        "milestone:M-004",
+        "team:platform-ci",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-501",
+      "title": "Define retention policy defaults and rationale.",
+      "epic_id": "E-501",
+      "milestone_id": "M-005",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:M-005",
+        "team:security-quality",
+        "specialist:safety"
+      ]
+    },
+    {
+      "id": "T-502",
+      "title": "Validate prune/report workflows under realistic load.",
+      "epic_id": "E-501",
+      "milestone_id": "M-005",
+      "status": "Backlog",
+      "depends_on": [
+        "T-501"
+      ],
+      "board_refs": [
+        "milestone:M-005",
+        "team:security-quality",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-503",
+      "title": "Publish operational playbook for retention management.",
+      "epic_id": "E-501",
+      "milestone_id": "M-005",
+      "status": "Backlog",
+      "depends_on": [
+        "T-502"
+      ],
+      "board_refs": [
+        "milestone:M-005",
+        "team:security-quality",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-601",
+      "title": "Assemble milestone completion evidence packet.",
+      "epic_id": "E-601",
+      "milestone_id": "M-006",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:M-006",
+        "team:security-quality",
+        "specialist:release"
+      ]
+    },
+    {
+      "id": "T-602",
+      "title": "Review unresolved risks/defects and required mitigations.",
+      "epic_id": "E-601",
+      "milestone_id": "M-006",
+      "status": "Backlog",
+      "depends_on": [
+        "T-601"
+      ],
+      "board_refs": [
+        "milestone:M-006",
+        "team:security-quality",
+        "specialist:safety"
+      ]
+    },
+    {
+      "id": "T-603",
+      "title": "Publish go/no-go recommendation with rationale and decision log links.",
+      "epic_id": "E-601",
+      "milestone_id": "M-006",
+      "status": "Backlog",
+      "depends_on": [
+        "T-602"
+      ],
+      "board_refs": [
+        "milestone:M-006",
+        "team:security-quality",
+        "specialist:release"
+      ]
+    },
+    {
+      "id": "T-701",
+      "title": "Add platform-aware runtime path: macOS windowed + non-macOS headless.",
+      "epic_id": "E-701",
+      "milestone_id": "M-007",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:M-007",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-702",
+      "title": "Keep animation/frame behavior identical across platform paths.",
+      "epic_id": "E-701",
+      "milestone_id": "M-007",
+      "status": "Backlog",
+      "depends_on": [
+        "T-701"
+      ],
+      "board_refs": [
+        "milestone:M-007",
+        "team:runtime",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-703",
+      "title": "Add non-macOS system telemetry providers and unavailable fallbacks.",
+      "epic_id": "E-701",
+      "milestone_id": "M-007",
+      "status": "Backlog",
+      "depends_on": [
+        "T-701"
+      ],
+      "board_refs": [
+        "milestone:M-007",
+        "team:runtime",
+        "specialist:safety"
+      ]
+    },
+    {
+      "id": "T-704",
+      "title": "Update tests/docs and validate no regression in dashboard formatting.",
+      "epic_id": "E-701",
+      "milestone_id": "M-007",
+      "status": "Backlog",
+      "depends_on": [
+        "T-702",
+        "T-703"
+      ],
+      "board_refs": [
+        "milestone:M-007",
+        "team:runtime",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-801",
+      "title": "Sideways x-axis rule labels for long names with readable wrapping/fallbacks.",
+      "epic_id": "E-801",
+      "milestone_id": "M-008",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:M-008",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-802",
+      "title": "Bar chart renderer support (static + interactive parity).",
+      "epic_id": "E-801",
+      "milestone_id": "M-008",
+      "status": "Backlog",
+      "depends_on": [
+        "T-801"
+      ],
+      "board_refs": [
+        "milestone:M-008",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-803",
+      "title": "Multiple plot support (subplot-like layout orchestration).",
+      "epic_id": "E-801",
+      "milestone_id": "M-008",
+      "status": "Backlog",
+      "depends_on": [
+        "T-802"
+      ],
+      "board_refs": [
+        "milestone:M-008",
+        "team:rendering",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-804",
+      "title": "Scrolling and viewport controls for dense plot surfaces.",
+      "epic_id": "E-801",
+      "milestone_id": "M-008",
+      "status": "Backlog",
+      "depends_on": [
+        "T-803"
+      ],
+      "board_refs": [
+        "milestone:M-008",
+        "team:runtime",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-805",
+      "title": "Table UI component system (sortable columns, pagination/virtualization, keyboard access).",
+      "epic_id": "E-801",
+      "milestone_id": "M-008",
+      "status": "Backlog",
+      "depends_on": [
+        "T-804"
+      ],
+      "board_refs": [
+        "milestone:M-008",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-901",
+      "title": "Calendar app component (day/week/month views + event rendering contract).",
+      "epic_id": "E-901",
+      "milestone_id": "M-009",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:M-009",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-902",
+      "title": "Calendar workflow integration with data workspace navigation/state sync.",
+      "epic_id": "E-901",
+      "milestone_id": "M-009",
+      "status": "Backlog",
+      "depends_on": [
+        "T-901"
+      ],
+      "board_refs": [
+        "milestone:M-009",
+        "team:runtime",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-1001",
+      "title": "Marketbook schema + ingestion adapter contract.",
+      "epic_id": "E-1001",
+      "milestone_id": "M-010",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:M-010",
+        "team:protocol",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-1002",
+      "title": "Dedicated dynamic marketbook renderer (depth ladder, spread, imbalance traces).",
+      "epic_id": "E-1001",
+      "milestone_id": "M-010",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1001"
+      ],
+      "board_refs": [
+        "milestone:M-010",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-1003",
+      "title": "Streaming update strategy + latency/perf budgets.",
+      "epic_id": "E-1001",
+      "milestone_id": "M-010",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1002"
+      ],
+      "board_refs": [
+        "milestone:M-010",
+        "team:runtime",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-1004",
+      "title": "Regression/safety tests and operator docs.",
+      "epic_id": "E-1001",
+      "milestone_id": "M-010",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1003"
+      ],
+      "board_refs": [
+        "milestone:M-010",
+        "team:security-quality",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-1101",
+      "title": "Define canonical timeline/task schema for Gantt + Agile cards.",
+      "epic_id": "E-1101",
+      "milestone_id": "M-011",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:M-011",
+        "team:rendering",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-1102",
+      "title": "Build Luvatrix Gantt renderer (axis/status/dependency lanes).",
+      "epic_id": "E-1101",
+      "milestone_id": "M-011",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1101"
+      ],
+      "board_refs": [
+        "milestone:M-011",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-1103",
+      "title": "Build Luvatrix Agile board renderer (columns/swimlanes/blockers).",
+      "epic_id": "E-1101",
+      "milestone_id": "M-011",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1102"
+      ],
+      "board_refs": [
+        "milestone:M-011",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-1104",
+      "title": "Add interaction layer (filter/zoom/scroll/click-through).",
+      "epic_id": "E-1101",
+      "milestone_id": "M-011",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1103"
+      ],
+      "board_refs": [
+        "milestone:M-011",
+        "team:runtime",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-1105",
+      "title": "Add export adapters (ASCII/Markdown/PNG) and Discord payload compatibility.",
+      "epic_id": "E-1101",
+      "milestone_id": "M-011",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1104"
+      ],
+      "board_refs": [
+        "milestone:M-011",
+        "team:runtime",
+        "specialist:release"
+      ]
+    },
+    {
+      "id": "T-1106",
+      "title": "Add validation suite (render correctness + dependency integrity).",
+      "epic_id": "E-1101",
+      "milestone_id": "M-011",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1105"
+      ],
+      "board_refs": [
+        "milestone:M-011",
+        "team:platform-ci",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-1107",
+      "title": "Define Agile source-of-truth contract (tasks master + board registry + data workflow).",
+      "epic_id": "E-1102",
+      "milestone_id": "M-011",
+      "status": "Done",
+      "depends_on": [
+        "T-1101"
+      ],
+      "board_refs": [
+        "milestone:M-011",
+        "team:protocol",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-1108",
+      "title": "Backfill milestone task indexes and create archived task ledger for historical milestones.",
+      "epic_id": "E-1102",
+      "milestone_id": "M-011",
+      "status": "Done",
+      "depends_on": [
+        "T-1107"
+      ],
+      "board_refs": [
+        "milestone:M-011",
+        "team:platform-ci",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-1109",
+      "title": "Implement milestone-task link validator enforcing active/archived resolution.",
+      "epic_id": "E-1102",
+      "milestone_id": "M-011",
+      "status": "Done",
+      "depends_on": [
+        "T-1108"
+      ],
+      "board_refs": [
+        "milestone:M-011",
+        "team:platform-ci",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-1110",
+      "title": "Build standardized endpoint-style planning API for safe milestone/task CRUD.",
+      "epic_id": "E-1102",
+      "milestone_id": "M-011",
+      "status": "Done",
+      "depends_on": [
+        "T-1109"
+      ],
+      "board_refs": [
+        "milestone:M-011",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-1111",
+      "title": "Document planning API usage and verify data-integrity smoke tests.",
+      "epic_id": "E-1102",
+      "milestone_id": "M-011",
+      "status": "Done",
+      "depends_on": [
+        "T-1110"
+      ],
+      "board_refs": [
+        "milestone:M-011",
+        "team:platform-ci",
+        "specialist:release"
+      ]
+    },
+    {
+      "id": "T-1112",
+      "title": "Consolidate Gantt markdown outputs into a single canonical milestones_gantt.md and retire legacy .txt/.md duplicates.",
+      "epic_id": "E-1102",
+      "milestone_id": "M-011",
+      "status": "Done",
+      "depends_on": [
+        "T-1110"
+      ],
+      "board_refs": [
+        "milestone:M-011",
+        "team:protocol",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-1113",
+      "title": "Wire planning API apply path to auto-regenerate Gantt markdown/detailed markdown/PNG artifacts after successful writes.",
+      "epic_id": "E-1102",
+      "milestone_id": "M-011",
+      "status": "Done",
+      "depends_on": [
+        "T-1112"
+      ],
+      "board_refs": [
+        "milestone:M-011",
+        "team:platform-ci",
+        "specialist:testing"
+      ]
+    }
+  ]
+}
