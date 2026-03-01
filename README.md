@@ -74,6 +74,7 @@ See:
 - `docs/ui_ir_v2_validation_plan.md` for the IR v2 strict/permissive validation matrix, snapshot policy, and rollout gate criteria
 - `docs/ui_ir_v2_compiler_upgrade_design.md` for the compiler pipeline design from Planes schema vNext to deterministic `planes-v2` IR
 - `docs/ui_ir_v2_runtime_pipeline_design.md` for the runtime compose pipeline design (ordering, section-cuts, overlay, and RGBA clamp semantics)
+- `docs/ui_ir_v2_performance_execution_plan.md` for culling/prefetch/invalidation/cache strategy and determinism-safe rollout phases
 - `docs/app_protocol_v2_superset_spec.md` for protocol-v2 runtime/adapters/process-lane contract
 - `docs/app_protocol_v2_conformance_matrix.md` for v1/v2 test matrix and CI gate commands
 - `docs/app_protocol_v2_migration.md` for migration path from v1 in-process apps to v2
