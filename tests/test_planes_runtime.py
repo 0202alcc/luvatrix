@@ -97,6 +97,58 @@ def _build_plane_file(root: Path) -> Path:
     return plane_path
 
 
+def _build_scroll_plane_file(root: Path) -> Path:
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "canvas.svg").write_text(
+        "<svg width=\"220\" height=\"200\" xmlns=\"http://www.w3.org/2000/svg\">"
+        "<rect x=\"0\" y=\"0\" width=\"220\" height=\"200\" fill=\"#224466\"/>"
+        "<rect x=\"120\" y=\"120\" width=\"80\" height=\"60\" fill=\"#88ccff\"/>"
+        "</svg>",
+        encoding="utf-8",
+    )
+    payload = {
+        "planes_protocol_version": "0.1.0",
+        "app": {
+            "id": "x.scroll",
+            "title": "Scroll",
+            "icon": "assets/canvas.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "plane": {
+            "id": "main",
+            "default_frame": "screen_tl",
+            "background": {"color": "#0b1320"},
+        },
+        "scripts": [{"id": "handlers", "lang": "python", "src": "scripts/handlers.py"}],
+        "components": [
+            {
+                "id": "canvas",
+                "type": "svg",
+                "position": {"x": 0, "y": 0},
+                "size": {"width": {"unit": "px", "value": 220}, "height": {"unit": "px", "value": 200}},
+                "z_index": 0,
+                "props": {"svg": "assets/canvas.svg"},
+            },
+            {
+                "id": "viewport",
+                "type": "viewport",
+                "position": {"x": 10, "y": 12},
+                "size": {"width": {"unit": "px", "value": 100}, "height": {"unit": "px", "value": 80}},
+                "z_index": 4,
+                "props": {
+                    "clip": True,
+                    "content_ref": "canvas",
+                    "scroll": {"x": 0, "y": 0},
+                    "scroll_speed": {"x": 1.0, "y": 1.0},
+                },
+            },
+        ],
+    }
+    plane_path = root / "plane_scroll.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
 class PlanesRuntimeTests(unittest.TestCase):
     def test_load_plane_app_renders_components(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -197,6 +249,63 @@ class PlanesRuntimeTests(unittest.TestCase):
             app.loop(ctx, 0.016)
             self.assertEqual(calls, [("on_press_single", "title")])
             self.assertEqual(app.state.get("clicked"), "title")
+
+    def test_plane_runtime_builtin_viewport_scroll_updates_camera_offset(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_scroll_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            ctx.mounted = []
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 20.0, "y": 20.0, "delta_x": 40.0, "delta_y": 25.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+
+            scroll_state = app.state.get("viewport_scroll", {})
+            self.assertIsInstance(scroll_state, dict)
+            self.assertIn("viewport", scroll_state)
+            entry = scroll_state["viewport"]
+            self.assertAlmostEqual(float(entry["x"]), 40.0, places=6)
+            self.assertAlmostEqual(float(entry["y"]), 25.0, places=6)
+
+            content_mount = next((comp for comp in ctx.mounted if comp.component_id == "viewport__content"), None)
+            self.assertIsNotNone(content_mount)
+            assert content_mount is not None
+            self.assertAlmostEqual(float(content_mount.position.x), -30.0, places=6)  # viewport x=10 minus scroll_x=40
+            self.assertAlmostEqual(float(content_mount.position.y), -13.0, places=6)  # viewport y=12 minus scroll_y=25
+
+    def test_plane_runtime_viewport_scroll_is_clamped_to_content_bounds(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_scroll_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 20.0, "y": 20.0, "delta_x": 500.0, "delta_y": 500.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            scroll_state = app.state["viewport_scroll"]["viewport"]
+            # max_x = 220 - 100 = 120, max_y = 200 - 80 = 120
+            self.assertAlmostEqual(float(scroll_state["x"]), 120.0, places=6)
+            self.assertAlmostEqual(float(scroll_state["y"]), 120.0, places=6)
 
 
 if __name__ == "__main__":

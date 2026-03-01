@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from luvatrix_ui.component_schema import CoordinatePoint
@@ -14,6 +15,14 @@ from luvatrix_core.core.ui_frame_renderer import MatrixUIFrameRenderer
 
 
 EventHandler = Callable[[dict[str, Any], dict[str, Any]], object | None]
+
+
+@dataclass(frozen=True)
+class ScrollIntent:
+    delta_x: float
+    delta_y: float
+    source: str
+    phase: str = "update"
 
 
 class PlaneApp:
@@ -40,6 +49,8 @@ class PlaneApp:
         self.state.setdefault("active_theme", "default")
         self.state.setdefault("hover_component_id", None)
         self.state.setdefault("last_pointer_xy", None)
+        self.state.setdefault("viewport_scroll", {})
+        self._component_index: dict[str, Any] = {}
 
     def register_handler(self, target: str, handler: EventHandler) -> None:
         self._handlers[target] = handler
@@ -60,8 +71,12 @@ class PlaneApp:
             clear_color=self._bg_color,
         )
         ordered = self._ui_page.ordered_components_for_draw()
+        viewport_content_refs = self._viewport_content_refs()
         for component in ordered:
             if not component.visible:
+                continue
+            if component.component_id in viewport_content_refs:
+                # Viewport content is rendered through the viewport camera pass.
                 continue
             if component.component_type == "viewport":
                 self._mount_viewport_cutout_mask(ctx, component)
@@ -118,6 +133,8 @@ class PlaneApp:
             matrix_height=int(ctx.matrix.height),
             strict=self._strict,
         )
+        self._component_index = {component.component_id: component for component in self._ui_page.components}
+        self._initialize_viewport_scroll_state()
         self._bg_color = _parse_hex_rgba(self._ui_page.background)
 
     def _dispatch_events(self, ctx, dt: float) -> None:
@@ -133,9 +150,13 @@ class PlaneApp:
                 self._dispatch_hover(payload, dt)
                 continue
             hook = _hook_for_event(event.event_type, payload)
+            target_component = self._pick_component_for_event(payload)
+            if target_component is not None:
+                intent = _scroll_intent_from_event(event.event_type, payload)
+                if intent is not None and target_component.component_type == "viewport":
+                    self._apply_viewport_scroll_intent(target_component, intent)
             if hook is None:
                 continue
-            target_component = self._pick_component_for_event(payload)
             if target_component is None:
                 continue
             self._invoke_bindings(target_component, hook, event.event_type, payload, dt)
@@ -283,6 +304,7 @@ class PlaneApp:
         h = float(component.height)
         full_w = float(self._ui_page.matrix.width)
         full_h = float(self._ui_page.matrix.height)
+        self._mount_viewport_content(ctx, component, x=x, y=y, frame=frame)
 
         # Four rectangles around the viewport create a "cutout window" effect.
         masks = [
@@ -310,6 +332,137 @@ class PlaneApp:
                     width=mw,
                     height=mh,
                     opacity=1.0,
+                )
+            )
+
+
+    def _initialize_viewport_scroll_state(self) -> None:
+        if self._ui_page is None:
+            return
+        state = self.state.setdefault("viewport_scroll", {})
+        if not isinstance(state, dict):
+            state = {}
+            self.state["viewport_scroll"] = state
+        for component in self._ui_page.components:
+            if component.component_type != "viewport":
+                continue
+            style = component.style if isinstance(component.style, dict) else {}
+            scroll = style.get("scroll")
+            sx = 0.0
+            sy = 0.0
+            if isinstance(scroll, dict):
+                sx = float(scroll.get("x", 0.0))
+                sy = float(scroll.get("y", 0.0))
+            cx, cy = self._clamp_viewport_scroll(component, sx, sy)
+            state[component.component_id] = {"x": cx, "y": cy}
+
+    def _viewport_content_refs(self) -> set[str]:
+        refs: set[str] = set()
+        if self._ui_page is None:
+            return refs
+        for component in self._ui_page.components:
+            if component.component_type != "viewport":
+                continue
+            style = component.style if isinstance(component.style, dict) else {}
+            ref = style.get("content_ref")
+            if isinstance(ref, str) and ref.strip():
+                refs.add(ref)
+        return refs
+
+    def _viewport_scroll_position(self, viewport_component) -> tuple[float, float]:
+        state = self.state.get("viewport_scroll")
+        if isinstance(state, dict):
+            entry = state.get(viewport_component.component_id)
+            if isinstance(entry, dict):
+                try:
+                    return (float(entry.get("x", 0.0)), float(entry.get("y", 0.0)))
+                except (TypeError, ValueError):
+                    pass
+        style = viewport_component.style if isinstance(viewport_component.style, dict) else {}
+        scroll = style.get("scroll")
+        if isinstance(scroll, dict):
+            try:
+                return (float(scroll.get("x", 0.0)), float(scroll.get("y", 0.0)))
+            except (TypeError, ValueError):
+                return (0.0, 0.0)
+        return (0.0, 0.0)
+
+    def _clamp_viewport_scroll(self, viewport_component, x: float, y: float) -> tuple[float, float]:
+        style = viewport_component.style if isinstance(viewport_component.style, dict) else {}
+        ref = style.get("content_ref")
+        max_x = 0.0
+        max_y = 0.0
+        if isinstance(ref, str) and ref in self._component_index:
+            content = self._component_index[ref]
+            max_x = max(0.0, float(content.width) - float(viewport_component.width))
+            max_y = max(0.0, float(content.height) - float(viewport_component.height))
+        cx = min(max(0.0, float(x)), max_x)
+        cy = min(max(0.0, float(y)), max_y)
+        return (cx, cy)
+
+    def _apply_viewport_scroll_intent(self, viewport_component, intent: ScrollIntent) -> None:
+        style = viewport_component.style if isinstance(viewport_component.style, dict) else {}
+        speed_x = 1.0
+        speed_y = 1.0
+        scroll_speed = style.get("scroll_speed")
+        if isinstance(scroll_speed, dict):
+            try:
+                speed_x = float(scroll_speed.get("x", 1.0))
+                speed_y = float(scroll_speed.get("y", 1.0))
+            except (TypeError, ValueError):
+                speed_x = 1.0
+                speed_y = 1.0
+        cur_x, cur_y = self._viewport_scroll_position(viewport_component)
+        next_x = cur_x + (intent.delta_x * speed_x)
+        next_y = cur_y + (intent.delta_y * speed_y)
+        clamped_x, clamped_y = self._clamp_viewport_scroll(viewport_component, next_x, next_y)
+        state = self.state.setdefault("viewport_scroll", {})
+        if not isinstance(state, dict):
+            state = {}
+            self.state["viewport_scroll"] = state
+        state[viewport_component.component_id] = {"x": clamped_x, "y": clamped_y}
+
+    def _mount_viewport_content(self, ctx, viewport_component, *, x: float, y: float, frame: str) -> None:
+        style = viewport_component.style if isinstance(viewport_component.style, dict) else {}
+        ref = style.get("content_ref")
+        if not isinstance(ref, str) or ref not in self._component_index:
+            return
+        content = self._component_index[ref]
+        scroll_x, scroll_y = self._viewport_scroll_position(viewport_component)
+        content_x = x - scroll_x
+        content_y = y - scroll_y
+        if content.component_type == "svg":
+            if content.asset is None:
+                return
+            svg_path = (self._plane_dir / content.asset.source).resolve()
+            svg_markup = svg_path.read_text(encoding="utf-8")
+            ctx.mount_component(
+                SVGComponent(
+                    component_id=f"{viewport_component.component_id}__content",
+                    svg_markup=svg_markup,
+                    position=CoordinatePoint(content_x, content_y, frame),
+                    width=content.width,
+                    height=content.height,
+                    opacity=float(content.opacity),
+                )
+            )
+            return
+        if content.component_type == "text":
+            props = content.style if isinstance(content.style, dict) else {}
+            text = str(props.get("text", content.component_id))
+            color_hex = self._resolve_text_color(content.component_id, props)
+            font_size_px = float(props.get("font_size_px", 14.0))
+            max_width_px = props.get("max_width_px")
+            if max_width_px is not None:
+                max_width_px = float(max_width_px)
+            ctx.mount_component(
+                TextComponent(
+                    component_id=f"{viewport_component.component_id}__content",
+                    text=text,
+                    position=CoordinatePoint(content_x, content_y, frame),
+                    size=TextSizeSpec(unit="px", value=font_size_px),
+                    appearance=TextAppearance(color_hex=color_hex, opacity=float(content.opacity)),
+                    max_width_px=max_width_px,
                 )
             )
 
@@ -349,6 +502,24 @@ def _hook_for_event(event_type: str, payload: object) -> str | None:
         return "on_pinch"
     if event_type == "rotate":
         return "on_rotate"
+    return None
+
+
+def _scroll_intent_from_event(event_type: str, payload: dict[str, Any]) -> ScrollIntent | None:
+    if event_type == "scroll":
+        try:
+            dx = float(payload.get("delta_x", 0.0))
+            dy = float(payload.get("delta_y", 0.0))
+        except (TypeError, ValueError):
+            return None
+        return ScrollIntent(delta_x=dx, delta_y=dy, source="wheel", phase="update")
+    if event_type in {"pan", "swipe"}:
+        try:
+            dx = float(payload.get("delta_x", 0.0))
+            dy = float(payload.get("delta_y", 0.0))
+        except (TypeError, ValueError):
+            return None
+        return ScrollIntent(delta_x=dx, delta_y=dy, source="touch_drag", phase="update")
     return None
 
 

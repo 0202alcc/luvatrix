@@ -2,7 +2,7 @@
   "planes_protocol_version": "0.1.0",
   "app": {
     "id": "examples.planes_v2_poc",
-    "title": "Planes v2 Theme Demo",
+    "title": "Planes v2 Scrolling Demo",
     "icon": "assets/logo.svg",
     "web": {
       "tab_title": null,
@@ -33,26 +33,26 @@
   ],
   "components": [
     {
-      "id": "underlay_orange",
+      "id": "scroll_canvas",
       "type": "svg",
       "position": {
-        "x": 130,
-        "y": 90,
+        "x": 0,
+        "y": 0,
         "frame": "screen_tl"
       },
       "size": {
         "width": {
           "unit": "px",
-          "value": 700
+          "value": 1600
         },
         "height": {
           "unit": "px",
-          "value": 360
+          "value": 1100
         }
       },
       "z_index": -1,
       "props": {
-        "svg": "assets/orange_rect.svg"
+        "svg": "assets/scroll_canvas.svg"
       }
     },
     {
@@ -60,38 +60,7 @@
       "type": "text",
       "position": {
         "x": 0,
-        "y": 20,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 420
-        },
-        "height": {
-          "unit": "px",
-          "value": 32
-        }
-      },
-      "z_index": 40,
-      "props": {
-        "text": "Planes v2 Protocol Demo",
-        "color_hex": "#f5fbff",
-        "hover_color_hex": "#4dd0ff",
-        "font_size_px": 22,
-        "align": "center",
-        "theme_colors": {
-          "default": "#f5fbff",
-          "sunset": "#ffe680"
-        }
-      }
-    },
-    {
-      "id": "cutout_viewport",
-      "type": "viewport",
-      "position": {
-        "x": 220,
-        "y": 140,
+        "y": 16,
         "frame": "screen_tl"
       },
       "size": {
@@ -101,16 +70,79 @@
         },
         "height": {
           "unit": "px",
-          "value": 240
+          "value": 34
+        }
+      },
+      "z_index": 40,
+      "props": {
+        "text": "Planes v2 Arbitrary Scroll Demo",
+        "color_hex": "#f5fbff",
+        "font_size_px": 22,
+        "align": "center",
+        "theme_colors": {
+          "default": "#f5fbff",
+          "sunset": "#ffe680"
+        }
+      }
+    },
+    {
+      "id": "subtitle",
+      "type": "text",
+      "position": {
+        "x": 0,
+        "y": 52,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 760
+        },
+        "height": {
+          "unit": "px",
+          "value": 24
+        }
+      },
+      "z_index": 40,
+      "props": {
+        "text": "Scroll inside the window (mouse wheel/trackpad). The viewport is a camera over a larger Plane.",
+        "color_hex": "#9eb8d8",
+        "font_size_px": 15,
+        "align": "center"
+      }
+    },
+    {
+      "id": "content_viewport",
+      "type": "viewport",
+      "position": {
+        "x": 140,
+        "y": 94,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 760
+        },
+        "height": {
+          "unit": "px",
+          "value": 430
         }
       },
       "z_index": 20,
+      "functions": {
+        "on_scroll": "handlers::record_scroll"
+      },
       "props": {
         "clip": true,
-        "content_ref": "underlay_orange",
+        "content_ref": "scroll_canvas",
         "scroll": {
           "x": 0,
           "y": 0
+        },
+        "scroll_speed": {
+          "x": 1.0,
+          "y": 1.0
         }
       }
     },
@@ -125,11 +157,11 @@
       "size": {
         "width": {
           "unit": "px",
-          "value": 260
+          "value": 240
         },
         "height": {
           "unit": "px",
-          "value": 52
+          "value": 50
         }
       },
       "z_index": 45,
@@ -147,18 +179,18 @@
       "id": "theme_button",
       "type": "text",
       "position": {
-        "x": 0,
+        "x": -130,
         "y": 0,
         "frame": "screen_tl"
       },
       "size": {
         "width": {
           "unit": "px",
-          "value": 260
+          "value": 240
         },
         "height": {
           "unit": "px",
-          "value": 52
+          "value": 50
         }
       },
       "z_index": 46,
@@ -168,7 +200,71 @@
       "props": {
         "text": "Toggle Theme",
         "color_hex": "#ffffff",
-        "font_size_px": 18,
+        "font_size_px": 17,
+        "align": "center",
+        "v_align": "bottom",
+        "margin_bottom_px": 20,
+        "theme_colors": {
+          "default": "#ffffff",
+          "sunset": "#ffe680"
+        }
+      }
+    },
+    {
+      "id": "reset_button_bg",
+      "type": "svg",
+      "position": {
+        "x": 130,
+        "y": 0,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 240
+        },
+        "height": {
+          "unit": "px",
+          "value": 50
+        }
+      },
+      "z_index": 45,
+      "functions": {
+        "on_press_single": "handlers::reset_scroll"
+      },
+      "props": {
+        "svg": "assets/button_bg.svg",
+        "align": "center",
+        "v_align": "bottom",
+        "margin_bottom_px": 20
+      }
+    },
+    {
+      "id": "reset_button",
+      "type": "text",
+      "position": {
+        "x": 130,
+        "y": 0,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 240
+        },
+        "height": {
+          "unit": "px",
+          "value": 50
+        }
+      },
+      "z_index": 46,
+      "functions": {
+        "on_press_single": "handlers::reset_scroll"
+      },
+      "props": {
+        "text": "Reset Scroll",
+        "color_hex": "#ffffff",
+        "font_size_px": 17,
         "align": "center",
         "v_align": "bottom",
         "margin_bottom_px": 20,

@@ -6,16 +6,9 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-01`
 
 ## Backlog
-1. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
-- Includes camera/viewport model: fixed matrix viewport over a larger Plane.
-2. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
-- Ensures only visible region is rasterized into the matrix frame.
-3. `T-808` Unified input/event plumbing for desktop + touch.
-- `ScrollIntent` abstraction across wheel, keyboard, touch-drag, and touch-fling.
-- Includes future mobile finger-swipe support and deterministic delta normalization.
-4. `T-809` Nested scroll containers + scrollbars/UX affordances.
+1. `T-809` Nested scroll containers + scrollbars/UX affordances.
 - Remainder bubbling for nested containers, thumb geometry, focus behavior.
-5. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
+2. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
 - Large mixed-content Plane demo proving full-page/canvas scroll (not plot-only/table-only).
 
 ## Ready
@@ -25,7 +18,13 @@ Last updated: `2026-03-01`
 1. None.
 
 ## Review
-1. None.
+1. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
+2. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
+3. `T-808` Unified input/event plumbing for desktop + touch.
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
+- Notes: Added `ScrollIntent` abstraction path for `scroll` plus touch-compatible event types (`pan`/`swipe`) scaffolding.
 
 ## Done
 1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
@@ -131,3 +130,12 @@ Last updated: `2026-03-01`
 54. `2026-03-01`: `M-008` reopened for full arbitrary page/canvas scrolling scope expansion.
 55. `2026-03-01`: Added scrolling expansion task breakdown `T-806..T-810`.
 56. `2026-03-01`: Aligned implementation model to Planes "camera over canvas" semantics with mobile-ready touch swipe/fling input in task scope (`T-808`).
+57. `2026-03-01`: `T-806` moved from `Backlog` to `In Progress`; implementation started on Planes viewport scroll-state/camera offset core.
+58. `2026-03-01`: Implemented viewport camera scroll state in `planes_runtime` with deterministic clamp math against content-vs-viewport bounds (`T-806`).
+59. `2026-03-01`: Implemented viewport content translation render path with clipping mask composition and content-ref suppression from base draw pass (`T-807`).
+60. `2026-03-01`: Added unified scroll intent plumbing in runtime (`ScrollIntent`), mapping desktop scroll plus touch-compatible `pan/swipe` deltas to viewport offsets (`T-808` scaffold).
+61. `2026-03-01`: Upgraded `examples/app_protocol/planes_v2_poc` into an arbitrary scrolling showcase (large plane canvas + viewport camera + reset control).
+62. `2026-03-01`: Verification passed:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py`
+- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py`
+63. `2026-03-01`: `T-806`, `T-807`, and `T-808` moved from `In Progress` to `Review`.
