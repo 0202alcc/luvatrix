@@ -91,6 +91,12 @@ Last updated: `2026-03-01`
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
 - Demo: `examples/app_protocol/planes_v2_poc` uses full-plane camera scrolling with global bottom/right plane scrollbars indicating current camera position and remaining page extent.
+- Follow-up optimization pass:
+- added deterministic camera-region culling + prefetch margin handling and SVG markup caching in `luvatrix_ui/planes_runtime.py`,
+- added regression coverage for offscreen culling and cache reuse in `tests/test_planes_runtime.py`,
+- verified behavior parity with:
+  - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass),
+  - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
 
 ## Done
 1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
@@ -371,3 +377,9 @@ Last updated: `2026-03-01`
 148. `2026-03-01`: Updated root README documentation index to include `docs/ui_ir_v2_rollout_compatibility_gate_plan.md`.
 149. `2026-03-01`: Verification rerun passed and `T-825` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+150. `2026-03-01`: `T-810` follow-up optimization pass implemented for `planes_v2_poc` runtime performance parity:
+- deterministic camera-space culling with configurable prefetch margins,
+- per-path SVG markup caching to avoid repeated disk reads each frame.
+151. `2026-03-01`: Added regression tests in `tests/test_planes_runtime.py` for offscreen culling and cache reuse; verification passed:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`

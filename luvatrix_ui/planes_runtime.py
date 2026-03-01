@@ -41,6 +41,7 @@ class PlaneApp:
         self._strict = strict
         self._renderer = MatrixUIFrameRenderer()
         self.state: dict[str, Any] = {}
+        self._svg_markup_cache: dict[Path, str] = {}
 
         self._planes = json.loads(self._plane_path.read_text(encoding="utf-8"))
         self.metadata = resolve_web_metadata(self._planes["app"])
@@ -51,6 +52,8 @@ class PlaneApp:
         self.state.setdefault("last_pointer_xy", None)
         self.state.setdefault("viewport_scroll", {})
         self.state.setdefault("plane_scroll", {"x": 0.0, "y": 0.0})
+        self.state.setdefault("prefetch_margin_px", {"x": 96.0, "y": 96.0})
+        self.state.setdefault("perf", {})
         self._component_index: dict[str, Any] = {}
 
     def register_handler(self, target: str, handler: EventHandler) -> None:
@@ -73,17 +76,33 @@ class PlaneApp:
         )
         ordered = self._ui_page.ordered_components_for_draw()
         viewport_content_refs = self._viewport_content_refs()
+        prefetch_x, prefetch_y = self._prefetch_margins()
+        considered = 0
+        culled = 0
+        mounted = 0
         for component in ordered:
             if not component.visible:
                 continue
+            considered += 1
             if component.component_id in viewport_content_refs:
                 # Viewport content is rendered through the viewport camera pass.
                 continue
+            resolved_x, resolved_y = self._resolved_position(component)
+            if not self._is_component_in_camera_region(
+                x=resolved_x,
+                y=resolved_y,
+                width=float(component.width),
+                height=float(component.height),
+                margin_x=prefetch_x,
+                margin_y=prefetch_y,
+            ):
+                culled += 1
+                continue
             if component.component_type == "viewport":
                 self._mount_viewport_cutout_mask(ctx, component)
+                mounted += 1
                 continue
             frame = component.resolved_frame(self._ui_page.default_frame)
-            resolved_x, resolved_y = self._resolved_position(component)
             if component.component_type == "text":
                 props = component.style if isinstance(component.style, dict) else {}
                 text = str(props.get("text", component.component_id))
@@ -102,12 +121,13 @@ class PlaneApp:
                         max_width_px=max_width_px,
                     )
                 )
+                mounted += 1
                 continue
             if component.component_type == "svg":
                 if component.asset is None:
                     continue
                 svg_path = (self._plane_dir / component.asset.source).resolve()
-                svg_markup = svg_path.read_text(encoding="utf-8")
+                svg_markup = self._load_svg_markup(svg_path)
                 ctx.mount_component(
                     SVGComponent(
                         component_id=component.component_id,
@@ -118,9 +138,18 @@ class PlaneApp:
                         opacity=float(component.opacity),
                     )
                 )
+                mounted += 1
                 continue
             # viewport and other component types are validated at compile-time.
         self._mount_plane_scrollbars(ctx)
+        self.state["perf"] = {
+            "components_considered": int(considered),
+            "components_culled": int(culled),
+            "components_mounted": int(mounted),
+            "prefetch_margin_x_px": float(prefetch_x),
+            "prefetch_margin_y_px": float(prefetch_y),
+            "svg_cache_size": int(len(self._svg_markup_cache)),
+        }
         ctx.finalize_ui_frame()
 
     def stop(self, ctx) -> None:
@@ -320,6 +349,55 @@ class PlaneApp:
             return (x, y)
         plane_x, plane_y = self._plane_scroll_position()
         return (x - plane_x, y - plane_y)
+
+    def _prefetch_margins(self) -> tuple[float, float]:
+        entry = self.state.get("prefetch_margin_px")
+        if isinstance(entry, dict):
+            try:
+                mx = max(0.0, float(entry.get("x", 96.0)))
+                my = max(0.0, float(entry.get("y", 96.0)))
+                return (mx, my)
+            except (TypeError, ValueError):
+                return (96.0, 96.0)
+        return (96.0, 96.0)
+
+    def _is_component_in_camera_region(
+        self,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        margin_x: float,
+        margin_y: float,
+    ) -> bool:
+        if self._ui_page is None:
+            return True
+        view_w = float(self._ui_page.matrix.width)
+        view_h = float(self._ui_page.matrix.height)
+        left = -margin_x
+        top = -margin_y
+        right = view_w + margin_x
+        bottom = view_h + margin_y
+        comp_right = x + max(0.0, width)
+        comp_bottom = y + max(0.0, height)
+        if comp_right < left:
+            return False
+        if comp_bottom < top:
+            return False
+        if x > right:
+            return False
+        if y > bottom:
+            return False
+        return True
+
+    def _load_svg_markup(self, svg_path: Path) -> str:
+        cached = self._svg_markup_cache.get(svg_path)
+        if cached is not None:
+            return cached
+        markup = svg_path.read_text(encoding="utf-8")
+        self._svg_markup_cache[svg_path] = markup
+        return markup
 
     def _resolved_position_base(self, component) -> tuple[float, float]:
         if self._ui_page is None:
@@ -643,7 +721,7 @@ class PlaneApp:
             if content.asset is None:
                 return
             svg_path = (self._plane_dir / content.asset.source).resolve()
-            svg_markup = svg_path.read_text(encoding="utf-8")
+            svg_markup = self._load_svg_markup(svg_path)
             ctx.mount_component(
                 SVGComponent(
                     component_id=f"{viewport_component.component_id}__content",

@@ -252,6 +252,46 @@ def _build_plane_camera_scroll_file(root: Path) -> Path:
     return plane_path
 
 
+def _build_plane_culling_file(root: Path) -> Path:
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "rect.svg").write_text(
+        "<svg width=\"200\" height=\"120\" xmlns=\"http://www.w3.org/2000/svg\">"
+        "<rect x=\"0\" y=\"0\" width=\"200\" height=\"120\" fill=\"#2a77b8\"/></svg>",
+        encoding="utf-8",
+    )
+    payload = {
+        "planes_protocol_version": "0.1.0",
+        "app": {
+            "id": "x.cull",
+            "title": "Cull",
+            "icon": "assets/rect.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "plane": {"id": "main", "default_frame": "screen_tl", "background": {"color": "#111111"}},
+        "components": [
+            {
+                "id": "near_panel",
+                "type": "svg",
+                "position": {"x": 20, "y": 20},
+                "size": {"width": {"unit": "px", "value": 200}, "height": {"unit": "px", "value": 120}},
+                "z_index": 1,
+                "props": {"svg": "assets/rect.svg"},
+            },
+            {
+                "id": "far_panel",
+                "type": "svg",
+                "position": {"x": 2200, "y": 1600},
+                "size": {"width": {"unit": "px", "value": 200}, "height": {"unit": "px", "value": 120}},
+                "z_index": 1,
+                "props": {"svg": "assets/rect.svg"},
+            },
+        ],
+    }
+    plane_path = root / "plane_cull.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
 class PlanesRuntimeTests(unittest.TestCase):
     def test_load_plane_app_renders_components(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -488,6 +528,38 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertIn("__plane_scrollbar_x_thumb", ids)
             self.assertIn("__plane_scrollbar_y_track", ids)
             self.assertIn("__plane_scrollbar_y_thumb", ids)
+
+    def test_plane_runtime_culls_far_offscreen_components_deterministically(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_culling_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+
+            ids = {comp.component_id for comp in ctx.mounted}
+            self.assertIn("near_panel", ids)
+            self.assertNotIn("far_panel", ids)
+
+            perf = app.state.get("perf", {})
+            self.assertEqual(int(perf.get("components_considered", 0)), 2)
+            self.assertEqual(int(perf.get("components_culled", 0)), 1)
+            self.assertEqual(int(perf.get("components_mounted", 0)), 1)
+
+    def test_plane_runtime_reuses_svg_markup_cache_across_frames(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_culling_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            first_perf = dict(app.state.get("perf", {}))
+            self.assertEqual(int(first_perf.get("svg_cache_size", 0)), 1)
+
+            ctx.mounted = []
+            app.loop(ctx, 0.016)
+            second_perf = dict(app.state.get("perf", {}))
+            self.assertEqual(int(second_perf.get("svg_cache_size", 0)), 1)
 
 
 if __name__ == "__main__":
