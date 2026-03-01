@@ -64,6 +64,12 @@ This index tracks major decisions with alternatives and rationale.
 - Summary: Define deterministic hit-test and scroll routing across overlay, planes, and section-cut pass-through regions.
 - Linked evidence: `ops/planning/adr/ADR-009-input-routing-and-scroll-targeting.md`, `ops/planning/agile/m008_execution_board.md`
 
+10. `ADR-010` Camera-relative culling and prefetch policy
+- Status: Accepted
+- Date: 2026-03-01
+- Summary: Define visible-region culling, predictive margins, and dirty/tile caching policy for smooth deterministic scrolling.
+- Linked evidence: `ops/planning/adr/ADR-010-camera-relative-culling-and-prefetch.md`, `ops/planning/agile/m008_execution_board.md`
+
 ## New ADR Template
 1. Context
 2. Decision
