@@ -71,3 +71,5 @@ Last updated: `2026-03-01`
 27. `2026-03-01`: Verification rerun passed:
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
+28. `2026-03-01`: Per review feedback, `T-801`, `T-802`, and `T-805` were moved from `Review` to `In Progress` for label-anchor, bar tick/reference-line, aspect/size, and Luvatrix table visual-output fixes.
+29. `2026-03-01`: After test+demo verification passed, `T-801`, `T-802`, and `T-805` were moved back to `Review` pending acceptance.
