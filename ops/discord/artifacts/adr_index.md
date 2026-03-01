@@ -58,6 +58,12 @@ This index tracks major decisions with alternatives and rationale.
 - Summary: Formalize `absolute_rgba` and `delta_rgba` behavior, deterministic order, and strict `[0,255]` final clamp rules.
 - Linked evidence: `ops/planning/adr/ADR-008-absolute-delta-rgba-compositing.md`, `ops/planning/agile/m008_execution_board.md`
 
+9. `ADR-009` Input routing and scroll targeting
+- Status: Accepted
+- Date: 2026-03-01
+- Summary: Define deterministic hit-test and scroll routing across overlay, planes, and section-cut pass-through regions.
+- Linked evidence: `ops/planning/adr/ADR-009-input-routing-and-scroll-targeting.md`, `ops/planning/agile/m008_execution_board.md`
+
 ## New ADR Template
 1. Context
 2. Decision
