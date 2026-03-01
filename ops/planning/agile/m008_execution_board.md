@@ -2,17 +2,30 @@
 
 Milestone: `M-008` Plot + data UX foundations
 Epic: `E-801`
-Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> T-807 -> T-808 -> T-809 -> T-810` (scrolling expansion)
+Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> T-807 -> T-808 -> T-809 -> T-810` (scrolling expansion) + `T-811 -> T-812 -> T-813 -> T-814 -> T-815 -> T-816 -> T-817 -> T-818 -> T-819 -> T-820 -> T-821 -> T-822 -> T-823 -> T-824 -> T-825` (architecture/spec extension)
 Last updated: `2026-03-01`
 
 ## Backlog
-1. None.
+1. `T-812` Composition model ADR.
+2. `T-813` Compositing ADR (`absolute_rgba` / `delta_rgba` + clamp contract).
+3. `T-814` Input/scroll routing ADR (section-cut pass-through + nested targeting).
+4. `T-815` Camera-relative culling/prefetch ADR.
+5. `T-816` Planes schema vNext spec update.
+6. `T-817` App protocol capability/version update.
+7. `T-818` UI IR gap assessment.
+8. `T-819` UI IR v2 field contract.
+9. `T-820` IR validation plan + snapshot matrix.
+10. `T-821` Compiler upgrade design (schema vNext -> IR v2).
+11. `T-822` Runtime pipeline design (matrix compositing + overlay + clamp).
+12. `T-823` Performance execution plan (culling/prefetch/invalidation/cache).
+13. `T-824` Demo + verification plan.
+14. `T-825` Rollout and compatibility gate plan.
 
 ## Ready
 1. None.
 
 ## In Progress
-1. None.
+1. `T-811` Terminology ADR (`MatrixBuffer` output vs `CameraOverlayLayer` concept).
 
 ## Review
 1. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
@@ -191,3 +204,5 @@ Last updated: `2026-03-01`
 89. `2026-03-01`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
+90. `2026-03-01`: Approved strict architecture/spec chain for continuation work: `T-811 -> T-825` (terminology ADR, schema/protocol/UI-IR readiness, compiler/runtime/perf/rollout planning).
+91. `2026-03-01`: `T-811` moved from newly approved chain to `In Progress`; `T-812..T-825` placed in `Backlog` in strict dependency order.
