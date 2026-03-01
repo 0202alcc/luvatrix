@@ -27,9 +27,9 @@ Last updated: `2026-03-01`
 - Notes: Added nested viewport scroll remainder bubbling + viewport scrollbars (x/y tracks and thumbs).
 5. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
 - Evidence:
-- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
-- Demo: `examples/app_protocol/planes_v2_poc` refined with renderer-safe canvas art, centered viewport framing, and single reset control.
+- Demo: `examples/app_protocol/planes_v2_poc` simplified to a single main-plane scrolling surface (no nested/containerized scrolling viewport).
 
 ## Done
 1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
@@ -167,3 +167,11 @@ Last updated: `2026-03-01`
 76. `2026-03-01`: Adjusted viewport scroll input polarity to match system-native wheel/trackpad direction expectations.
 77. `2026-03-01`: Verification rerun passed:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+78. `2026-03-01`: Reviewer requested reset to checkpoint `fb3cdb7`; `T-810` moved from `Review` back to `In Progress` for a ground-up simplification pass.
+79. `2026-03-01`: Started simplified `planes_v2_poc` direction: single main-plane scroll surface only (removed nested/containerized scrolling section from demo layout).
+80. `2026-03-01`: Simplified demo implementation completed:
+- resized to one near full-page viewport camera (`content_viewport`) with no framed nested/inset viewport,
+- refreshed scroll canvas art with deterministic grid/text landmarks for obvious movement cues.
+81. `2026-03-01`: Verification rerun passed and `T-810` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`

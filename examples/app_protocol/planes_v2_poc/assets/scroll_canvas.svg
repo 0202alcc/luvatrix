@@ -1,21 +1,33 @@
-<svg width="1800" height="1200" viewBox="0 0 1800 1200" xmlns="http://www.w3.org/2000/svg">
-  <rect x="0" y="0" width="1800" height="1200" fill="#13273d"/>
+<svg width="2400" height="1800" viewBox="0 0 2400 1800" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="2400" height="1800" fill="#12233a"/>
 
-  <rect x="60" y="60" width="260" height="180" rx="14" fill="#2b67a8"/>
-  <rect x="420" y="80" width="340" height="220" rx="16" fill="#2f90b5"/>
-  <rect x="840" y="80" width="300" height="180" rx="16" fill="#4e5fcc"/>
-  <rect x="1240" y="90" width="430" height="240" rx="16" fill="#257f60"/>
+  <g stroke="#2e4d70" stroke-width="2" opacity="0.5">
+    <line x1="0" y1="300" x2="2400" y2="300"/>
+    <line x1="0" y1="700" x2="2400" y2="700"/>
+    <line x1="0" y1="1100" x2="2400" y2="1100"/>
+    <line x1="0" y1="1500" x2="2400" y2="1500"/>
+    <line x1="400" y1="0" x2="400" y2="1800"/>
+    <line x1="900" y1="0" x2="900" y2="1800"/>
+    <line x1="1400" y1="0" x2="1400" y2="1800"/>
+    <line x1="1900" y1="0" x2="1900" y2="1800"/>
+  </g>
 
-  <rect x="90" y="360" width="360" height="260" rx="16" fill="#3177ba"/>
-  <rect x="520" y="360" width="430" height="260" rx="16" fill="#3ea3c8"/>
-  <rect x="1030" y="380" width="300" height="220" rx="16" fill="#7a4ec9"/>
-  <rect x="1380" y="360" width="320" height="260" rx="16" fill="#cf8f30"/>
+  <rect x="120" y="120" width="760" height="420" rx="18" fill="#3477b8"/>
+  <rect x="980" y="140" width="920" height="500" rx="18" fill="#3f9fc2"/>
+  <rect x="1960" y="180" width="300" height="400" rx="16" fill="#5d67ce"/>
 
-  <rect x="80" y="700" width="280" height="180" rx="16" fill="#267d5f"/>
-  <rect x="430" y="700" width="380" height="220" rx="16" fill="#c86c2f"/>
-  <rect x="890" y="700" width="420" height="260" rx="16" fill="#4f70d0"/>
-  <rect x="1390" y="720" width="300" height="240" rx="16" fill="#2f9bc1"/>
+  <rect x="180" y="760" width="980" height="430" rx="18" fill="#2f8db3"/>
+  <rect x="1260" y="720" width="980" height="520" rx="18" fill="#287858"/>
 
-  <circle cx="520" cy="1040" r="120" fill="#3fc3d6"/>
-  <circle cx="1420" cy="1030" r="150" fill="#5f88dc"/>
+  <rect x="140" y="1280" width="760" height="420" rx="18" fill="#2e6cae"/>
+  <rect x="980" y="1260" width="940" height="500" rx="18" fill="#c07f30"/>
+  <rect x="1980" y="1240" width="300" height="480" rx="16" fill="#6a4dc4"/>
+
+  <g fill="#d6e9ff" font-family="Comic Mono, monospace" font-size="48">
+    <text x="76" y="90">SCROLL CANVAS 2400 x 1800</text>
+    <text x="120" y="610">Top band</text>
+    <text x="140" y="1260">Middle band</text>
+    <text x="130" y="1760">Bottom band</text>
+    <text x="2050" y="1740">edge</text>
+  </g>
 </svg>
