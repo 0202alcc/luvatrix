@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -56,6 +57,8 @@ class PlaneApp:
         self.state.setdefault("perf", {})
         self._component_index: dict[str, Any] = {}
         self._plane_index: dict[str, Any] = {}
+        self._frame_perf: dict[str, float] = {}
+        self._frame_counts: dict[str, int] = {}
 
     def register_handler(self, target: str, handler: EventHandler) -> None:
         self._handlers[target] = handler
@@ -64,17 +67,23 @@ class PlaneApp:
         self._ensure_compiled(ctx)
 
     def loop(self, ctx, dt: float) -> None:
+        frame_start_ns = time.perf_counter_ns()
+        self._begin_perf_frame()
         self._ensure_compiled(ctx)
         assert self._ui_page is not None
+        input_start_ns = time.perf_counter_ns()
         self._dispatch_events(ctx, dt)
+        self._add_perf_ns("input_ns", time.perf_counter_ns() - input_start_ns)
         self._bg_color = self._resolve_background()
 
+        raster_start_ns = time.perf_counter_ns()
         ctx.begin_ui_frame(
             self._renderer,
             content_width_px=float(self._ui_page.matrix.width),
             content_height_px=float(self._ui_page.matrix.height),
             clear_color=self._bg_color,
         )
+        self._add_perf_ns("raster_ns", time.perf_counter_ns() - raster_start_ns)
         ordered = self._ui_page.ordered_components_for_draw()
         viewport_content_refs = self._viewport_content_refs()
         prefetch_x, prefetch_y = self._prefetch_margins()
@@ -91,6 +100,7 @@ class PlaneApp:
                 # Viewport content is rendered through the viewport camera pass.
                 continue
             resolved_x, resolved_y = self._resolved_position(component)
+            cull_start_ns = time.perf_counter_ns()
             if not self._is_component_in_camera_region(
                 x=resolved_x,
                 y=resolved_y,
@@ -99,10 +109,14 @@ class PlaneApp:
                 margin_x=prefetch_x,
                 margin_y=prefetch_y,
             ):
+                self._add_perf_ns("cull_ns", time.perf_counter_ns() - cull_start_ns)
                 culled += 1
                 continue
+            self._add_perf_ns("cull_ns", time.perf_counter_ns() - cull_start_ns)
             if component.component_type == "viewport":
+                mount_start_ns = time.perf_counter_ns()
                 self._mount_viewport_cutout_mask(ctx, component)
+                self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_start_ns)
                 mounted += 1
                 continue
             frame = component.resolved_frame(self._ui_page.default_frame)
@@ -114,6 +128,7 @@ class PlaneApp:
                 max_width_px = props.get("max_width_px")
                 if max_width_px is not None:
                     max_width_px = float(max_width_px)
+                mount_start_ns = time.perf_counter_ns()
                 ctx.mount_component(
                     TextComponent(
                         component_id=component.component_id,
@@ -124,6 +139,7 @@ class PlaneApp:
                         max_width_px=max_width_px,
                     )
                 )
+                self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_start_ns)
                 mounted += 1
                 continue
             if component.component_type == "svg":
@@ -131,6 +147,7 @@ class PlaneApp:
                     continue
                 svg_path = (self._plane_dir / component.asset.source).resolve()
                 svg_markup = self._load_svg_markup(svg_path)
+                mount_start_ns = time.perf_counter_ns()
                 ctx.mount_component(
                     SVGComponent(
                         component_id=component.component_id,
@@ -141,10 +158,14 @@ class PlaneApp:
                         opacity=float(component.opacity),
                     )
                 )
+                self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_start_ns)
                 mounted += 1
                 continue
             # viewport and other component types are validated at compile-time.
+        mount_scrollbar_start_ns = time.perf_counter_ns()
         self._mount_plane_scrollbars(ctx)
+        self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_scrollbar_start_ns)
+        present_start_ns = time.perf_counter_ns()
         self.state["perf"] = {
             "components_considered": int(considered),
             "components_culled": int(culled),
@@ -152,8 +173,30 @@ class PlaneApp:
             "prefetch_margin_x_px": float(prefetch_x),
             "prefetch_margin_y_px": float(prefetch_y),
             "svg_cache_size": int(len(self._svg_markup_cache)),
+            "events_polled": int(self._frame_counts.get("events_polled", 0)),
+            "events_processed": int(self._frame_counts.get("events_processed", 0)),
+            "scroll_events": int(self._frame_counts.get("scroll_events", 0)),
+            "hit_test_calls": int(self._frame_counts.get("hit_test_calls", 0)),
+            "timing_ms": {
+                "input": self._ns_to_ms(self._frame_perf.get("input_ns", 0.0)),
+                "hit_test": self._ns_to_ms(self._frame_perf.get("hit_test_ns", 0.0)),
+                "scroll_update": self._ns_to_ms(self._frame_perf.get("scroll_update_ns", 0.0)),
+                "cull": self._ns_to_ms(self._frame_perf.get("cull_ns", 0.0)),
+                "mount": self._ns_to_ms(self._frame_perf.get("mount_ns", 0.0)),
+                "raster": self._ns_to_ms(self._frame_perf.get("raster_ns", 0.0)),
+                "present": 0.0,
+                "frame_total": 0.0,
+            },
         }
         ctx.finalize_ui_frame()
+        self._add_perf_ns("present_ns", time.perf_counter_ns() - present_start_ns)
+        self._add_perf_ns("frame_total_ns", time.perf_counter_ns() - frame_start_ns)
+        perf = self.state.get("perf")
+        if isinstance(perf, dict):
+            timings = perf.get("timing_ms")
+            if isinstance(timings, dict):
+                timings["present"] = self._ns_to_ms(self._frame_perf.get("present_ns", 0.0))
+                timings["frame_total"] = self._ns_to_ms(self._frame_perf.get("frame_total_ns", 0.0))
 
     def stop(self, ctx) -> None:
         _ = ctx
@@ -177,13 +220,16 @@ class PlaneApp:
         if self._ui_page is None:
             return
         events = ctx.poll_hdi_events(128)
+        self._frame_counts["events_polled"] = int(len(events))
         if not events:
             return
         for event in events:
+            self._frame_counts["events_processed"] = int(self._frame_counts.get("events_processed", 0)) + 1
             payload = event.payload if isinstance(event.payload, dict) else {}
             self._record_pointer_xy(payload)
             intent = _scroll_intent_from_event(event.event_type, payload)
             if intent is not None:
+                self._frame_counts["scroll_events"] = int(self._frame_counts.get("scroll_events", 0)) + 1
                 self._dispatch_viewport_scroll(payload, intent)
             if event.event_type == "pointer_move":
                 self._dispatch_hover(payload, dt)
@@ -216,8 +262,11 @@ class PlaneApp:
     def _pick_component_for_event(self, payload: dict[str, Any]):
         if self._ui_page is None:
             return None
+        hit_start_ns = time.perf_counter_ns()
+        self._frame_counts["hit_test_calls"] = int(self._frame_counts.get("hit_test_calls", 0)) + 1
         xy = self._extract_event_xy(payload)
         if xy is None:
+            self._add_perf_ns("hit_test_ns", time.perf_counter_ns() - hit_start_ns)
             return None
         x, y = xy
         for component in self._ui_page.ordered_components_for_hit_test():
@@ -226,7 +275,9 @@ class PlaneApp:
             bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
             resolved_x, resolved_y = self._resolved_position(component)
             if resolved_x <= x <= resolved_x + bounds.width and resolved_y <= y <= resolved_y + bounds.height:
+                self._add_perf_ns("hit_test_ns", time.perf_counter_ns() - hit_start_ns)
                 return component
+        self._add_perf_ns("hit_test_ns", time.perf_counter_ns() - hit_start_ns)
         return None
 
     def _viewport_stack_for_point(self, x: float, y: float) -> list[Any]:
@@ -245,8 +296,10 @@ class PlaneApp:
         return stack
 
     def _dispatch_viewport_scroll(self, payload: dict[str, Any], intent: ScrollIntent) -> None:
+        scroll_start_ns = time.perf_counter_ns()
         xy = self._extract_event_xy(payload)
         if xy is None:
+            self._add_perf_ns("scroll_update_ns", time.perf_counter_ns() - scroll_start_ns)
             return
         px, py = xy
         stack = self._viewport_stack_for_point(px, py)
@@ -263,6 +316,7 @@ class PlaneApp:
                 break
         if abs(rem_x) > 1e-9 or abs(rem_y) > 1e-9:
             self._apply_plane_scroll_intent(ScrollIntent(delta_x=rem_x, delta_y=rem_y, source=intent.source, phase=intent.phase))
+        self._add_perf_ns("scroll_update_ns", time.perf_counter_ns() - scroll_start_ns)
 
     def _record_pointer_xy(self, payload: dict[str, Any]) -> None:
         xy = self._extract_xy_from_payload(payload)
@@ -406,6 +460,22 @@ class PlaneApp:
         markup = svg_path.read_text(encoding="utf-8")
         self._svg_markup_cache[svg_path] = markup
         return markup
+
+    def _begin_perf_frame(self) -> None:
+        self._frame_perf = {}
+        self._frame_counts = {
+            "events_polled": 0,
+            "events_processed": 0,
+            "scroll_events": 0,
+            "hit_test_calls": 0,
+        }
+
+    def _add_perf_ns(self, key: str, delta_ns: int) -> None:
+        self._frame_perf[key] = float(self._frame_perf.get(key, 0.0) + max(0, int(delta_ns)))
+
+    @staticmethod
+    def _ns_to_ms(value_ns: float) -> float:
+        return float(value_ns) / 1_000_000.0
 
     def _resolved_position_base(self, component) -> tuple[float, float]:
         if self._ui_page is None:

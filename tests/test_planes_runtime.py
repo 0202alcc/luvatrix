@@ -624,6 +624,39 @@ class PlanesRuntimeTests(unittest.TestCase):
             second_perf = dict(app.state.get("perf", {}))
             self.assertEqual(int(second_perf.get("svg_cache_size", 0)), 1)
 
+    def test_plane_runtime_exposes_frame_timing_stages_and_event_counters(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_scroll_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 20.0, "y": 20.0, "delta_x": -8.0, "delta_y": -4.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+
+            perf = app.state.get("perf", {})
+            self.assertGreaterEqual(int(perf.get("events_polled", 0)), 1)
+            self.assertGreaterEqual(int(perf.get("events_processed", 0)), 1)
+            self.assertGreaterEqual(int(perf.get("scroll_events", 0)), 1)
+            self.assertGreaterEqual(int(perf.get("hit_test_calls", 0)), 1)
+
+            timing = perf.get("timing_ms", {})
+            self.assertIsInstance(timing, dict)
+            expected_keys = {"input", "hit_test", "scroll_update", "cull", "mount", "raster", "present", "frame_total"}
+            self.assertTrue(expected_keys.issubset(set(timing.keys())))
+            for key in expected_keys:
+                value = float(timing.get(key, 0.0))
+                self.assertGreaterEqual(value, 0.0)
+
     def test_plane_runtime_supports_v2_attachment_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             plane_path = _build_plane_v2_multi_file(Path(td))

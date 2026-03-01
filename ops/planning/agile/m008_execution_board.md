@@ -6,16 +6,15 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-01`
 
 ## Backlog
-1. `T-826` Frame-time instrumentation pack (input/hit-test/scroll-update/cull/mount/raster/present + counters).
-2. `T-827` HDI scroll event coalescing + phase/momentum propagation contract.
-3. `T-828` Retained mount graph (incremental node updates, reduced per-frame object churn).
-4. `T-829` Standardized CameraOverlay scrollbar primitives (no per-frame ad-hoc SVG generation).
-5. `T-830` True dirty-region compose path (partial redraw + unchanged-region reuse).
-6. `T-831` Hit-test acceleration index (spatial partitioning).
-7. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
-8. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
-9. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
-10. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
+1. `T-827` HDI scroll event coalescing + phase/momentum propagation contract.
+2. `T-828` Retained mount graph (incremental node updates, reduced per-frame object churn).
+3. `T-829` Standardized CameraOverlay scrollbar primitives (no per-frame ad-hoc SVG generation).
+4. `T-830` True dirty-region compose path (partial redraw + unchanged-region reuse).
+5. `T-831` Hit-test acceleration index (spatial partitioning).
+6. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
+7. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
+8. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
+9. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
 
 ## Ready
 1. None.
@@ -115,6 +114,11 @@ Last updated: `2026-03-01`
 - v2 schema/runtime path follow-up:
 - `examples/app_protocol/planes_v2_poc/plane.json` migrated to `planes-v2` shape (`planes[]`, routes, per-component attachment declarations),
 - runtime smoke and tests confirm `planes_v2_poc` compiles through `ir_version=planes-v2` while keeping visual behavior.
+21. `T-826` Frame-time instrumentation pack (input/hit-test/scroll-update/cull/mount/raster/present + counters).
+- Evidence:
+- `luvatrix_ui/planes_runtime.py` now records per-frame timing buckets (`input`, `hit_test`, `scroll_update`, `cull`, `mount`, `raster`, `present`, `frame_total`) plus frame counters (`events_polled`, `events_processed`, `scroll_events`, `hit_test_calls`) in `state["perf"]`.
+- `tests/test_planes_runtime.py` adds metrics contract coverage for stage keys and non-negative timing/counter values.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 
 ## Done
 1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
@@ -411,3 +415,10 @@ Last updated: `2026-03-01`
 - `PYTHONPATH=. uv run pytest tests/test_planes_protocol.py tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
 155. `2026-03-01`: Performance hardening chain approved and added in strict order: `T-826 -> T-827 -> T-828 -> T-829 -> T-830 -> T-831 -> T-832 -> T-833 -> T-834 -> T-835`.
+156. `2026-03-01`: `T-826` started (`Backlog` -> `In Progress`) for frame-time instrumentation across runtime stages.
+157. `2026-03-01`: Implemented runtime perf stage instrumentation in `luvatrix_ui/planes_runtime.py`:
+- per-frame stage timings for `input/hit_test/scroll_update/cull/mount/raster/present/frame_total`,
+- per-frame counters for events and hit-test usage.
+158. `2026-03-01`: Added regression coverage in `tests/test_planes_runtime.py` for instrumentation contract (required stage keys and non-negative values).
+159. `2026-03-01`: Verification rerun passed and `T-826` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
