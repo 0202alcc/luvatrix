@@ -6,10 +6,9 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-01`
 
 ## Backlog
-1. `T-822` Runtime pipeline design (matrix compositing + overlay + clamp).
-2. `T-823` Performance execution plan (culling/prefetch/invalidation/cache).
-3. `T-824` Demo + verification plan.
-4. `T-825` Rollout and compatibility gate plan.
+1. `T-823` Performance execution plan (culling/prefetch/invalidation/cache).
+2. `T-824` Demo + verification plan.
+3. `T-825` Rollout and compatibility gate plan.
 
 ## Ready
 1. None.
@@ -63,17 +62,21 @@ Last updated: `2026-03-01`
 - Evidence:
 - `docs/ui_ir_v2_compiler_upgrade_design.md` created with parse/normalize/validate/emit pipeline stages, strict/permissive behavior, deterministic diagnostics/order-key contract, and v0->v2 compatibility-lift policy.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
-12. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
+12. `T-822` Runtime pipeline design (matrix compositing + overlay + clamp).
+- Evidence:
+- `docs/ui_ir_v2_runtime_pipeline_design.md` created with frame-stage pipeline design (active-scene resolve, cull/gather, compose, overlay, affordances), section-cut render/input rules, and blend clamp invariants.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+13. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-13. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
+14. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-14. `T-808` Unified input/event plumbing for desktop + touch.
+15. `T-808` Unified input/event plumbing for desktop + touch.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added `ScrollIntent` abstraction path for `scroll` plus touch-compatible event types (`pan`/`swipe`) scaffolding.
-15. `T-809` Nested scroll containers + scrollbars/UX affordances.
+16. `T-809` Nested scroll containers + scrollbars/UX affordances.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added nested viewport scroll remainder bubbling + viewport scrollbars (x/y tracks and thumbs).
-16. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
+17. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
 - Evidence:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
@@ -325,4 +328,12 @@ Last updated: `2026-03-01`
 - stable order-key construction and v0->v2 compatibility-lift design.
 132. `2026-03-01`: Updated root README documentation index to include `docs/ui_ir_v2_compiler_upgrade_design.md`.
 133. `2026-03-01`: Verification rerun passed and `T-821` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+134. `2026-03-01`: `T-822` started (`Backlog` -> `In Progress`) for runtime pipeline design (matrix compositing + overlay + clamp).
+135. `2026-03-01`: Created `docs/ui_ir_v2_runtime_pipeline_design.md` with:
+- deterministic frame-stage compose pipeline (`resolve -> cull/gather -> compose -> overlay -> affordances -> emit`),
+- section-cut render/input routing contract,
+- `absolute_rgba` / `delta_rgba` blend + clamp semantics and telemetry hooks.
+136. `2026-03-01`: Updated root README documentation index to include `docs/ui_ir_v2_runtime_pipeline_design.md`.
+137. `2026-03-01`: Verification rerun passed and `T-822` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
