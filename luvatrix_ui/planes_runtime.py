@@ -120,6 +120,7 @@ class PlaneApp:
                 )
                 continue
             # viewport and other component types are validated at compile-time.
+        self._mount_plane_scrollbars(ctx)
         ctx.finalize_ui_frame()
 
     def stop(self, ctx) -> None:
@@ -427,6 +428,12 @@ class PlaneApp:
         return (0.0, 0.0)
 
     def _clamp_plane_scroll(self, x: float, y: float) -> tuple[float, float]:
+        max_x, max_y = self._plane_scroll_limits()
+        cx = min(max(0.0, float(x)), max_x)
+        cy = min(max(0.0, float(y)), max_y)
+        return (cx, cy)
+
+    def _plane_scroll_limits(self) -> tuple[float, float]:
         if self._ui_page is None:
             return (0.0, 0.0)
         max_x = 0.0
@@ -444,9 +451,7 @@ class PlaneApp:
             bottom = base_y + float(component.height)
             max_x = max(max_x, right - float(self._ui_page.matrix.width))
             max_y = max(max_y, bottom - float(self._ui_page.matrix.height))
-        cx = min(max(0.0, float(x)), max_x)
-        cy = min(max(0.0, float(y)), max_y)
-        return (cx, cy)
+        return (max_x, max_y)
 
     def _apply_plane_scroll_intent(self, intent: ScrollIntent) -> tuple[float, float]:
         state = self.state.setdefault("plane_scroll", {"x": 0.0, "y": 0.0})
@@ -460,6 +465,101 @@ class PlaneApp:
         state["x"] = clamped_x
         state["y"] = clamped_y
         return (clamped_x - cur_x, clamped_y - cur_y)
+
+    def _mount_plane_scrollbars(self, ctx) -> None:
+        if self._ui_page is None:
+            return
+        max_x, max_y = self._plane_scroll_limits()
+        if max_x <= 1e-9 and max_y <= 1e-9:
+            return
+        view_w = float(self._ui_page.matrix.width)
+        view_h = float(self._ui_page.matrix.height)
+        scroll_x, scroll_y = self._plane_scroll_position()
+        frame = self._ui_page.default_frame
+        track_color = "#1f344d"
+        thumb_color = "#9bc9f8"
+
+        if max_x > 1e-9:
+            track_h = 6.0
+            track_x = 4.0
+            track_y = view_h - track_h - 2.0
+            track_w = max(16.0, view_w - 12.0)
+            track_markup = (
+                '<svg width="100" height="10" xmlns="http://www.w3.org/2000/svg">'
+                f'<rect x="0" y="0" width="100" height="10" rx="4" fill="{track_color}"/>'
+                "</svg>"
+            )
+            ctx.mount_component(
+                SVGComponent(
+                    component_id="__plane_scrollbar_x_track",
+                    svg_markup=track_markup,
+                    position=CoordinatePoint(track_x, track_y, frame),
+                    width=track_w,
+                    height=track_h,
+                    opacity=0.86,
+                )
+            )
+            content_w = view_w + max_x
+            thumb_ratio = max(0.08, min(1.0, view_w / max(content_w, 1e-9)))
+            thumb_w = max(12.0, track_w * thumb_ratio)
+            span = max(0.0, track_w - thumb_w)
+            thumb_x = track_x + span * (scroll_x / max_x)
+            thumb_markup = (
+                '<svg width="100" height="10" xmlns="http://www.w3.org/2000/svg">'
+                f'<rect x="0" y="0" width="100" height="10" rx="4" fill="{thumb_color}"/>'
+                "</svg>"
+            )
+            ctx.mount_component(
+                SVGComponent(
+                    component_id="__plane_scrollbar_x_thumb",
+                    svg_markup=thumb_markup,
+                    position=CoordinatePoint(thumb_x, track_y, frame),
+                    width=thumb_w,
+                    height=track_h,
+                    opacity=0.96,
+                )
+            )
+
+        if max_y > 1e-9:
+            track_w = 6.0
+            track_x = view_w - track_w - 2.0
+            track_y = 72.0
+            track_h = max(16.0, view_h - 82.0)
+            track_markup = (
+                '<svg width="10" height="100" xmlns="http://www.w3.org/2000/svg">'
+                f'<rect x="0" y="0" width="10" height="100" rx="4" fill="{track_color}"/>'
+                "</svg>"
+            )
+            ctx.mount_component(
+                SVGComponent(
+                    component_id="__plane_scrollbar_y_track",
+                    svg_markup=track_markup,
+                    position=CoordinatePoint(track_x, track_y, frame),
+                    width=track_w,
+                    height=track_h,
+                    opacity=0.86,
+                )
+            )
+            content_h = view_h + max_y
+            thumb_ratio = max(0.08, min(1.0, view_h / max(content_h, 1e-9)))
+            thumb_h = max(12.0, track_h * thumb_ratio)
+            span = max(0.0, track_h - thumb_h)
+            thumb_y = track_y + span * (scroll_y / max_y)
+            thumb_markup = (
+                '<svg width="10" height="100" xmlns="http://www.w3.org/2000/svg">'
+                f'<rect x="0" y="0" width="10" height="100" rx="4" fill="{thumb_color}"/>'
+                "</svg>"
+            )
+            ctx.mount_component(
+                SVGComponent(
+                    component_id="__plane_scrollbar_y_thumb",
+                    svg_markup=thumb_markup,
+                    position=CoordinatePoint(track_x, thumb_y, frame),
+                    width=track_w,
+                    height=thumb_h,
+                    opacity=0.96,
+                )
+            )
 
     def _viewport_content_refs(self) -> set[str]:
         refs: set[str] = set()

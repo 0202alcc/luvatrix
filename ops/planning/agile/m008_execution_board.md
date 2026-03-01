@@ -29,7 +29,7 @@ Last updated: `2026-03-01`
 - Evidence:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
-- Demo: `examples/app_protocol/planes_v2_poc` now uses full-plane camera scrolling (no viewport container); components are positioned beyond initial screen bounds and become visible via scroll.
+- Demo: `examples/app_protocol/planes_v2_poc` uses full-plane camera scrolling with global bottom/right plane scrollbars indicating current camera position and remaining page extent.
 
 ## Done
 1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
@@ -183,5 +183,11 @@ Last updated: `2026-03-01`
 - removed scrollable viewport container from demo,
 - added out-of-bounds world components directly in `plane.json` for right/bottom exploration by scroll.
 85. `2026-03-01`: Verification rerun passed and `T-810` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
+86. `2026-03-01`: Reviewer-requested usability enhancement started; `T-810` moved from `Review` to `In Progress` to add global page scroll position UI.
+87. `2026-03-01`: Added plane-level scrollbars in runtime (bottom + right) for non-viewport page camera scrolling, including thumb sizing/position based on total scrollable extent.
+88. `2026-03-01`: Added regression assertions for global plane scrollbar mounts in `tests/test_planes_runtime.py`.
+89. `2026-03-01`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`

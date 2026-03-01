@@ -483,6 +483,11 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertAlmostEqual(float(panel.position.y), 60.0, places=6)  # 160 - scroll_y(100)
             self.assertAlmostEqual(float(fixed.position.x), 12.0, places=6)  # fixed to camera
             self.assertAlmostEqual(float(fixed.position.y), 8.0, places=6)
+            ids = {comp.component_id for comp in ctx.mounted}
+            self.assertIn("__plane_scrollbar_x_track", ids)
+            self.assertIn("__plane_scrollbar_x_thumb", ids)
+            self.assertIn("__plane_scrollbar_y_track", ids)
+            self.assertIn("__plane_scrollbar_y_thumb", ids)
 
 
 if __name__ == "__main__":
