@@ -236,3 +236,38 @@ For protocol/UI work, keep these documents aligned:
 1. `docs/app_protocol.md` (runtime contract)
 2. `docs/ui_component_protocol.md` (component contract)
 3. `docs/json_ui_compiler.md` (JSON source and compile rules)
+4. `docs/app_protocol_variants_guide.md` (variant routing and failure cases)
+5. `docs/app_protocol_compatibility_policy.md` (version compatibility and deprecation policy)
+6. `docs/app_protocol_operator_runbook.md` (operator commands and troubleshooting)
+7. `docs/planes_protocol_v0.md` (JSON-first Plane/component schema standard)
+8. `docs/app_protocol_v2_superset_spec.md` (v2 runtime/adapters/process-lane contract)
+9. `docs/app_protocol_v2_conformance_matrix.md` (required test and CI matrix)
+10. `docs/app_protocol_v2_migration.md` (v1 to v2 migration guide)
+
+## 18. First-Party App Standardization Checklist
+
+A first-party app is considered protocol-standardized only when all items below are true:
+
+1. Manifest includes required fields:
+   `app_id`, `protocol_version`, `entrypoint`, `required_capabilities`, `optional_capabilities`.
+2. Protocol governance is explicit:
+   use `min_runtime_protocol_version` / `max_runtime_protocol_version` when release bounds are required.
+3. Variant routing is deterministic:
+   use normalized `platform_support` and `[[variants]]` entries with stable IDs and non-escaping `module_root`.
+4. Lifecycle object implements:
+   `init(ctx)`, `loop(ctx, dt)`, `stop(ctx)`.
+5. Capability gating assumptions are documented:
+   expected `DENIED` behavior for missing HDI/sensor permissions is intentional and tested.
+6. Operator runbook coverage exists:
+   run commands, troubleshooting, and audit verification are documented.
+7. CI/verification evidence includes protocol governance and app runtime variant tests.
+
+Companion references:
+
+1. `docs/app_protocol_variants_guide.md`
+2. `docs/app_protocol_compatibility_policy.md`
+3. `docs/app_protocol_operator_runbook.md`
+4. `docs/planes_protocol_v0.md`
+5. `docs/app_protocol_v2_superset_spec.md`
+6. `docs/app_protocol_v2_conformance_matrix.md`
+7. `docs/app_protocol_v2_migration.md`

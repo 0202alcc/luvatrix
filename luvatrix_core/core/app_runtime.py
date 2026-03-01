@@ -8,7 +8,7 @@ import platform
 import sys
 import time
 import tomllib
-from typing import Callable, Protocol
+from typing import Callable, Literal, Protocol
 
 import torch
 
@@ -68,6 +68,9 @@ class AppManifest:
     optional_capabilities: list[str]
     platform_support: list[str]
     variants: list["AppVariant"]
+    runtime_kind: Literal["python_inproc", "process"] = "python_inproc"
+    runtime_transport: Literal["stdio_jsonl"] = "stdio_jsonl"
+    process_command: list[str] = field(default_factory=list)
     min_runtime_protocol_version: str | None = None
     max_runtime_protocol_version: str | None = None
 
@@ -212,8 +215,6 @@ class AppContext:
         display = self._ui_display
         components = list(self._ui_components)
         try:
-            text_commands = []
-            svg_commands = []
             for component in components:
                 if isinstance(component, TextComponent):
                     command, _ = component.layout(
@@ -221,17 +222,13 @@ class AppContext:
                         display,
                         transformer=self.coordinate_frames,
                     )
-                    text_commands.append(command)
+                    renderer.draw_text_batch(TextRenderBatch(commands=(command,)))
                     continue
                 if isinstance(component, SVGComponent):
                     command, _ = component.layout()
-                    svg_commands.append(command)
+                    renderer.draw_svg_batch(SVGRenderBatch(commands=(command,)))
                     continue
                 raise NotImplementedError(f"unsupported component type for ui frame: {type(component)!r}")
-            if text_commands:
-                renderer.draw_text_batch(TextRenderBatch(commands=tuple(text_commands)))
-            if svg_commands:
-                renderer.draw_svg_batch(SVGRenderBatch(commands=tuple(svg_commands)))
             frame = renderer.end_frame()
             return self.submit_write_batch(WriteBatch([FullRewrite(frame)]))
         finally:
@@ -363,6 +360,8 @@ class AppRuntime:
         max_runtime_protocol_version = _coerce_optional_str(
             raw.get("max_runtime_protocol_version"), "max_runtime_protocol_version"
         )
+        runtime_raw = raw.get("runtime", {})
+        runtime_kind, runtime_transport, process_command = _coerce_runtime_config(runtime_raw)
         manifest = AppManifest(
             app_id=app_id,
             protocol_version=protocol_version,
@@ -371,6 +370,9 @@ class AppRuntime:
             optional_capabilities=optional,
             platform_support=platform_support,
             variants=variants,
+            runtime_kind=runtime_kind,
+            runtime_transport=runtime_transport,
+            process_command=process_command,
             min_runtime_protocol_version=min_runtime_protocol_version,
             max_runtime_protocol_version=max_runtime_protocol_version,
         )
@@ -542,6 +544,10 @@ class AppRuntime:
         for variant in manifest.variants:
             if variant.entrypoint is not None:
                 _parse_entrypoint(variant.entrypoint)
+        if manifest.runtime_kind == "process" and not manifest.process_command:
+            raise ValueError("runtime.kind=process requires runtime.command")
+        if manifest.runtime_transport != "stdio_jsonl":
+            raise ValueError(f"unsupported runtime transport: {manifest.runtime_transport}")
 
     def _audit_capability(self, action: str, capability: str) -> None:
         if self._capability_audit_logger is None:
@@ -573,6 +579,28 @@ def _coerce_optional_str(value: object, field_name: str) -> str | None:
     if not isinstance(value, str):
         raise ValueError(f"{field_name} must be a string if provided")
     return value
+
+
+def _coerce_runtime_config(value: object) -> tuple[Literal["python_inproc", "process"], Literal["stdio_jsonl"], list[str]]:
+    if value is None:
+        return ("python_inproc", "stdio_jsonl", [])
+    if not isinstance(value, dict):
+        raise ValueError("runtime must be a table/object")
+    raw_kind = _coerce_optional_str(value.get("kind"), "runtime.kind") or "python_inproc"
+    raw_transport = _coerce_optional_str(value.get("transport"), "runtime.transport") or "stdio_jsonl"
+    command_raw = value.get("command", [])
+    if raw_kind not in {"python_inproc", "process"}:
+        raise ValueError(f"unsupported runtime kind: {raw_kind}")
+    if raw_transport != "stdio_jsonl":
+        raise ValueError(f"unsupported runtime transport: {raw_transport}")
+    if not isinstance(command_raw, list):
+        raise ValueError("runtime.command must be a list")
+    command: list[str] = []
+    for item in command_raw:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError("runtime.command entries must be non-empty strings")
+        command.append(item)
+    return (raw_kind, raw_transport, command)
 
 
 def _coerce_variants(value: object) -> list[AppVariant]:

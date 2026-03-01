@@ -705,7 +705,7 @@
       "title": "Define App Protocol v2 superset wire spec with v1 backward-compatibility guarantees.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Ready",
+      "status": "Done",
       "depends_on": [
         "T-203"
       ],
@@ -720,7 +720,7 @@
       "title": "Implement runtime adapter layer (python in-process baseline + process runtime hooks) for protocol v2 execution.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-204"
       ],
@@ -735,7 +735,7 @@
       "title": "Deliver Python-first protocol v2 process lane (stdio transport + reference worker SDK/client) while keeping v1 behavior unchanged.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-205"
       ],
@@ -751,7 +751,7 @@
       "title": "Extend app manifest/governance for v2 runtime fields with strict compatibility policy and v1-safe defaults.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-204"
       ],
@@ -767,7 +767,7 @@
       "title": "Add protocol v1/v2 conformance matrix and CI gates for adapter/runtime compatibility and deterministic render outputs.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-205",
         "T-206",
@@ -785,7 +785,7 @@
       "title": "Publish v1-to-v2 migration guide and runbook updates for first-party app teams (Python-first, multi-language ready).",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-208"
       ],
@@ -801,7 +801,7 @@
       "title": "Finalize Planes Protocol v0 core schema (app/plane/component contracts, metadata inheritance, unit normalization).",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Ready",
+      "status": "Done",
       "depends_on": [
         "T-209"
       ],
@@ -816,7 +816,7 @@
       "title": "Standardize Planes interaction hooks against HDI-normalized phases and event payload contracts.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-210"
       ],
@@ -832,7 +832,7 @@
       "title": "Define Planes script registry and deterministic function target resolution (<script_id>::<function_name>) with strict-mode failures.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-210"
       ],
@@ -848,7 +848,7 @@
       "title": "Specify Planes viewport clipping and scroll-window semantics (coordinate remap, bounds, deterministic pan behavior).",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-210"
       ],
@@ -864,7 +864,7 @@
       "title": "Define Planes Gantt+Agile feature profile and status-theming contract for first-party planning app templates.",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-210",
         "T-213"
@@ -881,7 +881,7 @@
       "title": "Implement deterministic compiler mapping from Planes JSON to shared UI IR (draw/hit-test ordering + frame transforms).",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-211",
         "T-212",
@@ -900,9 +900,57 @@
       "title": "Add Planes strict/permissive schema validation and conformance tests (including v1/v2 protocol integration gates).",
       "epic_id": "E-201",
       "milestone_id": "M-002",
-      "status": "Backlog",
+      "status": "Done",
       "depends_on": [
         "T-215"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:platform-ci",
+        "team:protocol",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-217",
+      "title": "Implement first-party Planes runtime loader API (load_plane_app) so apps can run from plane.json without custom compile/render boilerplate.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Done",
+      "depends_on": [
+        "T-216"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:runtime",
+        "team:protocol",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-218",
+      "title": "Refactor planes_v2_poc example to tiny load_plane_app(...) pattern using framework-managed Planes compile/render pipeline.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Done",
+      "depends_on": [
+        "T-217"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:runtime",
+        "team:protocol",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-219",
+      "title": "Add Planes runtime tests/docs for handler dispatch, viewport semantics, and proof command coverage.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Done",
+      "depends_on": [
+        "T-218"
       ],
       "board_refs": [
         "milestone:M-002",

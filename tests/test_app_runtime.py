@@ -167,6 +167,65 @@ class AppRuntimeTests(unittest.TestCase):
             self.assertEqual(manifest.platform_support, ["macos", "linux"])
             self.assertEqual(len(manifest.variants), 1)
             self.assertEqual(manifest.variants[0].variant_id, "mac-arm64")
+            self.assertEqual(manifest.runtime_kind, "python_inproc")
+            self.assertEqual(manifest.runtime_transport, "stdio_jsonl")
+            self.assertEqual(manifest.process_command, [])
+
+    def test_manifest_parses_v2_process_runtime_block(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "x"',
+                        'protocol_version = "2"',
+                        'entrypoint = "app_main:create"',
+                        "required_capabilities = []",
+                        "optional_capabilities = []",
+                        "",
+                        "[runtime]",
+                        'kind = "process"',
+                        'transport = "stdio_jsonl"',
+                        'command = ["python", "-u", "worker.py"]',
+                    ]
+                )
+            )
+            (root / "app_main.py").write_text("def create():\n    return object()\n")
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=SensorManagerThread(providers={}),
+            )
+            manifest = runtime.load_manifest(root)
+            self.assertEqual(manifest.runtime_kind, "process")
+            self.assertEqual(manifest.runtime_transport, "stdio_jsonl")
+            self.assertEqual(manifest.process_command, ["python", "-u", "worker.py"])
+
+    def test_manifest_process_runtime_requires_command(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "x"',
+                        'protocol_version = "2"',
+                        'entrypoint = "app_main:create"',
+                        "required_capabilities = []",
+                        "optional_capabilities = []",
+                        "",
+                        "[runtime]",
+                        'kind = "process"',
+                    ]
+                )
+            )
+            (root / "app_main.py").write_text("def create():\n    return object()\n")
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=SensorManagerThread(providers={}),
+            )
+            with self.assertRaises(ValueError):
+                runtime.load_manifest(root)
 
     def test_resolve_variant_picks_host_match_with_arch_priority(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -496,7 +555,7 @@ class AppRuntimeTests(unittest.TestCase):
                         'app_id = "x"',
                         'protocol_version = "1"',
                         'entrypoint = "app_main:create"',
-                        'min_runtime_protocol_version = "2"',
+                        'min_runtime_protocol_version = "3"',
                         "required_capabilities = []",
                         "optional_capabilities = []",
                     ]

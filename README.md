@@ -64,6 +64,13 @@ See:
 - `docs/ui_component_protocol.md` for component contracts
 - `docs/app_protocol.md` for runtime contract
 - `docs/json_ui_compiler.md` for JSON page/lottie-oriented compiler design
+- `docs/app_protocol_variants_guide.md` for variant routing examples and precedence
+- `docs/app_protocol_compatibility_policy.md` for protocol support/deprecation policy
+- `docs/app_protocol_operator_runbook.md` for operator troubleshooting and audit verification
+- `docs/planes_protocol_v0.md` for the formal Planes JSON app-design schema (metadata, components, interactions, scripts, viewport semantics)
+- `docs/app_protocol_v2_superset_spec.md` for protocol-v2 runtime/adapters/process-lane contract
+- `docs/app_protocol_v2_conformance_matrix.md` for v1/v2 test matrix and CI gate commands
+- `docs/app_protocol_v2_migration.md` for migration path from v1 in-process apps to v2
 
 ## macOS Visualizer Examples
 
@@ -104,6 +111,11 @@ uv run --python 3.14 python examples/macos_visualizer/vulkan_probe.py
 Minimal input + sensor logger app:
 ```bash
 uv run --python 3.14 python examples/app_protocol/run_input_sensor_logger.py --simulate-hdi --simulate-sensors
+```
+
+Protocol-v2 + Planes proof-of-concept app:
+```bash
+PYTHONPATH=. uv run --python 3.14 python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 300
 ```
 
 Media transport lab (image + animated video rendering with aspect-ratio preserve and transport controls):
