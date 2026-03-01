@@ -108,3 +108,7 @@ Last updated: `2026-03-01`
 49. `2026-03-01`: Verification rerun passed and demos refreshed:
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
+50. `2026-03-01`: Per reviewer request, table focus marker reverted to plain open caret (`>`) for maximum font compatibility and predictable visibility.
+51. `2026-03-01`: Verification rerun passed and demo artifacts refreshed:
+- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
+- `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
