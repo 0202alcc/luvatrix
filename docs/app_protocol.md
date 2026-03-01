@@ -236,3 +236,6 @@ For protocol/UI work, keep these documents aligned:
 1. `docs/app_protocol.md` (runtime contract)
 2. `docs/ui_component_protocol.md` (component contract)
 3. `docs/json_ui_compiler.md` (JSON source and compile rules)
+4. `docs/app_protocol_variants_guide.md` (variant routing and failure cases)
+5. `docs/app_protocol_compatibility_policy.md` (version compatibility and deprecation policy)
+6. `docs/app_protocol_operator_runbook.md` (operator commands and troubleshooting)

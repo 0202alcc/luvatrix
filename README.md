@@ -64,6 +64,9 @@ See:
 - `docs/ui_component_protocol.md` for component contracts
 - `docs/app_protocol.md` for runtime contract
 - `docs/json_ui_compiler.md` for JSON page/lottie-oriented compiler design
+- `docs/app_protocol_variants_guide.md` for variant routing examples and precedence
+- `docs/app_protocol_compatibility_policy.md` for protocol support/deprecation policy
+- `docs/app_protocol_operator_runbook.md` for operator troubleshooting and audit verification
 
 ## macOS Visualizer Examples
 
