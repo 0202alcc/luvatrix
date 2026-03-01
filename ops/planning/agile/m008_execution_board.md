@@ -6,14 +6,13 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-01`
 
 ## Backlog
-1. `T-818` UI IR gap assessment.
-2. `T-819` UI IR v2 field contract.
-3. `T-820` IR validation plan + snapshot matrix.
-4. `T-821` Compiler upgrade design (schema vNext -> IR v2).
-5. `T-822` Runtime pipeline design (matrix compositing + overlay + clamp).
-6. `T-823` Performance execution plan (culling/prefetch/invalidation/cache).
-7. `T-824` Demo + verification plan.
-8. `T-825` Rollout and compatibility gate plan.
+1. `T-819` UI IR v2 field contract.
+2. `T-820` IR validation plan + snapshot matrix.
+3. `T-821` Compiler upgrade design (schema vNext -> IR v2).
+4. `T-822` Runtime pipeline design (matrix compositing + overlay + clamp).
+5. `T-823` Performance execution plan (culling/prefetch/invalidation/cache).
+6. `T-824` Demo + verification plan.
+7. `T-825` Rollout and compatibility gate plan.
 
 ## Ready
 1. None.
@@ -51,17 +50,21 @@ Last updated: `2026-03-01`
 - `docs/app_protocol_v2_superset_spec.md` updated with `[planes]` capability/version signaling (`schema_version`, schema bounds, required/optional features).
 - `docs/app_protocol_compatibility_policy.md` updated with Planes schema compatibility policy and migration examples for protocol v2 apps.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
-8. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
+8. `T-818` UI IR gap assessment.
+- Evidence:
+- `docs/ui_ir_v2_gap_assessment.md` created with ready/partial/missing capability matrix, recommended IR v2 field set, and explicit go/no-go decision.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+9. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-9. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
+10. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-10. `T-808` Unified input/event plumbing for desktop + touch.
+11. `T-808` Unified input/event plumbing for desktop + touch.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added `ScrollIntent` abstraction path for `scroll` plus touch-compatible event types (`pan`/`swipe`) scaffolding.
-11. `T-809` Nested scroll containers + scrollbars/UX affordances.
+12. `T-809` Nested scroll containers + scrollbars/UX affordances.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added nested viewport scroll remainder bubbling + viewport scrollbars (x/y tracks and thumbs).
-12. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
+13. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
 - Evidence:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
@@ -281,4 +284,12 @@ Last updated: `2026-03-01`
 - `docs/app_protocol_v2_superset_spec.md` adds optional `[planes]` table (`schema_version`, `min_schema_version`, `max_schema_version`, `required_features`, `optional_features`),
 - `docs/app_protocol_compatibility_policy.md` adds Planes schema compatibility policy and migration guidance.
 117. `2026-03-01`: Verification rerun passed and `T-817` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+118. `2026-03-01`: `T-818` started (`Backlog` -> `In Progress`) for UI IR readiness/gap assessment.
+119. `2026-03-01`: Created `docs/ui_ir_v2_gap_assessment.md`:
+- capability matrix (`Ready`/`Partial`/`Missing`) against vNext requirements,
+- explicit minimum IR v2 field set proposal,
+- go/no-go recommendation (no-go until `T-819` and `T-820` gates complete).
+120. `2026-03-01`: Updated root README documentation index to include `docs/ui_ir_v2_gap_assessment.md`.
+121. `2026-03-01`: Verification rerun passed and `T-818` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`

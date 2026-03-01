@@ -69,6 +69,7 @@ See:
 - `docs/app_protocol_operator_runbook.md` for operator troubleshooting and audit verification
 - `docs/planes_protocol_v0.md` for the formal Planes JSON app-design schema (metadata, components, interactions, scripts, viewport semantics)
 - `docs/planes_protocol_vnext.md` for the multi-plane schema extension draft (`planes[]`, `camera_overlay`, section cuts, blend modes, v0->vNext compatibility mapping)
+- `docs/ui_ir_v2_gap_assessment.md` for current UI IR readiness and v2 gap/go-no-go analysis
 - `docs/app_protocol_v2_superset_spec.md` for protocol-v2 runtime/adapters/process-lane contract
 - `docs/app_protocol_v2_conformance_matrix.md` for v1/v2 test matrix and CI gate commands
 - `docs/app_protocol_v2_migration.md` for migration path from v1 in-process apps to v2
