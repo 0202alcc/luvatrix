@@ -67,6 +67,7 @@ See:
 - `docs/app_protocol_variants_guide.md` for variant routing examples and precedence
 - `docs/app_protocol_compatibility_policy.md` for protocol support/deprecation policy
 - `docs/app_protocol_operator_runbook.md` for operator troubleshooting and audit verification
+- `docs/planes_protocol_v0.md` for the formal Planes JSON app-design schema (metadata, components, interactions, scripts, viewport semantics)
 
 ## macOS Visualizer Examples
 

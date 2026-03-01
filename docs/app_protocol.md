@@ -239,6 +239,7 @@ For protocol/UI work, keep these documents aligned:
 4. `docs/app_protocol_variants_guide.md` (variant routing and failure cases)
 5. `docs/app_protocol_compatibility_policy.md` (version compatibility and deprecation policy)
 6. `docs/app_protocol_operator_runbook.md` (operator commands and troubleshooting)
+7. `docs/planes_protocol_v0.md` (JSON-first Plane/component schema standard)
 
 ## 18. First-Party App Standardization Checklist
 
@@ -263,3 +264,4 @@ Companion references:
 1. `docs/app_protocol_variants_guide.md`
 2. `docs/app_protocol_compatibility_policy.md`
 3. `docs/app_protocol_operator_runbook.md`
+4. `docs/planes_protocol_v0.md`

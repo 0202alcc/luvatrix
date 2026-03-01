@@ -795,6 +795,121 @@
         "team:security-quality",
         "specialist:pm"
       ]
+    },
+    {
+      "id": "T-210",
+      "title": "Finalize Planes Protocol v0 core schema (app/plane/component contracts, metadata inheritance, unit normalization).",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Ready",
+      "depends_on": [
+        "T-209"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-211",
+      "title": "Standardize Planes interaction hooks against HDI-normalized phases and event payload contracts.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-210"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-212",
+      "title": "Define Planes script registry and deterministic function target resolution (<script_id>::<function_name>) with strict-mode failures.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-210"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "team:security-quality",
+        "specialist:safety"
+      ]
+    },
+    {
+      "id": "T-213",
+      "title": "Specify Planes viewport clipping and scroll-window semantics (coordinate remap, bounds, deterministic pan behavior).",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-210"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:rendering",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-214",
+      "title": "Define Planes Gantt+Agile feature profile and status-theming contract for first-party planning app templates.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-210",
+        "T-213"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "team:rendering",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-215",
+      "title": "Implement deterministic compiler mapping from Planes JSON to shared UI IR (draw/hit-test ordering + frame transforms).",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-211",
+        "T-212",
+        "T-213",
+        "T-214"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:runtime",
+        "team:protocol",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-216",
+      "title": "Add Planes strict/permissive schema validation and conformance tests (including v1/v2 protocol integration gates).",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-215"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:platform-ci",
+        "team:protocol",
+        "specialist:testing"
+      ]
     }
   ]
 }
