@@ -71,6 +71,7 @@ See:
 - `docs/planes_protocol_vnext.md` for the multi-plane schema extension draft (`planes[]`, `camera_overlay`, section cuts, blend modes, v0->vNext compatibility mapping)
 - `docs/ui_ir_v2_gap_assessment.md` for current UI IR readiness and v2 gap/go-no-go analysis
 - `docs/ui_ir_v2_field_contract.md` for the normative UI IR v2 field contract (`planes-v2` page/plane/cut/component fields)
+- `docs/ui_ir_v2_validation_plan.md` for the IR v2 strict/permissive validation matrix, snapshot policy, and rollout gate criteria
 - `docs/app_protocol_v2_superset_spec.md` for protocol-v2 runtime/adapters/process-lane contract
 - `docs/app_protocol_v2_conformance_matrix.md` for v1/v2 test matrix and CI gate commands
 - `docs/app_protocol_v2_migration.md` for migration path from v1 in-process apps to v2
