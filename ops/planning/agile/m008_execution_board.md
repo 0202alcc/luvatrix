@@ -161,3 +161,6 @@ Last updated: `2026-03-01`
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
 73. `2026-03-01`: `T-809` and `T-810` moved from `In Progress` back to `Review`.
+74. `2026-03-01`: Fixed interactive scrolling capability gate in `planes_v2_poc` by adding `hdi.trackpad` optional capability (macOS scroll events emit as trackpad device).
+75. `2026-03-01`: Verification rerun passed:
+- `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
