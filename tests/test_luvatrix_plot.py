@@ -226,6 +226,9 @@ class LuvatrixPlotTests(unittest.TestCase):
         assert plot_rect is not None
         self.assertLess(limits.ymin, 0.0)
         self.assertGreater(limits.ymax, 0.0)
+        tick_x, _ = ax.last_tick_values()
+        for xv in x.tolist():
+            self.assertTrue(any(abs(tv - float(xv)) <= 1e-9 for tv in tick_x))
 
         plot_x0, plot_y0, plot_w, plot_h = plot_rect
         transform = build_transform(limits, width=plot_w, height=plot_h)
@@ -259,10 +262,13 @@ class LuvatrixPlotTests(unittest.TestCase):
 
         frame_1 = fig.to_rgba()
         frame_2 = fig.to_rgba()
-        self.assertEqual(frame_1.shape, (200, 320, 4))
+        self.assertGreaterEqual(frame_1.shape[0], 200)
+        self.assertGreaterEqual(frame_1.shape[1], 320)
+        self.assertEqual(frame_1.shape[2], 4)
         self.assertTrue(np.array_equal(frame_1, frame_2))
-        self.assertGreater(float(frame_1[:, :160, :3].std()), 0.0)
-        self.assertGreater(float(frame_1[:, 160:, :3].std()), 0.0)
+        mid = frame_1.shape[1] // 2
+        self.assertGreater(float(frame_1[:, :mid, :3].std()), 0.0)
+        self.assertGreater(float(frame_1[:, mid:, :3].std()), 0.0)
 
     def test_subplots_update_one_panel_without_requiring_other_panel_change(self) -> None:
         fig = figure(width=360, height=220)
@@ -296,6 +302,16 @@ class LuvatrixPlotTests(unittest.TestCase):
         before_w = fig.width
         _ = fig.to_rgba()
         self.assertGreaterEqual(fig.width, before_w)
+
+    def test_line_subplot_defaults_to_four_by_three_preferred_aspect(self) -> None:
+        fig = figure(width=320, height=220)
+        ax_left, ax_right = fig.subplots(1, 2, x_label_bottom="x", y_label_left="y")
+        x = np.asarray([0.0, 1.0, 2.0, 3.0], dtype=np.float64)
+        ax_left.plot(x=x, y=np.asarray([0.0, 1.0, 0.0, 1.0], dtype=np.float64), color=(255, 170, 70), width=1)
+        ax_right.scatter(x=x, y=np.asarray([1.0, 0.0, 1.0, 0.0], dtype=np.float64), color=(90, 190, 255), size=2)
+        before_w = fig.width
+        _ = fig.to_rgba()
+        self.assertGreater(fig.width, before_w)
 
     def test_viewport_pan_is_clamped_and_deterministic(self) -> None:
         x = np.arange(100, dtype=np.float64)

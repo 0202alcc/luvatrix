@@ -487,6 +487,14 @@ class Axes:
             max_h=draw_max_h,
         )
 
+    @staticmethod
+    def _contains_zero_tick(ticks: np.ndarray) -> bool:
+        if ticks.size == 0:
+            return False
+        step = float(abs(ticks[1] - ticks[0])) if ticks.size > 1 else 1.0
+        eps = max(1e-12, step * 1e-6)
+        return bool(np.any(np.isclose(ticks, 0.0, rtol=0.0, atol=eps)))
+
     def add_reference_line(
         self,
         axis: Literal["x", "y"],
@@ -740,8 +748,6 @@ class Axes:
             height=max(2, h),
         )
         for idx, (xv, label) in enumerate(zip(tick_x.tolist(), labels, strict=False)):
-            if x_tick_layout.stride > 1 and (idx % x_tick_layout.stride) != 0:
-                continue
             if visible_min is not None and xv < visible_min:
                 continue
             if visible_max is not None and xv > visible_max:
@@ -763,15 +769,18 @@ class Axes:
                 min(h - 1, self._last_x_tick_mark_len),
                 self.axis_color,
             )
+            if x_tick_layout.stride > 1 and (idx % x_tick_layout.stride) != 0:
+                continue
             tx, _ = text_size(
                 label,
                 font_size_px=self._last_x_tick_font_px,
                 rotate_deg=x_tick_layout.rotate_deg,
                 italic=self._last_x_tick_italic,
             )
+            label_x = pxi - tx if x_tick_layout.rotate_deg != 0 else pxi - tx // 2
             draw_text(
                 patch,
-                pxi - tx // 2,
+                label_x,
                 int(round(self._last_x_tick_mark_len + self._last_x_tick_pad)),
                 label,
                 self.text_color,
@@ -909,6 +918,21 @@ class Axes:
         y_resolution = infer_resolution(y_all)
         preferred_y_step = self.y_major_tick_step if self.y_major_tick_step is not None else preferred_major_step_from_resolution(y_resolution)
         preferred_x_step = self.x_major_tick_step
+        if preferred_x_step is None:
+            bar_x_values: list[np.ndarray] = []
+            for spec in self._series:
+                if spec.style.mode != "bars":
+                    continue
+                mask = np.isfinite(spec.data.x) & np.isfinite(spec.data.y)
+                if np.any(mask):
+                    bar_x_values.append(spec.data.x[mask].astype(np.float64, copy=False))
+            if bar_x_values:
+                bx = np.unique(np.concatenate(bar_x_values))
+                if bx.size >= 2:
+                    diffs = np.diff(bx)
+                    positive = diffs[diffs > 1e-12]
+                    if positive.size > 0:
+                        preferred_x_step = float(np.min(positive))
 
         # First pass tick estimates for layout sizing.
         provisional_w = max(120, self.figure.width - 80)
@@ -936,6 +960,8 @@ class Axes:
         y_label_gap = int(max(8.0, label_font_px * 0.45))
         y_axis_label_pad = int(max(12.0, label_font_px * 0.75))
         left = int(max(18, max_y_tick_w + y_tick_pad + y_label_w + y_label_gap + y_axis_label_pad + 10))
+        if x_tick_layout_probe.rotate_deg != 0:
+            left = int(max(left, x_tick_layout_probe.max_w + 10))
         right_tick_pad = int(max(8, max_x_tick_w // 2 + 6))
         right = int(
             max(
@@ -1042,8 +1068,10 @@ class Axes:
                 draw_hline(grid, plot_x0, plot_x0 + plot_w - 1, plot_y0 + int(py[0]), self.grid_color)
             ref_lines: list[ReferenceLine] = list(self.reference_lines)
             if self.show_zero_reference_lines:
-                ref_lines.append(ReferenceLine(axis="x", value=0.0, color=self.reference_line_color, width=1))
-                ref_lines.append(ReferenceLine(axis="y", value=0.0, color=self.reference_line_color, width=1))
+                if self._contains_zero_tick(tick_x):
+                    ref_lines.append(ReferenceLine(axis="x", value=0.0, color=self.reference_line_color, width=1))
+                if self._contains_zero_tick(tick_y):
+                    ref_lines.append(ReferenceLine(axis="y", value=0.0, color=self.reference_line_color, width=1))
             for ref in ref_lines:
                 if ref.axis == "x":
                     if ref.value < xmin or ref.value > xmax:
@@ -1267,8 +1295,6 @@ class Axes:
                 )
 
             for idx, (xv, label) in enumerate(zip(tick_x.tolist(), x_tick_labels, strict=False)):
-                if x_tick_layout.stride > 1 and (idx % x_tick_layout.stride) != 0:
-                    continue
                 if (not self.show_edge_x_tick_labels) and (idx == 0 or idx == len(x_tick_labels) - 1):
                     continue
                 px, _ = map_to_pixels(np.asarray([xv], dtype=np.float64), np.asarray([ymin], dtype=np.float64), transform, plot_w, plot_h)
@@ -1280,15 +1306,18 @@ class Axes:
                     plot_y0 + plot_h + x_tick_mark_len,
                     self.axis_color,
                 )
+                if x_tick_layout.stride > 1 and (idx % x_tick_layout.stride) != 0:
+                    continue
                 tx, _ = text_size(
                     label,
                     font_size_px=x_tick_font_px,
                     rotate_deg=x_tick_layout.rotate_deg,
                     italic=x_tick_layout.italic,
                 )
+                label_x = pxi - tx if x_tick_layout.rotate_deg != 0 else pxi - tx // 2
                 draw_text(
                     text_layer,
-                    pxi - tx // 2,
+                    label_x,
                     int(round(plot_y0 + plot_h + x_tick_mark_len + x_tick_pad)),
                     label,
                     self.text_color,
@@ -1375,6 +1404,7 @@ class Figure:
     _subplot_children: list["Figure"] = field(default_factory=list)
     _subplot_gap_px: tuple[int, int] = (8, 8)
     _subplot_margin_px: tuple[int, int, int, int] = (2, 2, 2, 2)
+    _subplot_auto_sized: bool = False
     _last_frame_rgba: np.ndarray | None = None
 
     def __post_init__(self) -> None:
@@ -1427,6 +1457,7 @@ class Figure:
         title_items: tuple[str, ...] = tuple(titles) if titles is not None else ()
         self._subplot_grid = (int(rows), int(cols))
         self._subplot_children = []
+        self._subplot_auto_sized = False
         axes_out: list[Axes] = []
         for idx in range(rows * cols):
             child = Figure(width=max(2, self.width), height=max(2, self.height), style=self.style)
@@ -1475,6 +1506,8 @@ class Figure:
     def _apply_subplot_preferred_aspects(self) -> None:
         if self._subplot_grid is None or not self._subplot_children:
             return
+        if self._subplot_auto_sized:
+            return
         rows, cols = self._subplot_grid
         gap_x, gap_y = self._subplot_gap_px
         margin_left, margin_right, margin_top, margin_bottom = self._subplot_margin_px
@@ -1489,9 +1522,15 @@ class Figure:
             required_panel_h = panel_h
             for child in self._subplot_children:
                 ax = child._axes
-                if ax is None or ax.preferred_panel_aspect_ratio is None:
+                aspect: float | None = None
+                if ax is not None and ax.preferred_panel_aspect_ratio is not None:
+                    aspect = max(1e-9, float(ax.preferred_panel_aspect_ratio))
+                elif ax is not None:
+                    has_line_or_scatter = any(spec.style.mode in {"lines", "lines+markers", "markers"} for spec in ax._series)
+                    if has_line_or_scatter:
+                        aspect = 4.0 / 3.0
+                if aspect is None:
                     continue
-                aspect = max(1e-9, float(ax.preferred_panel_aspect_ratio))
                 required_panel_w = max(required_panel_w, panel_h * aspect)
                 required_panel_h = max(required_panel_h, panel_w / aspect)
             target_inner_w = int(np.ceil(max(float(inner_w), required_panel_w * cols)))
@@ -1507,6 +1546,7 @@ class Figure:
                 grew = True
             if not grew:
                 break
+        self._subplot_auto_sized = True
 
     def to_rgba(self) -> np.ndarray:
         if self._subplot_grid is not None:

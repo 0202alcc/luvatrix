@@ -7,7 +7,15 @@ from PIL import Image
 
 from luvatrix_core.core.ui_frame_renderer import MatrixUIFrameRenderer
 from luvatrix_plot import figure
-from luvatrix_ui import CoordinatePoint, DisplayableArea, TableComponent, TextAppearance, TextComponent, TextSizeSpec
+from luvatrix_ui import (
+    CoordinatePoint,
+    DisplayableArea,
+    SVGComponent,
+    TableComponent,
+    TextAppearance,
+    TextComponent,
+    TextSizeSpec,
+)
 from luvatrix_ui.component_schema import BoundingBox
 
 
@@ -20,8 +28,7 @@ def _render_plot_frame(*, panned: bool) -> np.ndarray:
         x_label_bottom="x",
         y_label_left="value",
     )
-    left_ax.set_preferred_panel_aspect_ratio(1.05)
-    right_ax.set_preferred_panel_aspect_ratio(1.25)
+    left_ax.set_preferred_panel_aspect_ratio(1.10)
 
     x_left = np.arange(18, dtype=np.float64)
     y_left = np.asarray([4, -2, 5, 3, -3, 2, 4, -1, 3, -4, 5, 2, -2, 4, 1, -3, 2, 5], dtype=np.float64)
@@ -42,7 +49,7 @@ def _render_plot_frame(*, panned: bool) -> np.ndarray:
     return fig.to_rgba()
 
 
-def _render_table_snapshot(out_dir: Path) -> str:
+def _build_demo_table(out_dir: Path) -> TableComponent:
     csv_lines = [
         "symbol,qty,pnl",
         "AAPL,50,1240.5",
@@ -74,23 +81,114 @@ def _render_table_snapshot(out_dir: Path) -> str:
     table.handle_key("ArrowDown")
     table.handle_key("ArrowDown")
     table.handle_key("PageDown")
-    return table.render_ascii()
+    return table
 
 
-def _render_table_luvatrix_rgba(table_ascii: str) -> np.ndarray:
-    display = DisplayableArea(content_width_px=1200.0, content_height_px=820.0)
+def _render_table_luvatrix_rgba(table: TableComponent) -> np.ndarray:
+    display = DisplayableArea(content_width_px=1320.0, content_height_px=860.0)
     renderer = MatrixUIFrameRenderer()
     renderer.begin_frame(display, clear_color=(4, 10, 20, 255))
-    lines = table_ascii.splitlines()
-    for idx, line in enumerate(lines):
-        component = TextComponent(
-            component_id=f"table-line-{idx}",
-            text=line,
-            position=CoordinatePoint(28.0, 24.0 + idx * 34.0, "screen_tl"),
+    columns = list(table.columns)
+    rows = list(table.visible_rows())
+    header_h = 72.0
+    row_h = 64.0
+    table_x = 70.0
+    table_y = 120.0
+    col_widths = [280.0, 180.0, 220.0]
+    table_w = float(sum(col_widths))
+    table_h = header_h + row_h * max(1, len(rows))
+    table_svg = f"""
+<svg width="{int(table_w)}" height="{int(table_h)}" viewBox="0 0 {int(table_w)} {int(table_h)}">
+  <rect x="0" y="0" width="{int(table_w)}" height="{int(table_h)}" fill="#0c1728" stroke="#6f88ad" stroke-width="2"/>
+  <rect x="0" y="0" width="{int(table_w)}" height="{int(header_h)}" fill="#16304d"/>
+</svg>
+""".strip()
+    SVGComponent(
+        component_id="table-bg",
+        svg_markup=table_svg,
+        position=CoordinatePoint(table_x, table_y, "screen_tl"),
+        width=table_w,
+        height=table_h,
+    ).render(renderer)
+    cursor_x = table_x
+    for i, width in enumerate(col_widths):
+        if i > 0:
+            line_svg = '<svg width="2" height="2"><rect x="0" y="0" width="2" height="2" fill="#6f88ad"/></svg>'
+            SVGComponent(
+                component_id=f"table-col-line-{i}",
+                svg_markup=line_svg,
+                position=CoordinatePoint(cursor_x, table_y, "screen_tl"),
+                width=2.0,
+                height=table_h,
+            ).render(renderer)
+        cursor_x += width
+    for i in range(1, max(1, len(rows)) + 1):
+        y = table_y + header_h + (i - 1) * row_h
+        line_svg = '<svg width="2" height="2"><rect x="0" y="0" width="2" height="2" fill="#2d4362"/></svg>'
+        SVGComponent(
+            component_id=f"table-row-line-{i}",
+            svg_markup=line_svg,
+            position=CoordinatePoint(table_x, y, "screen_tl"),
+            width=table_w,
+            height=2.0,
+        ).render(renderer)
+
+    TextComponent(
+        component_id="table-title",
+        text=f"Positions (page {table.page_index + 1}/{table.page_count()})",
+        position=CoordinatePoint(table_x, 48.0, "screen_tl"),
+        size=TextSizeSpec(unit="px", value=34.0),
+        appearance=TextAppearance(color_hex="#d0dae8"),
+    ).render(renderer, display)
+    TextComponent(
+        component_id="table-subtitle",
+        text=f"sort={table.sort_column_id}:{table.sort_direction} window={table.virtual_offset + 1}-{table.virtual_offset + len(rows)}",
+        position=CoordinatePoint(table_x, 84.0, "screen_tl"),
+        size=TextSizeSpec(unit="px", value=24.0),
+        appearance=TextAppearance(color_hex="#93abc9"),
+    ).render(renderer, display)
+
+    x_cursor = table_x + 20.0
+    for idx, column in enumerate(columns):
+        sort_marker = ""
+        if table.sort_column_id == column.column_id:
+            sort_marker = " ^" if table.sort_direction == "asc" else " v"
+        TextComponent(
+            component_id=f"table-header-{idx}",
+            text=f"{column.label}{sort_marker}",
+            position=CoordinatePoint(x_cursor, table_y + 18.0, "screen_tl"),
             size=TextSizeSpec(unit="px", value=30.0),
-            appearance=TextAppearance(color_hex="#d0dae8"),
-        )
-        component.render(renderer, display)
+            appearance=TextAppearance(color_hex="#e5efff"),
+        ).render(renderer, display)
+        x_cursor += col_widths[idx]
+
+    for row_idx, row in enumerate(rows):
+        focus = table.focus_region == "body" and row_idx == table.focus_row
+        y = table_y + header_h + row_idx * row_h + 16.0
+        x_cursor = table_x + 20.0
+        row_color = "#f2f7ff" if focus else "#d0dae8"
+        if focus:
+            TextComponent(
+                component_id=f"table-focus-{row_idx}",
+                text=">",
+                position=CoordinatePoint(table_x + 4.0, y, "screen_tl"),
+                size=TextSizeSpec(unit="px", value=30.0),
+                appearance=TextAppearance(color_hex="#f2f7ff"),
+            ).render(renderer, display)
+        for col_idx, column in enumerate(columns):
+            raw = row.get(column.key)
+            if isinstance(raw, float):
+                value_text = f"{raw:.1f}"
+            else:
+                value_text = str(raw)
+            TextComponent(
+                component_id=f"table-cell-{row_idx}-{col_idx}",
+                text=value_text,
+                position=CoordinatePoint(x_cursor, y, "screen_tl"),
+                size=TextSizeSpec(unit="px", value=34.0 if col_idx == 0 else 32.0),
+                appearance=TextAppearance(color_hex=row_color),
+            ).render(renderer, display)
+            x_cursor += col_widths[col_idx]
     frame = renderer.end_frame().cpu().numpy()
     return frame
 
@@ -105,8 +203,9 @@ def main() -> None:
 
     frame_default = _render_plot_frame(panned=False)
     frame_panned = _render_plot_frame(panned=True)
-    table_snapshot = _render_table_snapshot(out_dir)
-    table_frame = _render_table_luvatrix_rgba(table_snapshot)
+    table = _build_demo_table(out_dir)
+    table_snapshot = table.render_ascii()
+    table_frame = _render_table_luvatrix_rgba(table)
 
     plot_default_path = out_dir / "m008_demo_plot_default.png"
     plot_panned_path = out_dir / "m008_demo_plot_panned.png"

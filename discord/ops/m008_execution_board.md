@@ -3,7 +3,7 @@
 Milestone: `M-008` Plot + data UX foundations
 Epic: `E-801`
 Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805`
-Last updated: `2026-02-28`
+Last updated: `2026-03-01`
 
 ## Backlog
 1. None.
@@ -53,3 +53,21 @@ Last updated: `2026-02-28`
 17. `2026-02-28`: `T-802` reopened after bar-edge spacing feedback; moved from `Done` back to active fix scope.
 18. `2026-02-28`: Implemented label-to-bar emphasized x ticks, bar edge padding, subplot preferred-aspect auto sizing, and Luvatrix-rendered table PNG demo.
 19. `2026-02-28`: `T-802` returned to `Review`; refreshed demo artifacts and reran full M-008 regression test set.
+20. `2026-02-28`: Applied follow-up review refinements:
+- rotated-label anchor behavior updated so angled labels align to the tick endpoint,
+- bar charts now retain tick alignment at each bar by default while label thinning remains deterministic,
+- zero-reference x/y lines now render only when `0` is an actual displayed tick value.
+21. `2026-02-28`: Added default subplot preferred aspect behavior (`4:3` for line/scatter panels unless explicitly overridden) and deterministic subplot auto-sizing lock.
+22. `2026-02-28`: Reworked Luvatrix table demo output from ASCII-rendered text to a structured table-style render (`discord/ops/m008_demo_table.png`) with cell grid/backgrounds and mounted text cells.
+23. `2026-02-28`: Verification rerun passed:
+- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
+- `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
+24. `2026-03-01`: Applied review-driven chart readability/layout refinements:
+- angled x labels now anchor to tick endpoints (right-anchored rotated text) with extra left gutter protection,
+- zero-reference x/y rules now render only when `0` is an actual displayed tick,
+- bar plots retain per-bar major ticks by default even when label thinning is active.
+25. `2026-03-01`: Added subplot default preferred-aspect handling for line/scatter panels (`4:3`) while preserving explicit per-panel overrides.
+26. `2026-03-01`: Updated demo rendering to show Luvatrix-native structured table output (grid/cells/header text) instead of ASCII-only table visuals.
+27. `2026-03-01`: Verification rerun passed:
+- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
+- `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
