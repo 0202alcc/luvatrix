@@ -292,6 +292,69 @@ def _build_plane_culling_file(root: Path) -> Path:
     return plane_path
 
 
+def _build_plane_v2_multi_file(root: Path) -> Path:
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "rect.svg").write_text(
+        "<svg width=\"300\" height=\"200\" xmlns=\"http://www.w3.org/2000/svg\">"
+        "<rect x=\"0\" y=\"0\" width=\"300\" height=\"200\" fill=\"#2a77b8\"/></svg>",
+        encoding="utf-8",
+    )
+    payload = {
+        "planes_protocol_version": "0.2.0-dev",
+        "app": {
+            "id": "x.v2",
+            "title": "V2",
+            "icon": "assets/rect.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "planes": [
+            {
+                "id": "world",
+                "default_frame": "screen_tl",
+                "background": {"color": "#111111"},
+                "plane_global_z": 0,
+                "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 1200}, "height": {"unit": "px", "value": 900}},
+            },
+            {
+                "id": "content",
+                "default_frame": "screen_tl",
+                "background": {"color": "#111111"},
+                "plane_global_z": 5,
+                "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 1200}, "height": {"unit": "px", "value": 900}},
+            },
+        ],
+        "routes": [{"id": "main", "default": True, "active_planes": ["world", "content"]}],
+        "components": [
+            {
+                "id": "world_panel",
+                "type": "svg",
+                "attachment_kind": "plane",
+                "attach_to": "world",
+                "component_local_z": 1,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 200, "y": 120, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 300}, "height": {"unit": "px", "value": 200}},
+                "props": {"svg": "assets/rect.svg"},
+            },
+            {
+                "id": "overlay_text",
+                "type": "text",
+                "attachment_kind": "camera_overlay",
+                "component_local_z": 10,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 12, "y": 8, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 120}, "height": {"unit": "px", "value": 24}},
+                "props": {"text": "fixed"},
+            },
+        ],
+    }
+    plane_path = root / "plane_v2_multi.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
 class PlanesRuntimeTests(unittest.TestCase):
     def test_load_plane_app_renders_components(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -560,6 +623,37 @@ class PlanesRuntimeTests(unittest.TestCase):
             app.loop(ctx, 0.016)
             second_perf = dict(app.state.get("perf", {}))
             self.assertEqual(int(second_perf.get("svg_cache_size", 0)), 1)
+
+    def test_plane_runtime_supports_v2_attachment_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_v2_multi_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            self.assertEqual(app._ui_page.ir_version, "planes-v2")  # type: ignore[attr-defined]
+
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 40.0, "y": 40.0, "delta_x": -100.0, "delta_y": -60.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            world = next((comp for comp in ctx.mounted if comp.component_id == "world_panel"), None)
+            overlay = next((comp for comp in ctx.mounted if comp.component_id == "overlay_text"), None)
+            self.assertIsNotNone(world)
+            self.assertIsNotNone(overlay)
+            assert world is not None
+            assert overlay is not None
+            self.assertAlmostEqual(float(world.position.x), 100.0, places=6)
+            self.assertAlmostEqual(float(world.position.y), 60.0, places=6)
+            self.assertAlmostEqual(float(overlay.position.x), 12.0, places=6)
+            self.assertAlmostEqual(float(overlay.position.y), 8.0, places=6)
 
 
 if __name__ == "__main__":

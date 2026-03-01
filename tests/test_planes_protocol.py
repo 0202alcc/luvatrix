@@ -44,6 +44,78 @@ def _base_payload() -> dict[str, object]:
     }
 
 
+def _base_payload_v2() -> dict[str, object]:
+    return {
+        "planes_protocol_version": "0.2.0-dev",
+        "app": {
+            "id": "com.example.v2",
+            "title": "Demo v2",
+            "icon": "assets/icon.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "planes": [
+            {
+                "id": "world",
+                "default_frame": "screen_tl",
+                "background": {"color": "#000000"},
+                "plane_global_z": 0,
+                "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+                "size": {
+                    "width": {"unit": "px", "value": 800},
+                    "height": {"unit": "px", "value": 600},
+                },
+            },
+            {
+                "id": "overlay_plane",
+                "default_frame": "screen_tl",
+                "background": {"color": "#000000"},
+                "plane_global_z": 2,
+                "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+                "size": {
+                    "width": {"unit": "px", "value": 800},
+                    "height": {"unit": "px", "value": 600},
+                },
+            },
+        ],
+        "routes": [{"id": "main", "default": True, "active_planes": ["world", "overlay_plane"]}],
+        "scripts": [
+            {"id": "handlers", "lang": "python", "src": "scripts/handlers.py"},
+        ],
+        "components": [
+            {
+                "id": "world_svg",
+                "type": "svg",
+                "attachment_kind": "plane",
+                "attach_to": "world",
+                "component_local_z": 1,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+                "size": {
+                    "width": {"unit": "vw", "value": 100},
+                    "height": {"unit": "vh", "value": 100},
+                },
+                "z_index": 1,
+                "props": {"svg": "assets/logo.svg"},
+            },
+            {
+                "id": "title_overlay",
+                "type": "text",
+                "attachment_kind": "camera_overlay",
+                "component_local_z": 5,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 10, "y": 10, "frame": "screen_tl"},
+                "size": {
+                    "width": {"unit": "px", "value": 240},
+                    "height": {"unit": "px", "value": 24},
+                },
+                "z_index": 5,
+                "functions": {"on_press_single": "handlers::open_item"},
+                "props": {"text": "overlay"},
+            },
+        ],
+    }
+
+
 class PlanesProtocolTests(unittest.TestCase):
     def test_web_metadata_inherits_title_and_icon(self) -> None:
         meta = resolve_web_metadata(_base_payload()["app"])  # type: ignore[arg-type]
@@ -111,6 +183,27 @@ class PlanesProtocolTests(unittest.TestCase):
         self.assertIsNotNone(logo.asset)
         assert logo.asset is not None
         self.assertEqual(logo.asset.kind, "svg")
+
+    def test_validate_accepts_v2_payload(self) -> None:
+        validate_planes_payload(_base_payload_v2())
+
+    def test_compile_v2_produces_planes_v2_ir(self) -> None:
+        page = compile_planes_to_ui_ir(_base_payload_v2(), matrix_width=640, matrix_height=360)
+        self.assertEqual(page.ir_version, "planes-v2")
+        self.assertEqual(page.ordering_contract_version, "plane-z-local-z-overlay-v1")
+        self.assertEqual(set(page.active_plane_ids), {"world", "overlay_plane"})
+        self.assertEqual(len(page.plane_manifest), 2)
+        world = next(c for c in page.components if c.component_id == "world_svg")
+        overlay = next(c for c in page.components if c.component_id == "title_overlay")
+        self.assertEqual(world.attachment_kind, "plane")
+        self.assertEqual(world.plane_id, "world")
+        self.assertEqual(overlay.attachment_kind, "camera_overlay")
+
+    def test_validate_v2_rejects_missing_attachment_kind_in_strict_mode(self) -> None:
+        payload = _base_payload_v2()
+        payload["components"][0].pop("attachment_kind")  # type: ignore[index]
+        with self.assertRaises(PlanesValidationError):
+            validate_planes_payload(payload, strict=True)
 
 
 if __name__ == "__main__":

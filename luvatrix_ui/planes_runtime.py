@@ -55,6 +55,7 @@ class PlaneApp:
         self.state.setdefault("prefetch_margin_px", {"x": 96.0, "y": 96.0})
         self.state.setdefault("perf", {})
         self._component_index: dict[str, Any] = {}
+        self._plane_index: dict[str, Any] = {}
 
     def register_handler(self, target: str, handler: EventHandler) -> None:
         self._handlers[target] = handler
@@ -82,6 +83,8 @@ class PlaneApp:
         mounted = 0
         for component in ordered:
             if not component.visible:
+                continue
+            if not self._component_is_active(component):
                 continue
             considered += 1
             if component.component_id in viewport_content_refs:
@@ -165,6 +168,7 @@ class PlaneApp:
             strict=self._strict,
         )
         self._component_index = {component.component_id: component for component in self._ui_page.components}
+        self._plane_index = {plane.plane_id: plane for plane in getattr(self._ui_page, "plane_manifest", ())}
         self._initialize_viewport_scroll_state()
         self._initialize_plane_scroll_state()
         self._bg_color = _parse_hex_rgba(self._ui_page.background)
@@ -217,6 +221,8 @@ class PlaneApp:
             return None
         x, y = xy
         for component in self._ui_page.ordered_components_for_hit_test():
+            if not self._component_is_active(component):
+                continue
             bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
             resolved_x, resolved_y = self._resolved_position(component)
             if resolved_x <= x <= resolved_x + bounds.width and resolved_y <= y <= resolved_y + bounds.height:
@@ -228,6 +234,8 @@ class PlaneApp:
             return []
         stack: list[Any] = []
         for component in self._ui_page.ordered_components_for_hit_test():
+            if not self._component_is_active(component):
+                continue
             if component.component_type != "viewport":
                 continue
             bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
@@ -345,7 +353,7 @@ class PlaneApp:
 
     def _resolved_position(self, component) -> tuple[float, float]:
         x, y = self._resolved_position_base(component)
-        if self._is_camera_fixed(component):
+        if self._is_overlay_attached(component) or self._is_camera_fixed(component):
             return (x, y)
         plane_x, plane_y = self._plane_scroll_position()
         return (x - plane_x, y - plane_y)
@@ -404,6 +412,13 @@ class PlaneApp:
             return (float(component.position.x), float(component.position.y))
         x = float(component.position.x)
         y = float(component.position.y)
+        if self._ui_page.ir_version == "planes-v2":
+            plane_id = getattr(component, "plane_id", None)
+            if isinstance(plane_id, str) and plane_id:
+                plane = self._plane_index.get(plane_id)
+                if plane is not None:
+                    x += float(plane.resolved_position.x)
+                    y += float(plane.resolved_position.y)
         props = component.style if isinstance(component.style, dict) else {}
         align = str(props.get("align", "")).lower()
         if align == "center":
@@ -417,6 +432,24 @@ class PlaneApp:
     def _is_camera_fixed(self, component) -> bool:
         props = component.style if isinstance(component.style, dict) else {}
         return bool(props.get("camera_fixed", False))
+
+    def _is_overlay_attached(self, component) -> bool:
+        return str(getattr(component, "attachment_kind", "plane")) == "camera_overlay"
+
+    def _component_is_active(self, component) -> bool:
+        if self._ui_page is None:
+            return True
+        if self._ui_page.ir_version != "planes-v2":
+            return True
+        if self._is_overlay_attached(component):
+            return True
+        active = set(getattr(self._ui_page, "active_plane_ids", ()))
+        if not active:
+            return True
+        plane_id = getattr(component, "plane_id", None)
+        if not isinstance(plane_id, str):
+            return False
+        return plane_id in active
 
     def _mount_viewport_cutout_mask(self, ctx, component) -> None:
         if self._ui_page is None:
@@ -522,7 +555,9 @@ class PlaneApp:
                 continue
             if component.component_id in refs:
                 continue
-            if self._is_camera_fixed(component):
+            if self._is_overlay_attached(component) or self._is_camera_fixed(component):
+                continue
+            if not self._component_is_active(component):
                 continue
             base_x, base_y = self._resolved_position_base(component)
             right = base_x + float(component.width)

@@ -56,6 +56,18 @@ class PlanesV2PocExampleTests(unittest.TestCase):
         self.assertEqual(tuple(frame.shape), (96, 160, 4))
         self.assertGreater(float(frame[:, :, :3].float().mean().item()), 0.0)
 
+    def test_planes_poc_compiles_with_planes_v2_ir(self) -> None:
+        app = create()
+        class _Ctx:
+            class _Matrix:
+                width = 160
+                height = 96
+            matrix = _Matrix()
+
+        app.init(_Ctx())
+        self.assertIsNotNone(app._ui_page)  # type: ignore[attr-defined]
+        self.assertEqual(app._ui_page.ir_version, "planes-v2")  # type: ignore[attr-defined]
+
 
 if __name__ == "__main__":
     unittest.main()

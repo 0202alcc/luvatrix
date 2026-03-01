@@ -1,5 +1,5 @@
 {
-  "planes_protocol_version": "0.1.0",
+  "planes_protocol_version": "0.2.0-dev",
   "app": {
     "id": "examples.planes_v2_poc",
     "title": "Planes v2 Scrolling Demo",
@@ -9,13 +9,41 @@
       "tab_icon": null
     }
   },
-  "plane": {
-    "id": "main",
-    "default_frame": "screen_tl",
-    "background": {
-      "color": "#0d1720"
+  "planes": [
+    {
+      "id": "world",
+      "default_frame": "screen_tl",
+      "background": {
+        "color": "#0d1720"
+      },
+      "plane_global_z": 0,
+      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+      "size": {
+        "width": {"unit": "px", "value": 2400},
+        "height": {"unit": "px", "value": 1800}
+      }
+    },
+    {
+      "id": "content",
+      "default_frame": "screen_tl",
+      "background": {
+        "color": "#0d1720"
+      },
+      "plane_global_z": 5,
+      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+      "size": {
+        "width": {"unit": "px", "value": 2400},
+        "height": {"unit": "px", "value": 1800}
+      }
     }
-  },
+  ],
+  "routes": [
+    {
+      "id": "main",
+      "default": true,
+      "active_planes": ["world", "content"]
+    }
+  ],
   "themes": {
     "default": {
       "background": "#0d1720"
@@ -35,6 +63,10 @@
     {
       "id": "world_base",
       "type": "svg",
+      "attachment_kind": "plane",
+      "attach_to": "world",
+      "component_local_z": -5,
+      "blend_mode": "absolute_rgba",
       "position": {"x": 0, "y": 0, "frame": "screen_tl"},
       "size": {"width": {"unit": "px", "value": 2400}, "height": {"unit": "px", "value": 1800}},
       "z_index": -5,
@@ -43,6 +75,10 @@
     {
       "id": "panel_a",
       "type": "svg",
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 2,
+      "blend_mode": "absolute_rgba",
       "position": {"x": 120, "y": 180, "frame": "screen_tl"},
       "size": {"width": {"unit": "px", "value": 760}, "height": {"unit": "px", "value": 420}},
       "z_index": 2,
@@ -51,6 +87,10 @@
     {
       "id": "panel_b",
       "type": "svg",
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 2,
+      "blend_mode": "absolute_rgba",
       "position": {"x": 1080, "y": 220, "frame": "screen_tl"},
       "size": {"width": {"unit": "px", "value": 900}, "height": {"unit": "px", "value": 460}},
       "z_index": 2,
@@ -59,6 +99,10 @@
     {
       "id": "panel_c",
       "type": "svg",
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 2,
+      "blend_mode": "absolute_rgba",
       "position": {"x": 1640, "y": 1020, "frame": "screen_tl"},
       "size": {"width": {"unit": "px", "value": 700}, "height": {"unit": "px", "value": 420}},
       "z_index": 2,
@@ -67,6 +111,10 @@
     {
       "id": "panel_d",
       "type": "svg",
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 2,
+      "blend_mode": "absolute_rgba",
       "position": {"x": 260, "y": 1220, "frame": "screen_tl"},
       "size": {"width": {"unit": "px", "value": 820}, "height": {"unit": "px", "value": 460}},
       "z_index": 2,
@@ -75,6 +123,10 @@
     {
       "id": "world_label_top",
       "type": "text",
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 6,
+      "blend_mode": "absolute_rgba",
       "position": {"x": 80, "y": 70, "frame": "screen_tl"},
       "size": {"width": {"unit": "px", "value": 640}, "height": {"unit": "px", "value": 32}},
       "z_index": 6,
@@ -83,6 +135,10 @@
     {
       "id": "world_label_far_right",
       "type": "text",
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 6,
+      "blend_mode": "absolute_rgba",
       "position": {"x": 1760, "y": 180, "frame": "screen_tl"},
       "size": {"width": {"unit": "px", "value": 600}, "height": {"unit": "px", "value": 32}},
       "z_index": 6,
@@ -91,6 +147,10 @@
     {
       "id": "world_label_bottom",
       "type": "text",
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 6,
+      "blend_mode": "absolute_rgba",
       "position": {"x": 1700, "y": 1700, "frame": "screen_tl"},
       "size": {"width": {"unit": "px", "value": 640}, "height": {"unit": "px", "value": 32}},
       "z_index": 6,
@@ -99,6 +159,9 @@
     {
       "id": "title",
       "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 40,
+      "blend_mode": "absolute_rgba",
       "position": {"x": 0, "y": 18, "frame": "screen_tl"},
       "size": {"width": {"unit": "px", "value": 780}, "height": {"unit": "px", "value": 34}},
       "z_index": 40,
@@ -113,6 +176,9 @@
     {
       "id": "subtitle",
       "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 40,
+      "blend_mode": "absolute_rgba",
       "position": {"x": 0, "y": 52, "frame": "screen_tl"},
       "size": {"width": {"unit": "px", "value": 1160}, "height": {"unit": "px", "value": 24}},
       "z_index": 40,
@@ -127,6 +193,9 @@
     {
       "id": "reset_button_bg",
       "type": "svg",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 45,
+      "blend_mode": "absolute_rgba",
       "position": {"x": 0, "y": 0, "frame": "screen_tl"},
       "size": {"width": {"unit": "px", "value": 260}, "height": {"unit": "px", "value": 52}},
       "z_index": 45,
@@ -142,6 +211,9 @@
     {
       "id": "reset_button",
       "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 46,
+      "blend_mode": "absolute_rgba",
       "position": {"x": 0, "y": 0, "frame": "screen_tl"},
       "size": {"width": {"unit": "px", "value": 260}, "height": {"unit": "px", "value": 52}},
       "z_index": 46,

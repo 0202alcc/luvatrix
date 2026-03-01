@@ -60,10 +60,16 @@ Last updated: `2026-03-01`
 - Evidence:
 - `docs/ui_ir_v2_compiler_upgrade_design.md` created with parse/normalize/validate/emit pipeline stages, strict/permissive behavior, deterministic diagnostics/order-key contract, and v0->v2 compatibility-lift policy.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+- Implementation follow-up:
+- `luvatrix_ui/planes_protocol.py` now compiles true `planes-v2` payloads (`planes[]`, routes, section-cuts metadata, attachment/blend fields) and preserves `planes-v0` compatibility path.
+- `PYTHONPATH=. uv run pytest tests/test_planes_protocol.py tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 12. `T-822` Runtime pipeline design (matrix compositing + overlay + clamp).
 - Evidence:
 - `docs/ui_ir_v2_runtime_pipeline_design.md` created with frame-stage pipeline design (active-scene resolve, cull/gather, compose, overlay, affordances), section-cut render/input rules, and blend clamp invariants.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+- Implementation follow-up:
+- `luvatrix_ui/planes_runtime.py` now applies v2 attachment semantics at runtime (`camera_overlay` dominance, active-plane filtering, plane-manifest position offsets) while preserving scrolling behavior.
+- `PYTHONPATH=. uv run pytest tests/test_planes_protocol.py tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 13. `T-823` Performance execution plan (culling/prefetch/invalidation/cache).
 - Evidence:
 - `docs/ui_ir_v2_performance_execution_plan.md` created with deterministic culling/prefetch formula, dirty-region invalidation policy, cache key/eviction contract, telemetry budgets, and phased rollout model.
@@ -97,6 +103,9 @@ Last updated: `2026-03-01`
 - verified behavior parity with:
   - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass),
   - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
+- v2 schema/runtime path follow-up:
+- `examples/app_protocol/planes_v2_poc/plane.json` migrated to `planes-v2` shape (`planes[]`, routes, per-component attachment declarations),
+- runtime smoke and tests confirm `planes_v2_poc` compiles through `ir_version=planes-v2` while keeping visual behavior.
 
 ## Done
 1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
@@ -382,4 +391,13 @@ Last updated: `2026-03-01`
 - per-path SVG markup caching to avoid repeated disk reads each frame.
 151. `2026-03-01`: Added regression tests in `tests/test_planes_runtime.py` for offscreen culling and cache reuse; verification passed:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
+152. `2026-03-01`: Implemented full `planes-v2` compiler/runtime schema path:
+- `luvatrix_ui/planes_protocol.py` now supports v2 compile/validation (`planes[]`, route activation, attachment semantics, deterministic v2 ordering metadata) while preserving v0 path.
+- `luvatrix_ui/ui_ir.py` extended with v2 page/plane/section/component fields (`active_plane_ids`, `plane_manifest`, `attachment_kind`, `blend_mode`, etc.).
+153. `2026-03-01`: Runtime semantics aligned to v2:
+- `luvatrix_ui/planes_runtime.py` respects `camera_overlay` attachment behavior, active-plane filtering, and plane-manifest positional offsets.
+- `examples/app_protocol/planes_v2_poc/plane.json` migrated to native v2 payload.
+154. `2026-03-01`: Added/updated regression coverage and verification passed:
+- `PYTHONPATH=. uv run pytest tests/test_planes_protocol.py tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
