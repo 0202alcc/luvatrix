@@ -28,8 +28,8 @@ Last updated: `2026-03-01`
 5. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
 - Evidence:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-- Demo: `examples/app_protocol/planes_v2_poc` now showcases large-plane viewport scrolling.
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
+- Demo: `examples/app_protocol/planes_v2_poc` refined with renderer-safe canvas art, centered viewport framing, and single reset control.
 
 ## Done
 1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
@@ -152,3 +152,12 @@ Last updated: `2026-03-01`
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py`
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py`
 69. `2026-03-01`: `T-809` and `T-810` moved from `In Progress` to `Review`.
+70. `2026-03-01`: Reviewer feedback on `planes_v2_poc` showcase quality; `T-809` and `T-810` moved back to `In Progress` for visual/layout refinement.
+71. `2026-03-01`: Refined `planes_v2_poc` demo visuals/layout for readability:
+- replaced unsupported/fragile SVG defs/pattern styling with renderer-safe primitives,
+- centered and framed viewport window,
+- removed overlapping dual-button layout in favor of single reset control.
+72. `2026-03-01`: Verification rerun passed:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
+73. `2026-03-01`: `T-809` and `T-810` moved from `In Progress` back to `Review`.

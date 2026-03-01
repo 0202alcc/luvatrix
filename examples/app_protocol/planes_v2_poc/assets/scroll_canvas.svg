@@ -1,31 +1,21 @@
-<svg width="1600" height="1100" viewBox="0 0 1600 1100" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#11253a"/>
-      <stop offset="100%" stop-color="#0a1829"/>
-    </linearGradient>
-    <pattern id="minor-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#2b3f56" stroke-width="1"/>
-    </pattern>
-    <pattern id="major-grid" width="200" height="200" patternUnits="userSpaceOnUse">
-      <rect width="200" height="200" fill="url(#minor-grid)"/>
-      <path d="M 200 0 L 0 0 0 200" fill="none" stroke="#436487" stroke-width="2"/>
-    </pattern>
-  </defs>
+<svg width="1800" height="1200" viewBox="0 0 1800 1200" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="1800" height="1200" fill="#13273d"/>
 
-  <rect x="0" y="0" width="1600" height="1100" fill="url(#bg)"/>
-  <rect x="0" y="0" width="1600" height="1100" fill="url(#major-grid)" opacity="0.95"/>
+  <rect x="60" y="60" width="260" height="180" rx="14" fill="#2b67a8"/>
+  <rect x="420" y="80" width="340" height="220" rx="16" fill="#2f90b5"/>
+  <rect x="840" y="80" width="300" height="180" rx="16" fill="#4e5fcc"/>
+  <rect x="1240" y="90" width="430" height="240" rx="16" fill="#257f60"/>
 
-  <rect x="80" y="80" width="300" height="180" rx="18" fill="#2a72c7" opacity="0.8"/>
-  <rect x="460" y="180" width="420" height="240" rx="20" fill="#2596be" opacity="0.75"/>
-  <rect x="980" y="120" width="420" height="320" rx="22" fill="#4a5bd5" opacity="0.72"/>
-  <rect x="180" y="420" width="360" height="280" rx="20" fill="#1f9a70" opacity="0.75"/>
-  <rect x="650" y="520" width="520" height="260" rx="20" fill="#c28a2c" opacity="0.78"/>
-  <rect x="1200" y="560" width="280" height="360" rx="18" fill="#8f3dc8" opacity="0.75"/>
+  <rect x="90" y="360" width="360" height="260" rx="16" fill="#3177ba"/>
+  <rect x="520" y="360" width="430" height="260" rx="16" fill="#3ea3c8"/>
+  <rect x="1030" y="380" width="300" height="220" rx="16" fill="#7a4ec9"/>
+  <rect x="1380" y="360" width="320" height="260" rx="16" fill="#cf8f30"/>
 
-  <circle cx="1450" cy="220" r="88" fill="#f39b35" opacity="0.85"/>
-  <circle cx="360" cy="900" r="140" fill="#3ec1d3" opacity="0.65"/>
+  <rect x="80" y="700" width="280" height="180" rx="16" fill="#267d5f"/>
+  <rect x="430" y="700" width="380" height="220" rx="16" fill="#c86c2f"/>
+  <rect x="890" y="700" width="420" height="260" rx="16" fill="#4f70d0"/>
+  <rect x="1390" y="720" width="300" height="240" rx="16" fill="#2f9bc1"/>
 
-  <text x="100" y="1050" fill="#e8f2ff" font-size="34" font-family="Comic Mono, Menlo, monospace">Large Plane Canvas (1600 x 1100)</text>
-  <text x="1020" y="1040" fill="#cfe4ff" font-size="24" font-family="Comic Mono, Menlo, monospace">Scroll to explore</text>
+  <circle cx="520" cy="1040" r="120" fill="#3fc3d6"/>
+  <circle cx="1420" cy="1030" r="150" fill="#5f88dc"/>
 </svg>

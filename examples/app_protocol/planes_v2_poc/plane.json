@@ -43,11 +43,11 @@
       "size": {
         "width": {
           "unit": "px",
-          "value": 1600
+          "value": 1800
         },
         "height": {
           "unit": "px",
-          "value": 1100
+          "value": 1200
         }
       },
       "z_index": -1,
@@ -60,13 +60,13 @@
       "type": "text",
       "position": {
         "x": 0,
-        "y": 16,
+        "y": 18,
         "frame": "screen_tl"
       },
       "size": {
         "width": {
           "unit": "px",
-          "value": 520
+          "value": 560
         },
         "height": {
           "unit": "px",
@@ -78,11 +78,7 @@
         "text": "Planes v2 Arbitrary Scroll Demo",
         "color_hex": "#f5fbff",
         "font_size_px": 22,
-        "align": "center",
-        "theme_colors": {
-          "default": "#f5fbff",
-          "sunset": "#ffe680"
-        }
+        "align": "center"
       }
     },
     {
@@ -96,7 +92,7 @@
       "size": {
         "width": {
           "unit": "px",
-          "value": 760
+          "value": 860
         },
         "height": {
           "unit": "px",
@@ -105,7 +101,7 @@
       },
       "z_index": 40,
       "props": {
-        "text": "Scroll inside the window (mouse wheel/trackpad). The viewport is a camera over a larger Plane.",
+        "text": "Use wheel/trackpad over the viewport. This is a camera over a larger Plane.",
         "color_hex": "#9eb8d8",
         "font_size_px": 15,
         "align": "center"
@@ -115,18 +111,18 @@
       "id": "content_viewport",
       "type": "viewport",
       "position": {
-        "x": 140,
-        "y": 94,
+        "x": 0,
+        "y": 96,
         "frame": "screen_tl"
       },
       "size": {
         "width": {
           "unit": "px",
-          "value": 760
+          "value": 980
         },
         "height": {
           "unit": "px",
-          "value": 430
+          "value": 560
         }
       },
       "z_index": 20,
@@ -134,6 +130,7 @@
         "on_scroll": "handlers::record_scroll"
       },
       "props": {
+        "align": "center",
         "clip": true,
         "content_ref": "scroll_canvas",
         "scroll": {
@@ -147,7 +144,31 @@
       }
     },
     {
-      "id": "theme_button_bg",
+      "id": "content_viewport_frame",
+      "type": "svg",
+      "position": {
+        "x": 0,
+        "y": 96,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 980
+        },
+        "height": {
+          "unit": "px",
+          "value": 560
+        }
+      },
+      "z_index": 30,
+      "props": {
+        "align": "center",
+        "svg": "assets/viewport_frame.svg"
+      }
+    },
+    {
+      "id": "reset_button_bg",
       "type": "svg",
       "position": {
         "x": 0,
@@ -157,75 +178,11 @@
       "size": {
         "width": {
           "unit": "px",
-          "value": 240
+          "value": 260
         },
         "height": {
           "unit": "px",
-          "value": 50
-        }
-      },
-      "z_index": 45,
-      "functions": {
-        "on_press_single": "handlers::toggle_theme"
-      },
-      "props": {
-        "svg": "assets/button_bg.svg",
-        "align": "center",
-        "v_align": "bottom",
-        "margin_bottom_px": 20
-      }
-    },
-    {
-      "id": "theme_button",
-      "type": "text",
-      "position": {
-        "x": -130,
-        "y": 0,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 240
-        },
-        "height": {
-          "unit": "px",
-          "value": 50
-        }
-      },
-      "z_index": 46,
-      "functions": {
-        "on_press_single": "handlers::toggle_theme"
-      },
-      "props": {
-        "text": "Toggle Theme",
-        "color_hex": "#ffffff",
-        "font_size_px": 17,
-        "align": "center",
-        "v_align": "bottom",
-        "margin_bottom_px": 20,
-        "theme_colors": {
-          "default": "#ffffff",
-          "sunset": "#ffe680"
-        }
-      }
-    },
-    {
-      "id": "reset_button_bg",
-      "type": "svg",
-      "position": {
-        "x": 130,
-        "y": 0,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 240
-        },
-        "height": {
-          "unit": "px",
-          "value": 50
+          "value": 52
         }
       },
       "z_index": 45,
@@ -243,18 +200,18 @@
       "id": "reset_button",
       "type": "text",
       "position": {
-        "x": 130,
+        "x": 0,
         "y": 0,
         "frame": "screen_tl"
       },
       "size": {
         "width": {
           "unit": "px",
-          "value": 240
+          "value": 260
         },
         "height": {
           "unit": "px",
-          "value": 50
+          "value": 52
         }
       },
       "z_index": 46,
@@ -264,14 +221,10 @@
       "props": {
         "text": "Reset Scroll",
         "color_hex": "#ffffff",
-        "font_size_px": 17,
+        "font_size_px": 18,
         "align": "center",
         "v_align": "bottom",
-        "margin_bottom_px": 20,
-        "theme_colors": {
-          "default": "#ffffff",
-          "sunset": "#ffe680"
-        }
+        "margin_bottom_px": 20
       }
     }
   ]
