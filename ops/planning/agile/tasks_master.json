@@ -699,6 +699,102 @@
         "team:platform-ci",
         "specialist:testing"
       ]
+    },
+    {
+      "id": "T-204",
+      "title": "Define App Protocol v2 superset wire spec with v1 backward-compatibility guarantees.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Ready",
+      "depends_on": [
+        "T-203"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-205",
+      "title": "Implement runtime adapter layer (python in-process baseline + process runtime hooks) for protocol v2 execution.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-204"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-206",
+      "title": "Deliver Python-first protocol v2 process lane (stdio transport + reference worker SDK/client) while keeping v1 behavior unchanged.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-205"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:runtime",
+        "team:protocol",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-207",
+      "title": "Extend app manifest/governance for v2 runtime fields with strict compatibility policy and v1-safe defaults.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-204"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "specialist:architecture",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-208",
+      "title": "Add protocol v1/v2 conformance matrix and CI gates for adapter/runtime compatibility and deterministic render outputs.",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-205",
+        "T-206",
+        "T-207"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:platform-ci",
+        "team:protocol",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-209",
+      "title": "Publish v1-to-v2 migration guide and runbook updates for first-party app teams (Python-first, multi-language ready).",
+      "epic_id": "E-201",
+      "milestone_id": "M-002",
+      "status": "Backlog",
+      "depends_on": [
+        "T-208"
+      ],
+      "board_refs": [
+        "milestone:M-002",
+        "team:protocol",
+        "team:security-quality",
+        "specialist:pm"
+      ]
     }
   ]
 }

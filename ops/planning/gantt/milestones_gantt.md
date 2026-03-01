@@ -93,7 +93,7 @@ Canonical schedule source: `ops/planning/gantt/milestone_schedule.json`
 ### M-002 📜 App protocol docs finalized
 - Status: In Progress
 - Target window: Week 2-3
-- Tasks: `T-201, T-202, T-203`
+- Tasks: `T-201, T-202, T-203, T-204, T-205, T-206, T-207, T-208, T-209`
 
 ### M-003 🎮 Vulkan stabilization
 - Status: Planned
