@@ -6,16 +6,15 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-01`
 
 ## Backlog
-1. `T-816` Planes schema vNext spec update.
-2. `T-817` App protocol capability/version update.
-3. `T-818` UI IR gap assessment.
-4. `T-819` UI IR v2 field contract.
-5. `T-820` IR validation plan + snapshot matrix.
-6. `T-821` Compiler upgrade design (schema vNext -> IR v2).
-7. `T-822` Runtime pipeline design (matrix compositing + overlay + clamp).
-8. `T-823` Performance execution plan (culling/prefetch/invalidation/cache).
-9. `T-824` Demo + verification plan.
-10. `T-825` Rollout and compatibility gate plan.
+1. `T-817` App protocol capability/version update.
+2. `T-818` UI IR gap assessment.
+3. `T-819` UI IR v2 field contract.
+4. `T-820` IR validation plan + snapshot matrix.
+5. `T-821` Compiler upgrade design (schema vNext -> IR v2).
+6. `T-822` Runtime pipeline design (matrix compositing + overlay + clamp).
+7. `T-823` Performance execution plan (culling/prefetch/invalidation/cache).
+8. `T-824` Demo + verification plan.
+9. `T-825` Rollout and compatibility gate plan.
 
 ## Ready
 1. None.
@@ -44,17 +43,21 @@ Last updated: `2026-03-01`
 - Evidence:
 - `ops/planning/adr/ADR-010-camera-relative-culling-and-prefetch.md` created (Accepted).
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
-6. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
+6. `T-816` Planes schema vNext spec update.
+- Evidence:
+- `docs/planes_protocol_vnext.md` created with multi-plane schema additions (`planes[]`, `attachment_kind`, `attach_to`, `component_local_z`, `blend_mode`, `section_cuts[]`, optional `routes[]`) and explicit v0->vNext compatibility mapping.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+7. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-7. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
+8. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-8. `T-808` Unified input/event plumbing for desktop + touch.
+9. `T-808` Unified input/event plumbing for desktop + touch.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added `ScrollIntent` abstraction path for `scroll` plus touch-compatible event types (`pan`/`swipe`) scaffolding.
-9. `T-809` Nested scroll containers + scrollbars/UX affordances.
+10. `T-809` Nested scroll containers + scrollbars/UX affordances.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added nested viewport scroll remainder bubbling + viewport scrollbars (x/y tracks and thumbs).
-10. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
+11. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
 - Evidence:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
@@ -258,4 +261,14 @@ Last updated: `2026-03-01`
 - dirty-region and optional tile-cache policy with performance telemetry gates.
 109. `2026-03-01`: Updated ADR index with `ADR-010` entry for performance policy traceability.
 110. `2026-03-01`: Verification rerun passed and `T-815` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+111. `2026-03-01`: `T-816` started (`Backlog` -> `In Progress`) for Planes schema vNext spec update.
+112. `2026-03-01`: Created schema vNext spec `docs/planes_protocol_vnext.md` with:
+- top-level `planes[]` contract replacing single-plane-only shape,
+- explicit component attachment fields (`attachment_kind`, `attach_to`),
+- local/global ordering fields (`component_local_z`, `plane_global_z`),
+- compositing declaration (`blend_mode`) and section-cut schema (`section_cuts[]`),
+- explicit backward compatibility mapping (`v0 -> vNext`).
+113. `2026-03-01`: Updated root README documentation index to include `docs/planes_protocol_vnext.md`.
+114. `2026-03-01`: Verification rerun passed and `T-816` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
