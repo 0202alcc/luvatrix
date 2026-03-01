@@ -6,8 +6,7 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-01`
 
 ## Backlog
-1. `T-824` Demo + verification plan.
-2. `T-825` Rollout and compatibility gate plan.
+1. `T-825` Rollout and compatibility gate plan.
 
 ## Ready
 1. None.
@@ -69,17 +68,21 @@ Last updated: `2026-03-01`
 - Evidence:
 - `docs/ui_ir_v2_performance_execution_plan.md` created with deterministic culling/prefetch formula, dirty-region invalidation policy, cache key/eviction contract, telemetry budgets, and phased rollout model.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
-14. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
+14. `T-824` Demo + verification plan.
+- Evidence:
+- `docs/ui_ir_v2_demo_verification_plan.md` created with scenario checklist (`D01..D05`), demo artifact expectations, verification command bundle, acceptance criteria, and failure triage playbook.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+15. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-15. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
+16. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-16. `T-808` Unified input/event plumbing for desktop + touch.
+17. `T-808` Unified input/event plumbing for desktop + touch.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added `ScrollIntent` abstraction path for `scroll` plus touch-compatible event types (`pan`/`swipe`) scaffolding.
-17. `T-809` Nested scroll containers + scrollbars/UX affordances.
+18. `T-809` Nested scroll containers + scrollbars/UX affordances.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added nested viewport scroll remainder bubbling + viewport scrollbars (x/y tracks and thumbs).
-18. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
+19. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
 - Evidence:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
@@ -347,4 +350,12 @@ Last updated: `2026-03-01`
 - telemetry budgets and staged enablement strategy.
 140. `2026-03-01`: Updated root README documentation index to include `docs/ui_ir_v2_performance_execution_plan.md`.
 141. `2026-03-01`: Verification rerun passed and `T-823` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+142. `2026-03-01`: `T-824` started (`Backlog` -> `In Progress`) for demo + verification planning.
+143. `2026-03-01`: Created `docs/ui_ir_v2_demo_verification_plan.md` with:
+- required command bundle for runtime + demo smoke checks,
+- scenario checklist (`D01..D05`) and acceptance criteria,
+- failure triage and release-review deliverable packaging guidance.
+144. `2026-03-01`: Updated root README documentation index to include `docs/ui_ir_v2_demo_verification_plan.md`.
+145. `2026-03-01`: Verification rerun passed and `T-824` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
