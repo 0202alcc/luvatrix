@@ -104,3 +104,7 @@ Last updated: `2026-03-01`
 47. `2026-03-01`: Verification rerun passed and demo artifacts refreshed:
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
+48. `2026-03-01`: Table focus indicator refined to a larger in-cell custom SVG arrow for clearer active-row visibility; non-selected row text color darkened for stronger focus contrast.
+49. `2026-03-01`: Verification rerun passed and demos refreshed:
+- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
+- `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
