@@ -12,7 +12,7 @@ Last updated: `2026-03-01`
 1. None.
 
 ## In Progress
-1. None.
+1. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
 
 ## Review
 1. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
@@ -167,3 +167,10 @@ Last updated: `2026-03-01`
 76. `2026-03-01`: Adjusted viewport scroll input polarity to match system-native wheel/trackpad direction expectations.
 77. `2026-03-01`: Verification rerun passed:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+78. `2026-03-01`: Additional reviewer-requested scenario started for `T-810`: combined scrolling validation with both main-page viewport scrolling and inner container viewport scrolling in the same demo.
+79. `2026-03-01`: `planes_v2_poc` demo extended to multi-scroll scenario:
+- large main page viewport (`page_viewport`) with oversized page canvas,
+- independent inset viewport (`content_viewport`) with its own oversized content.
+80. `2026-03-01`: Verification rerun passed:
+- `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
+81. `2026-03-01`: `T-810` remains in `Review` with expanded multi-scroll scenario coverage.

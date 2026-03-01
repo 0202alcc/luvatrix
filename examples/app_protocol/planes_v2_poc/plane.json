@@ -33,6 +33,29 @@
   ],
   "components": [
     {
+      "id": "page_canvas",
+      "type": "svg",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 2400
+        },
+        "height": {
+          "unit": "px",
+          "value": 1800
+        }
+      },
+      "z_index": -3,
+      "props": {
+        "svg": "assets/page_canvas.svg"
+      }
+    },
+    {
       "id": "scroll_canvas",
       "type": "svg",
       "position": {
@@ -50,7 +73,7 @@
           "value": 1200
         }
       },
-      "z_index": -1,
+      "z_index": -2,
       "props": {
         "svg": "assets/scroll_canvas.svg"
       }
@@ -73,9 +96,9 @@
           "value": 34
         }
       },
-      "z_index": 40,
+      "z_index": 60,
       "props": {
-        "text": "Planes v2 Arbitrary Scroll Demo",
+        "text": "Planes v2 Multi-Scroll Demo",
         "color_hex": "#f5fbff",
         "font_size_px": 22,
         "align": "center"
@@ -92,23 +115,23 @@
       "size": {
         "width": {
           "unit": "px",
-          "value": 860
+          "value": 940
         },
         "height": {
           "unit": "px",
           "value": 24
         }
       },
-      "z_index": 40,
+      "z_index": 60,
       "props": {
-        "text": "Use wheel/trackpad over the viewport. This is a camera over a larger Plane.",
+        "text": "Scroll over large main viewport, then try the smaller inset viewport (independent camera).",
         "color_hex": "#9eb8d8",
         "font_size_px": 15,
         "align": "center"
       }
     },
     {
-      "id": "content_viewport",
+      "id": "page_viewport",
       "type": "viewport",
       "position": {
         "x": 0,
@@ -118,21 +141,21 @@
       "size": {
         "width": {
           "unit": "px",
-          "value": 980
+          "value": 1260
         },
         "height": {
           "unit": "px",
-          "value": 560
+          "value": 700
         }
       },
-      "z_index": 20,
+      "z_index": 10,
       "functions": {
         "on_scroll": "handlers::record_scroll"
       },
       "props": {
         "align": "center",
         "clip": true,
-        "content_ref": "scroll_canvas",
+        "content_ref": "page_canvas",
         "scroll": {
           "x": 0,
           "y": 0
@@ -144,7 +167,7 @@
       }
     },
     {
-      "id": "content_viewport_frame",
+      "id": "page_viewport_frame",
       "type": "svg",
       "position": {
         "x": 0,
@@ -154,17 +177,75 @@
       "size": {
         "width": {
           "unit": "px",
-          "value": 980
+          "value": 1260
         },
         "height": {
           "unit": "px",
-          "value": 560
+          "value": 700
         }
       },
-      "z_index": 30,
+      "z_index": 14,
       "props": {
         "align": "center",
-        "svg": "assets/viewport_frame.svg"
+        "svg": "assets/viewport_frame_large.svg"
+      }
+    },
+    {
+      "id": "content_viewport",
+      "type": "viewport",
+      "position": {
+        "x": 930,
+        "y": 510,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 440
+        },
+        "height": {
+          "unit": "px",
+          "value": 250
+        }
+      },
+      "z_index": 20,
+      "functions": {
+        "on_scroll": "handlers::record_scroll"
+      },
+      "props": {
+        "clip": true,
+        "content_ref": "scroll_canvas",
+        "scroll": {
+          "x": 180,
+          "y": 100
+        },
+        "scroll_speed": {
+          "x": 1.0,
+          "y": 1.0
+        }
+      }
+    },
+    {
+      "id": "content_viewport_frame",
+      "type": "svg",
+      "position": {
+        "x": 930,
+        "y": 510,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 440
+        },
+        "height": {
+          "unit": "px",
+          "value": 250
+        }
+      },
+      "z_index": 24,
+      "props": {
+        "svg": "assets/viewport_frame_small.svg"
       }
     },
     {
