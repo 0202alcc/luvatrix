@@ -646,14 +646,16 @@ def _scroll_intent_from_event(event_type: str, payload: dict[str, Any]) -> Scrol
             dy = float(payload.get("delta_y", 0.0))
         except (TypeError, ValueError):
             return None
-        return ScrollIntent(delta_x=dx, delta_y=dy, source="wheel", phase="update")
+        # Match system-native scroll direction expectations by treating positive
+        # wheel deltas as moving the viewport camera in the opposite direction.
+        return ScrollIntent(delta_x=-dx, delta_y=-dy, source="wheel", phase="update")
     if event_type in {"pan", "swipe"}:
         try:
             dx = float(payload.get("delta_x", 0.0))
             dy = float(payload.get("delta_y", 0.0))
         except (TypeError, ValueError):
             return None
-        return ScrollIntent(delta_x=dx, delta_y=dy, source="touch_drag", phase="update")
+        return ScrollIntent(delta_x=-dx, delta_y=-dy, source="touch_drag", phase="update")
     return None
 
 

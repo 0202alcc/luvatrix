@@ -328,7 +328,7 @@ class PlanesRuntimeTests(unittest.TestCase):
                     device="mouse",
                     event_type="scroll",
                     status="OK",
-                    payload={"x": 20.0, "y": 20.0, "delta_x": 40.0, "delta_y": 25.0},
+                    payload={"x": 20.0, "y": 20.0, "delta_x": -40.0, "delta_y": -25.0},
                 )
             )
             app.loop(ctx, 0.016)
@@ -360,7 +360,7 @@ class PlanesRuntimeTests(unittest.TestCase):
                     device="mouse",
                     event_type="scroll",
                     status="OK",
-                    payload={"x": 20.0, "y": 20.0, "delta_x": 500.0, "delta_y": 500.0},
+                    payload={"x": 20.0, "y": 20.0, "delta_x": -500.0, "delta_y": -500.0},
                 )
             )
             app.loop(ctx, 0.016)
@@ -383,7 +383,7 @@ class PlanesRuntimeTests(unittest.TestCase):
                     device="mouse",
                     event_type="scroll",
                     status="OK",
-                    payload={"x": 40.0, "y": 40.0, "delta_x": 80.0, "delta_y": 80.0},
+                    payload={"x": 40.0, "y": 40.0, "delta_x": -80.0, "delta_y": -80.0},
                 )
             )
             app.loop(ctx, 0.016)
