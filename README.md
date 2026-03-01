@@ -109,6 +109,11 @@ Minimal input + sensor logger app:
 uv run --python 3.14 python examples/app_protocol/run_input_sensor_logger.py --simulate-hdi --simulate-sensors
 ```
 
+Media transport lab (image + animated video rendering with aspect-ratio preserve and transport controls):
+```bash
+uv run --python 3.14 python main.py run-app examples/media_transport_lab --render macos --width 960 --height 540
+```
+
 Choose which sensors to log:
 ```bash
 uv run --python 3.14 python examples/app_protocol/run_input_sensor_logger.py \

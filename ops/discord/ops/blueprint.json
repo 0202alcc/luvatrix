@@ -1,0 +1,193 @@
+{
+  "roles": [
+    {"name": "CEO", "color": 15158332, "mentionable": true},
+    {"name": "Leads", "color": 3447003, "mentionable": true},
+    {"name": "Core Engineer", "color": 3066993, "mentionable": true},
+    {"name": "Contributor", "color": 10181046, "mentionable": true},
+    {"name": "AI Agent", "color": 15844367, "mentionable": true},
+    {"name": "Observer", "color": 9807270, "mentionable": true},
+    {"name": "Onboarded", "color": 5763719, "mentionable": false}
+  ],
+  "categories": [
+    {
+      "name": "00_ONBOARDING_GATE",
+      "channels": [
+        {"name": "welcome", "read_only": true},
+        {"name": "server-map", "read_only": true},
+        {"name": "onboarding-checklist", "read_only": true},
+        {"name": "onboarding-ack"},
+        {"name": "project-charter-public"},
+        {"name": "workplan-public"},
+        {"name": "reports-index-public"},
+        {"name": "agent-onboarding"},
+        {"name": "ai-ethics-safety-charter"},
+        {"name": "glossary-protocols"}
+      ]
+    },
+    {
+      "name": "01_PROJECT_MANAGEMENT",
+      "requires_onboarded": true,
+      "channels": [
+        {"name": "milestones-gantt", "read_only": true},
+        {"name": "gantt-discussion"},
+        {"name": "agile-board-feed", "read_only": true},
+        {"name": "agile-discussion"},
+        {"name": "milestone-priority-index", "read_only": true},
+        {"name": "m-007-status", "read_only": true},
+        {"name": "m-001-status", "read_only": true},
+        {"name": "m-008-status", "read_only": true},
+        {"name": "m-009-status", "read_only": true},
+        {"name": "m-010-status", "read_only": true},
+        {"name": "m-011-status", "read_only": true},
+        {"name": "m-002-status", "read_only": true},
+        {"name": "m-003-status", "read_only": true},
+        {"name": "m-004-status", "read_only": true},
+        {"name": "m-005-status", "read_only": true},
+        {"name": "m-006-status", "read_only": true},
+        "wbs-work-breakdown",
+        "responsibility-matrix",
+        "cross-team-dependencies",
+        "planning-change-log"
+      ]
+    },
+    {
+      "name": "02_TEAM_AGILE_BOARDS",
+      "requires_onboarded": true,
+      "channels": [
+        "team-runtime-board",
+        "team-protocol-board",
+        "team-rendering-board",
+        "team-platform-ci-board",
+        "team-security-quality-board",
+        "agile-ceremonies"
+      ]
+    },
+    {
+      "name": "03_SPECIALIST_AGILE_LANES",
+      "requires_onboarded": true,
+      "channels": [
+        "specialist-pm-board",
+        "specialist-architecture-board",
+        "specialist-development-board",
+        "specialist-testing-board",
+        "specialist-qa-board",
+        "specialist-safety-board",
+        "specialist-release-board",
+        "specialist-cross-lane-discussion"
+      ]
+    },
+    {
+      "name": "04_ENGINEERING_STREAMS",
+      "requires_onboarded": true,
+      "channels": [
+        "runtime-core",
+        "app-protocol",
+        "rendering-vulkan-macos",
+        "hdi-sensors",
+        "audit-energy-safety",
+        "testing-ci"
+      ]
+    },
+    {
+      "name": "05_DECISIONS_AND_RECORDS",
+      "requires_onboarded": true,
+      "channels": [
+        "rfc-proposals",
+        "adr-log",
+        "meeting-minutes",
+        "iteration-reviews",
+        "risk-incident-log",
+        "postmortems"
+      ]
+    },
+    {
+      "name": "06_EXECUTIVE",
+      "restricted": true,
+      "channels": [
+        "exec-dashboard",
+        "portfolio-context-switch-brief",
+        "resource-budget",
+        "external-stakeholder-comms"
+      ]
+    },
+    {
+      "name": "06A_M001_DISCORD_GOVERNANCE",
+      "requires_onboarded": true,
+      "channels": [
+        "m001-general",
+        "m001-requirements",
+        "m001-dev",
+        "m001-testing-qa",
+        "m001-concerns-risks",
+        "m001-release-handoff"
+      ]
+    },
+    {
+      "name": "06B_M007_CROSS_PLATFORM_RUNTIME",
+      "requires_onboarded": true,
+      "channels": [
+        "m007-general",
+        "m007-requirements",
+        "m007-dev",
+        "m007-testing-qa",
+        "m007-concerns-risks",
+        "m007-release-handoff"
+      ]
+    },
+    {
+      "name": "07_COLLABORATION",
+      "requires_onboarded": true,
+      "channels": [
+        "help-wanted",
+        "review-requests",
+        "pairing-room",
+        "wins-demos",
+        "feature-deliberation-lab",
+        "private-faq-request"
+      ]
+    },
+    {
+      "name": "07_ARCHIVE",
+      "requires_onboarded": true,
+      "channels": [
+        "history-index",
+        "closed-rfcs",
+        "completed-milestones",
+        "retired-context"
+      ]
+    }
+  ],
+  "legacy_cleanup": {
+    "legacy_categories": [
+      "00_START_HERE",
+      "01_PLANNING_SYSTEM",
+      "03_ENGINEERING_STREAMS",
+      "04_DECISIONS_AND_RECORDS",
+      "05_EXECUTIVE",
+      "06_COLLABORATION"
+    ],
+    "legacy_channels": []
+  },
+  "seed_messages": {
+    "welcome": "Welcome to Luvatrix Engineering. Complete onboarding before participating in non-onboarding channels.",
+    "server-map": "Server map: 00 onboarding gate, 01 project management, 02 team agile boards, 03 specialist lanes, 04 engineering streams, 05 decisions/records, 06 executive + active milestone workspaces, 07 collaboration + archive.",
+    "onboarding-checklist": "Onboarding checklist:\n1) Read CHARTER, WORKPLAN, GANTT, WBS, RACI, ADR-INDEX, RISK-REGISTER, EXEC-DIGEST\n2) Publish onboarding acknowledgement in #onboarding-ack\n3) Propose first task mapped to milestone M-###\n4) Human lead assigns Onboarded role to unlock remaining categories.",
+    "onboarding-ack": "Post your onboarding acknowledgement in this format:\n- artifacts reviewed\n- current state summary\n- first task proposal (M-### / E-### / T-###)",
+    "agent-onboarding": "AI onboarding contract:\n- Read all mandatory artifacts\n- Cite evidence links for claims\n- Propose work mapped to M-### and E-###\n- Follow AI ethics and safety charter\n- AI agents may not create private channels",
+    "ai-ethics-safety-charter": "AI Ethics and Safety Charter (co-authored by humans and AI):\n- user safety and welfare\n- privacy/secret handling\n- provenance and citation\n- fairness and harm review\n- escalation boundaries and human approvals\n- incident response",
+    "milestones-gantt": "Read-only Gantt feed. Bot posts the latest chart and pins the current baseline. Use #gantt-discussion for comments and change proposals.",
+    "gantt-discussion": "Use threads per milestone for Gantt discussion and sequencing proposals. Major changes route through RFC -> ADR.",
+    "agile-board-feed": "Read-only Agile movement feed. Bot posts task-card transitions by milestone (Backlog/Ready/In Progress/Review/Done).",
+    "agile-discussion": "Cross-milestone task deliberation. Use threads per milestone. If proposing task reassignment across milestones, include rationale and dependency impact.",
+    "milestone-priority-index": "Milestone status channels are ordered top-to-bottom by execution priority. Active milestones first, then planned sequence.",
+    "planning-change-log": "Record every baseline planning change with date, reason, owner, and links to RFC/ADR as applicable.",
+    "rfc-proposals": "RFC template: problem, goals/non-goals, options, tradeoffs, recommendation, validation plan, rollback plan.",
+    "adr-log": "ADR template: context, decision, alternatives considered, rationale, consequences, links to PR/tests, approver, date.",
+    "testing-ci": "Quality gate policy: success, safety, implementation, edge-case, performance, and regression evidence required before merge.",
+    "exec-dashboard": "Weekly executive digest: milestone health, major decisions, top risks, staffing/load, next-week priorities.",
+    "risk-incident-log": "Risk card template: risk, likelihood, impact, trigger, mitigation, owner, review date, status.",
+    "feature-deliberation-lab": "Deliberation lab: convert feature ideas into M-### / E-### / T-### proposals with success criteria, safety tests, and dependency analysis.",
+    "private-faq-request": "Future feature placeholder: private FAQ intake with project-overview bot (confidential one-on-one clarification).",
+    "history-index": "Archive links for discoverability: closed RFCs, ADR index, milestones, postmortems, and release summaries."
+  }
+}

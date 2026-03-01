@@ -1,0 +1,25 @@
+Luvatrix Milestone Gantt (Historical + Active + Planned)
+Baseline start: 2026-02-23 | mode=collapsed
+Status colors: Planned=#94A3B8, In Progress=#2563EB, At Risk=#F59E0B, Blocked=#DC2626, Complete=#16A34A
+Weeks:  W01W02W03W04W05W06W07W08W09W10W11W12W13
+Dates:  02/2303/0203/0903/1603/2303/3004/0604/1304/2004/2705/0405/1105/18
+lane:H         |==                        | members=H-001,H-002,H-003,H-004,H-005,H-006,H-007,H-008,H-009
+lane:M         |################~~########| members=M-001,M-002,M-003,M-004,M-005,M-006,M-007,M-008,M-009,M-010,M-011
+
+Dependency lines:
+   H-008 -> M-001  |>-                        | overlap
+   M-001 -> M-002  |  >-                      | overlap
+   M-002 -> M-003  |    >-                    | overlap
+   M-007 -> M-003  |    >---                  | overlap
+   M-002 -> M-004  |    -->-                  | ok
+   M-004 -> M-005  |        >---              | overlap
+   M-003 -> M-006  |          ---->-          | ok
+   M-004 -> M-006  |          ---->-          | ok
+   M-005 -> M-006  |            -->-          | ok
+   H-006 -> M-007  |>-                        | overlap
+   H-009 -> M-007  |>-                        | overlap
+   M-007 -> M-008  |      >-                  | overlap
+   M-008 -> M-009  |              >-          | overlap
+   M-008 -> M-010  |              -->-        | ok
+   M-009 -> M-010  |                >-        | overlap
+   M-008 -> M-011  |              ---->-      | ok
