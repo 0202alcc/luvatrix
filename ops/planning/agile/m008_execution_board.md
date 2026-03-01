@@ -6,13 +6,12 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-01`
 
 ## Backlog
-1. `T-819` UI IR v2 field contract.
-2. `T-820` IR validation plan + snapshot matrix.
-3. `T-821` Compiler upgrade design (schema vNext -> IR v2).
-4. `T-822` Runtime pipeline design (matrix compositing + overlay + clamp).
-5. `T-823` Performance execution plan (culling/prefetch/invalidation/cache).
-6. `T-824` Demo + verification plan.
-7. `T-825` Rollout and compatibility gate plan.
+1. `T-820` IR validation plan + snapshot matrix.
+2. `T-821` Compiler upgrade design (schema vNext -> IR v2).
+3. `T-822` Runtime pipeline design (matrix compositing + overlay + clamp).
+4. `T-823` Performance execution plan (culling/prefetch/invalidation/cache).
+5. `T-824` Demo + verification plan.
+6. `T-825` Rollout and compatibility gate plan.
 
 ## Ready
 1. None.
@@ -54,17 +53,21 @@ Last updated: `2026-03-01`
 - Evidence:
 - `docs/ui_ir_v2_gap_assessment.md` created with ready/partial/missing capability matrix, recommended IR v2 field set, and explicit go/no-go decision.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
-9. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
+9. `T-819` UI IR v2 field contract.
+- Evidence:
+- `docs/ui_ir_v2_field_contract.md` created with normative v2 page/plane/cut/component fields, deterministic ordering keys, strict/permissive rules, and v0->v2 mapping.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+10. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-10. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
+11. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-11. `T-808` Unified input/event plumbing for desktop + touch.
+12. `T-808` Unified input/event plumbing for desktop + touch.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added `ScrollIntent` abstraction path for `scroll` plus touch-compatible event types (`pan`/`swipe`) scaffolding.
-12. `T-809` Nested scroll containers + scrollbars/UX affordances.
+13. `T-809` Nested scroll containers + scrollbars/UX affordances.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added nested viewport scroll remainder bubbling + viewport scrollbars (x/y tracks and thumbs).
-13. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
+14. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
 - Evidence:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
@@ -292,4 +295,12 @@ Last updated: `2026-03-01`
 - go/no-go recommendation (no-go until `T-819` and `T-820` gates complete).
 120. `2026-03-01`: Updated root README documentation index to include `docs/ui_ir_v2_gap_assessment.md`.
 121. `2026-03-01`: Verification rerun passed and `T-818` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+122. `2026-03-01`: `T-819` started (`Backlog` -> `In Progress`) for UI IR v2 field contract definition.
+123. `2026-03-01`: Created `docs/ui_ir_v2_field_contract.md` with:
+- normative `planes-v2` page/plane/section-cut/component field contracts,
+- deterministic ordering-key contract and compositing field rules,
+- strict/permissive validation behavior and v0->v2 compatibility mapping.
+124. `2026-03-01`: Updated root README documentation index to include `docs/ui_ir_v2_field_contract.md`.
+125. `2026-03-01`: Verification rerun passed and `T-819` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
