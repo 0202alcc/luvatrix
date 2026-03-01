@@ -40,6 +40,12 @@ This index tracks major decisions with alternatives and rationale.
 - Summary: Reduce cost while preserving role-specific contexts and controls.
 - Linked evidence: `ops/discord/discord.md` bot strategy
 
+6. `ADR-006` MatrixBuffer and Camera Overlay terminology
+- Status: Accepted
+- Date: 2026-03-01
+- Summary: Standardize naming so visible output is always `MatrixBuffer` and top-pinned UI is `CameraOverlayLayer`.
+- Linked evidence: `ops/planning/adr/ADR-006-matrixbuffer-cameraoverlay-terminology.md`, `ops/planning/agile/m008_execution_board.md`
+
 ## New ADR Template
 1. Context
 2. Decision

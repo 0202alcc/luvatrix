@@ -25,20 +25,24 @@ Last updated: `2026-03-01`
 1. None.
 
 ## In Progress
-1. `T-811` Terminology ADR (`MatrixBuffer` output vs `CameraOverlayLayer` concept).
+1. None.
 
 ## Review
-1. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
+1. `T-811` Terminology ADR (`MatrixBuffer` output vs `CameraOverlayLayer` concept).
+- Evidence:
+- `ops/planning/adr/ADR-006-matrixbuffer-cameraoverlay-terminology.md` created (Accepted).
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+2. `T-806` Scroll core model (`ScrollState` + clamp math + deterministic offset invariants).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-2. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
+3. `T-807` Scroll render pipeline (viewport clipping/scissor + translated plane rendering).
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
-3. `T-808` Unified input/event plumbing for desktop + touch.
+4. `T-808` Unified input/event plumbing for desktop + touch.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added `ScrollIntent` abstraction path for `scroll` plus touch-compatible event types (`pan`/`swipe`) scaffolding.
-4. `T-809` Nested scroll containers + scrollbars/UX affordances.
+5. `T-809` Nested scroll containers + scrollbars/UX affordances.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added nested viewport scroll remainder bubbling + viewport scrollbars (x/y tracks and thumbs).
-5. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
+6. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
 - Evidence:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
@@ -206,3 +210,7 @@ Last updated: `2026-03-01`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
 90. `2026-03-01`: Approved strict architecture/spec chain for continuation work: `T-811 -> T-825` (terminology ADR, schema/protocol/UI-IR readiness, compiler/runtime/perf/rollout planning).
 91. `2026-03-01`: `T-811` moved from newly approved chain to `In Progress`; `T-812..T-825` placed in `Backlog` in strict dependency order.
+92. `2026-03-01`: Created terminology ADR `ops/planning/adr/ADR-006-matrixbuffer-cameraoverlay-terminology.md` with accepted naming contract (`MatrixBuffer` output and `CameraOverlayLayer` overlay concept).
+93. `2026-03-01`: Updated ADR index with `ADR-006` entry for discoverability in `ops/discord/artifacts/adr_index.md`.
+94. `2026-03-01`: Verification rerun passed and `T-811` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
