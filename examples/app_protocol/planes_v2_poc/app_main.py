@@ -25,6 +25,7 @@ def reset_scroll(event_ctx: dict[str, Any], app_state: dict[str, Any]) -> None:
     _ = event_ctx
     viewport_scroll = app_state.setdefault("viewport_scroll", {})
     if isinstance(viewport_scroll, dict):
+        viewport_scroll["page_viewport"] = {"x": 0.0, "y": 0.0}
         viewport_scroll["content_viewport"] = {"x": 0.0, "y": 0.0}
 
 

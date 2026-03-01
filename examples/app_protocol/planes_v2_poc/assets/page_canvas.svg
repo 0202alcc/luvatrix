@@ -1,17 +1,32 @@
 <svg width="2400" height="1800" viewBox="0 0 2400 1800" xmlns="http://www.w3.org/2000/svg">
   <rect x="0" y="0" width="2400" height="1800" fill="#101f33"/>
 
-  <rect x="120" y="120" width="760" height="380" rx="20" fill="#2e6cae"/>
-  <rect x="980" y="140" width="920" height="420" rx="20" fill="#2f8db3"/>
-  <rect x="1960" y="180" width="300" height="320" rx="18" fill="#5d67ce"/>
+  <g stroke="#355479" stroke-width="2" opacity="0.45">
+    <line x1="0" y1="300" x2="2400" y2="300"/>
+    <line x1="0" y1="700" x2="2400" y2="700"/>
+    <line x1="0" y1="1100" x2="2400" y2="1100"/>
+    <line x1="0" y1="1500" x2="2400" y2="1500"/>
+    <line x1="400" y1="0" x2="400" y2="1800"/>
+    <line x1="900" y1="0" x2="900" y2="1800"/>
+    <line x1="1400" y1="0" x2="1400" y2="1800"/>
+    <line x1="1900" y1="0" x2="1900" y2="1800"/>
+  </g>
 
-  <rect x="180" y="620" width="1020" height="460" rx="20" fill="#3477b8"/>
-  <rect x="1280" y="660" width="980" height="420" rx="20" fill="#3f9fc2"/>
+  <rect x="120" y="140" width="760" height="420" rx="18" fill="#2e6cae"/>
+  <rect x="1020" y="160" width="860" height="500" rx="18" fill="#2f8db3"/>
+  <rect x="1960" y="180" width="320" height="380" rx="16" fill="#5d67ce"/>
 
-  <rect x="140" y="1180" width="700" height="420" rx="20" fill="#287858"/>
-  <rect x="920" y="1160" width="960" height="500" rx="20" fill="#c07f30"/>
-  <rect x="1940" y="1160" width="320" height="460" rx="18" fill="#6a4dc4"/>
+  <rect x="180" y="760" width="980" height="420" rx="18" fill="#3477b8"/>
+  <rect x="1260" y="720" width="980" height="520" rx="18" fill="#3f9fc2"/>
 
-  <circle cx="2060" cy="980" r="180" fill="#4e86d5"/>
-  <circle cx="520" cy="1460" r="150" fill="#37b7cb"/>
+  <rect x="140" y="1280" width="760" height="420" rx="18" fill="#287858"/>
+  <rect x="980" y="1260" width="940" height="500" rx="18" fill="#c07f30"/>
+  <rect x="1980" y="1240" width="300" height="480" rx="16" fill="#6a4dc4"/>
+
+  <g fill="#d6e9ff" font-family="Comic Mono, monospace" font-size="48">
+    <text x="72" y="90">MAIN CANVAS (2400 x 1800)</text>
+    <text x="140" y="640">Region A (x:120..1880, y:140..660)</text>
+    <text x="170" y="1210">Region B (x:180..2240, y:720..1240)</text>
+    <text x="140" y="1760">Region C (x:140..2280, y:1240..1760)</text>
+  </g>
 </svg>

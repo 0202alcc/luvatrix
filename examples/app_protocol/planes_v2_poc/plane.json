@@ -35,67 +35,24 @@
     {
       "id": "page_canvas",
       "type": "svg",
-      "position": {
-        "x": 0,
-        "y": 0,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 2400
-        },
-        "height": {
-          "unit": "px",
-          "value": 1800
-        }
-      },
+      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 2400}, "height": {"unit": "px", "value": 1800}},
       "z_index": -3,
-      "props": {
-        "svg": "assets/page_canvas.svg"
-      }
+      "props": {"svg": "assets/page_canvas.svg"}
     },
     {
-      "id": "scroll_canvas",
+      "id": "inset_canvas",
       "type": "svg",
-      "position": {
-        "x": 0,
-        "y": 0,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 1800
-        },
-        "height": {
-          "unit": "px",
-          "value": 1200
-        }
-      },
+      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 900}, "height": {"unit": "px", "value": 700}},
       "z_index": -2,
-      "props": {
-        "svg": "assets/scroll_canvas.svg"
-      }
+      "props": {"svg": "assets/inset_canvas.svg"}
     },
     {
       "id": "title",
       "type": "text",
-      "position": {
-        "x": 0,
-        "y": 18,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 560
-        },
-        "height": {
-          "unit": "px",
-          "value": 34
-        }
-      },
+      "position": {"x": 0, "y": 18, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 720}, "height": {"unit": "px", "value": 34}},
       "z_index": 60,
       "props": {
         "text": "Planes v2 Multi-Scroll Demo",
@@ -107,206 +64,93 @@
     {
       "id": "subtitle",
       "type": "text",
-      "position": {
-        "x": 0,
-        "y": 52,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 940
-        },
-        "height": {
-          "unit": "px",
-          "value": 24
-        }
-      },
+      "position": {"x": 0, "y": 52, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1280}, "height": {"unit": "px", "value": 24}},
       "z_index": 60,
       "props": {
-        "text": "Scroll over large main viewport, then try the smaller inset viewport (independent camera).",
+        "text": "Wheel/trackpad over each framed viewport. Left scrolls the full page canvas; right scrolls inset canvas only.",
         "color_hex": "#9eb8d8",
         "font_size_px": 15,
         "align": "center"
       }
     },
     {
+      "id": "main_label",
+      "type": "text",
+      "position": {"x": 80, "y": 92, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 420}, "height": {"unit": "px", "value": 24}},
+      "z_index": 60,
+      "props": {"text": "Main Page Viewport", "color_hex": "#b8d4f0", "font_size_px": 16}
+    },
+    {
+      "id": "inset_label",
+      "type": "text",
+      "position": {"x": 1230, "y": 192, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 340}, "height": {"unit": "px", "value": 24}},
+      "z_index": 60,
+      "props": {"text": "Inset Viewport (Independent)", "color_hex": "#f0c78e", "font_size_px": 16}
+    },
+    {
       "id": "page_viewport",
       "type": "viewport",
-      "position": {
-        "x": 0,
-        "y": 96,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 1260
-        },
-        "height": {
-          "unit": "px",
-          "value": 700
-        }
-      },
+      "position": {"x": 80, "y": 120, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1100}, "height": {"unit": "px", "value": 660}},
       "z_index": 10,
-      "functions": {
-        "on_scroll": "handlers::record_scroll"
-      },
+      "functions": {"on_scroll": "handlers::record_scroll"},
       "props": {
-        "align": "center",
         "clip": true,
         "content_ref": "page_canvas",
-        "scroll": {
-          "x": 0,
-          "y": 0
-        },
-        "scroll_speed": {
-          "x": 1.0,
-          "y": 1.0
-        }
+        "scroll": {"x": 0, "y": 0},
+        "scroll_speed": {"x": 1.0, "y": 1.0}
       }
     },
     {
       "id": "page_viewport_frame",
       "type": "svg",
-      "position": {
-        "x": 0,
-        "y": 96,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 1260
-        },
-        "height": {
-          "unit": "px",
-          "value": 700
-        }
-      },
+      "position": {"x": 80, "y": 120, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1100}, "height": {"unit": "px", "value": 660}},
       "z_index": 14,
-      "props": {
-        "align": "center",
-        "svg": "assets/viewport_frame_large.svg"
-      }
+      "props": {"svg": "assets/viewport_frame_large.svg"}
     },
     {
       "id": "content_viewport",
       "type": "viewport",
-      "position": {
-        "x": 930,
-        "y": 510,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 440
-        },
-        "height": {
-          "unit": "px",
-          "value": 250
-        }
-      },
+      "position": {"x": 1230, "y": 220, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 360}, "height": {"unit": "px", "value": 260}},
       "z_index": 20,
-      "functions": {
-        "on_scroll": "handlers::record_scroll"
-      },
+      "functions": {"on_scroll": "handlers::record_scroll"},
       "props": {
         "clip": true,
-        "content_ref": "scroll_canvas",
-        "scroll": {
-          "x": 180,
-          "y": 100
-        },
-        "scroll_speed": {
-          "x": 1.0,
-          "y": 1.0
-        }
+        "content_ref": "inset_canvas",
+        "scroll": {"x": 0, "y": 0},
+        "scroll_speed": {"x": 1.0, "y": 1.0}
       }
     },
     {
       "id": "content_viewport_frame",
       "type": "svg",
-      "position": {
-        "x": 930,
-        "y": 510,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 440
-        },
-        "height": {
-          "unit": "px",
-          "value": 250
-        }
-      },
+      "position": {"x": 1230, "y": 220, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 360}, "height": {"unit": "px", "value": 260}},
       "z_index": 24,
-      "props": {
-        "svg": "assets/viewport_frame_small.svg"
-      }
+      "props": {"svg": "assets/viewport_frame_small.svg"}
     },
     {
       "id": "reset_button_bg",
       "type": "svg",
-      "position": {
-        "x": 0,
-        "y": 0,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 260
-        },
-        "height": {
-          "unit": "px",
-          "value": 52
-        }
-      },
+      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 260}, "height": {"unit": "px", "value": 52}},
       "z_index": 45,
-      "functions": {
-        "on_press_single": "handlers::reset_scroll"
-      },
-      "props": {
-        "svg": "assets/button_bg.svg",
-        "align": "center",
-        "v_align": "bottom",
-        "margin_bottom_px": 20
-      }
+      "functions": {"on_press_single": "handlers::reset_scroll"},
+      "props": {"svg": "assets/button_bg.svg", "align": "center", "v_align": "bottom", "margin_bottom_px": 20}
     },
     {
       "id": "reset_button",
       "type": "text",
-      "position": {
-        "x": 0,
-        "y": 0,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 260
-        },
-        "height": {
-          "unit": "px",
-          "value": 52
-        }
-      },
+      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 260}, "height": {"unit": "px", "value": 52}},
       "z_index": 46,
-      "functions": {
-        "on_press_single": "handlers::reset_scroll"
-      },
-      "props": {
-        "text": "Reset Scroll",
-        "color_hex": "#ffffff",
-        "font_size_px": 18,
-        "align": "center",
-        "v_align": "bottom",
-        "margin_bottom_px": 20
-      }
+      "functions": {"on_press_single": "handlers::reset_scroll"},
+      "props": {"text": "Reset Scroll", "color_hex": "#ffffff", "font_size_px": 18, "align": "center", "v_align": "bottom", "margin_bottom_px": 20}
     }
   ]
 }

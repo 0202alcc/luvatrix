@@ -178,3 +178,10 @@ Last updated: `2026-03-01`
 83. `2026-03-01`: Verification rerun passed:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
+84. `2026-03-01`: Reviewer-clarity refinement pass on `T-810`:
+- separated main/inset viewport regions with stronger labels and non-overlapping placement,
+- replaced canvas art with explicit grid/text landmarks so scroll motion is visually obvious,
+- updated reset behavior to reset both viewport cameras (`page_viewport` and `content_viewport`).
+85. `2026-03-01`: Verification rerun passed:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60`
