@@ -6,10 +6,7 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-01`
 
 ## Backlog
-1. `T-809` Nested scroll containers + scrollbars/UX affordances.
-- Remainder bubbling for nested containers, thumb geometry, focus behavior.
-2. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
-- Large mixed-content Plane demo proving full-page/canvas scroll (not plot-only/table-only).
+1. None.
 
 ## Ready
 1. None.
@@ -25,6 +22,14 @@ Last updated: `2026-03-01`
 3. `T-808` Unified input/event plumbing for desktop + touch.
 - Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
 - Notes: Added `ScrollIntent` abstraction path for `scroll` plus touch-compatible event types (`pan`/`swipe`) scaffolding.
+4. `T-809` Nested scroll containers + scrollbars/UX affordances.
+- Evidence: `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
+- Notes: Added nested viewport scroll remainder bubbling + viewport scrollbars (x/y tracks and thumbs).
+5. `T-810` End-to-end arbitrary page/canvas scrolling demos + regression coverage.
+- Evidence:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
+- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py` (pass).
+- Demo: `examples/app_protocol/planes_v2_poc` now showcases large-plane viewport scrolling.
 
 ## Done
 1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
@@ -139,3 +144,11 @@ Last updated: `2026-03-01`
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py`
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py`
 63. `2026-03-01`: `T-806`, `T-807`, and `T-808` moved from `In Progress` to `Review`.
+64. `2026-03-01`: `T-809` moved from `Backlog` to `In Progress`; implementing nested scroll bubbling and scrollbar affordances.
+65. `2026-03-01`: Added nested viewport scroll remainder bubbling (deepest-first with deterministic remainder propagation).
+66. `2026-03-01`: Added viewport scrollbar overlays (x/y track + thumb) for overflow visibility and position feedback.
+67. `2026-03-01`: `T-810` moved from `Backlog` to `In Progress`; expanded end-to-end showcase/regression coverage for arbitrary plane scrolling.
+68. `2026-03-01`: Verification passed:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py`
+- `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py tests/test_planes_runtime.py tests/test_planes_protocol.py tests/test_planes_v2_poc_example.py`
+69. `2026-03-01`: `T-809` and `T-810` moved from `In Progress` to `Review`.

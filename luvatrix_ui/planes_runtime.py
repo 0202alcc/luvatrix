@@ -146,15 +146,14 @@ class PlaneApp:
         for event in events:
             payload = event.payload if isinstance(event.payload, dict) else {}
             self._record_pointer_xy(payload)
+            intent = _scroll_intent_from_event(event.event_type, payload)
+            if intent is not None:
+                self._dispatch_viewport_scroll(payload, intent)
             if event.event_type == "pointer_move":
                 self._dispatch_hover(payload, dt)
                 continue
             hook = _hook_for_event(event.event_type, payload)
             target_component = self._pick_component_for_event(payload)
-            if target_component is not None:
-                intent = _scroll_intent_from_event(event.event_type, payload)
-                if intent is not None and target_component.component_type == "viewport":
-                    self._apply_viewport_scroll_intent(target_component, intent)
             if hook is None:
                 continue
             if target_component is None:
@@ -191,6 +190,39 @@ class PlaneApp:
             if resolved_x <= x <= resolved_x + bounds.width and resolved_y <= y <= resolved_y + bounds.height:
                 return component
         return None
+
+    def _viewport_stack_for_point(self, x: float, y: float) -> list[Any]:
+        if self._ui_page is None:
+            return []
+        stack: list[Any] = []
+        for component in self._ui_page.ordered_components_for_hit_test():
+            if component.component_type != "viewport":
+                continue
+            bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
+            resolved_x, resolved_y = self._resolved_position(component)
+            if resolved_x <= x <= resolved_x + bounds.width and resolved_y <= y <= resolved_y + bounds.height:
+                stack.append(component)
+        return stack
+
+    def _dispatch_viewport_scroll(self, payload: dict[str, Any], intent: ScrollIntent) -> None:
+        xy = self._extract_event_xy(payload)
+        if xy is None:
+            return
+        px, py = xy
+        stack = self._viewport_stack_for_point(px, py)
+        if not stack:
+            return
+        rem_x = float(intent.delta_x)
+        rem_y = float(intent.delta_y)
+        for viewport in stack:
+            consumed_x, consumed_y = self._apply_viewport_scroll_intent(
+                viewport,
+                ScrollIntent(delta_x=rem_x, delta_y=rem_y, source=intent.source, phase=intent.phase),
+            )
+            rem_x -= consumed_x
+            rem_y -= consumed_y
+            if abs(rem_x) <= 1e-9 and abs(rem_y) <= 1e-9:
+                break
 
     def _record_pointer_xy(self, payload: dict[str, Any]) -> None:
         xy = self._extract_xy_from_payload(payload)
@@ -334,6 +366,7 @@ class PlaneApp:
                     opacity=1.0,
                 )
             )
+        self._mount_viewport_scrollbars(ctx, component, x=x, y=y, frame=frame)
 
 
     def _initialize_viewport_scroll_state(self) -> None:
@@ -400,7 +433,7 @@ class PlaneApp:
         cy = min(max(0.0, float(y)), max_y)
         return (cx, cy)
 
-    def _apply_viewport_scroll_intent(self, viewport_component, intent: ScrollIntent) -> None:
+    def _apply_viewport_scroll_intent(self, viewport_component, intent: ScrollIntent) -> tuple[float, float]:
         style = viewport_component.style if isinstance(viewport_component.style, dict) else {}
         speed_x = 1.0
         speed_y = 1.0
@@ -421,6 +454,9 @@ class PlaneApp:
             state = {}
             self.state["viewport_scroll"] = state
         state[viewport_component.component_id] = {"x": clamped_x, "y": clamped_y}
+        consumed_x = (clamped_x - cur_x) / speed_x if abs(speed_x) > 1e-12 else 0.0
+        consumed_y = (clamped_y - cur_y) / speed_y if abs(speed_y) > 1e-12 else 0.0
+        return (consumed_x, consumed_y)
 
     def _mount_viewport_content(self, ctx, viewport_component, *, x: float, y: float, frame: str) -> None:
         style = viewport_component.style if isinstance(viewport_component.style, dict) else {}
@@ -447,6 +483,10 @@ class PlaneApp:
                 )
             )
             return
+        if content.component_type == "viewport":
+            self._mount_viewport_content(ctx, content, x=content_x, y=content_y, frame=frame)
+            self._mount_viewport_scrollbars(ctx, content, x=content_x, y=content_y, frame=frame)
+            return
         if content.component_type == "text":
             props = content.style if isinstance(content.style, dict) else {}
             text = str(props.get("text", content.component_id))
@@ -463,6 +503,100 @@ class PlaneApp:
                     size=TextSizeSpec(unit="px", value=font_size_px),
                     appearance=TextAppearance(color_hex=color_hex, opacity=float(content.opacity)),
                     max_width_px=max_width_px,
+                )
+            )
+
+    def _mount_viewport_scrollbars(self, ctx, viewport_component, *, x: float, y: float, frame: str) -> None:
+        style = viewport_component.style if isinstance(viewport_component.style, dict) else {}
+        ref = style.get("content_ref")
+        if not isinstance(ref, str) or ref not in self._component_index:
+            return
+        content = self._component_index[ref]
+        view_w = float(viewport_component.width)
+        view_h = float(viewport_component.height)
+        content_w = float(content.width)
+        content_h = float(content.height)
+        if view_w <= 0 or view_h <= 0:
+            return
+        scroll_x, scroll_y = self._viewport_scroll_position(viewport_component)
+        track_color = "#1f344d"
+        thumb_color = "#89b7e6"
+
+        if content_w > view_w + 1e-9:
+            track_h = 5.0
+            track_y = y + view_h - track_h - 2.0
+            track_markup = (
+                '<svg width="100" height="10" xmlns="http://www.w3.org/2000/svg">'
+                f'<rect x="0" y="0" width="100" height="10" rx="4" fill="{track_color}"/>'
+                "</svg>"
+            )
+            ctx.mount_component(
+                SVGComponent(
+                    component_id=f"{viewport_component.component_id}__scrollbar_x_track",
+                    svg_markup=track_markup,
+                    position=CoordinatePoint(x + 2.0, track_y, frame),
+                    width=max(8.0, view_w - 4.0),
+                    height=track_h,
+                    opacity=0.82,
+                )
+            )
+            thumb_ratio = max(0.08, min(1.0, view_w / content_w))
+            thumb_w = max(10.0, (view_w - 4.0) * thumb_ratio)
+            max_scroll_x = max(1e-9, content_w - view_w)
+            span = max(0.0, (view_w - 4.0) - thumb_w)
+            thumb_x = x + 2.0 + span * (scroll_x / max_scroll_x)
+            thumb_markup = (
+                '<svg width="100" height="10" xmlns="http://www.w3.org/2000/svg">'
+                f'<rect x="0" y="0" width="100" height="10" rx="4" fill="{thumb_color}"/>'
+                "</svg>"
+            )
+            ctx.mount_component(
+                SVGComponent(
+                    component_id=f"{viewport_component.component_id}__scrollbar_x_thumb",
+                    svg_markup=thumb_markup,
+                    position=CoordinatePoint(thumb_x, track_y, frame),
+                    width=thumb_w,
+                    height=track_h,
+                    opacity=0.95,
+                )
+            )
+
+        if content_h > view_h + 1e-9:
+            track_w = 5.0
+            track_x = x + view_w - track_w - 2.0
+            track_markup = (
+                '<svg width="10" height="100" xmlns="http://www.w3.org/2000/svg">'
+                f'<rect x="0" y="0" width="10" height="100" rx="4" fill="{track_color}"/>'
+                "</svg>"
+            )
+            ctx.mount_component(
+                SVGComponent(
+                    component_id=f"{viewport_component.component_id}__scrollbar_y_track",
+                    svg_markup=track_markup,
+                    position=CoordinatePoint(track_x, y + 2.0, frame),
+                    width=track_w,
+                    height=max(8.0, view_h - 4.0),
+                    opacity=0.82,
+                )
+            )
+            thumb_ratio = max(0.08, min(1.0, view_h / content_h))
+            thumb_h = max(10.0, (view_h - 4.0) * thumb_ratio)
+            max_scroll_y = max(1e-9, content_h - view_h)
+            span = max(0.0, (view_h - 4.0) - thumb_h)
+            thumb_y = y + 2.0 + span * (scroll_y / max_scroll_y)
+            thumb_markup = (
+                '<svg width="10" height="100" xmlns="http://www.w3.org/2000/svg">'
+                f'<rect x="0" y="0" width="10" height="100" rx="4" fill="{thumb_color}"/>'
+                "</svg>"
+            )
+            ctx.mount_component(
+                SVGComponent(
+                    component_id=f"{viewport_component.component_id}__scrollbar_y_thumb",
+                    svg_markup=thumb_markup,
+                    position=CoordinatePoint(track_x, thumb_y, frame),
+                    width=track_w,
+                    height=thumb_h,
+                    opacity=0.95,
                 )
             )
 

@@ -149,6 +149,68 @@ def _build_scroll_plane_file(root: Path) -> Path:
     return plane_path
 
 
+def _build_nested_scroll_plane_file(root: Path) -> Path:
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "outer.svg").write_text(
+        "<svg width=\"260\" height=\"220\" xmlns=\"http://www.w3.org/2000/svg\">"
+        "<rect x=\"0\" y=\"0\" width=\"260\" height=\"220\" fill=\"#204060\"/></svg>",
+        encoding="utf-8",
+    )
+    (root / "assets" / "inner.svg").write_text(
+        "<svg width=\"140\" height=\"120\" xmlns=\"http://www.w3.org/2000/svg\">"
+        "<rect x=\"0\" y=\"0\" width=\"140\" height=\"120\" fill=\"#6080a0\"/></svg>",
+        encoding="utf-8",
+    )
+    payload = {
+        "planes_protocol_version": "0.1.0",
+        "app": {
+            "id": "x.nested",
+            "title": "Nested",
+            "icon": "assets/outer.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "plane": {"id": "main", "default_frame": "screen_tl", "background": {"color": "#111111"}},
+        "scripts": [{"id": "handlers", "lang": "python", "src": "scripts/handlers.py"}],
+        "components": [
+            {
+                "id": "outer_canvas",
+                "type": "svg",
+                "position": {"x": 0, "y": 0},
+                "size": {"width": {"unit": "px", "value": 260}, "height": {"unit": "px", "value": 220}},
+                "z_index": 0,
+                "props": {"svg": "assets/outer.svg"},
+            },
+            {
+                "id": "inner_canvas",
+                "type": "svg",
+                "position": {"x": 0, "y": 0},
+                "size": {"width": {"unit": "px", "value": 140}, "height": {"unit": "px", "value": 120}},
+                "z_index": 1,
+                "props": {"svg": "assets/inner.svg"},
+            },
+            {
+                "id": "outer_viewport",
+                "type": "viewport",
+                "position": {"x": 10, "y": 10},
+                "size": {"width": {"unit": "px", "value": 120}, "height": {"unit": "px", "value": 100}},
+                "z_index": 5,
+                "props": {"clip": True, "content_ref": "outer_canvas", "scroll": {"x": 0, "y": 0}},
+            },
+            {
+                "id": "inner_viewport",
+                "type": "viewport",
+                "position": {"x": 20, "y": 20},
+                "size": {"width": {"unit": "px", "value": 100}, "height": {"unit": "px", "value": 90}},
+                "z_index": 6,
+                "props": {"clip": True, "content_ref": "inner_canvas", "scroll": {"x": 0, "y": 0}},
+            },
+        ],
+    }
+    plane_path = root / "plane_nested_scroll.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
 class PlanesRuntimeTests(unittest.TestCase):
     def test_load_plane_app_renders_components(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -306,6 +368,45 @@ class PlanesRuntimeTests(unittest.TestCase):
             # max_x = 220 - 100 = 120, max_y = 200 - 80 = 120
             self.assertAlmostEqual(float(scroll_state["x"]), 120.0, places=6)
             self.assertAlmostEqual(float(scroll_state["y"]), 120.0, places=6)
+
+    def test_plane_runtime_scroll_remainder_bubbles_to_underlying_viewport(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_nested_scroll_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=220)
+            app.init(ctx)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 40.0, "y": 40.0, "delta_x": 80.0, "delta_y": 80.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            outer = app.state["viewport_scroll"]["outer_viewport"]
+            inner = app.state["viewport_scroll"]["inner_viewport"]
+            # inner max: x=40, y=30 ; outer max: x=140, y=120
+            self.assertAlmostEqual(float(inner["x"]), 40.0, places=6)
+            self.assertAlmostEqual(float(inner["y"]), 30.0, places=6)
+            self.assertAlmostEqual(float(outer["x"]), 40.0, places=6)
+            self.assertAlmostEqual(float(outer["y"]), 50.0, places=6)
+
+    def test_plane_runtime_mounts_viewport_scrollbars_when_content_overflows(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_scroll_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            ids = {comp.component_id for comp in ctx.mounted}
+            self.assertIn("viewport__scrollbar_x_track", ids)
+            self.assertIn("viewport__scrollbar_x_thumb", ids)
+            self.assertIn("viewport__scrollbar_y_track", ids)
+            self.assertIn("viewport__scrollbar_y_thumb", ids)
 
 
 if __name__ == "__main__":
