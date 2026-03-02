@@ -225,7 +225,7 @@ def _build_nested_scroll_plane_file(root: Path) -> Path:
     return plane_path
 
 
-def _build_plane_camera_scroll_file(root: Path) -> Path:
+def _build_plane_camera_scroll_file(root: Path, *, include_fixed_title: bool = True) -> Path:
     (root / "assets").mkdir(parents=True, exist_ok=True)
     (root / "assets" / "panel.svg").write_text(
         "<svg width=\"800\" height=\"600\" xmlns=\"http://www.w3.org/2000/svg\">"
@@ -250,7 +250,11 @@ def _build_plane_camera_scroll_file(root: Path) -> Path:
                 "size": {"width": {"unit": "px", "value": 800}, "height": {"unit": "px", "value": 600}},
                 "z_index": 0,
                 "props": {"svg": "assets/panel.svg"},
-            },
+            }
+        ],
+    }
+    if include_fixed_title:
+        payload["components"].append(
             {
                 "id": "fixed_title",
                 "type": "text",
@@ -258,9 +262,8 @@ def _build_plane_camera_scroll_file(root: Path) -> Path:
                 "size": {"width": {"unit": "px", "value": 120}, "height": {"unit": "px", "value": 24}},
                 "z_index": 10,
                 "props": {"text": "fixed", "camera_fixed": True},
-            },
-        ],
-    }
+            }
+        )
     plane_path = root / "plane_camera_scroll.json"
     plane_path.write_text(json.dumps(payload), encoding="utf-8")
     return plane_path
@@ -758,9 +761,9 @@ class PlanesRuntimeTests(unittest.TestCase):
                 value = float(timing.get(key, 0.0))
                 self.assertGreaterEqual(value, 0.0)
 
-    def test_plane_runtime_uses_partial_dirty_rects_for_plane_scroll_with_shift_hint(self) -> None:
+    def test_plane_runtime_scrollable_plane_uses_full_frame_compose(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            plane_path = _build_plane_camera_scroll_file(Path(td))
+            plane_path = _build_plane_camera_scroll_file(Path(td), include_fixed_title=False)
             app = load_plane_app(plane_path, handlers={})
             ctx = _FakeCtx(width=320, height=180)
             app.init(ctx)
@@ -778,14 +781,14 @@ class PlanesRuntimeTests(unittest.TestCase):
             )
             app.loop(ctx, 0.016)
             perf = app.state.get("perf", {})
-            self.assertEqual(str(perf.get("compose_mode", "")), "partial_dirty")
-            self.assertGreaterEqual(int(perf.get("dirty_rect_count", 0)), 1)
-            self.assertLess(int(perf.get("dirty_rect_area_px", 320 * 180)), 320 * 180)
-            self.assertIsNotNone(ctx.last_scroll_shift)
+            self.assertEqual(str(perf.get("compose_mode", "")), "full_frame")
+            self.assertEqual(int(perf.get("dirty_rect_count", 0)), 1)
+            self.assertEqual(int(perf.get("dirty_rect_area_px", 0)), 320 * 180)
+            self.assertIsNone(ctx.last_scroll_shift)
 
     def test_plane_runtime_subpixel_scroll_uses_full_frame_compose(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            plane_path = _build_plane_camera_scroll_file(Path(td))
+            plane_path = _build_plane_camera_scroll_file(Path(td), include_fixed_title=False)
             app = load_plane_app(plane_path, handlers={})
             ctx = _FakeCtx(width=320, height=180)
             app.init(ctx)
@@ -799,6 +802,29 @@ class PlanesRuntimeTests(unittest.TestCase):
                     event_type="scroll",
                     status="OK",
                     payload={"x": 40.0, "y": 40.0, "delta_x": -0.4, "delta_y": 0.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(str(perf.get("compose_mode", "")), "full_frame")
+            self.assertIsNone(ctx.last_scroll_shift)
+
+    def test_plane_runtime_overlay_scroll_avoids_shift_compose(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_camera_scroll_file(Path(td), include_fixed_title=True)
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 40.0, "y": 40.0, "delta_x": -10.0, "delta_y": 0.0},
                 )
             )
             app.loop(ctx, 0.016)

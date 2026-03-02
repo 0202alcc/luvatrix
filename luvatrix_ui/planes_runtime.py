@@ -995,6 +995,8 @@ class PlaneApp:
             return full
         if not plane_changed:
             return full
+        if self._has_camera_overlay_activity():
+            return full
         shift_x, shift_y = self._quantized_scroll_shift(dx, dy)
         adx = abs(int(shift_x))
         ady = abs(int(shift_y))
@@ -1028,6 +1030,8 @@ class PlaneApp:
             return None
         if self._last_dirty_signature is None or self._last_plane_scroll is None:
             return None
+        if self._has_camera_overlay_activity():
+            return None
         theme_or_hover_changed = pre_signature[0:2] != post_signature[0:2]
         viewport_scroll_changed = pre_signature[2] != post_signature[2]
         if theme_or_hover_changed or viewport_scroll_changed:
@@ -1046,6 +1050,19 @@ class PlaneApp:
         # Keep dirty-strip and shift compose aligned to the same integer translation.
         # positive plane-scroll means content moves left/up in camera space.
         return (-int(round(dx)), -int(round(dy)))
+
+    def _has_camera_overlay_activity(self) -> bool:
+        if self._ui_page is None:
+            return False
+        for component in self._ui_page.components:
+            if not component.visible:
+                continue
+            if not self._component_is_active(component):
+                continue
+            if self._is_overlay_attached(component) or self._is_camera_fixed(component):
+                return True
+        max_x, max_y = self._plane_scroll_limits()
+        return max_x > 1e-9 or max_y > 1e-9
 
     @staticmethod
     def _normalize_local_dirty_rects(
