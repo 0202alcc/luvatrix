@@ -6,7 +6,7 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-02`
 
 ## Backlog
-1. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
+1. None.
 
 ## Ready
 1. None.
@@ -165,6 +165,13 @@ Last updated: `2026-03-02`
 - Plan defines deterministic ABI contract, parity rollout strategy, fallback model, and exit criteria for native acceleration enablement.
 - `README.md` documentation index updated to include the new plan doc.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+30. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
+- Evidence:
+- Added `ops/ci/m008_perf_gate.py` deterministic perf smoke script with two-pass replay parity checks plus p95/jitter budget enforcement.
+- Added `tests/test_m008_perf_gate.py` for perf-gate contract coverage.
+- Added `.github/workflows/m008-perf-gate.yml` CI workflow gate for runtime tests + perf smoke budgets.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py tests/test_m008_perf_gate.py` (pass).
+- `PYTHONPATH=. uv run python ops/ci/m008_perf_gate.py --samples 60 --budget-p95-ms 40 --budget-jitter-ms 25` (pass).
 
 ## Done
 1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
@@ -516,3 +523,11 @@ Last updated: `2026-03-02`
 185. `2026-03-02`: Added `docs/ui_ir_v2_native_hot_path_extraction_plan.md` and linked it in `README.md` with deterministic ABI boundaries, parity gates, and rollout/fallback strategy.
 186. `2026-03-02`: Verification rerun passed and `T-834` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+187. `2026-03-02`: `T-835` started (`Backlog` -> `In Progress`) for CI perf gate pack implementation.
+188. `2026-03-02`: Added performance-gate artifacts:
+- `ops/ci/m008_perf_gate.py` deterministic two-pass perf smoke with p95/jitter budget checks,
+- `tests/test_m008_perf_gate.py` perf-gate contract test,
+- `.github/workflows/m008-perf-gate.yml` CI gate workflow.
+189. `2026-03-02`: Verification rerun passed and `T-835` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py tests/test_m008_perf_gate.py`
+- `PYTHONPATH=. uv run python ops/ci/m008_perf_gate.py --samples 60 --budget-p95-ms 40 --budget-jitter-ms 25`
