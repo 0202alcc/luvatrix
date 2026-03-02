@@ -23,7 +23,7 @@ from .coordinates import CoordinateFrameRegistry
 from .frame_rate_controller import FrameRateController
 from .protocol_governance import CURRENT_PROTOCOL_VERSION, check_protocol_compatibility
 from .sensor_manager import SensorManagerThread, SensorSample
-from .window_matrix import CallBlitEvent, FullRewrite, ReplaceRect, WindowMatrix, WriteBatch
+from .window_matrix import CallBlitEvent, FullRewrite, ReplaceRect, ShiftFrame, WindowMatrix, WriteBatch
 
 LOGGER = logging.getLogger(__name__)
 APP_PROTOCOL_VERSION = CURRENT_PROTOCOL_VERSION
@@ -105,6 +105,8 @@ class AppContext:
     _ui_display: DisplayableArea | None = field(default=None, init=False, repr=False)
     _ui_components: list[ComponentBase] = field(default_factory=list, init=False, repr=False)
     _ui_dirty_rects: list[tuple[int, int, int, int]] | None = field(default=None, init=False, repr=False)
+    _ui_scroll_shift: tuple[int, int] | None = field(default=None, init=False, repr=False)
+    _ui_clear_color: tuple[int, int, int, int] = field(default=(0, 0, 0, 255), init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.coordinate_frames is None:
@@ -190,6 +192,7 @@ class AppContext:
         content_height_px: float | None = None,
         clear_color: tuple[int, int, int, int] = (0, 0, 0, 255),
         dirty_rects: list[tuple[int, int, int, int]] | None = None,
+        scroll_shift: tuple[int, int] | None = None,
     ) -> None:
         if self._ui_renderer is not None:
             raise RuntimeError("ui frame is already active")
@@ -204,6 +207,13 @@ class AppContext:
         self._ui_renderer = renderer
         self._ui_components = []
         self._ui_dirty_rects = _normalize_dirty_rects(dirty_rects, self.matrix.width, self.matrix.height)
+        self._ui_scroll_shift = _normalize_scroll_shift(scroll_shift)
+        self._ui_clear_color = (
+            int(clear_color[0]),
+            int(clear_color[1]),
+            int(clear_color[2]),
+            int(clear_color[3]),
+        )
         renderer.begin_frame(self._ui_display, clear_color)
 
     def mount_component(self, component: ComponentBase) -> None:
@@ -234,7 +244,14 @@ class AppContext:
                 raise NotImplementedError(f"unsupported component type for ui frame: {type(component)!r}")
             frame = renderer.end_frame()
             if self._ui_dirty_rects:
-                ops = [
+                if self._ui_scroll_shift is not None and (self._ui_scroll_shift[0] != 0 or self._ui_scroll_shift[1] != 0):
+                    fill = torch.tensor(self._ui_clear_color, dtype=torch.uint8)
+                    ops = [
+                        ShiftFrame(dx=int(self._ui_scroll_shift[0]), dy=int(self._ui_scroll_shift[1]), fill_rgba_4=fill)
+                    ]
+                else:
+                    ops = []
+                ops.extend(
                     ReplaceRect(
                         x=x,
                         y=y,
@@ -243,7 +260,7 @@ class AppContext:
                         rect_h_w_4=frame[y : y + h, x : x + w, :].clone(),
                     )
                     for (x, y, w, h) in self._ui_dirty_rects
-                ]
+                )
                 return self.submit_write_batch(WriteBatch(ops))
             return self.submit_write_batch(WriteBatch([FullRewrite(frame)]))
         finally:
@@ -251,6 +268,7 @@ class AppContext:
             self._ui_display = None
             self._ui_components = []
             self._ui_dirty_rects = None
+            self._ui_scroll_shift = None
 
     def _require_capability(self, capability: str) -> None:
         if capability not in self.granted_capabilities:
@@ -751,6 +769,19 @@ def _normalize_dirty_rects(
         return None
     out.sort(key=lambda r: (r[1], r[0], r[2], r[3]))
     return out
+
+
+def _normalize_scroll_shift(scroll_shift: tuple[int, int] | None) -> tuple[int, int] | None:
+    if scroll_shift is None:
+        return None
+    if not isinstance(scroll_shift, tuple) or len(scroll_shift) != 2:
+        return None
+    try:
+        dx = int(scroll_shift[0])
+        dy = int(scroll_shift[1])
+    except (TypeError, ValueError):
+        return None
+    return (dx, dy)
 
 
 def _normalize_os_name(value: str) -> str:

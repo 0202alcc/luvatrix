@@ -55,11 +55,18 @@ class ReplaceRect:
 
 
 @dataclass(frozen=True)
+class ShiftFrame:
+    dx: int
+    dy: int
+    fill_rgba_4: TensorLike
+
+
+@dataclass(frozen=True)
 class Multiply:
     color_matrix_4x4: TensorLike
 
 
-WriteOp: TypeAlias = FullRewrite | PushColumn | ReplaceColumn | PushRow | ReplaceRow | ReplaceRect | Multiply
+WriteOp: TypeAlias = FullRewrite | PushColumn | ReplaceColumn | PushRow | ReplaceRow | ReplaceRect | ShiftFrame | Multiply
 
 
 @dataclass(frozen=True)
@@ -186,6 +193,25 @@ class WindowMatrix:
             patch, offending = _sanitize_rgba_tensor(op.rect_h_w_4, (op.height, op.width, 4))
             matrix[op.y : op.y + op.height, op.x : op.x + op.width, :] = patch
             return matrix, offending
+        if isinstance(op, ShiftFrame):
+            fill, offending = _sanitize_rgba_tensor(op.fill_rgba_4.view(1, 1, 4), (1, 1, 4))
+            dx = int(op.dx)
+            dy = int(op.dy)
+            out = fill.view(1, 1, 4).expand(self.height, self.width, 4).clone()
+            if abs(dx) >= self.width or abs(dy) >= self.height:
+                return out, offending
+            src = matrix
+            src_x = max(0, -dx)
+            dst_x = max(0, dx)
+            width = self.width - abs(dx)
+            src_y = max(0, -dy)
+            dst_y = max(0, dy)
+            height = self.height - abs(dy)
+            if width > 0 and height > 0:
+                out[dst_y : dst_y + height, dst_x : dst_x + width, :] = src[
+                    src_y : src_y + height, src_x : src_x + width, :
+                ]
+            return out, offending
         if isinstance(op, Multiply):
             color_matrix = _coerce_numeric(op.color_matrix_4x4, (4, 4), "color_matrix_4x4")
             if not torch.isfinite(color_matrix).all():

@@ -422,6 +422,81 @@
       ]
     },
     {
+      "id": "T-836",
+      "title": "Implement shift-blit camera scroll compose path (translate previous frame + redraw exposed strips only).",
+      "epic_id": "E-801",
+      "milestone_id": "M-008",
+      "status": "Backlog",
+      "depends_on": [
+        "T-835"
+      ],
+      "board_refs": [
+        "milestone:M-008",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-837",
+      "title": "Add pre-rasterized bitmap cache path for stable SVG/text components during camera scrolling.",
+      "epic_id": "E-801",
+      "milestone_id": "M-008",
+      "status": "Backlog",
+      "depends_on": [
+        "T-836"
+      ],
+      "board_refs": [
+        "milestone:M-008",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-838",
+      "title": "Add frame-paced scroll scheduler (coalesced input -> one render cadence update).",
+      "epic_id": "E-801",
+      "milestone_id": "M-008",
+      "status": "Backlog",
+      "depends_on": [
+        "T-837"
+      ],
+      "board_refs": [
+        "milestone:M-008",
+        "team:runtime",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-839",
+      "title": "Decouple input ingestion from render thread using deterministic intent queue handoff.",
+      "epic_id": "E-801",
+      "milestone_id": "M-008",
+      "status": "Backlog",
+      "depends_on": [
+        "T-838"
+      ],
+      "board_refs": [
+        "milestone:M-008",
+        "team:runtime",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-840",
+      "title": "Finalize scroll performance validation pack (latency/jitter budgets + visual artifact regression gates).",
+      "epic_id": "E-801",
+      "milestone_id": "M-008",
+      "status": "Backlog",
+      "depends_on": [
+        "T-839"
+      ],
+      "board_refs": [
+        "milestone:M-008",
+        "team:platform-ci",
+        "specialist:qa"
+      ]
+    },
+    {
       "id": "T-901",
       "title": "Calendar app component (day/week/month views + event rendering contract).",
       "epic_id": "E-901",

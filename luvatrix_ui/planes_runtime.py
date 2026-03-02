@@ -109,6 +109,12 @@ class PlaneApp:
             post_signature=post_signature,
             events_processed=int(self._frame_counts.get("events_processed", 0)),
         )
+        scroll_shift = self._compute_scroll_shift(
+            pre_plane_scroll=pre_plane_scroll,
+            post_plane_scroll=post_plane_scroll,
+            pre_signature=pre_signature,
+            post_signature=post_signature,
+        )
         self._last_plane_scroll = post_plane_scroll
         self._last_dirty_signature = post_signature
         dirty_count = int(len(dirty_rects))
@@ -159,6 +165,7 @@ class PlaneApp:
             content_height_px=float(self._ui_page.matrix.height),
             clear_color=self._bg_color,
             dirty_rects=dirty_rects,
+            scroll_shift=scroll_shift,
         )
         self._add_perf_ns("raster_ns", time.perf_counter_ns() - raster_start_ns)
         ordered = self._ui_page.ordered_components_for_draw()
@@ -988,9 +995,49 @@ class PlaneApp:
             return full
         if not plane_changed:
             return full
-        # Scroll translation requires either matrix-shift compose or full-frame redraw.
-        # Until shift compose exists, force full redraw to prevent stale-pixel trails.
-        return full
+        adx = int(math.ceil(abs(dx)))
+        ady = int(math.ceil(abs(dy)))
+        if adx >= view_w or ady >= view_h:
+            return full
+        rects: list[tuple[int, int, int, int]] = []
+        # plane scroll delta > 0 moves content left/up in camera space.
+        if dx > 0:
+            rects.append((view_w - adx, 0, adx, view_h))
+        elif dx < 0:
+            rects.append((0, 0, adx, view_h))
+        if dy > 0:
+            rects.append((0, view_h - ady, view_w, ady))
+        elif dy < 0:
+            rects.append((0, 0, view_w, ady))
+        normalized = self._normalize_local_dirty_rects(rects, view_w=view_w, view_h=view_h)
+        return normalized if normalized else full
+
+    def _compute_scroll_shift(
+        self,
+        *,
+        pre_plane_scroll: tuple[float, float],
+        post_plane_scroll: tuple[float, float],
+        pre_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]],
+        post_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]],
+    ) -> tuple[int, int] | None:
+        if self._ui_page is None:
+            return None
+        if self._last_dirty_signature is None or self._last_plane_scroll is None:
+            return None
+        theme_or_hover_changed = pre_signature[0:2] != post_signature[0:2]
+        viewport_scroll_changed = pre_signature[2] != post_signature[2]
+        if theme_or_hover_changed or viewport_scroll_changed:
+            return None
+        dx = float(post_plane_scroll[0] - pre_plane_scroll[0])
+        dy = float(post_plane_scroll[1] - pre_plane_scroll[1])
+        if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+            return None
+        # positive plane-scroll means content moves left/up.
+        shift_x = -int(round(dx))
+        shift_y = -int(round(dy))
+        if shift_x == 0 and shift_y == 0:
+            return None
+        return (shift_x, shift_y)
 
     @staticmethod
     def _normalize_local_dirty_rects(

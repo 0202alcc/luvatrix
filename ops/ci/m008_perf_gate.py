@@ -30,8 +30,9 @@ class _PerfGateCtx:
         content_height_px: float,
         clear_color: tuple[int, int, int, int],
         dirty_rects=None,
+        scroll_shift=None,
     ) -> None:
-        _ = (renderer, content_width_px, content_height_px, clear_color, dirty_rects)
+        _ = (renderer, content_width_px, content_height_px, clear_color, dirty_rects, scroll_shift)
 
     def mount_component(self, component) -> None:
         _ = component

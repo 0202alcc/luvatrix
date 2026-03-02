@@ -2,11 +2,14 @@
 
 Milestone: `M-008` Plot + data UX foundations
 Epic: `E-801`
-Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> T-807 -> T-808 -> T-809 -> T-810` (scrolling expansion) + `T-811 -> T-812 -> T-813 -> T-814 -> T-815 -> T-816 -> T-817 -> T-818 -> T-819 -> T-820 -> T-821 -> T-822 -> T-823 -> T-824 -> T-825` (architecture/spec extension) + `T-826 -> T-827 -> T-828 -> T-829 -> T-830 -> T-831 -> T-832 -> T-833 -> T-834 -> T-835` (scroll performance hardening)
+Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> T-807 -> T-808 -> T-809 -> T-810` (scrolling expansion) + `T-811 -> T-812 -> T-813 -> T-814 -> T-815 -> T-816 -> T-817 -> T-818 -> T-819 -> T-820 -> T-821 -> T-822 -> T-823 -> T-824 -> T-825` (architecture/spec extension) + `T-826 -> T-827 -> T-828 -> T-829 -> T-830 -> T-831 -> T-832 -> T-833 -> T-834 -> T-835` (scroll performance hardening) + `T-836 -> T-837 -> T-838 -> T-839 -> T-840` (scroll runtime acceleration follow-up)
 Last updated: `2026-03-02`
 
 ## Backlog
-1. None.
+1. `T-837` Pre-rasterized bitmap cache path for stable SVG/text during camera scrolling.
+2. `T-838` Frame-paced scroll scheduler (coalesced input to fixed render cadence updates).
+3. `T-839` Input ingestion/render decoupling via deterministic intent queue handoff.
+4. `T-840` Scroll performance validation pack (latency/jitter budgets + visual artifact regression gates).
 
 ## Ready
 1. None.
@@ -171,6 +174,18 @@ Last updated: `2026-03-02`
 - Added `tests/test_m008_perf_gate.py` for perf-gate contract coverage.
 - Added `.github/workflows/m008-perf-gate.yml` CI workflow gate for runtime tests + perf smoke budgets.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py tests/test_m008_perf_gate.py` (pass).
+- `PYTHONPATH=. uv run python ops/ci/m008_perf_gate.py --samples 60 --budget-p95-ms 40 --budget-jitter-ms 25` (pass).
+31. `T-836` Shift-blit camera scroll compose path (translate previous frame + redraw exposed strips).
+- Evidence:
+- `luvatrix_core/core/window_matrix.py` now supports `ShiftFrame` write op for deterministic matrix translation with fill color.
+- `luvatrix_core/core/app_runtime.py` now accepts `scroll_shift` hints and emits `ShiftFrame + ReplaceRect` batches on dirty-frame finalize.
+- `luvatrix_ui/planes_runtime.py` now emits corrected scroll-direction strip dirty rects and shift hints for plane-scroll translation.
+- Added/updated coverage:
+  - `tests/test_window_matrix_protocol.py` (`ShiftFrame` semantics),
+  - `tests/test_app_runtime.py` (shift+patch UI finalize path),
+  - `tests/test_planes_runtime.py` (partial-dirty + scroll-shift hint contract),
+  - `ops/ci/m008_perf_gate.py` context signature update.
+- `PYTHONPATH=. uv run pytest tests/test_window_matrix_protocol.py tests/test_app_runtime.py tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py tests/test_m008_perf_gate.py` (pass).
 - `PYTHONPATH=. uv run python ops/ci/m008_perf_gate.py --samples 60 --budget-p95-ms 40 --budget-jitter-ms 25` (pass).
 
 ## Done
@@ -530,4 +545,13 @@ Last updated: `2026-03-02`
 - `.github/workflows/m008-perf-gate.yml` CI gate workflow.
 189. `2026-03-02`: Verification rerun passed and `T-835` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py tests/test_m008_perf_gate.py`
+- `PYTHONPATH=. uv run python ops/ci/m008_perf_gate.py --samples 60 --budget-p95-ms 40 --budget-jitter-ms 25`
+190. `2026-03-02`: Added follow-up scroll acceleration chain in strict order: `T-836 -> T-837 -> T-838 -> T-839 -> T-840`.
+191. `2026-03-02`: `T-836` started (`Backlog` -> `In Progress`) for shift-blit camera scroll compose.
+192. `2026-03-02`: Implemented shift-blit compose path:
+- added `ShiftFrame` operation in `WindowMatrix`,
+- wired `AppContext.begin_ui_frame(..., scroll_shift=...)` and shift+patch finalize path,
+- restored and corrected scroll-direction dirty strip mapping in `planes_runtime`.
+193. `2026-03-02`: Verification rerun passed and `T-836` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_window_matrix_protocol.py tests/test_app_runtime.py tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py tests/test_m008_perf_gate.py`
 - `PYTHONPATH=. uv run python ops/ci/m008_perf_gate.py --samples 60 --budget-p95-ms 40 --budget-jitter-ms 25`
