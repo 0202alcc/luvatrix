@@ -133,6 +133,12 @@ Last updated: `2026-03-02`
   - verification:
     - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
     - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
+- Hole + blend refinement follow-up (`2026-03-02`):
+  - section cut now reveals a plain white underlay surface (`assets/underlay_content.svg`) so it reads as a true square hole.
+  - gradient smoothness improved by increasing vertical band density and color interpolation steps in `assets/index_plane_gradient.svg`.
+  - verification:
+    - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
+    - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
 21. `T-826` Frame-time instrumentation pack (input/hit-test/scroll-update/cull/mount/raster/present + counters).
 - Evidence:
 - `luvatrix_ui/planes_runtime.py` now records per-frame timing buckets (`input`, `hit_test`, `scroll_update`, `cull`, `mount`, `raster`, `present`, `frame_total`) plus frame counters (`events_polled`, `events_processed`, `scroll_events`, `hit_test_calls`) in `state["perf"]`.
@@ -604,5 +610,12 @@ Last updated: `2026-03-02`
 - replaced unsupported gradient primitive with stepped solid-band gradient asset,
 - snapped section-cut geometry to integer pixels to avoid cutout seam lines.
 207. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
+208. `2026-03-02`: Reviewer requested true hole behavior in section cut and smoother gradient blend; `T-810` moved from `Review` to `In Progress`.
+209. `2026-03-02`: Updated visual assets:
+- `assets/underlay_content.svg` changed to solid white fill for hole readability,
+- `assets/index_plane_gradient.svg` refined to denser stepped blend.
+210. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
