@@ -157,6 +157,50 @@
       "props": {"text": "Bottom-right world edge", "color_hex": "#f5fbff", "font_size_px": 24}
     },
     {
+      "id": "inset_canvas",
+      "type": "svg",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 39,
+      "blend_mode": "absolute_rgba",
+      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1400}, "height": {"unit": "px", "value": 900}},
+      "z_index": 39,
+      "props": {"svg": "assets/inset_canvas.svg", "camera_fixed": true}
+    },
+    {
+      "id": "inset_viewport",
+      "type": "viewport",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 41,
+      "blend_mode": "absolute_rgba",
+      "position": {"x": 470, "y": 140, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 620}, "height": {"unit": "px", "value": 360}},
+      "z_index": 41,
+      "props": {
+        "clip": true,
+        "content_ref": "inset_canvas",
+        "scroll": {"x": 0, "y": 0},
+        "scroll_speed": {"x": 1.0, "y": 1.0},
+        "camera_fixed": true
+      }
+    },
+    {
+      "id": "inset_label",
+      "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 42,
+      "blend_mode": "absolute_rgba",
+      "position": {"x": 470, "y": 108, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 620}, "height": {"unit": "px", "value": 24}},
+      "z_index": 42,
+      "props": {
+        "text": "Inset viewport: scroll here first, then page scroll remainder",
+        "color_hex": "#ffe4bf",
+        "font_size_px": 16,
+        "camera_fixed": true
+      }
+    },
+    {
       "id": "title",
       "type": "text",
       "attachment_kind": "camera_overlay",
@@ -166,7 +210,7 @@
       "size": {"width": {"unit": "px", "value": 780}, "height": {"unit": "px", "value": 34}},
       "z_index": 40,
       "props": {
-        "text": "Planes v2 Full-Page Camera Scroll Demo",
+        "text": "Planes v2 Nested Scroll Demo",
         "color_hex": "#f5fbff",
         "font_size_px": 22,
         "align": "center",
@@ -183,7 +227,7 @@
       "size": {"width": {"unit": "px", "value": 1160}, "height": {"unit": "px", "value": 24}},
       "z_index": 40,
       "props": {
-        "text": "Wheel/trackpad scroll moves the plane camera. Components outside initial bounds become visible.",
+        "text": "Scroll over inset viewport to pan inset content; when saturated, remainder bubbles to full page camera scroll.",
         "color_hex": "#9eb8d8",
         "font_size_px": 15,
         "align": "center",

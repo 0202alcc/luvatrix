@@ -1,22 +1,9 @@
-<svg width="900" height="700" viewBox="0 0 900 700" xmlns="http://www.w3.org/2000/svg">
-  <rect x="0" y="0" width="900" height="700" fill="#261b1b"/>
-
-  <g stroke="#6d5040" stroke-width="2" opacity="0.5">
-    <line x1="0" y1="230" x2="900" y2="230"/>
-    <line x1="0" y1="470" x2="900" y2="470"/>
-    <line x1="300" y1="0" x2="300" y2="700"/>
-    <line x1="600" y1="0" x2="600" y2="700"/>
-  </g>
-
-  <rect x="40" y="50" width="230" height="170" rx="14" fill="#c2682a"/>
-  <rect x="340" y="80" width="300" height="220" rx="14" fill="#d8a23a"/>
-  <rect x="700" y="60" width="160" height="180" rx="14" fill="#e1c35c"/>
-  <rect x="80" y="320" width="280" height="220" rx="14" fill="#9f4f2f"/>
-  <rect x="430" y="320" width="360" height="250" rx="14" fill="#bf6f3d"/>
-  <circle cx="760" cy="560" r="92" fill="#d99343"/>
-
-  <g fill="#ffe9cf" font-family="Comic Mono, monospace" font-size="30">
-    <text x="30" y="36">INSET CANVAS (900 x 700)</text>
-    <text x="70" y="636">Independent nested viewport camera</text>
-  </g>
+<svg width="1400" height="900" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="1400" height="900" fill="#1b2430"/>
+  <rect x="40" y="40" width="360" height="220" fill="#3a7dbf"/>
+  <rect x="520" y="120" width="520" height="260" fill="#3f9ec2"/>
+  <rect x="1080" y="90" width="260" height="220" fill="#5869c9"/>
+  <rect x="120" y="430" width="620" height="320" fill="#457cb7"/>
+  <rect x="820" y="430" width="500" height="320" fill="#4da4c6"/>
+  <circle cx="1220" cy="760" r="120" fill="#8658c8"/>
 </svg>
