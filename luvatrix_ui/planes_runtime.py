@@ -988,21 +988,9 @@ class PlaneApp:
             return full
         if not plane_changed:
             return full
-        adx = int(math.ceil(abs(dx)))
-        ady = int(math.ceil(abs(dy)))
-        if adx >= view_w or ady >= view_h:
-            return full
-        rects: list[tuple[int, int, int, int]] = []
-        if dx > 0:
-            rects.append((0, 0, adx, view_h))
-        elif dx < 0:
-            rects.append((view_w - adx, 0, adx, view_h))
-        if dy > 0:
-            rects.append((0, 0, view_w, ady))
-        elif dy < 0:
-            rects.append((0, view_h - ady, view_w, ady))
-        normalized = self._normalize_local_dirty_rects(rects, view_w=view_w, view_h=view_h)
-        return normalized if normalized else full
+        # Scroll translation requires either matrix-shift compose or full-frame redraw.
+        # Until shift compose exists, force full redraw to prevent stale-pixel trails.
+        return full
 
     @staticmethod
     def _normalize_local_dirty_rects(

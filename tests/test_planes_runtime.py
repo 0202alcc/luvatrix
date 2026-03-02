@@ -747,7 +747,7 @@ class PlanesRuntimeTests(unittest.TestCase):
                 value = float(timing.get(key, 0.0))
                 self.assertGreaterEqual(value, 0.0)
 
-    def test_plane_runtime_uses_partial_dirty_rects_for_plane_scroll(self) -> None:
+    def test_plane_runtime_uses_full_dirty_rect_for_plane_scroll_until_shift_compose(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             plane_path = _build_plane_camera_scroll_file(Path(td))
             app = load_plane_app(plane_path, handlers={})
@@ -767,9 +767,9 @@ class PlanesRuntimeTests(unittest.TestCase):
             )
             app.loop(ctx, 0.016)
             perf = app.state.get("perf", {})
-            self.assertEqual(str(perf.get("compose_mode", "")), "partial_dirty")
-            self.assertGreaterEqual(int(perf.get("dirty_rect_count", 0)), 1)
-            self.assertLess(int(perf.get("dirty_rect_area_px", 320 * 180)), 320 * 180)
+            self.assertEqual(str(perf.get("compose_mode", "")), "full_frame")
+            self.assertEqual(int(perf.get("dirty_rect_count", 0)), 1)
+            self.assertEqual(int(perf.get("dirty_rect_area_px", 0)), 320 * 180)
 
     def test_plane_runtime_coalesces_scroll_events_and_preserves_phases(self) -> None:
         with tempfile.TemporaryDirectory() as td:
