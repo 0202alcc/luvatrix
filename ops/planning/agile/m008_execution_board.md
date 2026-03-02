@@ -6,11 +6,10 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-02`
 
 ## Backlog
-1. `T-831` Hit-test acceleration index (spatial partitioning).
-2. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
-3. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
-4. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
-5. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
+1. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
+2. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
+3. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
+4. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
 
 ## Ready
 1. None.
@@ -141,6 +140,13 @@ Last updated: `2026-03-02`
 - `luvatrix_ui/planes_runtime.py` now computes deterministic dirty regions, emits `compose_mode` telemetry (`full_frame` / `partial_dirty` / `idle_skip`), and skips compose work entirely when nothing changed.
 - `tests/test_planes_runtime.py` adds idle-skip and partial-dirty regression coverage; fake context updated for dirty-rect frame API.
 - `tests/test_planes_v2_poc_example.py` updated for idle-skip-compatible revision assertion semantics.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+26. `T-831` Hit-test acceleration index (spatial partitioning).
+- Evidence:
+- `luvatrix_ui/planes_runtime.py` now builds and reuses a deterministic spatial hit-test bucket index (cell-based partitioning) keyed by camera/viewport scroll state and active planes.
+- Event dispatch now uses bucket-filtered candidates for both direct hit target selection and viewport stack resolution, with index refresh on post-scroll retargeting.
+- Runtime perf counters now expose `hit_test_candidates_checked` and `hit_test_spatial_buckets`.
+- `tests/test_planes_runtime.py` validates new counter visibility in the frame instrumentation contract.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 
 ## Done
@@ -470,4 +476,11 @@ Last updated: `2026-03-02`
 - `luvatrix_core/core/app_runtime.py` now supports normalized per-frame `dirty_rects` and emits `ReplaceRect` operations for partial present.
 - `luvatrix_ui/planes_runtime.py` now computes deterministic dirty rectangles, supports compose idle-skip, and records compose-mode / dirty-area telemetry.
 174. `2026-03-02`: Verification rerun passed and `T-830` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+175. `2026-03-02`: `T-831` started (`Backlog` -> `In Progress`) for hit-test acceleration index implementation.
+176. `2026-03-02`: Implemented spatial partition hit-test path in `luvatrix_ui/planes_runtime.py`:
+- deterministic cell-bucket index keyed by scroll/active-plane signature,
+- bucket-scoped candidate checks for event hit testing and viewport stack resolution,
+- perf counters for candidate checks and spatial bucket count.
+177. `2026-03-02`: Verification rerun passed and `T-831` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`

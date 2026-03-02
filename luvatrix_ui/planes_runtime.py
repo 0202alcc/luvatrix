@@ -73,6 +73,10 @@ class PlaneApp:
             "viewport_track_v": self._build_scrollbar_markup(10, 100, "#1f344d"),
             "viewport_thumb_v": self._build_scrollbar_markup(10, 100, "#89b7e6"),
         }
+        self._hit_grid_cell_px = 96
+        self._hit_spatial_index: dict[tuple[int, int], list[Any]] = {}
+        self._hit_index_all: list[Any] = []
+        self._hit_index_signature: tuple[tuple[float, float], tuple[tuple[str, float, float], ...], tuple[str, ...]] | None = None
         self._last_dirty_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]] | None = None
         self._last_plane_scroll: tuple[float, float] | None = None
 
@@ -120,6 +124,8 @@ class PlaneApp:
                 "scroll_events": int(self._frame_counts.get("scroll_events", 0)),
                 "scroll_events_coalesced": int(self._frame_counts.get("scroll_events_coalesced", 0)),
                 "hit_test_calls": int(self._frame_counts.get("hit_test_calls", 0)),
+                "hit_test_candidates_checked": int(self._frame_counts.get("hit_test_candidates_checked", 0)),
+                "hit_test_spatial_buckets": int(self._frame_counts.get("hit_test_spatial_buckets", 0)),
                 "retained_components_reused": int(self._frame_counts.get("retained_components_reused", 0)),
                 "retained_components_new": int(self._frame_counts.get("retained_components_new", 0)),
                 "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
@@ -247,6 +253,8 @@ class PlaneApp:
             "scroll_events": int(self._frame_counts.get("scroll_events", 0)),
             "scroll_events_coalesced": int(self._frame_counts.get("scroll_events_coalesced", 0)),
             "hit_test_calls": int(self._frame_counts.get("hit_test_calls", 0)),
+            "hit_test_candidates_checked": int(self._frame_counts.get("hit_test_candidates_checked", 0)),
+            "hit_test_spatial_buckets": int(self._frame_counts.get("hit_test_spatial_buckets", 0)),
             "retained_components_reused": int(self._frame_counts.get("retained_components_reused", 0)),
             "retained_components_new": int(self._frame_counts.get("retained_components_new", 0)),
             "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
@@ -299,6 +307,7 @@ class PlaneApp:
         self._frame_counts["events_polled"] = int(len(events))
         if not events:
             return
+        self._refresh_hit_test_index()
         scroll_dx = 0.0
         scroll_dy = 0.0
         scroll_count = 0
@@ -358,6 +367,7 @@ class PlaneApp:
             if scroll_momentum_phase is not None:
                 coalesced_payload["momentum_phase"] = scroll_momentum_phase
             self._dispatch_viewport_scroll(coalesced_payload, intent)
+            self._refresh_hit_test_index(force=True)
             hook = _hook_for_event("scroll", coalesced_payload)
             target_component = self._pick_component_for_event(coalesced_payload)
             if hook is not None and target_component is not None:
@@ -390,9 +400,10 @@ class PlaneApp:
             self._add_perf_ns("hit_test_ns", time.perf_counter_ns() - hit_start_ns)
             return None
         x, y = xy
-        for component in self._ui_page.ordered_components_for_hit_test():
-            if not self._component_is_active(component):
-                continue
+        for component in self._hit_candidates_for_point(x, y):
+            self._frame_counts["hit_test_candidates_checked"] = int(
+                self._frame_counts.get("hit_test_candidates_checked", 0)
+            ) + 1
             bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
             resolved_x, resolved_y = self._resolved_position(component)
             if resolved_x <= x <= resolved_x + bounds.width and resolved_y <= y <= resolved_y + bounds.height:
@@ -405,9 +416,10 @@ class PlaneApp:
         if self._ui_page is None:
             return []
         stack: list[Any] = []
-        for component in self._ui_page.ordered_components_for_hit_test():
-            if not self._component_is_active(component):
-                continue
+        for component in self._hit_candidates_for_point(x, y):
+            self._frame_counts["hit_test_candidates_checked"] = int(
+                self._frame_counts.get("hit_test_candidates_checked", 0)
+            ) + 1
             if component.component_type != "viewport":
                 continue
             bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
@@ -740,10 +752,72 @@ class PlaneApp:
             "scroll_events": 0,
             "scroll_events_coalesced": 0,
             "hit_test_calls": 0,
+            "hit_test_candidates_checked": 0,
+            "hit_test_spatial_buckets": 0,
             "retained_components_reused": 0,
             "retained_components_new": 0,
             "camera_overlay_scrollbar_primitives": 0,
         }
+
+    def _hit_index_active_planes(self) -> tuple[str, ...]:
+        if self._ui_page is None or self._ui_page.ir_version != "planes-v2":
+            return ()
+        raw = getattr(self._ui_page, "active_plane_ids", ())
+        if not isinstance(raw, (list, tuple, set)):
+            return ()
+        return tuple(sorted(str(item) for item in raw if isinstance(item, str)))
+
+    def _hit_index_signature_current(
+        self,
+    ) -> tuple[tuple[float, float], tuple[tuple[str, float, float], ...], tuple[str, ...]]:
+        return (self._plane_scroll_position(), self._viewport_scroll_snapshot(), self._hit_index_active_planes())
+
+    def _refresh_hit_test_index(self, *, force: bool = False) -> None:
+        if self._ui_page is None:
+            self._hit_spatial_index = {}
+            self._hit_index_all = []
+            self._hit_index_signature = None
+            return
+        signature = self._hit_index_signature_current()
+        if not force and self._hit_index_signature == signature:
+            self._frame_counts["hit_test_spatial_buckets"] = int(len(self._hit_spatial_index))
+            return
+        ordered = [component for component in self._ui_page.ordered_components_for_hit_test() if self._component_is_active(component)]
+        self._hit_index_all = ordered
+        buckets: dict[tuple[int, int], list[Any]] = {}
+        cell_px = max(1, int(self._hit_grid_cell_px))
+        for component in ordered:
+            bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
+            width = float(bounds.width)
+            height = float(bounds.height)
+            if width <= 0.0 or height <= 0.0:
+                continue
+            x, y = self._resolved_position(component)
+            min_cx = int(math.floor(x / cell_px))
+            max_cx = int(math.floor((x + width) / cell_px))
+            min_cy = int(math.floor(y / cell_px))
+            max_cy = int(math.floor((y + height) / cell_px))
+            for cx in range(min_cx, max_cx + 1):
+                for cy in range(min_cy, max_cy + 1):
+                    key = (cx, cy)
+                    if key not in buckets:
+                        buckets[key] = []
+                    buckets[key].append(component)
+        self._hit_spatial_index = buckets
+        self._hit_index_signature = signature
+        self._frame_counts["hit_test_spatial_buckets"] = int(len(self._hit_spatial_index))
+
+    def _hit_candidates_for_point(self, x: float, y: float) -> list[Any]:
+        if self._ui_page is None:
+            return []
+        self._refresh_hit_test_index()
+        cell_px = max(1, int(self._hit_grid_cell_px))
+        cx = int(math.floor(float(x) / cell_px))
+        cy = int(math.floor(float(y) / cell_px))
+        candidates = self._hit_spatial_index.get((cx, cy))
+        if candidates is not None:
+            return candidates
+        return self._hit_index_all
 
     def _current_dirty_signature(self) -> tuple[str, str | None, tuple[tuple[str, float, float], ...]]:
         theme = str(self.state.get("active_theme", "default"))
