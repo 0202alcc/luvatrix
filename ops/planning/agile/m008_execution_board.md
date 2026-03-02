@@ -121,6 +121,12 @@ Last updated: `2026-03-02`
   - verification:
     - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
     - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
+- Centering correction follow-up (`2026-03-02`):
+  - section-cut placement now computed at init using exact matrix geometry so the square is centered against full `100vw x 300vh` plane bounds.
+  - added explicit regression test: `test_section_cut_is_centered_against_100vw_by_300vh_plane`.
+  - verification:
+    - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
+    - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
 21. `T-826` Frame-time instrumentation pack (input/hit-test/scroll-update/cull/mount/raster/present + counters).
 - Evidence:
 - `luvatrix_ui/planes_runtime.py` now records per-frame timing buckets (`input`, `hit_test`, `scroll_update`, `cull`, `mount`, `raster`, `present`, `frame_total`) plus frame counters (`events_polled`, `events_processed`, `scroll_events`, `hit_test_calls`) in `state["perf"]`.
@@ -576,5 +582,14 @@ Last updated: `2026-03-02`
 198. `2026-03-02`: Reviewer requested ground-up foundation reset for demo shape; `T-810` moved from `Review` to `In Progress`.
 199. `2026-03-02`: Rebuilt `planes_v2_poc` foundation with single `index` page plane (`100vw x 300vh`), gradient background (`dark blue -> white`), and centered square section cut scaffold.
 200. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
+201. `2026-03-02`: Reviewer clarified section-cut must be centered against full plane bounds (`100vw x 300vh`); `T-810` moved from `Review` to `In Progress` for exact geometry correction.
+202. `2026-03-02`: Implemented deterministic init-time centering pass in `examples/app_protocol/planes_v2_poc/app_main.py`:
+- computes `plane_h = 3 * window_h`,
+- computes square side from viewport height baseline,
+- applies centered `x/y` and equal `width/height` to `section_cut` and `section_cut_frame`.
+203. `2026-03-02`: Added centering regression test in `tests/test_planes_v2_poc_example.py`.
+204. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`

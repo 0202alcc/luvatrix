@@ -68,6 +68,39 @@ class PlanesV2PocExampleTests(unittest.TestCase):
         self.assertIsNotNone(app._ui_page)  # type: ignore[attr-defined]
         self.assertEqual(app._ui_page.ir_version, "planes-v2")  # type: ignore[attr-defined]
 
+    def test_section_cut_is_centered_against_100vw_by_300vh_plane(self) -> None:
+        app = create()
+
+        class _Ctx:
+            class _Matrix:
+                width = 160
+                height = 96
+
+            matrix = _Matrix()
+
+        app.init(_Ctx())
+        page = app._ui_page  # type: ignore[attr-defined]
+        self.assertIsNotNone(page)
+        assert page is not None
+        by_id = {component.component_id: component for component in page.components}
+        self.assertIn("section_cut", by_id)
+        self.assertIn("section_cut_frame", by_id)
+
+        expected_side = 0.4 * 96.0
+        expected_x = (160.0 - expected_side) / 2.0
+        expected_y = ((3.0 * 96.0) - expected_side) / 2.0
+
+        section_cut = by_id["section_cut"]
+        frame = by_id["section_cut_frame"]
+        self.assertAlmostEqual(section_cut.width, expected_side, places=6)
+        self.assertAlmostEqual(section_cut.height, expected_side, places=6)
+        self.assertAlmostEqual(section_cut.position.x, expected_x, places=6)
+        self.assertAlmostEqual(section_cut.position.y, expected_y, places=6)
+        self.assertAlmostEqual(frame.width, expected_side, places=6)
+        self.assertAlmostEqual(frame.height, expected_side, places=6)
+        self.assertAlmostEqual(frame.position.x, expected_x, places=6)
+        self.assertAlmostEqual(frame.position.y, expected_y, places=6)
+
 
 if __name__ == "__main__":
     unittest.main()

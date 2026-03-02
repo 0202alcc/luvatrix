@@ -36,8 +36,35 @@ def record_scroll(event_ctx: dict[str, Any], app_state: dict[str, Any]) -> None:
         app_state["last_scroll_dy"] = float(payload.get("delta_y", 0.0))
 
 
+def _apply_centered_section_cut_geometry(app: Any, ctx: Any) -> None:
+    width = float(getattr(ctx.matrix, "width", 0))
+    height = float(getattr(ctx.matrix, "height", 0))
+    if width <= 0 or height <= 0:
+        return
+
+    plane_height = 3.0 * height
+    side = 0.40 * height
+    x = (width - side) / 2.0
+    y = (plane_height - side) / 2.0
+
+    components = app._planes.get("components", [])
+    if not isinstance(components, list):
+        return
+    for component in components:
+        if not isinstance(component, dict):
+            continue
+        comp_id = component.get("id")
+        if comp_id not in {"section_cut", "section_cut_frame"}:
+            continue
+        component["position"] = {"x": x, "y": y, "frame": "screen_tl"}
+        component["size"] = {
+            "width": {"unit": "px", "value": side},
+            "height": {"unit": "px", "value": side},
+        }
+
+
 def create():
-    return load_plane_app(
+    app = load_plane_app(
         PLANES_JSON,
         handlers={
             "handlers::toggle_theme": toggle_theme,
@@ -46,3 +73,11 @@ def create():
         },
         strict=True,
     )
+    original_init = app.init
+
+    def _init_with_centered_section_cut(ctx: Any) -> None:
+        _apply_centered_section_cut_geometry(app, ctx)
+        original_init(ctx)
+
+    app.init = _init_with_centered_section_cut
+    return app
