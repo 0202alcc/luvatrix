@@ -75,6 +75,7 @@ See:
 - `docs/ui_ir_v2_compiler_upgrade_design.md` for the compiler pipeline design from Planes schema vNext to deterministic `planes-v2` IR
 - `docs/ui_ir_v2_runtime_pipeline_design.md` for the runtime compose pipeline design (ordering, section-cuts, overlay, and RGBA clamp semantics)
 - `docs/ui_ir_v2_performance_execution_plan.md` for culling/prefetch/invalidation/cache strategy and determinism-safe rollout phases
+- `docs/ui_ir_v2_native_hot_path_extraction_plan.md` for optional C/Rust extraction boundaries and parity-safe rollout gates for hot runtime loops
 - `docs/ui_ir_v2_demo_verification_plan.md` for end-to-end demo validation scenarios and the verification command/checklist pack
 - `docs/ui_ir_v2_rollout_compatibility_gate_plan.md` for phased rollout, compatibility gates, rollback controls, and release-readiness criteria
 - `docs/app_protocol_v2_superset_spec.md` for protocol-v2 runtime/adapters/process-lane contract

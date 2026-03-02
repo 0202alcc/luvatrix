@@ -6,8 +6,7 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-02`
 
 ## Backlog
-1. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
-2. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
+1. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
 
 ## Ready
 1. None.
@@ -159,6 +158,12 @@ Last updated: `2026-03-02`
 - Batch telemetry is exposed via `renderer_batch_groups` and `renderer_batch_state_switches` perf counters.
 - Existing render ordering remains stable (no cross-z reordering), while mount-path branch churn is reduced through grouped execution.
 - `tests/test_planes_runtime.py` instrumentation assertions include renderer batch perf fields.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+29. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
+- Evidence:
+- `docs/ui_ir_v2_native_hot_path_extraction_plan.md` created with extraction boundaries for dirty-compose, hit-index, layout transform, and scrollbar geometry hot loops.
+- Plan defines deterministic ABI contract, parity rollout strategy, fallback model, and exit criteria for native acceleration enablement.
+- `README.md` documentation index updated to include the new plan doc.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 
 ## Done
@@ -506,4 +511,8 @@ Last updated: `2026-03-02`
 181. `2026-03-02`: `T-833` started (`Backlog` -> `In Progress`) for renderer batch optimization pass.
 182. `2026-03-02`: Implemented deterministic contiguous draw batching in `luvatrix_ui/planes_runtime.py` for non-viewport primitives with batch-state telemetry (`renderer_batch_groups`, `renderer_batch_state_switches`).
 183. `2026-03-02`: Verification rerun passed and `T-833` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+184. `2026-03-02`: `T-834` started (`Backlog` -> `In Progress`) for native hot-path extraction planning.
+185. `2026-03-02`: Added `docs/ui_ir_v2_native_hot_path_extraction_plan.md` and linked it in `README.md` with deterministic ABI boundaries, parity gates, and rollout/fallback strategy.
+186. `2026-03-02`: Verification rerun passed and `T-834` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
