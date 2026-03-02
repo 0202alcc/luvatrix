@@ -1,0 +1,16 @@
+<svg width="1600" height="1800" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="1600" height="1800" fill="#1a2530"/>
+  <rect x="60" y="60" width="720" height="300" fill="#3a7dbf"/>
+  <rect x="860" y="120" width="660" height="260" fill="#3f9ec2"/>
+  <rect x="120" y="460" width="1260" height="260" fill="#4f78b8"/>
+  <rect x="220" y="820" width="1160" height="280" fill="#4da4c6"/>
+  <rect x="160" y="1210" width="900" height="320" fill="#c17f35"/>
+  <rect x="1080" y="1260" width="420" height="320" fill="#6d51c8"/>
+  <g fill="#deefff" font-family="Comic Mono, monospace" font-size="38">
+    <text x="72" y="48">LOWER PLANE CONTENT</text>
+    <text x="78" y="410">Independent viewport camera region</text>
+    <text x="84" y="770">Scroll inside section cut to pan this content</text>
+    <text x="90" y="1160">Outside section cut, main page receives scroll</text>
+    <text x="96" y="1670">Bottom marker</text>
+  </g>
+</svg>

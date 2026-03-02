@@ -2,7 +2,7 @@
   "planes_protocol_version": "0.2.0-dev",
   "app": {
     "id": "examples.planes_v2_poc",
-    "title": "Planes v2 Scrolling Demo",
+    "title": "Planes v2 Web Scroll + Section Cut Demo",
     "icon": "assets/logo.svg",
     "web": {
       "tab_title": null,
@@ -13,27 +13,34 @@
     {
       "id": "world",
       "default_frame": "screen_tl",
-      "background": {
-        "color": "#0d1720"
-      },
+      "background": {"color": "#0d1720"},
       "plane_global_z": 0,
       "position": {"x": 0, "y": 0, "frame": "screen_tl"},
       "size": {
-        "width": {"unit": "px", "value": 2400},
-        "height": {"unit": "px", "value": 1800}
+        "width": {"unit": "px", "value": 1800},
+        "height": {"unit": "px", "value": 4200}
       }
     },
     {
       "id": "content",
       "default_frame": "screen_tl",
-      "background": {
-        "color": "#0d1720"
-      },
-      "plane_global_z": 5,
+      "background": {"color": "#0d1720"},
+      "plane_global_z": 6,
       "position": {"x": 0, "y": 0, "frame": "screen_tl"},
       "size": {
-        "width": {"unit": "px", "value": 2400},
-        "height": {"unit": "px", "value": 1800}
+        "width": {"unit": "px", "value": 1800},
+        "height": {"unit": "px", "value": 4200}
+      }
+    },
+    {
+      "id": "detail",
+      "default_frame": "screen_tl",
+      "background": {"color": "#0d1720"},
+      "plane_global_z": 3,
+      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+      "size": {
+        "width": {"unit": "px", "value": 1800},
+        "height": {"unit": "px", "value": 4200}
       }
     }
   ],
@@ -41,16 +48,12 @@
     {
       "id": "main",
       "default": true,
-      "active_planes": ["world", "content"]
+      "active_planes": ["world", "detail", "content"]
     }
   ],
   "themes": {
-    "default": {
-      "background": "#0d1720"
-    },
-    "sunset": {
-      "background": "#6a1b2e"
-    }
+    "default": {"background": "#0d1720"},
+    "sunset": {"background": "#6a1b2e"}
   },
   "scripts": [
     {
@@ -68,208 +71,189 @@
       "component_local_z": -5,
       "blend_mode": "absolute_rgba",
       "position": {"x": 0, "y": 0, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 2400}, "height": {"unit": "px", "value": 1800}},
+      "size": {"width": {"unit": "px", "value": 1800}, "height": {"unit": "px", "value": 4200}},
       "z_index": -5,
-      "props": {"svg": "assets/scroll_canvas.svg"}
+      "props": {"svg": "assets/page_canvas.svg"}
     },
     {
-      "id": "panel_a",
+      "id": "page_title",
+      "type": "text",
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 20,
+      "blend_mode": "absolute_rgba",
+      "position": {"x": 120, "y": 88, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1500}, "height": {"unit": "px", "value": 46}},
+      "z_index": 20,
+      "props": {
+        "text": "Scrollable Page Demo (main plane camera)",
+        "color_hex": "#f5fbff",
+        "font_size_px": 30
+      }
+    },
+    {
+      "id": "page_subtitle",
+      "type": "text",
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 20,
+      "blend_mode": "absolute_rgba",
+      "position": {"x": 120, "y": 142, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1650}, "height": {"unit": "px", "value": 30}},
+      "z_index": 20,
+      "props": {
+        "text": "Scroll up/down anywhere on the page. In the section cut, wheel input scrolls the lower plane only.",
+        "color_hex": "#9eb8d8",
+        "font_size_px": 18
+      }
+    },
+    {
+      "id": "hero_block",
       "type": "svg",
       "attachment_kind": "plane",
       "attach_to": "content",
-      "component_local_z": 2,
+      "component_local_z": 6,
       "blend_mode": "absolute_rgba",
-      "position": {"x": 120, "y": 180, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 760}, "height": {"unit": "px", "value": 420}},
-      "z_index": 2,
+      "position": {"x": 120, "y": 220, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1480}, "height": {"unit": "px", "value": 380}},
+      "z_index": 6,
       "props": {"svg": "assets/blue_rect.svg"}
     },
     {
-      "id": "panel_b",
+      "id": "copy_block_top",
       "type": "svg",
       "attachment_kind": "plane",
       "attach_to": "content",
-      "component_local_z": 2,
+      "component_local_z": 6,
       "blend_mode": "absolute_rgba",
-      "position": {"x": 1080, "y": 220, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 900}, "height": {"unit": "px", "value": 460}},
-      "z_index": 2,
+      "position": {"x": 180, "y": 700, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1320}, "height": {"unit": "px", "value": 300}},
+      "z_index": 6,
       "props": {"svg": "assets/teal_rect.svg"}
     },
     {
-      "id": "panel_c",
+      "id": "copy_block_mid",
       "type": "svg",
       "attachment_kind": "plane",
       "attach_to": "content",
-      "component_local_z": 2,
+      "component_local_z": 6,
       "blend_mode": "absolute_rgba",
-      "position": {"x": 1640, "y": 1020, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 700}, "height": {"unit": "px", "value": 420}},
-      "z_index": 2,
-      "props": {"svg": "assets/orange_rect.svg"}
-    },
-    {
-      "id": "panel_d",
-      "type": "svg",
-      "attachment_kind": "plane",
-      "attach_to": "content",
-      "component_local_z": 2,
-      "blend_mode": "absolute_rgba",
-      "position": {"x": 260, "y": 1220, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 820}, "height": {"unit": "px", "value": 460}},
-      "z_index": 2,
+      "position": {"x": 220, "y": 1100, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1260}, "height": {"unit": "px", "value": 260}},
+      "z_index": 6,
       "props": {"svg": "assets/green_rect.svg"}
     },
     {
-      "id": "world_label_top",
+      "id": "section_cut_title",
       "type": "text",
       "attachment_kind": "plane",
       "attach_to": "content",
-      "component_local_z": 6,
+      "component_local_z": 24,
       "blend_mode": "absolute_rgba",
-      "position": {"x": 80, "y": 70, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 640}, "height": {"unit": "px", "value": 32}},
-      "z_index": 6,
-      "props": {"text": "World origin area (0,0)", "color_hex": "#d4ebff", "font_size_px": 24}
+      "position": {"x": 180, "y": 1520, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1500}, "height": {"unit": "px", "value": 30}},
+      "z_index": 24,
+      "props": {
+        "text": "Section cut: lower plane scrolls only while pointer is inside this viewport",
+        "color_hex": "#ffe4bf",
+        "font_size_px": 20
+      }
     },
     {
-      "id": "world_label_far_right",
-      "type": "text",
-      "attachment_kind": "plane",
-      "attach_to": "content",
-      "component_local_z": 6,
-      "blend_mode": "absolute_rgba",
-      "position": {"x": 1760, "y": 180, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 600}, "height": {"unit": "px", "value": 32}},
-      "z_index": 6,
-      "props": {"text": "Far right component zone", "color_hex": "#ffe9cf", "font_size_px": 24}
-    },
-    {
-      "id": "world_label_bottom",
-      "type": "text",
-      "attachment_kind": "plane",
-      "attach_to": "content",
-      "component_local_z": 6,
-      "blend_mode": "absolute_rgba",
-      "position": {"x": 1700, "y": 1700, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 640}, "height": {"unit": "px", "value": 32}},
-      "z_index": 6,
-      "props": {"text": "Bottom-right world edge", "color_hex": "#f5fbff", "font_size_px": 24}
-    },
-    {
-      "id": "inset_canvas",
+      "id": "detail_canvas",
       "type": "svg",
-      "attachment_kind": "camera_overlay",
-      "component_local_z": 39,
+      "attachment_kind": "plane",
+      "attach_to": "detail",
+      "component_local_z": 4,
       "blend_mode": "absolute_rgba",
       "position": {"x": 0, "y": 0, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 1400}, "height": {"unit": "px", "value": 900}},
-      "z_index": 39,
-      "props": {"svg": "assets/inset_canvas.svg", "camera_fixed": true}
+      "size": {"width": {"unit": "px", "value": 1600}, "height": {"unit": "px", "value": 1800}},
+      "z_index": 4,
+      "props": {"svg": "assets/section_cut_content.svg"}
     },
     {
-      "id": "inset_viewport",
+      "id": "section_cut_viewport",
       "type": "viewport",
-      "attachment_kind": "camera_overlay",
-      "component_local_z": 41,
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 28,
       "blend_mode": "absolute_rgba",
-      "position": {"x": 470, "y": 140, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 620}, "height": {"unit": "px", "value": 360}},
-      "z_index": 41,
+      "position": {"x": 180, "y": 1580, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1240}, "height": {"unit": "px", "value": 450}},
+      "z_index": 28,
       "props": {
         "clip": true,
-        "content_ref": "inset_canvas",
+        "content_ref": "detail_canvas",
         "scroll": {"x": 0, "y": 0},
-        "scroll_speed": {"x": 1.0, "y": 1.0},
-        "camera_fixed": true
+        "scroll_speed": {"x": 1.0, "y": 1.0}
       }
     },
     {
-      "id": "inset_label",
+      "id": "section_help",
       "type": "text",
-      "attachment_kind": "camera_overlay",
-      "component_local_z": 42,
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 29,
       "blend_mode": "absolute_rgba",
-      "position": {"x": 470, "y": 108, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 620}, "height": {"unit": "px", "value": 24}},
-      "z_index": 42,
+      "position": {"x": 190, "y": 2048, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1500}, "height": {"unit": "px", "value": 24}},
+      "z_index": 29,
       "props": {
-        "text": "Inset viewport: scroll here first, then page scroll remainder",
-        "color_hex": "#ffe4bf",
-        "font_size_px": 16,
-        "camera_fixed": true
+        "text": "Move pointer outside this cutout to return to page scrolling.",
+        "color_hex": "#d6ecff",
+        "font_size_px": 16
       }
     },
     {
-      "id": "title",
-      "type": "text",
-      "attachment_kind": "camera_overlay",
-      "component_local_z": 40,
-      "blend_mode": "absolute_rgba",
-      "position": {"x": 0, "y": 18, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 780}, "height": {"unit": "px", "value": 34}},
-      "z_index": 40,
-      "props": {
-        "text": "Planes v2 Nested Scroll Demo",
-        "color_hex": "#f5fbff",
-        "font_size_px": 22,
-        "align": "center",
-        "camera_fixed": true
-      }
-    },
-    {
-      "id": "subtitle",
-      "type": "text",
-      "attachment_kind": "camera_overlay",
-      "component_local_z": 40,
-      "blend_mode": "absolute_rgba",
-      "position": {"x": 0, "y": 52, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 1160}, "height": {"unit": "px", "value": 24}},
-      "z_index": 40,
-      "props": {
-        "text": "Scroll over inset viewport to pan inset content; when saturated, remainder bubbles to full page camera scroll.",
-        "color_hex": "#9eb8d8",
-        "font_size_px": 15,
-        "align": "center",
-        "camera_fixed": true
-      }
-    },
-    {
-      "id": "reset_button_bg",
+      "id": "copy_block_lower_1",
       "type": "svg",
-      "attachment_kind": "camera_overlay",
-      "component_local_z": 45,
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 6,
       "blend_mode": "absolute_rgba",
-      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 260}, "height": {"unit": "px", "value": 52}},
-      "z_index": 45,
-      "functions": {"on_press_single": "handlers::reset_scroll"},
-      "props": {
-        "svg": "assets/button_bg.svg",
-        "align": "center",
-        "v_align": "bottom",
-        "margin_bottom_px": 20,
-        "camera_fixed": true
-      }
+      "position": {"x": 180, "y": 2190, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1320}, "height": {"unit": "px", "value": 340}},
+      "z_index": 6,
+      "props": {"svg": "assets/orange_rect.svg"}
     },
     {
-      "id": "reset_button",
-      "type": "text",
-      "attachment_kind": "camera_overlay",
-      "component_local_z": 46,
+      "id": "copy_block_lower_2",
+      "type": "svg",
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 6,
       "blend_mode": "absolute_rgba",
-      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 260}, "height": {"unit": "px", "value": 52}},
-      "z_index": 46,
-      "functions": {"on_press_single": "handlers::reset_scroll"},
+      "position": {"x": 240, "y": 2660, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1260}, "height": {"unit": "px", "value": 370}},
+      "z_index": 6,
+      "props": {"svg": "assets/teal_rect.svg"}
+    },
+    {
+      "id": "copy_block_lower_3",
+      "type": "svg",
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 6,
+      "blend_mode": "absolute_rgba",
+      "position": {"x": 160, "y": 3180, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1380}, "height": {"unit": "px", "value": 420}},
+      "z_index": 6,
+      "props": {"svg": "assets/blue_rect.svg"}
+    },
+    {
+      "id": "bottom_label",
+      "type": "text",
+      "attachment_kind": "plane",
+      "attach_to": "content",
+      "component_local_z": 24,
+      "blend_mode": "absolute_rgba",
+      "position": {"x": 200, "y": 3680, "frame": "screen_tl"},
+      "size": {"width": {"unit": "px", "value": 1400}, "height": {"unit": "px", "value": 30}},
+      "z_index": 24,
       "props": {
-        "text": "Reset Scroll",
-        "color_hex": "#ffffff",
-        "font_size_px": 18,
-        "align": "center",
-        "v_align": "bottom",
-        "margin_bottom_px": 20,
-        "camera_fixed": true
+        "text": "Bottom of page. Camera scroll confirms full-page vertical behavior.",
+        "color_hex": "#f5fbff",
+        "font_size_px": 20
       }
     }
   ]

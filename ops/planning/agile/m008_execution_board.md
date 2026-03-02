@@ -100,6 +100,11 @@ Last updated: `2026-03-02`
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 8 --fps 60` (pass).
 - Demo: `examples/app_protocol/planes_v2_poc` uses full-plane camera scrolling with global bottom/right plane scrollbars indicating current camera position and remaining page extent.
+- 2026-03-02 refinement: `planes_v2_poc` now models a web-like vertical page with a mid-page section-cut viewport.
+- In this viewport, nested lower-plane content scrolls only when pointer is inside the section cut; outside it, wheel/trackpad scroll applies to the main page camera.
+- Verification for refinement:
+  - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
+  - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
 - Follow-up optimization pass:
 - added deterministic camera-region culling + prefetch margin handling and SVG markup caching in `luvatrix_ui/planes_runtime.py`,
 - added regression coverage for offscreen culling and cache reuse in `tests/test_planes_runtime.py`,
@@ -555,3 +560,9 @@ Last updated: `2026-03-02`
 193. `2026-03-02`: Verification rerun passed and `T-836` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_window_matrix_protocol.py tests/test_app_runtime.py tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py tests/test_m008_perf_gate.py`
 - `PYTHONPATH=. uv run python ops/ci/m008_perf_gate.py --samples 60 --budget-p95-ms 40 --budget-jitter-ms 25`
+194. `2026-03-02`: Reviewer-requested `planes_v2_poc` interaction-model rework started; `T-810` moved from `Review` to `In Progress` to enforce web-like main-page scrolling plus section-cut nested scrolling.
+195. `2026-03-02`: Reworked `examples/app_protocol/planes_v2_poc/plane.json` into a single-page vertical scroll surface with a mid-page viewport section cut backed by lower-plane content (`detail_canvas` -> `section_cut_content.svg`).
+196. `2026-03-02`: Updated `tests/test_planes_v2_poc_example.py` metadata assertions for renamed demo (`Planes v2 Web Scroll + Section Cut Demo`).
+197. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
