@@ -1,28 +1,36 @@
 {
-  "planes_protocol_version": "0.1.0",
+  "planes_protocol_version": "0.2.0-dev",
   "app": {
     "id": "examples.planes_v2_poc",
-    "title": "Planes v2 Theme Demo",
+    "title": "Planes v2 Index Plane Foundation",
     "icon": "assets/logo.svg",
     "web": {
       "tab_title": null,
       "tab_icon": null
     }
   },
-  "plane": {
-    "id": "main",
-    "default_frame": "screen_tl",
-    "background": {
-      "color": "#0d1720"
+  "planes": [
+    {
+      "id": "index",
+      "default_frame": "screen_tl",
+      "background": {"color": "#0d1720"},
+      "plane_global_z": 0,
+      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+      "size": {
+        "width": {"unit": "vw", "value": 100},
+        "height": {"unit": "vh", "value": 300}
+      }
     }
-  },
+  ],
+  "routes": [
+    {
+      "id": "main",
+      "default": true,
+      "active_planes": ["index"]
+    }
+  ],
   "themes": {
-    "default": {
-      "background": "#0d1720"
-    },
-    "sunset": {
-      "background": "#6a1b2e"
-    }
+    "default": {"background": "#0d1720"}
   },
   "scripts": [
     {
@@ -33,150 +41,73 @@
   ],
   "components": [
     {
-      "id": "underlay_orange",
+      "id": "index_gradient_bg",
       "type": "svg",
-      "position": {
-        "x": 130,
-        "y": 90,
-        "frame": "screen_tl"
-      },
+      "attachment_kind": "plane",
+      "attach_to": "index",
+      "component_local_z": 0,
+      "blend_mode": "absolute_rgba",
+      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
       "size": {
-        "width": {
-          "unit": "px",
-          "value": 700
-        },
-        "height": {
-          "unit": "px",
-          "value": 360
-        }
+        "width": {"unit": "vw", "value": 100},
+        "height": {"unit": "vh", "value": 300}
       },
-      "z_index": -1,
+      "z_index": 0,
+      "props": {"svg": "assets/index_plane_gradient.svg"}
+    },
+    {
+      "id": "foundation_label",
+      "type": "text",
+      "attachment_kind": "plane",
+      "attach_to": "index",
+      "component_local_z": 30,
+      "blend_mode": "absolute_rgba",
+      "position": {"x": 6, "y": 8, "frame": "screen_tl"},
+      "size": {
+        "width": {"unit": "vw", "value": 88},
+        "height": {"unit": "vh", "value": 4}
+      },
+      "z_index": 30,
       "props": {
-        "svg": "assets/orange_rect.svg"
+        "text": "Index Plane: 100vw x 300vh with centered section cut",
+        "color_hex": "#e9f4ff",
+        "font_size_px": 26
       }
     },
     {
-      "id": "title",
-      "type": "text",
-      "position": {
-        "x": 0,
-        "y": 20,
-        "frame": "screen_tl"
-      },
+      "id": "section_cut",
+      "type": "viewport",
+      "attachment_kind": "plane",
+      "attach_to": "index",
+      "component_local_z": 40,
+      "blend_mode": "absolute_rgba",
+      "position": {"x": 40, "y": 130, "frame": "screen_tl"},
       "size": {
-        "width": {
-          "unit": "px",
-          "value": 420
-        },
-        "height": {
-          "unit": "px",
-          "value": 32
-        }
+        "width": {"unit": "vh", "value": 40},
+        "height": {"unit": "vh", "value": 40}
       },
       "z_index": 40,
       "props": {
-        "text": "Planes v2 Protocol Demo",
-        "color_hex": "#f5fbff",
-        "hover_color_hex": "#4dd0ff",
-        "font_size_px": 22,
-        "align": "center",
-        "theme_colors": {
-          "default": "#f5fbff",
-          "sunset": "#ffe680"
-        }
-      }
-    },
-    {
-      "id": "cutout_viewport",
-      "type": "viewport",
-      "position": {
-        "x": 220,
-        "y": 140,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 520
-        },
-        "height": {
-          "unit": "px",
-          "value": 240
-        }
-      },
-      "z_index": 20,
-      "props": {
         "clip": true,
-        "content_ref": "underlay_orange",
-        "scroll": {
-          "x": 0,
-          "y": 0
-        }
+        "content_ref": "index_gradient_bg",
+        "scroll": {"x": 0, "y": 0},
+        "scroll_speed": {"x": 1.0, "y": 1.0}
       }
     },
     {
-      "id": "theme_button_bg",
+      "id": "section_cut_frame",
       "type": "svg",
-      "position": {
-        "x": 0,
-        "y": 0,
-        "frame": "screen_tl"
-      },
+      "attachment_kind": "plane",
+      "attach_to": "index",
+      "component_local_z": 45,
+      "blend_mode": "absolute_rgba",
+      "position": {"x": 40, "y": 130, "frame": "screen_tl"},
       "size": {
-        "width": {
-          "unit": "px",
-          "value": 260
-        },
-        "height": {
-          "unit": "px",
-          "value": 52
-        }
+        "width": {"unit": "vh", "value": 40},
+        "height": {"unit": "vh", "value": 40}
       },
       "z_index": 45,
-      "functions": {
-        "on_press_single": "handlers::toggle_theme"
-      },
-      "props": {
-        "svg": "assets/button_bg.svg",
-        "align": "center",
-        "v_align": "bottom",
-        "margin_bottom_px": 20
-      }
-    },
-    {
-      "id": "theme_button",
-      "type": "text",
-      "position": {
-        "x": 0,
-        "y": 0,
-        "frame": "screen_tl"
-      },
-      "size": {
-        "width": {
-          "unit": "px",
-          "value": 260
-        },
-        "height": {
-          "unit": "px",
-          "value": 52
-        }
-      },
-      "z_index": 46,
-      "functions": {
-        "on_press_single": "handlers::toggle_theme"
-      },
-      "props": {
-        "text": "Toggle Theme",
-        "color_hex": "#ffffff",
-        "font_size_px": 18,
-        "align": "center",
-        "v_align": "bottom",
-        "margin_bottom_px": 20,
-        "theme_colors": {
-          "default": "#ffffff",
-          "sunset": "#ffe680"
-        }
-      }
+      "props": {"svg": "assets/section_cut_frame.svg"}
     }
   ]
 }

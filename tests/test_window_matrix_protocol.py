@@ -13,6 +13,7 @@ from luvatrix_core.core.window_matrix import (
     ReplaceColumn,
     ReplaceRect,
     ReplaceRow,
+    ShiftFrame,
     WriteBatch,
     WindowMatrix,
 )
@@ -135,6 +136,22 @@ class WindowMatrixProtocolTests(unittest.TestCase):
         self.assertEqual(snap[2, 2, 0].item(), 12)
         self.assertEqual(snap[2, 3, 0].item(), 13)
         self.assertEqual(snap[0, 0, 0].item(), 0)
+
+    def test_shift_frame_translates_pixels_and_fills_exposed_region(self) -> None:
+        matrix = WindowMatrix(height=2, width=3)
+        base = torch.tensor(
+            [
+                [[1, 0, 0, 255], [2, 0, 0, 255], [3, 0, 0, 255]],
+                [[4, 0, 0, 255], [5, 0, 0, 255], [6, 0, 0, 255]],
+            ],
+            dtype=torch.uint8,
+        )
+        matrix.submit_write_batch(WriteBatch([FullRewrite(base)]))
+        fill = torch.tensor([9, 0, 0, 255], dtype=torch.uint8)
+        matrix.submit_write_batch(WriteBatch([ShiftFrame(dx=-1, dy=0, fill_rgba_4=fill)]))
+        snap = matrix.read_snapshot()
+        self.assertEqual(snap[0, :, 0].tolist(), [2, 3, 9])
+        self.assertEqual(snap[1, :, 0].tolist(), [5, 6, 9])
 
     def test_multiply_applies_transform_and_clamps(self) -> None:
         matrix = WindowMatrix(height=1, width=1)

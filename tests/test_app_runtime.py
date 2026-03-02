@@ -467,6 +467,31 @@ class AppRuntimeTests(unittest.TestCase):
         self.assertEqual(cmd.component_id, "logo")
         self.assertEqual((cmd.width, cmd.height), (48.0, 20.0))
 
+    def test_app_context_ui_frame_can_shift_then_patch_dirty_rects(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        matrix = WindowMatrix(2, 3)
+        base = torch.tensor(
+            [
+                [[1, 0, 0, 255], [2, 0, 0, 255], [3, 0, 0, 255]],
+                [[4, 0, 0, 255], [5, 0, 0, 255], [6, 0, 0, 255]],
+            ],
+            dtype=torch.uint8,
+        )
+        matrix.submit_write_batch(WriteBatch([FullRewrite(base)]))
+        renderer = _FakeUIRenderer(width=3, height=2)
+        ctx = AppContext(
+            matrix=matrix,
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write"},
+        )
+        ctx.begin_ui_frame(renderer, dirty_rects=[(2, 0, 1, 2)], scroll_shift=(-1, 0))
+        ctx.finalize_ui_frame()
+        snap = matrix.read_snapshot()
+        self.assertEqual(snap[0, :, 0].tolist(), [2, 3, 0])
+        self.assertEqual(snap[1, :, 0].tolist(), [5, 6, 0])
+
     def test_app_context_sensor_denied_without_sensor_capability(self) -> None:
         from luvatrix_core.core.app_runtime import AppContext
 

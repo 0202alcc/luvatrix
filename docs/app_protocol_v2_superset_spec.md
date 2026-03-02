@@ -28,6 +28,47 @@ Rules:
 2. default `transport` is `stdio_jsonl`.
 3. `kind = "process"` requires non-empty `command`.
 
+## Planes Capability and Version Signaling (M-008 extension)
+
+Optional `[planes]` table (recommended for protocol v2 apps using Planes):
+
+```toml
+[planes]
+schema_version = "0.2.0-dev"
+min_schema_version = "0.1.0"
+max_schema_version = "0.2.0-dev"
+required_features = ["multi_plane", "camera_overlay", "blend.delta_rgba"]
+optional_features = ["section_cuts", "route_activation", "perf.culling_hints"]
+```
+
+### Rules
+
+1. If `[planes]` is omitted, runtime assumes legacy Planes compatibility behavior.
+2. `schema_version` declares the app-authored schema target.
+3. Runtime MUST reject if active schema support is below `min_schema_version`.
+4. Runtime MUST reject if active schema support is above `max_schema_version`.
+5. Every item in `required_features` MUST be supported, otherwise fail startup.
+6. `optional_features` MAY be silently unavailable, but runtime SHOULD expose availability in diagnostics.
+
+### Feature Namespace (current draft)
+
+1. `multi_plane`
+2. `camera_overlay`
+3. `section_cuts`
+4. `blend.absolute_rgba`
+5. `blend.delta_rgba`
+6. `route_activation`
+7. `perf.culling_hints`
+
+### Backward Compatibility Mapping
+
+For v0 Planes payloads under protocol v2:
+
+1. Treat single `plane` as implicit `planes=[...]`.
+2. Map legacy `z_index` to local ordering in compatibility mode.
+3. Assume `blend.absolute_rgba` unless explicit override exists.
+4. Treat overlay-like components via compatibility shim when no explicit `attachment_kind` exists.
+
 ## Process Lane Wire Contract (Python-first)
 
 Transport: newline-delimited JSON messages on stdin/stdout.
@@ -64,3 +105,4 @@ Example app response:
 1. `CURRENT_PROTOCOL_VERSION = "2"`.
 2. `SUPPORTED_PROTOCOL_VERSIONS = {"1", "2"}`.
 3. Protocol `1` is accepted with deprecation warning.
+4. Planes capability/version checks are enforced only when `[planes]` metadata is present.

@@ -51,7 +51,28 @@ protocol_version = "2"
 max_runtime_protocol_version = "0"
 ```
 
-## 3. Deprecation Lifecycle Policy
+## 3. Planes Schema Capability Policy (vNext extension)
+
+When an app declares a `[planes]` table in `app.toml`, runtime applies additional compatibility checks:
+
+1. `planes.schema_version` identifies authored Planes schema target.
+2. `planes.min_schema_version` and `planes.max_schema_version` bound acceptable runtime schema support.
+3. `planes.required_features` must be fully satisfied or app startup is rejected.
+4. `planes.optional_features` may be unsupported without rejection.
+
+Recommended current feature identifiers:
+
+1. `multi_plane`
+2. `camera_overlay`
+3. `section_cuts`
+4. `blend.absolute_rgba`
+5. `blend.delta_rgba`
+6. `route_activation`
+7. `perf.culling_hints`
+
+If `[planes]` is absent, legacy compatibility mapping remains in effect.
+
+## 4. Deprecation Lifecycle Policy
 
 For future protocol revisions, use this lifecycle:
 
@@ -66,7 +87,7 @@ Governance requirements:
 2. add/refresh deterministic tests for acceptance, warnings, and rejection
 3. include explicit milestone task evidence before marking release-complete
 
-## 4. Migration Checklist
+## 5. Migration Checklist
 
 When bumping a first-party app to a new protocol version:
 
@@ -77,7 +98,13 @@ When bumping a first-party app to a new protocol version:
 5. run app smoke command for representative runtime path
 6. update app-level docs and runbook links
 
-## 5. Migration Example
+When adopting Planes schema vNext:
+
+1. add `[planes]` metadata (`schema_version`, bounds, required/optional features)
+2. confirm required feature set matches runtime support
+3. verify compatibility mapping for legacy payloads is not relied on implicitly
+
+## 6. Migration Example
 
 Before:
 
@@ -99,7 +126,22 @@ required_capabilities = ["window.write"]
 optional_capabilities = ["sensor.thermal"]
 ```
 
-## 6. Verification Commands
+Protocol v2 + Planes vNext example:
+
+```toml
+protocol_version = "2"
+min_runtime_protocol_version = "2"
+max_runtime_protocol_version = "2"
+
+[planes]
+schema_version = "0.2.0-dev"
+min_schema_version = "0.1.0"
+max_schema_version = "0.2.0-dev"
+required_features = ["multi_plane", "camera_overlay", "blend.delta_rgba"]
+optional_features = ["section_cuts", "route_activation"]
+```
+
+## 7. Verification Commands
 
 Compatibility and bounds checks:
 
@@ -111,4 +153,10 @@ Runtime integration coverage:
 
 ```bash
 uv run pytest tests/test_unified_runtime.py tests/test_app_runtime.py
+```
+
+Planes/runtime safety smoke for current M-008 track:
+
+```bash
+PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py
 ```

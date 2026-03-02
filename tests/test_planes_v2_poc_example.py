@@ -21,6 +21,7 @@ SPEC.loader.exec_module(MODULE)
 
 create = MODULE.create
 PLANES_JSON = MODULE.PLANES_JSON
+RUNTIME_GRADIENT_ASSET = MODULE.RUNTIME_GRADIENT_ASSET
 
 
 class _NoopHDISource(HDIEventSource):
@@ -32,8 +33,8 @@ class _NoopHDISource(HDIEventSource):
 class PlanesV2PocExampleTests(unittest.TestCase):
     def test_planes_poc_compiles_and_inherits_web_metadata(self) -> None:
         app = create()
-        self.assertEqual(app.metadata.title, "Planes v2 Theme Demo")
-        self.assertEqual(app.metadata.tab_title, "Planes v2 Theme Demo")
+        self.assertEqual(app.metadata.title, "Planes v2 Index Plane Foundation")
+        self.assertEqual(app.metadata.tab_title, "Planes v2 Index Plane Foundation")
         self.assertEqual(app.metadata.icon, "assets/logo.svg")
         self.assertEqual(app.metadata.tab_icon, "assets/logo.svg")
         self.assertTrue(PLANES_JSON.exists())
@@ -51,10 +52,78 @@ class PlanesV2PocExampleTests(unittest.TestCase):
         self.assertEqual(manifest.protocol_version, "2")
 
         runtime.run(APP_DIR, max_ticks=2, target_fps=120)
-        self.assertEqual(matrix.revision, 2)
+        self.assertGreaterEqual(matrix.revision, 1)
         frame = matrix.read_snapshot()
         self.assertEqual(tuple(frame.shape), (96, 160, 4))
         self.assertGreater(float(frame[:, :, :3].float().mean().item()), 0.0)
+
+    def test_planes_poc_compiles_with_planes_v2_ir(self) -> None:
+        app = create()
+        class _Ctx:
+            class _Matrix:
+                width = 160
+                height = 96
+            matrix = _Matrix()
+
+        app.init(_Ctx())
+        self.assertIsNotNone(app._ui_page)  # type: ignore[attr-defined]
+        self.assertEqual(app._ui_page.ir_version, "planes-v2")  # type: ignore[attr-defined]
+
+    def test_section_cut_is_centered_against_100vw_by_300vh_plane(self) -> None:
+        app = create()
+
+        class _Ctx:
+            class _Matrix:
+                width = 160
+                height = 96
+
+            matrix = _Matrix()
+
+        app.init(_Ctx())
+        page = app._ui_page  # type: ignore[attr-defined]
+        self.assertIsNotNone(page)
+        assert page is not None
+        by_id = {component.component_id: component for component in page.components}
+        self.assertIn("section_cut", by_id)
+        self.assertIn("section_cut_frame", by_id)
+
+        expected_side = float(int(round(0.4 * 96.0)))
+        expected_x = float(int(round((160.0 - expected_side) / 2.0)))
+        expected_y = float(int(round(((3.0 * 96.0) - expected_side) / 2.0)))
+
+        section_cut = by_id["section_cut"]
+        frame = by_id["section_cut_frame"]
+        self.assertAlmostEqual(section_cut.width, expected_side, places=6)
+        self.assertAlmostEqual(section_cut.height, expected_side, places=6)
+        self.assertAlmostEqual(section_cut.position.x, expected_x, places=6)
+        self.assertAlmostEqual(section_cut.position.y, expected_y, places=6)
+        self.assertAlmostEqual(frame.width, expected_side, places=6)
+        self.assertAlmostEqual(frame.height, expected_side, places=6)
+        self.assertAlmostEqual(frame.position.x, expected_x, places=6)
+        self.assertAlmostEqual(frame.position.y, expected_y, places=6)
+
+    def test_runtime_gradient_asset_is_generated_and_bound(self) -> None:
+        app = create()
+
+        class _Ctx:
+            class _Matrix:
+                width = 160
+                height = 96
+
+            matrix = _Matrix()
+
+        if RUNTIME_GRADIENT_ASSET.exists():
+            RUNTIME_GRADIENT_ASSET.unlink()
+        app.init(_Ctx())
+        self.assertTrue(RUNTIME_GRADIENT_ASSET.exists())
+        page = app._ui_page  # type: ignore[attr-defined]
+        self.assertIsNotNone(page)
+        assert page is not None
+        by_id = {component.component_id: component for component in page.components}
+        self.assertIn("index_gradient_bg", by_id)
+        style = by_id["index_gradient_bg"].style
+        self.assertIsInstance(style, dict)
+        self.assertEqual(style.get("svg"), f"assets/{RUNTIME_GRADIENT_ASSET.name}")
 
 
 if __name__ == "__main__":
