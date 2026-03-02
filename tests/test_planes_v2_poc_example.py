@@ -86,9 +86,9 @@ class PlanesV2PocExampleTests(unittest.TestCase):
         self.assertIn("section_cut", by_id)
         self.assertIn("section_cut_frame", by_id)
 
-        expected_side = 0.4 * 96.0
-        expected_x = (160.0 - expected_side) / 2.0
-        expected_y = ((3.0 * 96.0) - expected_side) / 2.0
+        expected_side = float(int(round(0.4 * 96.0)))
+        expected_x = float(int(round((160.0 - expected_side) / 2.0)))
+        expected_y = float(int(round(((3.0 * 96.0) - expected_side) / 2.0)))
 
         section_cut = by_id["section_cut"]
         frame = by_id["section_cut_frame"]

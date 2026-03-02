@@ -42,10 +42,10 @@ def _apply_centered_section_cut_geometry(app: Any, ctx: Any) -> None:
     if width <= 0 or height <= 0:
         return
 
-    plane_height = 3.0 * height
-    side = 0.40 * height
-    x = (width - side) / 2.0
-    y = (plane_height - side) / 2.0
+    plane_height = int(round(3.0 * height))
+    side = max(1, int(round(0.40 * height)))
+    x = int(round((width - float(side)) / 2.0))
+    y = int(round((float(plane_height) - float(side)) / 2.0))
 
     components = app._planes.get("components", [])
     if not isinstance(components, list):
@@ -58,8 +58,8 @@ def _apply_centered_section_cut_geometry(app: Any, ctx: Any) -> None:
             continue
         component["position"] = {"x": x, "y": y, "frame": "screen_tl"}
         component["size"] = {
-            "width": {"unit": "px", "value": side},
-            "height": {"unit": "px", "value": side},
+            "width": {"unit": "px", "value": int(side)},
+            "height": {"unit": "px", "value": int(side)},
         }
 
 

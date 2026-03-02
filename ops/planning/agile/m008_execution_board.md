@@ -127,6 +127,12 @@ Last updated: `2026-03-02`
   - verification:
     - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
     - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
+- Visual fidelity correction follow-up (`2026-03-02`):
+  - replaced unsupported SVG `linearGradient` background with deterministic stepped-band gradient (`assets/index_plane_gradient.svg`) to ensure visible dark-blue→white transition at runtime.
+  - pixel-snapped section-cut square geometry (`x/y/side`) to remove seam artifacts caused by sub-pixel cutout boundaries.
+  - verification:
+    - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
+    - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
 21. `T-826` Frame-time instrumentation pack (input/hit-test/scroll-update/cull/mount/raster/present + counters).
 - Evidence:
 - `luvatrix_ui/planes_runtime.py` now records per-frame timing buckets (`input`, `hit_test`, `scroll_update`, `cull`, `mount`, `raster`, `present`, `frame_total`) plus frame counters (`events_polled`, `events_processed`, `scroll_events`, `hit_test_calls`) in `state["perf"]`.
@@ -591,5 +597,12 @@ Last updated: `2026-03-02`
 - applies centered `x/y` and equal `width/height` to `section_cut` and `section_cut_frame`.
 203. `2026-03-02`: Added centering regression test in `tests/test_planes_v2_poc_example.py`.
 204. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
+205. `2026-03-02`: Reviewer reported seam artifact around centered square and missing gradient rendering; `T-810` moved from `Review` to `In Progress` for visual fidelity correction.
+206. `2026-03-02`: Implemented visual corrections:
+- replaced unsupported gradient primitive with stepped solid-band gradient asset,
+- snapped section-cut geometry to integer pixels to avoid cutout seam lines.
+207. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
