@@ -114,6 +114,13 @@ Last updated: `2026-03-02`
 - v2 schema/runtime path follow-up:
 - `examples/app_protocol/planes_v2_poc/plane.json` migrated to `planes-v2` shape (`planes[]`, routes, per-component attachment declarations),
 - runtime smoke and tests confirm `planes_v2_poc` compiles through `ir_version=planes-v2` while keeping visual behavior.
+- Foundation rebuild follow-up (`2026-03-02`):
+  - rebuilt demo from scratch as requested: `index` plane sized `100vw x 300vh`, top-to-bottom dark-blue→white gradient background, centered square section-cut viewport scaffold.
+  - added assets: `assets/index_plane_gradient.svg`, `assets/underlay_content.svg`, `assets/section_cut_frame.svg`.
+  - updated example metadata expectation in `tests/test_planes_v2_poc_example.py`.
+  - verification:
+    - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
+    - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
 21. `T-826` Frame-time instrumentation pack (input/hit-test/scroll-update/cull/mount/raster/present + counters).
 - Evidence:
 - `luvatrix_ui/planes_runtime.py` now records per-frame timing buckets (`input`, `hit_test`, `scroll_update`, `cull`, `mount`, `raster`, `present`, `frame_total`) plus frame counters (`events_polled`, `events_processed`, `scroll_events`, `hit_test_calls`) in `state["perf"]`.
@@ -564,5 +571,10 @@ Last updated: `2026-03-02`
 195. `2026-03-02`: Reworked `examples/app_protocol/planes_v2_poc/plane.json` into a single-page vertical scroll surface with a mid-page viewport section cut backed by lower-plane content (`detail_canvas` -> `section_cut_content.svg`).
 196. `2026-03-02`: Updated `tests/test_planes_v2_poc_example.py` metadata assertions for renamed demo (`Planes v2 Web Scroll + Section Cut Demo`).
 197. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
+198. `2026-03-02`: Reviewer requested ground-up foundation reset for demo shape; `T-810` moved from `Review` to `In Progress`.
+199. `2026-03-02`: Rebuilt `planes_v2_poc` foundation with single `index` page plane (`100vw x 300vh`), gradient background (`dark blue -> white`), and centered square section cut scaffold.
+200. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
