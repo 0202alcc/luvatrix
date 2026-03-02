@@ -11,21 +11,10 @@
   },
   "planes": [
     {
-      "id": "underlay",
-      "default_frame": "screen_tl",
-      "background": {"color": "#ffffff"},
-      "plane_global_z": 0,
-      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
-      "size": {
-        "width": {"unit": "vw", "value": 100},
-        "height": {"unit": "vh", "value": 300}
-      }
-    },
-    {
       "id": "index",
       "default_frame": "screen_tl",
       "background": {"color": "#0d1720"},
-      "plane_global_z": 10,
+      "plane_global_z": 0,
       "position": {"x": 0, "y": 0, "frame": "screen_tl"},
       "size": {
         "width": {"unit": "vw", "value": 100},
@@ -37,7 +26,7 @@
     {
       "id": "main",
       "default": true,
-      "active_planes": ["underlay", "index"]
+      "active_planes": ["index"]
     }
   ],
   "themes": {
@@ -89,7 +78,7 @@
       "id": "underlay_content",
       "type": "svg",
       "attachment_kind": "plane",
-      "attach_to": "underlay",
+      "attach_to": "index",
       "component_local_z": 1,
       "blend_mode": "absolute_rgba",
       "position": {"x": 0, "y": 0, "frame": "screen_tl"},

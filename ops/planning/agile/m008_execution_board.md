@@ -146,6 +146,13 @@ Last updated: `2026-03-02`
   - verification:
     - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
     - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
+- Plane simplification follow-up (`2026-03-02`):
+  - removed dedicated `underlay` plane from `planes_v2_poc`.
+  - set `index` plane `plane_global_z` to `0`.
+  - retained section-cut viewport behavior by attaching `underlay_content` to `index` and keeping `content_ref` wiring.
+  - verification:
+    - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
+    - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
 21. `T-826` Frame-time instrumentation pack (input/hit-test/scroll-update/cull/mount/raster/present + counters).
 - Evidence:
 - `luvatrix_ui/planes_runtime.py` now records per-frame timing buckets (`input`, `hit_test`, `scroll_update`, `cull`, `mount`, `raster`, `present`, `frame_total`) plus frame counters (`events_polled`, `events_processed`, `scroll_events`, `hit_test_calls`) in `state["perf"]`.
@@ -629,5 +636,10 @@ Last updated: `2026-03-02`
 211. `2026-03-02`: Reviewer requested explanation of lower-plane behavior and smoother blend path; `T-810` moved from `Review` to `In Progress` for gradient-programmability update.
 212. `2026-03-02`: Implemented runtime-generated gradient path in `examples/app_protocol/planes_v2_poc/app_main.py` and added binding regression coverage in `tests/test_planes_v2_poc_example.py`.
 213. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
+214. `2026-03-02`: Reviewer requested removing underlay plane and setting `index` z-order baseline; `T-810` moved from `Review` to `In Progress`.
+215. `2026-03-02`: Simplified scene graph to single plane (`index`, `plane_global_z=0`) and removed `underlay` plane from active route list.
+216. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
