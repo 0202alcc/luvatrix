@@ -6,10 +6,9 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-02`
 
 ## Backlog
-1. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
-2. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
-3. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
-4. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
+1. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
+2. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
+3. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
 
 ## Ready
 1. None.
@@ -147,6 +146,13 @@ Last updated: `2026-03-02`
 - Event dispatch now uses bucket-filtered candidates for both direct hit target selection and viewport stack resolution, with index refresh on post-scroll retargeting.
 - Runtime perf counters now expose `hit_test_candidates_checked` and `hit_test_spatial_buckets`.
 - `tests/test_planes_runtime.py` validates new counter visibility in the frame instrumentation contract.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+27. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
+- Evidence:
+- `luvatrix_ui/planes_runtime.py` now caches resolved component transforms and interaction bounds with deterministic cache keys and signature-based invalidation.
+- Layout cache invalidation is triggered only when required state changes (`plane_scroll`, active planes), otherwise cached layout/transform values are reused.
+- Runtime perf counters now expose `layout_cache_hits` and `layout_cache_misses`.
+- `tests/test_planes_runtime.py` validates layout cache counter visibility via runtime perf contract assertions.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 
 ## Done
@@ -483,4 +489,11 @@ Last updated: `2026-03-02`
 - bucket-scoped candidate checks for event hit testing and viewport stack resolution,
 - perf counters for candidate checks and spatial bucket count.
 177. `2026-03-02`: Verification rerun passed and `T-831` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+178. `2026-03-02`: `T-832` started (`Backlog` -> `In Progress`) for transform/layout cache invalidation implementation.
+179. `2026-03-02`: Added deterministic layout cache in `luvatrix_ui/planes_runtime.py`:
+- resolved-position and interaction-bounds caches with stable keys,
+- explicit invalidation on layout signature changes (`plane_scroll`, active planes),
+- perf telemetry counters (`layout_cache_hits`, `layout_cache_misses`).
+180. `2026-03-02`: Verification rerun passed and `T-832` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`

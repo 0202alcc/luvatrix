@@ -63,6 +63,9 @@ class PlaneApp:
         self._frame_perf: dict[str, float] = {}
         self._frame_counts: dict[str, int] = {}
         self._retained_mount_cache: dict[str, tuple[tuple[Any, ...], Any]] = {}
+        self._layout_position_cache: dict[str, tuple[tuple[Any, ...], tuple[float, float]]] = {}
+        self._interaction_bounds_cache: dict[str, tuple[tuple[Any, ...], Any]] = {}
+        self._layout_cache_signature: tuple[tuple[float, float], tuple[str, ...]] | None = None
         self._scrollbar_markups: dict[str, str] = {
             "page_track_h": self._build_scrollbar_markup(100, 10, "#1f344d"),
             "page_thumb_h": self._build_scrollbar_markup(100, 10, "#9bc9f8"),
@@ -126,6 +129,8 @@ class PlaneApp:
                 "hit_test_calls": int(self._frame_counts.get("hit_test_calls", 0)),
                 "hit_test_candidates_checked": int(self._frame_counts.get("hit_test_candidates_checked", 0)),
                 "hit_test_spatial_buckets": int(self._frame_counts.get("hit_test_spatial_buckets", 0)),
+                "layout_cache_hits": int(self._frame_counts.get("layout_cache_hits", 0)),
+                "layout_cache_misses": int(self._frame_counts.get("layout_cache_misses", 0)),
                 "retained_components_reused": int(self._frame_counts.get("retained_components_reused", 0)),
                 "retained_components_new": int(self._frame_counts.get("retained_components_new", 0)),
                 "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
@@ -255,6 +260,8 @@ class PlaneApp:
             "hit_test_calls": int(self._frame_counts.get("hit_test_calls", 0)),
             "hit_test_candidates_checked": int(self._frame_counts.get("hit_test_candidates_checked", 0)),
             "hit_test_spatial_buckets": int(self._frame_counts.get("hit_test_spatial_buckets", 0)),
+            "layout_cache_hits": int(self._frame_counts.get("layout_cache_hits", 0)),
+            "layout_cache_misses": int(self._frame_counts.get("layout_cache_misses", 0)),
             "retained_components_reused": int(self._frame_counts.get("retained_components_reused", 0)),
             "retained_components_new": int(self._frame_counts.get("retained_components_new", 0)),
             "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
@@ -404,7 +411,7 @@ class PlaneApp:
             self._frame_counts["hit_test_candidates_checked"] = int(
                 self._frame_counts.get("hit_test_candidates_checked", 0)
             ) + 1
-            bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
+            bounds = self._resolved_interaction_bounds(component)
             resolved_x, resolved_y = self._resolved_position(component)
             if resolved_x <= x <= resolved_x + bounds.width and resolved_y <= y <= resolved_y + bounds.height:
                 self._add_perf_ns("hit_test_ns", time.perf_counter_ns() - hit_start_ns)
@@ -422,7 +429,7 @@ class PlaneApp:
             ) + 1
             if component.component_type != "viewport":
                 continue
-            bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
+            bounds = self._resolved_interaction_bounds(component)
             resolved_x, resolved_y = self._resolved_position(component)
             if resolved_x <= x <= resolved_x + bounds.width and resolved_y <= y <= resolved_y + bounds.height:
                 stack.append(component)
@@ -555,11 +562,71 @@ class PlaneApp:
         return color_hex
 
     def _resolved_position(self, component) -> tuple[float, float]:
+        self._ensure_layout_cache_state()
+        key = self._resolved_position_cache_key(component)
+        cached = self._layout_position_cache.get(component.component_id)
+        if cached is not None and cached[0] == key:
+            self._frame_counts["layout_cache_hits"] = int(self._frame_counts.get("layout_cache_hits", 0)) + 1
+            return cached[1]
         x, y = self._resolved_position_base(component)
-        if self._is_overlay_attached(component) or self._is_camera_fixed(component):
-            return (x, y)
-        plane_x, plane_y = self._plane_scroll_position()
-        return (x - plane_x, y - plane_y)
+        if not (self._is_overlay_attached(component) or self._is_camera_fixed(component)):
+            plane_x, plane_y = self._plane_scroll_position()
+            x -= plane_x
+            y -= plane_y
+        resolved = (x, y)
+        self._layout_position_cache[component.component_id] = (key, resolved)
+        self._frame_counts["layout_cache_misses"] = int(self._frame_counts.get("layout_cache_misses", 0)) + 1
+        return resolved
+
+    def _resolved_position_cache_key(self, component) -> tuple[Any, ...]:
+        props = component.style if isinstance(component.style, dict) else {}
+        plane_id = getattr(component, "plane_id", None)
+        plane_x = 0.0
+        plane_y = 0.0
+        if isinstance(plane_id, str):
+            plane = self._plane_index.get(plane_id)
+            if plane is not None:
+                plane_x = float(plane.resolved_position.x)
+                plane_y = float(plane.resolved_position.y)
+        return (
+            float(component.position.x),
+            float(component.position.y),
+            float(component.width),
+            float(component.height),
+            str(getattr(component, "attachment_kind", "plane")),
+            str(plane_id or ""),
+            plane_x,
+            plane_y,
+            bool(props.get("camera_fixed", False)),
+            str(props.get("align", "")),
+            str(props.get("v_align", "")),
+            float(props.get("margin_bottom_px", 0.0)),
+        )
+
+    def _resolved_interaction_bounds(self, component):
+        if self._ui_page is None:
+            return component.resolved_interaction_bounds("screen_tl")
+        self._ensure_layout_cache_state()
+        key = (float(component.width), float(component.height), self._ui_page.default_frame)
+        cached = self._interaction_bounds_cache.get(component.component_id)
+        if cached is not None and cached[0] == key:
+            self._frame_counts["layout_cache_hits"] = int(self._frame_counts.get("layout_cache_hits", 0)) + 1
+            return cached[1]
+        bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
+        self._interaction_bounds_cache[component.component_id] = (key, bounds)
+        self._frame_counts["layout_cache_misses"] = int(self._frame_counts.get("layout_cache_misses", 0)) + 1
+        return bounds
+
+    def _layout_signature_current(self) -> tuple[tuple[float, float], tuple[str, ...]]:
+        return (self._plane_scroll_position(), self._hit_index_active_planes())
+
+    def _ensure_layout_cache_state(self) -> None:
+        signature = self._layout_signature_current()
+        if self._layout_cache_signature == signature:
+            return
+        self._layout_cache_signature = signature
+        self._layout_position_cache.clear()
+        self._interaction_bounds_cache.clear()
 
     def _prefetch_margins(self) -> tuple[float, float]:
         entry = self.state.get("prefetch_margin_px")
@@ -754,6 +821,8 @@ class PlaneApp:
             "hit_test_calls": 0,
             "hit_test_candidates_checked": 0,
             "hit_test_spatial_buckets": 0,
+            "layout_cache_hits": 0,
+            "layout_cache_misses": 0,
             "retained_components_reused": 0,
             "retained_components_new": 0,
             "camera_overlay_scrollbar_primitives": 0,
@@ -787,7 +856,7 @@ class PlaneApp:
         buckets: dict[tuple[int, int], list[Any]] = {}
         cell_px = max(1, int(self._hit_grid_cell_px))
         for component in ordered:
-            bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
+            bounds = self._resolved_interaction_bounds(component)
             width = float(bounds.width)
             height = float(bounds.height)
             if width <= 0.0 or height <= 0.0:
