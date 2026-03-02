@@ -289,6 +289,7 @@ class PlaneApp:
         scroll_dy = 0.0
         scroll_count = 0
         scroll_source = "wheel"
+        scroll_latest_wins = False
         scroll_phase = "update"
         scroll_momentum_phase: str | None = None
         scroll_payload_for_hook: dict[str, Any] | None = None
@@ -297,12 +298,18 @@ class PlaneApp:
             payload = event.payload if isinstance(event.payload, dict) else {}
             self._record_pointer_xy(payload)
             if event.event_type in {"scroll", "pan", "swipe"}:
-                intent = _scroll_intent_from_event(event.event_type, payload)
+                intent = _scroll_intent_from_event(event.event_type, payload, event.device)
                 if intent is not None:
                     self._frame_counts["scroll_events"] = int(self._frame_counts.get("scroll_events", 0)) + 1
                     scroll_count += 1
-                    scroll_dx += float(intent.delta_x)
-                    scroll_dy += float(intent.delta_y)
+                    if intent.source == "trackpad":
+                        # Latency-focused path: latest trackpad intent wins per frame.
+                        scroll_dx = float(intent.delta_x)
+                        scroll_dy = float(intent.delta_y)
+                        scroll_latest_wins = True
+                    elif not scroll_latest_wins:
+                        scroll_dx += float(intent.delta_x)
+                        scroll_dy += float(intent.delta_y)
                     scroll_source = intent.source
                     scroll_phase = intent.phase
                     scroll_momentum_phase = intent.momentum_phase or scroll_momentum_phase
@@ -341,6 +348,8 @@ class PlaneApp:
             coalesced_payload["delta_x"] = float(-scroll_dx)
             coalesced_payload["delta_y"] = float(-scroll_dy)
             coalesced_payload["coalesced_count"] = int(scroll_count)
+            if scroll_latest_wins:
+                coalesced_payload["coalesce_mode"] = "latest"
             if scroll_momentum_phase is not None:
                 coalesced_payload["momentum_phase"] = scroll_momentum_phase
             self._dispatch_viewport_scroll(coalesced_payload, intent)
@@ -1585,7 +1594,7 @@ def _hook_for_event(event_type: str, payload: object) -> str | None:
     return None
 
 
-def _scroll_intent_from_event(event_type: str, payload: dict[str, Any]) -> ScrollIntent | None:
+def _scroll_intent_from_event(event_type: str, payload: dict[str, Any], device: str | None = None) -> ScrollIntent | None:
     if event_type == "scroll":
         try:
             dx = float(payload.get("delta_x", 0.0))
@@ -1595,9 +1604,10 @@ def _scroll_intent_from_event(event_type: str, payload: dict[str, Any]) -> Scrol
         phase = str(payload.get("phase", "update"))
         momentum_phase = payload.get("momentum_phase")
         momentum = str(momentum_phase) if isinstance(momentum_phase, str) and momentum_phase else None
+        source = "trackpad" if (str(device or "").lower() == "trackpad" or bool(payload.get("precise", False))) else "wheel"
         # Match system-native scroll direction expectations by treating positive
         # wheel deltas as moving the viewport camera in the opposite direction.
-        return ScrollIntent(delta_x=-dx, delta_y=-dy, source="wheel", phase=phase, momentum_phase=momentum)
+        return ScrollIntent(delta_x=-dx, delta_y=-dy, source=source, phase=phase, momentum_phase=momentum)
     if event_type in {"pan", "swipe"}:
         try:
             dx = float(payload.get("delta_x", 0.0))

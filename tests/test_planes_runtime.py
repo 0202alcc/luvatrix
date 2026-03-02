@@ -878,8 +878,9 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertEqual(len(calls), 1)
             payload = calls[0]
             self.assertEqual(int(payload.get("coalesced_count", 0)), 2)
-            self.assertAlmostEqual(float(payload.get("delta_x", 0.0)), -10.0, places=6)
-            self.assertAlmostEqual(float(payload.get("delta_y", 0.0)), -5.0, places=6)
+            self.assertAlmostEqual(float(payload.get("delta_x", 0.0)), -6.0, places=6)
+            self.assertAlmostEqual(float(payload.get("delta_y", 0.0)), -3.0, places=6)
+            self.assertEqual(str(payload.get("coalesce_mode", "")), "latest")
             self.assertEqual(str(payload.get("phase", "")), "ended")
             self.assertEqual(str(payload.get("momentum_phase", "")), "none")
 
