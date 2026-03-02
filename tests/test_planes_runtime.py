@@ -24,12 +24,14 @@ class _FakeCtx:
         self.begin_calls = 0
         self.finalize_calls = 0
         self.clear = None
+        self.last_dirty_rects = None
         self._events: list[HDIEvent] = []
 
-    def begin_ui_frame(self, renderer, *, content_width_px, content_height_px, clear_color) -> None:
+    def begin_ui_frame(self, renderer, *, content_width_px, content_height_px, clear_color, dirty_rects=None) -> None:
         _ = (renderer, content_width_px, content_height_px)
         self.begin_calls += 1
         self.clear = clear_color
+        self.last_dirty_rects = dirty_rects
 
     def mount_component(self, component) -> None:
         self.mounted.append(component)
@@ -670,6 +672,17 @@ class PlanesRuntimeTests(unittest.TestCase):
             first_by_id = {comp.component_id: comp for comp in ctx.mounted}
 
             ctx.mounted = []
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 20.0, "y": 20.0, "delta_x": -1.0, "delta_y": 0.0},
+                )
+            )
             app.loop(ctx, 0.016)
             second_by_id = {comp.component_id: comp for comp in ctx.mounted}
 
@@ -677,6 +690,23 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertIs(first_by_id["logo"], second_by_id["logo"])
             perf = app.state.get("perf", {})
             self.assertGreaterEqual(int(perf.get("retained_components_reused", 0)), 2)
+
+    def test_plane_runtime_skips_compose_when_no_dirty_change(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={"handlers::open": lambda e, s: None})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            begin_before = ctx.begin_calls
+            finalize_before = ctx.finalize_calls
+
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(str(perf.get("compose_mode", "")), "idle_skip")
+            self.assertEqual(int(perf.get("dirty_rect_count", -1)), 0)
+            self.assertEqual(ctx.begin_calls, begin_before)
+            self.assertEqual(ctx.finalize_calls, finalize_before)
 
     def test_plane_runtime_exposes_frame_timing_stages_and_event_counters(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -710,6 +740,30 @@ class PlanesRuntimeTests(unittest.TestCase):
             for key in expected_keys:
                 value = float(timing.get(key, 0.0))
                 self.assertGreaterEqual(value, 0.0)
+
+    def test_plane_runtime_uses_partial_dirty_rects_for_plane_scroll(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_camera_scroll_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 40.0, "y": 40.0, "delta_x": -10.0, "delta_y": 0.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(str(perf.get("compose_mode", "")), "partial_dirty")
+            self.assertGreaterEqual(int(perf.get("dirty_rect_count", 0)), 1)
+            self.assertLess(int(perf.get("dirty_rect_area_px", 320 * 180)), 320 * 180)
 
     def test_plane_runtime_coalesces_scroll_events_and_preserves_phases(self) -> None:
         with tempfile.TemporaryDirectory() as td:

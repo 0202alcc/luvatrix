@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from pathlib import Path
 from dataclasses import dataclass
@@ -72,6 +73,8 @@ class PlaneApp:
             "viewport_track_v": self._build_scrollbar_markup(10, 100, "#1f344d"),
             "viewport_thumb_v": self._build_scrollbar_markup(10, 100, "#89b7e6"),
         }
+        self._last_dirty_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]] | None = None
+        self._last_plane_scroll: tuple[float, float] | None = None
 
     def register_handler(self, target: str, handler: EventHandler) -> None:
         self._handlers[target] = handler
@@ -84,10 +87,57 @@ class PlaneApp:
         self._begin_perf_frame()
         self._ensure_compiled(ctx)
         assert self._ui_page is not None
+        pre_plane_scroll = self._plane_scroll_position()
+        pre_signature = self._current_dirty_signature()
         input_start_ns = time.perf_counter_ns()
         self._dispatch_events(ctx, dt)
         self._add_perf_ns("input_ns", time.perf_counter_ns() - input_start_ns)
         self._bg_color = self._resolve_background()
+        post_plane_scroll = self._plane_scroll_position()
+        post_signature = self._current_dirty_signature()
+        dirty_rects = self._compute_dirty_rects(
+            pre_plane_scroll=pre_plane_scroll,
+            post_plane_scroll=post_plane_scroll,
+            pre_signature=pre_signature,
+            post_signature=post_signature,
+            events_processed=int(self._frame_counts.get("events_processed", 0)),
+        )
+        self._last_plane_scroll = post_plane_scroll
+        self._last_dirty_signature = post_signature
+        dirty_count = int(len(dirty_rects))
+        dirty_area = int(sum((w * h) for (_, _, w, h) in dirty_rects))
+        if dirty_count == 0:
+            self._add_perf_ns("frame_total_ns", time.perf_counter_ns() - frame_start_ns)
+            self.state["perf"] = {
+                "components_considered": 0,
+                "components_culled": 0,
+                "components_mounted": 0,
+                "prefetch_margin_x_px": float(self._prefetch_margins()[0]),
+                "prefetch_margin_y_px": float(self._prefetch_margins()[1]),
+                "svg_cache_size": int(len(self._svg_markup_cache)),
+                "events_polled": int(self._frame_counts.get("events_polled", 0)),
+                "events_processed": int(self._frame_counts.get("events_processed", 0)),
+                "scroll_events": int(self._frame_counts.get("scroll_events", 0)),
+                "scroll_events_coalesced": int(self._frame_counts.get("scroll_events_coalesced", 0)),
+                "hit_test_calls": int(self._frame_counts.get("hit_test_calls", 0)),
+                "retained_components_reused": int(self._frame_counts.get("retained_components_reused", 0)),
+                "retained_components_new": int(self._frame_counts.get("retained_components_new", 0)),
+                "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
+                "dirty_rect_count": 0,
+                "dirty_rect_area_px": 0,
+                "compose_mode": "idle_skip",
+                "timing_ms": {
+                    "input": self._ns_to_ms(self._frame_perf.get("input_ns", 0.0)),
+                    "hit_test": self._ns_to_ms(self._frame_perf.get("hit_test_ns", 0.0)),
+                    "scroll_update": self._ns_to_ms(self._frame_perf.get("scroll_update_ns", 0.0)),
+                    "cull": 0.0,
+                    "mount": 0.0,
+                    "raster": 0.0,
+                    "present": 0.0,
+                    "frame_total": self._ns_to_ms(self._frame_perf.get("frame_total_ns", 0.0)),
+                },
+            }
+            return
 
         raster_start_ns = time.perf_counter_ns()
         ctx.begin_ui_frame(
@@ -95,6 +145,7 @@ class PlaneApp:
             content_width_px=float(self._ui_page.matrix.width),
             content_height_px=float(self._ui_page.matrix.height),
             clear_color=self._bg_color,
+            dirty_rects=dirty_rects,
         )
         self._add_perf_ns("raster_ns", time.perf_counter_ns() - raster_start_ns)
         ordered = self._ui_page.ordered_components_for_draw()
@@ -199,6 +250,9 @@ class PlaneApp:
             "retained_components_reused": int(self._frame_counts.get("retained_components_reused", 0)),
             "retained_components_new": int(self._frame_counts.get("retained_components_new", 0)),
             "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
+            "dirty_rect_count": dirty_count,
+            "dirty_rect_area_px": dirty_area,
+            "compose_mode": ("partial_dirty" if not self._is_full_frame_dirty(dirty_rects) else "full_frame"),
             "timing_ms": {
                 "input": self._ns_to_ms(self._frame_perf.get("input_ns", 0.0)),
                 "hit_test": self._ns_to_ms(self._frame_perf.get("hit_test_ns", 0.0)),
@@ -690,6 +744,111 @@ class PlaneApp:
             "retained_components_new": 0,
             "camera_overlay_scrollbar_primitives": 0,
         }
+
+    def _current_dirty_signature(self) -> tuple[str, str | None, tuple[tuple[str, float, float], ...]]:
+        theme = str(self.state.get("active_theme", "default"))
+        hover = self.state.get("hover_component_id")
+        hover_id = str(hover) if isinstance(hover, str) else None
+        return (theme, hover_id, self._viewport_scroll_snapshot())
+
+    def _viewport_scroll_snapshot(self) -> tuple[tuple[str, float, float], ...]:
+        raw = self.state.get("viewport_scroll")
+        if not isinstance(raw, dict):
+            return ()
+        out: list[tuple[str, float, float]] = []
+        for key, value in raw.items():
+            if not isinstance(key, str) or not isinstance(value, dict):
+                continue
+            try:
+                sx = float(value.get("x", 0.0))
+                sy = float(value.get("y", 0.0))
+            except (TypeError, ValueError):
+                sx = 0.0
+                sy = 0.0
+            out.append((key, sx, sy))
+        out.sort(key=lambda item: item[0])
+        return tuple(out)
+
+    def _compute_dirty_rects(
+        self,
+        *,
+        pre_plane_scroll: tuple[float, float],
+        post_plane_scroll: tuple[float, float],
+        pre_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]],
+        post_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]],
+        events_processed: int,
+    ) -> list[tuple[int, int, int, int]]:
+        if self._ui_page is None:
+            return []
+        view_w = int(self._ui_page.matrix.width)
+        view_h = int(self._ui_page.matrix.height)
+        full = [(0, 0, view_w, view_h)]
+        if self._last_dirty_signature is None or self._last_plane_scroll is None:
+            return full
+        if pre_signature == post_signature and pre_plane_scroll == post_plane_scroll and events_processed == 0:
+            return []
+        theme_or_hover_changed = pre_signature[0:2] != post_signature[0:2]
+        viewport_scroll_changed = pre_signature[2] != post_signature[2]
+        dx = float(post_plane_scroll[0] - pre_plane_scroll[0])
+        dy = float(post_plane_scroll[1] - pre_plane_scroll[1])
+        plane_changed = abs(dx) > 1e-9 or abs(dy) > 1e-9
+        if theme_or_hover_changed or viewport_scroll_changed:
+            return full
+        if not plane_changed:
+            return full
+        adx = int(math.ceil(abs(dx)))
+        ady = int(math.ceil(abs(dy)))
+        if adx >= view_w or ady >= view_h:
+            return full
+        rects: list[tuple[int, int, int, int]] = []
+        if dx > 0:
+            rects.append((0, 0, adx, view_h))
+        elif dx < 0:
+            rects.append((view_w - adx, 0, adx, view_h))
+        if dy > 0:
+            rects.append((0, 0, view_w, ady))
+        elif dy < 0:
+            rects.append((0, view_h - ady, view_w, ady))
+        normalized = self._normalize_local_dirty_rects(rects, view_w=view_w, view_h=view_h)
+        return normalized if normalized else full
+
+    @staticmethod
+    def _normalize_local_dirty_rects(
+        rects: list[tuple[int, int, int, int]],
+        *,
+        view_w: int,
+        view_h: int,
+    ) -> list[tuple[int, int, int, int]]:
+        out: list[tuple[int, int, int, int]] = []
+        for (x, y, w, h) in rects:
+            if w <= 0 or h <= 0:
+                continue
+            if x >= view_w or y >= view_h:
+                continue
+            cx = max(0, int(x))
+            cy = max(0, int(y))
+            cw = min(int(w) - max(0, -int(x)), view_w - cx)
+            ch = min(int(h) - max(0, -int(y)), view_h - cy)
+            if cw <= 0 or ch <= 0:
+                continue
+            out.append((cx, cy, cw, ch))
+        out.sort(key=lambda r: (r[1], r[0], r[2], r[3]))
+        deduped: list[tuple[int, int, int, int]] = []
+        seen: set[tuple[int, int, int, int]] = set()
+        for item in out:
+            if item in seen:
+                continue
+            deduped.append(item)
+            seen.add(item)
+        return deduped
+
+    def _is_full_frame_dirty(self, dirty_rects: list[tuple[int, int, int, int]]) -> bool:
+        if self._ui_page is None:
+            return False
+        if len(dirty_rects) != 1:
+            return False
+        x, y, w, h = dirty_rects[0]
+        return x == 0 and y == 0 and w == int(self._ui_page.matrix.width) and h == int(self._ui_page.matrix.height)
 
     def _add_perf_ns(self, key: str, delta_ns: int) -> None:
         self._frame_perf[key] = float(self._frame_perf.get(key, 0.0) + max(0, int(delta_ns)))

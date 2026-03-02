@@ -3,15 +3,14 @@
 Milestone: `M-008` Plot + data UX foundations
 Epic: `E-801`
 Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> T-807 -> T-808 -> T-809 -> T-810` (scrolling expansion) + `T-811 -> T-812 -> T-813 -> T-814 -> T-815 -> T-816 -> T-817 -> T-818 -> T-819 -> T-820 -> T-821 -> T-822 -> T-823 -> T-824 -> T-825` (architecture/spec extension) + `T-826 -> T-827 -> T-828 -> T-829 -> T-830 -> T-831 -> T-832 -> T-833 -> T-834 -> T-835` (scroll performance hardening)
-Last updated: `2026-03-01`
+Last updated: `2026-03-02`
 
 ## Backlog
-1. `T-830` True dirty-region compose path (partial redraw + unchanged-region reuse).
-2. `T-831` Hit-test acceleration index (spatial partitioning).
-3. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
-4. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
-5. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
-6. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
+1. `T-831` Hit-test acceleration index (spatial partitioning).
+2. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
+3. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
+4. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
+5. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
 
 ## Ready
 1. None.
@@ -135,6 +134,13 @@ Last updated: `2026-03-01`
 - Scrollbar markup strings are prebuilt once per app lifecycle and reused (`self._scrollbar_markups`) instead of being generated ad hoc per mount path.
 - Runtime perf counters include `camera_overlay_scrollbar_primitives` for mounted primitive visibility.
 - `tests/test_planes_runtime.py` validates primitive counter presence alongside scrollbar mount IDs.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+25. `T-830` True dirty-region compose path (partial redraw + unchanged-region reuse).
+- Evidence:
+- `luvatrix_core/core/app_runtime.py` now accepts normalized `dirty_rects` per UI frame and emits `ReplaceRect` write ops for partial present; full-frame rewrite remains the fallback.
+- `luvatrix_ui/planes_runtime.py` now computes deterministic dirty regions, emits `compose_mode` telemetry (`full_frame` / `partial_dirty` / `idle_skip`), and skips compose work entirely when nothing changed.
+- `tests/test_planes_runtime.py` adds idle-skip and partial-dirty regression coverage; fake context updated for dirty-rect frame API.
+- `tests/test_planes_v2_poc_example.py` updated for idle-skip-compatible revision assertion semantics.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 
 ## Done
@@ -458,4 +464,10 @@ Last updated: `2026-03-01`
 169. `2026-03-01`: Replaced ad-hoc scrollbar mount code in `luvatrix_ui/planes_runtime.py` with a shared primitive helper and prebuilt markup token set for page + viewport scrollbars.
 170. `2026-03-01`: Added regression assertion in `tests/test_planes_runtime.py` for `camera_overlay_scrollbar_primitives` metric visibility.
 171. `2026-03-01`: Verification rerun passed and `T-829` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+172. `2026-03-02`: `T-830` started (`Backlog` -> `In Progress`) for true dirty-region compose path (partial redraw + unchanged-region reuse).
+173. `2026-03-02`: Implemented dirty-region compose plumbing:
+- `luvatrix_core/core/app_runtime.py` now supports normalized per-frame `dirty_rects` and emits `ReplaceRect` operations for partial present.
+- `luvatrix_ui/planes_runtime.py` now computes deterministic dirty rectangles, supports compose idle-skip, and records compose-mode / dirty-area telemetry.
+174. `2026-03-02`: Verification rerun passed and `T-830` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
