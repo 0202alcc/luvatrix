@@ -153,6 +153,12 @@ Last updated: `2026-03-02`
   - verification:
     - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
     - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
+- Component simplification follow-up (`2026-03-02`):
+  - removed dedicated `underlay_content` component from demo scene graph.
+  - rewired `section_cut.props.content_ref` to reuse `index_gradient_bg` directly.
+  - verification:
+    - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
+    - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
 21. `T-826` Frame-time instrumentation pack (input/hit-test/scroll-update/cull/mount/raster/present + counters).
 - Evidence:
 - `luvatrix_ui/planes_runtime.py` now records per-frame timing buckets (`input`, `hit_test`, `scroll_update`, `cull`, `mount`, `raster`, `present`, `frame_total`) plus frame counters (`events_polled`, `events_processed`, `scroll_events`, `hit_test_calls`) in `state["perf"]`.
@@ -641,5 +647,10 @@ Last updated: `2026-03-02`
 214. `2026-03-02`: Reviewer requested removing underlay plane and setting `index` z-order baseline; `T-810` moved from `Review` to `In Progress`.
 215. `2026-03-02`: Simplified scene graph to single plane (`index`, `plane_global_z=0`) and removed `underlay` plane from active route list.
 216. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
+217. `2026-03-02`: Reviewer requested removing dedicated cutout-fill component; `T-810` moved from `Review` to `In Progress`.
+218. `2026-03-02`: Simplified viewport source model by removing `underlay_content` and referencing `index_gradient_bg` directly from `section_cut`.
+219. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`

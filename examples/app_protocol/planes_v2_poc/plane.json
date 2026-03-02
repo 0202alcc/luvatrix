@@ -75,21 +75,6 @@
       }
     },
     {
-      "id": "underlay_content",
-      "type": "svg",
-      "attachment_kind": "plane",
-      "attach_to": "index",
-      "component_local_z": 1,
-      "blend_mode": "absolute_rgba",
-      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
-      "size": {
-        "width": {"unit": "vw", "value": 100},
-        "height": {"unit": "vh", "value": 300}
-      },
-      "z_index": 1,
-      "props": {"svg": "assets/underlay_content.svg"}
-    },
-    {
       "id": "section_cut",
       "type": "viewport",
       "attachment_kind": "plane",
@@ -104,7 +89,7 @@
       "z_index": 40,
       "props": {
         "clip": true,
-        "content_ref": "underlay_content",
+        "content_ref": "index_gradient_bg",
         "scroll": {"x": 0, "y": 0},
         "scroll_speed": {"x": 1.0, "y": 1.0}
       }
