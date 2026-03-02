@@ -21,6 +21,7 @@ SPEC.loader.exec_module(MODULE)
 
 create = MODULE.create
 PLANES_JSON = MODULE.PLANES_JSON
+RUNTIME_GRADIENT_ASSET = MODULE.RUNTIME_GRADIENT_ASSET
 
 
 class _NoopHDISource(HDIEventSource):
@@ -100,6 +101,29 @@ class PlanesV2PocExampleTests(unittest.TestCase):
         self.assertAlmostEqual(frame.height, expected_side, places=6)
         self.assertAlmostEqual(frame.position.x, expected_x, places=6)
         self.assertAlmostEqual(frame.position.y, expected_y, places=6)
+
+    def test_runtime_gradient_asset_is_generated_and_bound(self) -> None:
+        app = create()
+
+        class _Ctx:
+            class _Matrix:
+                width = 160
+                height = 96
+
+            matrix = _Matrix()
+
+        if RUNTIME_GRADIENT_ASSET.exists():
+            RUNTIME_GRADIENT_ASSET.unlink()
+        app.init(_Ctx())
+        self.assertTrue(RUNTIME_GRADIENT_ASSET.exists())
+        page = app._ui_page  # type: ignore[attr-defined]
+        self.assertIsNotNone(page)
+        assert page is not None
+        by_id = {component.component_id: component for component in page.components}
+        self.assertIn("index_gradient_bg", by_id)
+        style = by_id["index_gradient_bg"].style
+        self.assertIsInstance(style, dict)
+        self.assertEqual(style.get("svg"), f"assets/{RUNTIME_GRADIENT_ASSET.name}")
 
 
 if __name__ == "__main__":

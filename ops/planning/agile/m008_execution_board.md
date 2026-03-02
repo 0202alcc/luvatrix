@@ -139,6 +139,13 @@ Last updated: `2026-03-02`
   - verification:
     - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
     - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
+- Programmatic gradient follow-up (`2026-03-02`):
+  - gradient now generated at app init from code (`app_main.py`) using per-pixel color interpolation against actual runtime matrix geometry.
+  - generated asset `assets/index_plane_gradient_runtime.svg` is bound to `index_gradient_bg` before compile for smooth blending.
+  - added regression test: `test_runtime_gradient_asset_is_generated_and_bound`.
+  - verification:
+    - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py` (pass).
+    - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60` (pass).
 21. `T-826` Frame-time instrumentation pack (input/hit-test/scroll-update/cull/mount/raster/present + counters).
 - Evidence:
 - `luvatrix_ui/planes_runtime.py` now records per-frame timing buckets (`input`, `hit_test`, `scroll_update`, `cull`, `mount`, `raster`, `present`, `frame_total`) plus frame counters (`events_polled`, `events_processed`, `scroll_events`, `hit_test_calls`) in `state["perf"]`.
@@ -617,5 +624,10 @@ Last updated: `2026-03-02`
 - `assets/underlay_content.svg` changed to solid white fill for hole readability,
 - `assets/index_plane_gradient.svg` refined to denser stepped blend.
 210. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
+- `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
+211. `2026-03-02`: Reviewer requested explanation of lower-plane behavior and smoother blend path; `T-810` moved from `Review` to `In Progress` for gradient-programmability update.
+212. `2026-03-02`: Implemented runtime-generated gradient path in `examples/app_protocol/planes_v2_poc/app_main.py` and added binding regression coverage in `tests/test_planes_v2_poc_example.py`.
+213. `2026-03-02`: Verification rerun passed and `T-810` moved from `In Progress` back to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_v2_poc_example.py tests/test_planes_runtime.py`
 - `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 12 --fps 60`
