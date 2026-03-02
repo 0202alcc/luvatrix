@@ -62,6 +62,16 @@ class PlaneApp:
         self._frame_perf: dict[str, float] = {}
         self._frame_counts: dict[str, int] = {}
         self._retained_mount_cache: dict[str, tuple[tuple[Any, ...], Any]] = {}
+        self._scrollbar_markups: dict[str, str] = {
+            "page_track_h": self._build_scrollbar_markup(100, 10, "#1f344d"),
+            "page_thumb_h": self._build_scrollbar_markup(100, 10, "#9bc9f8"),
+            "page_track_v": self._build_scrollbar_markup(10, 100, "#1f344d"),
+            "page_thumb_v": self._build_scrollbar_markup(10, 100, "#9bc9f8"),
+            "viewport_track_h": self._build_scrollbar_markup(100, 10, "#1f344d"),
+            "viewport_thumb_h": self._build_scrollbar_markup(100, 10, "#89b7e6"),
+            "viewport_track_v": self._build_scrollbar_markup(10, 100, "#1f344d"),
+            "viewport_thumb_v": self._build_scrollbar_markup(10, 100, "#89b7e6"),
+        }
 
     def register_handler(self, target: str, handler: EventHandler) -> None:
         self._handlers[target] = handler
@@ -188,6 +198,7 @@ class PlaneApp:
             "hit_test_calls": int(self._frame_counts.get("hit_test_calls", 0)),
             "retained_components_reused": int(self._frame_counts.get("retained_components_reused", 0)),
             "retained_components_new": int(self._frame_counts.get("retained_components_new", 0)),
+            "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
             "timing_ms": {
                 "input": self._ns_to_ms(self._frame_perf.get("input_ns", 0.0)),
                 "hit_test": self._ns_to_ms(self._frame_perf.get("hit_test_ns", 0.0)),
@@ -611,6 +622,62 @@ class PlaneApp:
         self._frame_counts["retained_components_new"] = int(self._frame_counts.get("retained_components_new", 0)) + 1
         return component
 
+    @staticmethod
+    def _build_scrollbar_markup(width: int, height: int, fill_hex: str) -> str:
+        return (
+            f'<svg width="{int(width)}" height="{int(height)}" xmlns="http://www.w3.org/2000/svg">'
+            f'<rect x="0" y="0" width="{int(width)}" height="{int(height)}" rx="4" fill="{fill_hex}"/>'
+            "</svg>"
+        )
+
+    def _mount_camera_overlay_scrollbar_pair(
+        self,
+        ctx,
+        *,
+        frame: str,
+        track_id: str,
+        thumb_id: str,
+        track_x: float,
+        track_y: float,
+        track_w: float,
+        track_h: float,
+        thumb_x: float,
+        thumb_y: float,
+        thumb_w: float,
+        thumb_h: float,
+        track_markup_key: str,
+        thumb_markup_key: str,
+        track_opacity: float,
+        thumb_opacity: float,
+    ) -> None:
+        self._frame_counts["camera_overlay_scrollbar_primitives"] = int(
+            self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)
+        ) + 2
+        ctx.mount_component(
+            self._retained_svg_component(
+                component_id=track_id,
+                svg_markup=self._scrollbar_markups[track_markup_key],
+                x=track_x,
+                y=track_y,
+                frame=frame,
+                width=track_w,
+                height=track_h,
+                opacity=track_opacity,
+            )
+        )
+        ctx.mount_component(
+            self._retained_svg_component(
+                component_id=thumb_id,
+                svg_markup=self._scrollbar_markups[thumb_markup_key],
+                x=thumb_x,
+                y=thumb_y,
+                frame=frame,
+                width=thumb_w,
+                height=thumb_h,
+                opacity=thumb_opacity,
+            )
+        )
+
     def _begin_perf_frame(self) -> None:
         self._frame_perf = {}
         self._frame_counts = {
@@ -621,6 +688,7 @@ class PlaneApp:
             "hit_test_calls": 0,
             "retained_components_reused": 0,
             "retained_components_new": 0,
+            "camera_overlay_scrollbar_primitives": 0,
         }
 
     def _add_perf_ns(self, key: str, delta_ns: int) -> None:
@@ -814,52 +882,34 @@ class PlaneApp:
         view_h = float(self._ui_page.matrix.height)
         scroll_x, scroll_y = self._plane_scroll_position()
         frame = self._ui_page.default_frame
-        track_color = "#1f344d"
-        thumb_color = "#9bc9f8"
 
         if max_x > 1e-9:
             track_h = 6.0
             track_x = 4.0
             track_y = view_h - track_h - 2.0
             track_w = max(16.0, view_w - 12.0)
-            track_markup = (
-                '<svg width="100" height="10" xmlns="http://www.w3.org/2000/svg">'
-                f'<rect x="0" y="0" width="100" height="10" rx="4" fill="{track_color}"/>'
-                "</svg>"
-            )
-            ctx.mount_component(
-                self._retained_svg_component(
-                    component_id="__plane_scrollbar_x_track",
-                    svg_markup=track_markup,
-                    x=track_x,
-                    y=track_y,
-                    frame=frame,
-                    width=track_w,
-                    height=track_h,
-                    opacity=0.86,
-                )
-            )
             content_w = view_w + max_x
             thumb_ratio = max(0.08, min(1.0, view_w / max(content_w, 1e-9)))
             thumb_w = max(12.0, track_w * thumb_ratio)
             span = max(0.0, track_w - thumb_w)
             thumb_x = track_x + span * (scroll_x / max_x)
-            thumb_markup = (
-                '<svg width="100" height="10" xmlns="http://www.w3.org/2000/svg">'
-                f'<rect x="0" y="0" width="100" height="10" rx="4" fill="{thumb_color}"/>'
-                "</svg>"
-            )
-            ctx.mount_component(
-                self._retained_svg_component(
-                    component_id="__plane_scrollbar_x_thumb",
-                    svg_markup=thumb_markup,
-                    x=thumb_x,
-                    y=track_y,
-                    frame=frame,
-                    width=thumb_w,
-                    height=track_h,
-                    opacity=0.96,
-                )
+            self._mount_camera_overlay_scrollbar_pair(
+                ctx,
+                frame=frame,
+                track_id="__plane_scrollbar_x_track",
+                thumb_id="__plane_scrollbar_x_thumb",
+                track_x=track_x,
+                track_y=track_y,
+                track_w=track_w,
+                track_h=track_h,
+                thumb_x=thumb_x,
+                thumb_y=track_y,
+                thumb_w=thumb_w,
+                thumb_h=track_h,
+                track_markup_key="page_track_h",
+                thumb_markup_key="page_thumb_h",
+                track_opacity=0.86,
+                thumb_opacity=0.96,
             )
 
         if max_y > 1e-9:
@@ -867,44 +917,28 @@ class PlaneApp:
             track_x = view_w - track_w - 2.0
             track_y = 72.0
             track_h = max(16.0, view_h - 82.0)
-            track_markup = (
-                '<svg width="10" height="100" xmlns="http://www.w3.org/2000/svg">'
-                f'<rect x="0" y="0" width="10" height="100" rx="4" fill="{track_color}"/>'
-                "</svg>"
-            )
-            ctx.mount_component(
-                self._retained_svg_component(
-                    component_id="__plane_scrollbar_y_track",
-                    svg_markup=track_markup,
-                    x=track_x,
-                    y=track_y,
-                    frame=frame,
-                    width=track_w,
-                    height=track_h,
-                    opacity=0.86,
-                )
-            )
             content_h = view_h + max_y
             thumb_ratio = max(0.08, min(1.0, view_h / max(content_h, 1e-9)))
             thumb_h = max(12.0, track_h * thumb_ratio)
             span = max(0.0, track_h - thumb_h)
             thumb_y = track_y + span * (scroll_y / max_y)
-            thumb_markup = (
-                '<svg width="10" height="100" xmlns="http://www.w3.org/2000/svg">'
-                f'<rect x="0" y="0" width="10" height="100" rx="4" fill="{thumb_color}"/>'
-                "</svg>"
-            )
-            ctx.mount_component(
-                self._retained_svg_component(
-                    component_id="__plane_scrollbar_y_thumb",
-                    svg_markup=thumb_markup,
-                    x=track_x,
-                    y=thumb_y,
-                    frame=frame,
-                    width=track_w,
-                    height=thumb_h,
-                    opacity=0.96,
-                )
+            self._mount_camera_overlay_scrollbar_pair(
+                ctx,
+                frame=frame,
+                track_id="__plane_scrollbar_y_track",
+                thumb_id="__plane_scrollbar_y_thumb",
+                track_x=track_x,
+                track_y=track_y,
+                track_w=track_w,
+                track_h=track_h,
+                thumb_x=track_x,
+                thumb_y=thumb_y,
+                thumb_w=track_w,
+                thumb_h=thumb_h,
+                track_markup_key="page_track_v",
+                thumb_markup_key="page_thumb_v",
+                track_opacity=0.86,
+                thumb_opacity=0.96,
             )
 
     def _viewport_content_refs(self) -> set[str]:
@@ -1042,93 +1076,63 @@ class PlaneApp:
         if view_w <= 0 or view_h <= 0:
             return
         scroll_x, scroll_y = self._viewport_scroll_position(viewport_component)
-        track_color = "#1f344d"
-        thumb_color = "#89b7e6"
 
         if content_w > view_w + 1e-9:
             track_h = 5.0
             track_y = y + view_h - track_h - 2.0
-            track_markup = (
-                '<svg width="100" height="10" xmlns="http://www.w3.org/2000/svg">'
-                f'<rect x="0" y="0" width="100" height="10" rx="4" fill="{track_color}"/>'
-                "</svg>"
-            )
-            ctx.mount_component(
-                self._retained_svg_component(
-                    component_id=f"{viewport_component.component_id}__scrollbar_x_track",
-                    svg_markup=track_markup,
-                    x=x + 2.0,
-                    y=track_y,
-                    frame=frame,
-                    width=max(8.0, view_w - 4.0),
-                    height=track_h,
-                    opacity=0.82,
-                )
-            )
+            track_x = x + 2.0
+            track_w = max(8.0, view_w - 4.0)
             thumb_ratio = max(0.08, min(1.0, view_w / content_w))
-            thumb_w = max(10.0, (view_w - 4.0) * thumb_ratio)
+            thumb_w = max(10.0, track_w * thumb_ratio)
             max_scroll_x = max(1e-9, content_w - view_w)
-            span = max(0.0, (view_w - 4.0) - thumb_w)
-            thumb_x = x + 2.0 + span * (scroll_x / max_scroll_x)
-            thumb_markup = (
-                '<svg width="100" height="10" xmlns="http://www.w3.org/2000/svg">'
-                f'<rect x="0" y="0" width="100" height="10" rx="4" fill="{thumb_color}"/>'
-                "</svg>"
-            )
-            ctx.mount_component(
-                self._retained_svg_component(
-                    component_id=f"{viewport_component.component_id}__scrollbar_x_thumb",
-                    svg_markup=thumb_markup,
-                    x=thumb_x,
-                    y=track_y,
-                    frame=frame,
-                    width=thumb_w,
-                    height=track_h,
-                    opacity=0.95,
-                )
+            span = max(0.0, track_w - thumb_w)
+            thumb_x = track_x + span * (scroll_x / max_scroll_x)
+            self._mount_camera_overlay_scrollbar_pair(
+                ctx,
+                frame=frame,
+                track_id=f"{viewport_component.component_id}__scrollbar_x_track",
+                thumb_id=f"{viewport_component.component_id}__scrollbar_x_thumb",
+                track_x=track_x,
+                track_y=track_y,
+                track_w=track_w,
+                track_h=track_h,
+                thumb_x=thumb_x,
+                thumb_y=track_y,
+                thumb_w=thumb_w,
+                thumb_h=track_h,
+                track_markup_key="viewport_track_h",
+                thumb_markup_key="viewport_thumb_h",
+                track_opacity=0.82,
+                thumb_opacity=0.95,
             )
 
         if content_h > view_h + 1e-9:
             track_w = 5.0
             track_x = x + view_w - track_w - 2.0
-            track_markup = (
-                '<svg width="10" height="100" xmlns="http://www.w3.org/2000/svg">'
-                f'<rect x="0" y="0" width="10" height="100" rx="4" fill="{track_color}"/>'
-                "</svg>"
-            )
-            ctx.mount_component(
-                self._retained_svg_component(
-                    component_id=f"{viewport_component.component_id}__scrollbar_y_track",
-                    svg_markup=track_markup,
-                    x=track_x,
-                    y=y + 2.0,
-                    frame=frame,
-                    width=track_w,
-                    height=max(8.0, view_h - 4.0),
-                    opacity=0.82,
-                )
-            )
+            track_y = y + 2.0
+            track_h = max(8.0, view_h - 4.0)
             thumb_ratio = max(0.08, min(1.0, view_h / content_h))
-            thumb_h = max(10.0, (view_h - 4.0) * thumb_ratio)
+            thumb_h = max(10.0, track_h * thumb_ratio)
             max_scroll_y = max(1e-9, content_h - view_h)
-            span = max(0.0, (view_h - 4.0) - thumb_h)
-            thumb_y = y + 2.0 + span * (scroll_y / max_scroll_y)
-            thumb_markup = (
-                '<svg width="10" height="100" xmlns="http://www.w3.org/2000/svg">'
-                f'<rect x="0" y="0" width="10" height="100" rx="4" fill="{thumb_color}"/>'
-                "</svg>"
-            )
-            ctx.mount_component(
-                self._retained_svg_component(
-                    component_id=f"{viewport_component.component_id}__scrollbar_y_thumb",
-                    svg_markup=thumb_markup,
-                    x=track_x,
-                    y=thumb_y,
-                    frame=frame,
-                    width=track_w,
-                    height=thumb_h,
-                    opacity=0.95,
-                )
+            span = max(0.0, track_h - thumb_h)
+            thumb_y = track_y + span * (scroll_y / max_scroll_y)
+            self._mount_camera_overlay_scrollbar_pair(
+                ctx,
+                frame=frame,
+                track_id=f"{viewport_component.component_id}__scrollbar_y_track",
+                thumb_id=f"{viewport_component.component_id}__scrollbar_y_thumb",
+                track_x=track_x,
+                track_y=track_y,
+                track_w=track_w,
+                track_h=track_h,
+                thumb_x=track_x,
+                thumb_y=thumb_y,
+                thumb_w=track_w,
+                thumb_h=thumb_h,
+                track_markup_key="viewport_track_v",
+                thumb_markup_key="viewport_thumb_v",
+                track_opacity=0.82,
+                thumb_opacity=0.95,
             )
 
 

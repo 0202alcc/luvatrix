@@ -585,6 +585,8 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertIn("viewport__scrollbar_x_thumb", ids)
             self.assertIn("viewport__scrollbar_y_track", ids)
             self.assertIn("viewport__scrollbar_y_thumb", ids)
+            perf = app.state.get("perf", {})
+            self.assertGreaterEqual(int(perf.get("camera_overlay_scrollbar_primitives", 0)), 4)
 
     def test_plane_runtime_scrolls_main_plane_when_no_viewport_matches(self) -> None:
         with tempfile.TemporaryDirectory() as td:

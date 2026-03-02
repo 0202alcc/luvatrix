@@ -6,13 +6,12 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-01`
 
 ## Backlog
-1. `T-829` Standardized CameraOverlay scrollbar primitives (no per-frame ad-hoc SVG generation).
-2. `T-830` True dirty-region compose path (partial redraw + unchanged-region reuse).
-3. `T-831` Hit-test acceleration index (spatial partitioning).
-4. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
-5. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
-6. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
-7. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
+1. `T-830` True dirty-region compose path (partial redraw + unchanged-region reuse).
+2. `T-831` Hit-test acceleration index (spatial partitioning).
+3. `T-832` Transform/layout cache invalidation model (recompute-on-change only).
+4. `T-833` Renderer batch optimization pass (state-change minimization and draw grouping).
+5. `T-834` Native hot-path extraction plan (optional C/Rust acceleration boundaries).
+6. `T-835` CI performance gate pack (p95 frame-time/jitter budgets + deterministic perf smoke).
 
 ## Ready
 1. None.
@@ -129,6 +128,13 @@ Last updated: `2026-03-01`
 - `luvatrix_ui/planes_runtime.py` now uses a retained mount cache for text/svg nodes and reuses previously-built component objects when render keys are unchanged.
 - Runtime perf counters expose `retained_components_reused` and `retained_components_new` to quantify churn reduction.
 - `tests/test_planes_runtime.py` adds identity reuse coverage for unchanged consecutive frames.
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
+24. `T-829` Standardized CameraOverlay scrollbar primitives (no per-frame ad-hoc SVG generation).
+- Evidence:
+- `luvatrix_ui/planes_runtime.py` now mounts both page and viewport scrollbars through a shared camera-overlay primitive helper (`_mount_camera_overlay_scrollbar_pair`) with standardized visual tokens/markup.
+- Scrollbar markup strings are prebuilt once per app lifecycle and reused (`self._scrollbar_markups`) instead of being generated ad hoc per mount path.
+- Runtime perf counters include `camera_overlay_scrollbar_primitives` for mounted primitive visibility.
+- `tests/test_planes_runtime.py` validates primitive counter presence alongside scrollbar mount IDs.
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py` (pass).
 
 ## Done
@@ -447,4 +453,9 @@ Last updated: `2026-03-01`
 - exposed churn counters (`retained_components_reused`, `retained_components_new`) in perf metrics.
 166. `2026-03-01`: Added regression coverage in `tests/test_planes_runtime.py` for unchanged-frame mount object identity reuse.
 167. `2026-03-01`: Verification rerun passed and `T-828` moved from `In Progress` to `Review`:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
+168. `2026-03-01`: `T-829` started (`Backlog` -> `In Progress`) for standardized camera-overlay scrollbar primitive implementation.
+169. `2026-03-01`: Replaced ad-hoc scrollbar mount code in `luvatrix_ui/planes_runtime.py` with a shared primitive helper and prebuilt markup token set for page + viewport scrollbars.
+170. `2026-03-01`: Added regression assertion in `tests/test_planes_runtime.py` for `camera_overlay_scrollbar_primitives` metric visibility.
+171. `2026-03-01`: Verification rerun passed and `T-829` moved from `In Progress` to `Review`:
 - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py`
