@@ -995,19 +995,23 @@ class PlaneApp:
             return full
         if not plane_changed:
             return full
-        adx = int(math.ceil(abs(dx)))
-        ady = int(math.ceil(abs(dy)))
+        shift_x, shift_y = self._quantized_scroll_shift(dx, dy)
+        adx = abs(int(shift_x))
+        ady = abs(int(shift_y))
+        if adx == 0 and ady == 0:
+            # Subpixel scroll deltas cannot be safely represented via integer shift+strip compose.
+            return full
         if adx >= view_w or ady >= view_h:
             return full
         rects: list[tuple[int, int, int, int]] = []
         # plane scroll delta > 0 moves content left/up in camera space.
-        if dx > 0:
+        if shift_x < 0:
             rects.append((view_w - adx, 0, adx, view_h))
-        elif dx < 0:
+        elif shift_x > 0:
             rects.append((0, 0, adx, view_h))
-        if dy > 0:
+        if shift_y < 0:
             rects.append((0, view_h - ady, view_w, ady))
-        elif dy < 0:
+        elif shift_y > 0:
             rects.append((0, 0, view_w, ady))
         normalized = self._normalize_local_dirty_rects(rects, view_w=view_w, view_h=view_h)
         return normalized if normalized else full
@@ -1032,12 +1036,16 @@ class PlaneApp:
         dy = float(post_plane_scroll[1] - pre_plane_scroll[1])
         if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
             return None
-        # positive plane-scroll means content moves left/up.
-        shift_x = -int(round(dx))
-        shift_y = -int(round(dy))
+        shift_x, shift_y = self._quantized_scroll_shift(dx, dy)
         if shift_x == 0 and shift_y == 0:
             return None
         return (shift_x, shift_y)
+
+    @staticmethod
+    def _quantized_scroll_shift(dx: float, dy: float) -> tuple[int, int]:
+        # Keep dirty-strip and shift compose aligned to the same integer translation.
+        # positive plane-scroll means content moves left/up in camera space.
+        return (-int(round(dx)), -int(round(dy)))
 
     @staticmethod
     def _normalize_local_dirty_rects(

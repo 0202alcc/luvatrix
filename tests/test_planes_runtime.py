@@ -783,6 +783,29 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertLess(int(perf.get("dirty_rect_area_px", 320 * 180)), 320 * 180)
             self.assertIsNotNone(ctx.last_scroll_shift)
 
+    def test_plane_runtime_subpixel_scroll_uses_full_frame_compose(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_camera_scroll_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 40.0, "y": 40.0, "delta_x": -0.4, "delta_y": 0.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(str(perf.get("compose_mode", "")), "full_frame")
+            self.assertIsNone(ctx.last_scroll_shift)
+
     def test_plane_runtime_coalesces_scroll_events_and_preserves_phases(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             plane_path = _build_scroll_hook_plane_file(Path(td))
