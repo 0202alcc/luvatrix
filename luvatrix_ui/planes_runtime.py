@@ -131,6 +131,8 @@ class PlaneApp:
                 "hit_test_spatial_buckets": int(self._frame_counts.get("hit_test_spatial_buckets", 0)),
                 "layout_cache_hits": int(self._frame_counts.get("layout_cache_hits", 0)),
                 "layout_cache_misses": int(self._frame_counts.get("layout_cache_misses", 0)),
+                "renderer_batch_groups": int(self._frame_counts.get("renderer_batch_groups", 0)),
+                "renderer_batch_state_switches": int(self._frame_counts.get("renderer_batch_state_switches", 0)),
                 "retained_components_reused": int(self._frame_counts.get("retained_components_reused", 0)),
                 "retained_components_new": int(self._frame_counts.get("retained_components_new", 0)),
                 "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
@@ -165,6 +167,7 @@ class PlaneApp:
         considered = 0
         culled = 0
         mounted = 0
+        mount_plan: list[tuple[str, Any, float, float, str]] = []
         for component in ordered:
             if not component.visible:
                 continue
@@ -195,53 +198,11 @@ class PlaneApp:
                 mounted += 1
                 continue
             frame = component.resolved_frame(self._ui_page.default_frame)
-            if component.component_type == "text":
-                props = component.style if isinstance(component.style, dict) else {}
-                text = str(props.get("text", component.component_id))
-                color_hex = self._resolve_text_color(component.component_id, props)
-                font_size_px = float(props.get("font_size_px", 14.0))
-                max_width_px = props.get("max_width_px")
-                if max_width_px is not None:
-                    max_width_px = float(max_width_px)
-                mount_start_ns = time.perf_counter_ns()
-                ctx.mount_component(
-                    self._retained_text_component(
-                        component_id=component.component_id,
-                        text=text,
-                        x=resolved_x,
-                        y=resolved_y,
-                        frame=frame,
-                        font_size_px=font_size_px,
-                        color_hex=color_hex,
-                        opacity=float(component.opacity),
-                        max_width_px=max_width_px,
-                    )
-                )
-                self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_start_ns)
-                mounted += 1
-                continue
-            if component.component_type == "svg":
-                if component.asset is None:
-                    continue
-                svg_path = (self._plane_dir / component.asset.source).resolve()
-                svg_markup = self._load_svg_markup(svg_path)
-                mount_start_ns = time.perf_counter_ns()
-                ctx.mount_component(
-                    self._retained_svg_component(
-                        component_id=component.component_id,
-                        svg_markup=svg_markup,
-                        x=resolved_x,
-                        y=resolved_y,
-                        frame=frame,
-                        width=float(component.width),
-                        height=float(component.height),
-                        opacity=float(component.opacity),
-                    )
-                )
-                self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_start_ns)
-                mounted += 1
+            if component.component_type in {"text", "svg"}:
+                mount_plan.append((str(component.component_type), component, resolved_x, resolved_y, frame))
                 continue
             # viewport and other component types are validated at compile-time.
+        mounted += self._mount_batched_drawables(ctx, mount_plan)
         mount_scrollbar_start_ns = time.perf_counter_ns()
         self._mount_plane_scrollbars(ctx)
         self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_scrollbar_start_ns)
@@ -262,6 +223,8 @@ class PlaneApp:
             "hit_test_spatial_buckets": int(self._frame_counts.get("hit_test_spatial_buckets", 0)),
             "layout_cache_hits": int(self._frame_counts.get("layout_cache_hits", 0)),
             "layout_cache_misses": int(self._frame_counts.get("layout_cache_misses", 0)),
+            "renderer_batch_groups": int(self._frame_counts.get("renderer_batch_groups", 0)),
+            "renderer_batch_state_switches": int(self._frame_counts.get("renderer_batch_state_switches", 0)),
             "retained_components_reused": int(self._frame_counts.get("retained_components_reused", 0)),
             "retained_components_new": int(self._frame_counts.get("retained_components_new", 0)),
             "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
@@ -677,6 +640,90 @@ class PlaneApp:
         self._svg_markup_cache[svg_path] = markup
         return markup
 
+    def _draw_batch_key(self, kind: str, component) -> tuple[Any, ...]:
+        if kind == "svg":
+            asset_src = ""
+            if component.asset is not None:
+                asset_src = str(component.asset.source)
+            return ("svg", asset_src, round(float(component.opacity), 4))
+        props = component.style if isinstance(component.style, dict) else {}
+        return (
+            "text",
+            round(float(component.opacity), 4),
+            round(float(props.get("font_size_px", 14.0)), 4),
+        )
+
+    def _mount_batched_drawables(self, ctx, drawables: list[tuple[str, Any, float, float, str]]) -> int:
+        if not drawables:
+            self._frame_counts["renderer_batch_groups"] = 0
+            self._frame_counts["renderer_batch_state_switches"] = 0
+            return 0
+        batches: list[list[tuple[str, Any, float, float, str]]] = []
+        current: list[tuple[str, Any, float, float, str]] = []
+        current_key: tuple[Any, ...] | None = None
+        for entry in drawables:
+            kind, component, _, _, _ = entry
+            key = self._draw_batch_key(kind, component)
+            if current_key is None or key == current_key:
+                current.append(entry)
+                current_key = key
+                continue
+            batches.append(current)
+            current = [entry]
+            current_key = key
+        if current:
+            batches.append(current)
+        self._frame_counts["renderer_batch_groups"] = int(len(batches))
+        self._frame_counts["renderer_batch_state_switches"] = int(max(0, len(batches) - 1))
+        mounted = 0
+        for batch in batches:
+            for kind, component, resolved_x, resolved_y, frame in batch:
+                if kind == "text":
+                    props = component.style if isinstance(component.style, dict) else {}
+                    text = str(props.get("text", component.component_id))
+                    color_hex = self._resolve_text_color(component.component_id, props)
+                    font_size_px = float(props.get("font_size_px", 14.0))
+                    max_width_px = props.get("max_width_px")
+                    if max_width_px is not None:
+                        max_width_px = float(max_width_px)
+                    mount_start_ns = time.perf_counter_ns()
+                    ctx.mount_component(
+                        self._retained_text_component(
+                            component_id=component.component_id,
+                            text=text,
+                            x=resolved_x,
+                            y=resolved_y,
+                            frame=frame,
+                            font_size_px=font_size_px,
+                            color_hex=color_hex,
+                            opacity=float(component.opacity),
+                            max_width_px=max_width_px,
+                        )
+                    )
+                    self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_start_ns)
+                    mounted += 1
+                    continue
+                if component.asset is None:
+                    continue
+                svg_path = (self._plane_dir / component.asset.source).resolve()
+                svg_markup = self._load_svg_markup(svg_path)
+                mount_start_ns = time.perf_counter_ns()
+                ctx.mount_component(
+                    self._retained_svg_component(
+                        component_id=component.component_id,
+                        svg_markup=svg_markup,
+                        x=resolved_x,
+                        y=resolved_y,
+                        frame=frame,
+                        width=float(component.width),
+                        height=float(component.height),
+                        opacity=float(component.opacity),
+                    )
+                )
+                self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_start_ns)
+                mounted += 1
+        return mounted
+
     def _retained_text_component(
         self,
         *,
@@ -823,6 +870,8 @@ class PlaneApp:
             "hit_test_spatial_buckets": 0,
             "layout_cache_hits": 0,
             "layout_cache_misses": 0,
+            "renderer_batch_groups": 0,
+            "renderer_batch_state_switches": 0,
             "retained_components_reused": 0,
             "retained_components_new": 0,
             "camera_overlay_scrollbar_primitives": 0,

@@ -736,6 +736,8 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertGreaterEqual(int(perf.get("hit_test_spatial_buckets", 0)), 1)
             self.assertGreaterEqual(int(perf.get("layout_cache_hits", 0)), 1)
             self.assertGreaterEqual(int(perf.get("layout_cache_misses", 0)), 1)
+            self.assertGreaterEqual(int(perf.get("renderer_batch_groups", 0)), 0)
+            self.assertGreaterEqual(int(perf.get("renderer_batch_state_switches", 0)), 0)
 
             timing = perf.get("timing_ms", {})
             self.assertIsInstance(timing, dict)
