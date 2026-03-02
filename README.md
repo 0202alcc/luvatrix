@@ -68,6 +68,16 @@ See:
 - `docs/app_protocol_compatibility_policy.md` for protocol support/deprecation policy
 - `docs/app_protocol_operator_runbook.md` for operator troubleshooting and audit verification
 - `docs/planes_protocol_v0.md` for the formal Planes JSON app-design schema (metadata, components, interactions, scripts, viewport semantics)
+- `docs/planes_protocol_vnext.md` for the multi-plane schema extension draft (`planes[]`, `camera_overlay`, section cuts, blend modes, v0->vNext compatibility mapping)
+- `docs/ui_ir_v2_gap_assessment.md` for current UI IR readiness and v2 gap/go-no-go analysis
+- `docs/ui_ir_v2_field_contract.md` for the normative UI IR v2 field contract (`planes-v2` page/plane/cut/component fields)
+- `docs/ui_ir_v2_validation_plan.md` for the IR v2 strict/permissive validation matrix, snapshot policy, and rollout gate criteria
+- `docs/ui_ir_v2_compiler_upgrade_design.md` for the compiler pipeline design from Planes schema vNext to deterministic `planes-v2` IR
+- `docs/ui_ir_v2_runtime_pipeline_design.md` for the runtime compose pipeline design (ordering, section-cuts, overlay, and RGBA clamp semantics)
+- `docs/ui_ir_v2_performance_execution_plan.md` for culling/prefetch/invalidation/cache strategy and determinism-safe rollout phases
+- `docs/ui_ir_v2_native_hot_path_extraction_plan.md` for optional C/Rust extraction boundaries and parity-safe rollout gates for hot runtime loops
+- `docs/ui_ir_v2_demo_verification_plan.md` for end-to-end demo validation scenarios and the verification command/checklist pack
+- `docs/ui_ir_v2_rollout_compatibility_gate_plan.md` for phased rollout, compatibility gates, rollback controls, and release-readiness criteria
 - `docs/app_protocol_v2_superset_spec.md` for protocol-v2 runtime/adapters/process-lane contract
 - `docs/app_protocol_v2_conformance_matrix.md` for v1/v2 test matrix and CI gate commands
 - `docs/app_protocol_v2_migration.md` for migration path from v1 in-process apps to v2

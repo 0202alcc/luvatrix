@@ -40,6 +40,36 @@ This index tracks major decisions with alternatives and rationale.
 - Summary: Reduce cost while preserving role-specific contexts and controls.
 - Linked evidence: `ops/discord/discord.md` bot strategy
 
+6. `ADR-006` MatrixBuffer and Camera Overlay terminology
+- Status: Accepted
+- Date: 2026-03-01
+- Summary: Standardize naming so visible output is always `MatrixBuffer` and top-pinned UI is `CameraOverlayLayer`.
+- Linked evidence: `ops/planning/adr/ADR-006-matrixbuffer-cameraoverlay-terminology.md`, `ops/planning/agile/m008_execution_board.md`
+
+7. `ADR-007` Plane composition model
+- Status: Accepted
+- Date: 2026-03-01
+- Summary: Define deterministic composition via global plane z, local component z, and camera-overlay dominance.
+- Linked evidence: `ops/planning/adr/ADR-007-plane-composition-model.md`, `ops/planning/agile/m008_execution_board.md`
+
+8. `ADR-008` Absolute and delta RGBA compositing contract
+- Status: Accepted
+- Date: 2026-03-01
+- Summary: Formalize `absolute_rgba` and `delta_rgba` behavior, deterministic order, and strict `[0,255]` final clamp rules.
+- Linked evidence: `ops/planning/adr/ADR-008-absolute-delta-rgba-compositing.md`, `ops/planning/agile/m008_execution_board.md`
+
+9. `ADR-009` Input routing and scroll targeting
+- Status: Accepted
+- Date: 2026-03-01
+- Summary: Define deterministic hit-test and scroll routing across overlay, planes, and section-cut pass-through regions.
+- Linked evidence: `ops/planning/adr/ADR-009-input-routing-and-scroll-targeting.md`, `ops/planning/agile/m008_execution_board.md`
+
+10. `ADR-010` Camera-relative culling and prefetch policy
+- Status: Accepted
+- Date: 2026-03-01
+- Summary: Define visible-region culling, predictive margins, and dirty/tile caching policy for smooth deterministic scrolling.
+- Linked evidence: `ops/planning/adr/ADR-010-camera-relative-culling-and-prefetch.md`, `ops/planning/agile/m008_execution_board.md`
+
 ## New ADR Template
 1. Context
 2. Decision

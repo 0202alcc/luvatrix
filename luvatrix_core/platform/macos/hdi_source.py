@@ -76,11 +76,16 @@ class MacOSWindowHDISource(HDIEventSource):
                     loc = event.locationInWindow()
                     view = self._window_handle.window.contentView()
                     view_h = float(view.bounds().size.height)
+                    phase = _scroll_phase_name(int(event.phase()))
+                    momentum_phase = _scroll_phase_name(int(event.momentumPhase()))
                     payload = {
                         "x": float(loc.x),
                         "y": _to_top_left_y(float(loc.y), view_h),
                         "delta_x": float(event.scrollingDeltaX()),
                         "delta_y": float(event.scrollingDeltaY()),
+                        "precise": bool(event.hasPreciseScrollingDeltas()),
+                        "phase": phase,
+                        "momentum_phase": momentum_phase,
                     }
                 elif event_type == int(NSEventTypePressure):
                     hdi_type = "pressure"
@@ -211,3 +216,15 @@ def _to_top_left_y(local_y: float, view_height: float) -> float:
     if y > (h - 1.0):
         return h - 1.0
     return y
+
+
+def _scroll_phase_name(raw: int) -> str:
+    phase_map = {
+        0: "none",
+        1: "began",
+        2: "changed",
+        3: "ended",
+        4: "cancelled",
+        5: "may_begin",
+    }
+    return phase_map.get(int(raw), "unknown")
