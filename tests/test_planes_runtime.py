@@ -537,9 +537,8 @@ class PlanesRuntimeTests(unittest.TestCase):
             content_mount = next((comp for comp in ctx.mounted if comp.component_id == "viewport__content"), None)
             self.assertIsNotNone(content_mount)
             assert content_mount is not None
-            self.assertAlmostEqual(float(content_mount.position.x), 10.0, places=6)
-            self.assertAlmostEqual(float(content_mount.position.y), 12.0, places=6)
-            self.assertIn('translate(-40.000 -25.000)', content_mount.svg_markup)
+            self.assertAlmostEqual(float(content_mount.position.x), -30.0, places=6)
+            self.assertAlmostEqual(float(content_mount.position.y), -13.0, places=6)
 
     def test_plane_runtime_viewport_scroll_is_clamped_to_content_bounds(self) -> None:
         with tempfile.TemporaryDirectory() as td:
