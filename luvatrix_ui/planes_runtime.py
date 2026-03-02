@@ -61,6 +61,7 @@ class PlaneApp:
         self._plane_index: dict[str, Any] = {}
         self._frame_perf: dict[str, float] = {}
         self._frame_counts: dict[str, int] = {}
+        self._retained_mount_cache: dict[str, tuple[tuple[Any, ...], Any]] = {}
 
     def register_handler(self, target: str, handler: EventHandler) -> None:
         self._handlers[target] = handler
@@ -132,12 +133,15 @@ class PlaneApp:
                     max_width_px = float(max_width_px)
                 mount_start_ns = time.perf_counter_ns()
                 ctx.mount_component(
-                    TextComponent(
+                    self._retained_text_component(
                         component_id=component.component_id,
                         text=text,
-                        position=CoordinatePoint(resolved_x, resolved_y, frame),
-                        size=TextSizeSpec(unit="px", value=font_size_px),
-                        appearance=TextAppearance(color_hex=color_hex, opacity=float(component.opacity)),
+                        x=resolved_x,
+                        y=resolved_y,
+                        frame=frame,
+                        font_size_px=font_size_px,
+                        color_hex=color_hex,
+                        opacity=float(component.opacity),
                         max_width_px=max_width_px,
                     )
                 )
@@ -151,12 +155,14 @@ class PlaneApp:
                 svg_markup = self._load_svg_markup(svg_path)
                 mount_start_ns = time.perf_counter_ns()
                 ctx.mount_component(
-                    SVGComponent(
+                    self._retained_svg_component(
                         component_id=component.component_id,
                         svg_markup=svg_markup,
-                        position=CoordinatePoint(resolved_x, resolved_y, frame),
-                        width=component.width,
-                        height=component.height,
+                        x=resolved_x,
+                        y=resolved_y,
+                        frame=frame,
+                        width=float(component.width),
+                        height=float(component.height),
                         opacity=float(component.opacity),
                     )
                 )
@@ -180,6 +186,8 @@ class PlaneApp:
             "scroll_events": int(self._frame_counts.get("scroll_events", 0)),
             "scroll_events_coalesced": int(self._frame_counts.get("scroll_events_coalesced", 0)),
             "hit_test_calls": int(self._frame_counts.get("hit_test_calls", 0)),
+            "retained_components_reused": int(self._frame_counts.get("retained_components_reused", 0)),
+            "retained_components_new": int(self._frame_counts.get("retained_components_new", 0)),
             "timing_ms": {
                 "input": self._ns_to_ms(self._frame_perf.get("input_ns", 0.0)),
                 "hit_test": self._ns_to_ms(self._frame_perf.get("hit_test_ns", 0.0)),
@@ -525,6 +533,84 @@ class PlaneApp:
         self._svg_markup_cache[svg_path] = markup
         return markup
 
+    def _retained_text_component(
+        self,
+        *,
+        component_id: str,
+        text: str,
+        x: float,
+        y: float,
+        frame: str,
+        font_size_px: float,
+        color_hex: str,
+        opacity: float,
+        max_width_px: float | None,
+    ) -> TextComponent:
+        key: tuple[Any, ...] = (
+            "text",
+            text,
+            round(float(x), 4),
+            round(float(y), 4),
+            frame,
+            round(float(font_size_px), 4),
+            color_hex,
+            round(float(opacity), 4),
+            None if max_width_px is None else round(float(max_width_px), 4),
+        )
+        cached_entry = self._retained_mount_cache.get(component_id)
+        if cached_entry is not None and cached_entry[0] == key and isinstance(cached_entry[1], TextComponent):
+            self._frame_counts["retained_components_reused"] = int(self._frame_counts.get("retained_components_reused", 0)) + 1
+            return cached_entry[1]
+        component = TextComponent(
+            component_id=component_id,
+            text=text,
+            position=CoordinatePoint(float(x), float(y), frame),
+            size=TextSizeSpec(unit="px", value=float(font_size_px)),
+            appearance=TextAppearance(color_hex=color_hex, opacity=float(opacity)),
+            max_width_px=max_width_px,
+        )
+        self._retained_mount_cache[component_id] = (key, component)
+        self._frame_counts["retained_components_new"] = int(self._frame_counts.get("retained_components_new", 0)) + 1
+        return component
+
+    def _retained_svg_component(
+        self,
+        *,
+        component_id: str,
+        svg_markup: str,
+        x: float,
+        y: float,
+        frame: str,
+        width: float,
+        height: float,
+        opacity: float,
+    ) -> SVGComponent:
+        key: tuple[Any, ...] = (
+            "svg",
+            hash(svg_markup),
+            round(float(x), 4),
+            round(float(y), 4),
+            frame,
+            round(float(width), 4),
+            round(float(height), 4),
+            round(float(opacity), 4),
+        )
+        cached_entry = self._retained_mount_cache.get(component_id)
+        if cached_entry is not None and cached_entry[0] == key and isinstance(cached_entry[1], SVGComponent):
+            self._frame_counts["retained_components_reused"] = int(self._frame_counts.get("retained_components_reused", 0)) + 1
+            return cached_entry[1]
+        component = SVGComponent(
+            component_id=component_id,
+            svg_markup=svg_markup,
+            position=CoordinatePoint(float(x), float(y), frame),
+            width=float(width),
+            height=float(height),
+            opacity=float(opacity),
+        )
+        self._retained_mount_cache[component_id] = (key, component)
+        self._frame_counts["retained_components_new"] = int(self._frame_counts.get("retained_components_new", 0)) + 1
+        return component
+
     def _begin_perf_frame(self) -> None:
         self._frame_perf = {}
         self._frame_counts = {
@@ -533,6 +619,8 @@ class PlaneApp:
             "scroll_events": 0,
             "scroll_events_coalesced": 0,
             "hit_test_calls": 0,
+            "retained_components_reused": 0,
+            "retained_components_new": 0,
         }
 
     def _add_perf_ns(self, key: str, delta_ns: int) -> None:
@@ -617,10 +705,12 @@ class PlaneApp:
                 "</svg>"
             )
             ctx.mount_component(
-                SVGComponent(
+                self._retained_svg_component(
                     component_id=f"{component.component_id}__mask_{i}",
                     svg_markup=markup,
-                    position=CoordinatePoint(mx, my, frame),
+                    x=mx,
+                    y=my,
+                    frame=frame,
                     width=mw,
                     height=mh,
                     opacity=1.0,
@@ -738,10 +828,12 @@ class PlaneApp:
                 "</svg>"
             )
             ctx.mount_component(
-                SVGComponent(
+                self._retained_svg_component(
                     component_id="__plane_scrollbar_x_track",
                     svg_markup=track_markup,
-                    position=CoordinatePoint(track_x, track_y, frame),
+                    x=track_x,
+                    y=track_y,
+                    frame=frame,
                     width=track_w,
                     height=track_h,
                     opacity=0.86,
@@ -758,10 +850,12 @@ class PlaneApp:
                 "</svg>"
             )
             ctx.mount_component(
-                SVGComponent(
+                self._retained_svg_component(
                     component_id="__plane_scrollbar_x_thumb",
                     svg_markup=thumb_markup,
-                    position=CoordinatePoint(thumb_x, track_y, frame),
+                    x=thumb_x,
+                    y=track_y,
+                    frame=frame,
                     width=thumb_w,
                     height=track_h,
                     opacity=0.96,
@@ -779,10 +873,12 @@ class PlaneApp:
                 "</svg>"
             )
             ctx.mount_component(
-                SVGComponent(
+                self._retained_svg_component(
                     component_id="__plane_scrollbar_y_track",
                     svg_markup=track_markup,
-                    position=CoordinatePoint(track_x, track_y, frame),
+                    x=track_x,
+                    y=track_y,
+                    frame=frame,
                     width=track_w,
                     height=track_h,
                     opacity=0.86,
@@ -799,10 +895,12 @@ class PlaneApp:
                 "</svg>"
             )
             ctx.mount_component(
-                SVGComponent(
+                self._retained_svg_component(
                     component_id="__plane_scrollbar_y_thumb",
                     svg_markup=thumb_markup,
-                    position=CoordinatePoint(track_x, thumb_y, frame),
+                    x=track_x,
+                    y=thumb_y,
+                    frame=frame,
                     width=track_w,
                     height=thumb_h,
                     opacity=0.96,
@@ -893,12 +991,14 @@ class PlaneApp:
             svg_path = (self._plane_dir / content.asset.source).resolve()
             svg_markup = self._load_svg_markup(svg_path)
             ctx.mount_component(
-                SVGComponent(
+                self._retained_svg_component(
                     component_id=f"{viewport_component.component_id}__content",
                     svg_markup=svg_markup,
-                    position=CoordinatePoint(content_x, content_y, frame),
-                    width=content.width,
-                    height=content.height,
+                    x=content_x,
+                    y=content_y,
+                    frame=frame,
+                    width=float(content.width),
+                    height=float(content.height),
                     opacity=float(content.opacity),
                 )
             )
@@ -916,12 +1016,15 @@ class PlaneApp:
             if max_width_px is not None:
                 max_width_px = float(max_width_px)
             ctx.mount_component(
-                TextComponent(
+                self._retained_text_component(
                     component_id=f"{viewport_component.component_id}__content",
                     text=text,
-                    position=CoordinatePoint(content_x, content_y, frame),
-                    size=TextSizeSpec(unit="px", value=font_size_px),
-                    appearance=TextAppearance(color_hex=color_hex, opacity=float(content.opacity)),
+                    x=content_x,
+                    y=content_y,
+                    frame=frame,
+                    font_size_px=font_size_px,
+                    color_hex=color_hex,
+                    opacity=float(content.opacity),
                     max_width_px=max_width_px,
                 )
             )
@@ -951,10 +1054,12 @@ class PlaneApp:
                 "</svg>"
             )
             ctx.mount_component(
-                SVGComponent(
+                self._retained_svg_component(
                     component_id=f"{viewport_component.component_id}__scrollbar_x_track",
                     svg_markup=track_markup,
-                    position=CoordinatePoint(x + 2.0, track_y, frame),
+                    x=x + 2.0,
+                    y=track_y,
+                    frame=frame,
                     width=max(8.0, view_w - 4.0),
                     height=track_h,
                     opacity=0.82,
@@ -971,10 +1076,12 @@ class PlaneApp:
                 "</svg>"
             )
             ctx.mount_component(
-                SVGComponent(
+                self._retained_svg_component(
                     component_id=f"{viewport_component.component_id}__scrollbar_x_thumb",
                     svg_markup=thumb_markup,
-                    position=CoordinatePoint(thumb_x, track_y, frame),
+                    x=thumb_x,
+                    y=track_y,
+                    frame=frame,
                     width=thumb_w,
                     height=track_h,
                     opacity=0.95,
@@ -990,10 +1097,12 @@ class PlaneApp:
                 "</svg>"
             )
             ctx.mount_component(
-                SVGComponent(
+                self._retained_svg_component(
                     component_id=f"{viewport_component.component_id}__scrollbar_y_track",
                     svg_markup=track_markup,
-                    position=CoordinatePoint(track_x, y + 2.0, frame),
+                    x=track_x,
+                    y=y + 2.0,
+                    frame=frame,
                     width=track_w,
                     height=max(8.0, view_h - 4.0),
                     opacity=0.82,
@@ -1010,10 +1119,12 @@ class PlaneApp:
                 "</svg>"
             )
             ctx.mount_component(
-                SVGComponent(
+                self._retained_svg_component(
                     component_id=f"{viewport_component.component_id}__scrollbar_y_thumb",
                     svg_markup=thumb_markup,
-                    position=CoordinatePoint(track_x, thumb_y, frame),
+                    x=track_x,
+                    y=thumb_y,
+                    frame=frame,
                     width=track_w,
                     height=thumb_h,
                     opacity=0.95,

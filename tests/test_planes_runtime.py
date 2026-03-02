@@ -658,6 +658,24 @@ class PlanesRuntimeTests(unittest.TestCase):
             second_perf = dict(app.state.get("perf", {}))
             self.assertEqual(int(second_perf.get("svg_cache_size", 0)), 1)
 
+    def test_plane_runtime_reuses_retained_mount_nodes_for_unchanged_frame(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={"handlers::open": lambda e, s: None})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            first_by_id = {comp.component_id: comp for comp in ctx.mounted}
+
+            ctx.mounted = []
+            app.loop(ctx, 0.016)
+            second_by_id = {comp.component_id: comp for comp in ctx.mounted}
+
+            self.assertIs(first_by_id["title"], second_by_id["title"])
+            self.assertIs(first_by_id["logo"], second_by_id["logo"])
+            perf = app.state.get("perf", {})
+            self.assertGreaterEqual(int(perf.get("retained_components_reused", 0)), 2)
+
     def test_plane_runtime_exposes_frame_timing_stages_and_event_counters(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             plane_path = _build_scroll_plane_file(Path(td))
