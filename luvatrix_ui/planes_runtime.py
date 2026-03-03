@@ -1165,11 +1165,23 @@ class PlaneApp:
         dx = float(post_plane_scroll[0] - pre_plane_scroll[0])
         dy = float(post_plane_scroll[1] - pre_plane_scroll[1])
         plane_changed = abs(dx) > 1e-9 or abs(dy) > 1e-9
-        if theme_or_hover_changed or viewport_scroll_changed:
+        if theme_or_hover_changed:
             return full
+        dirty_rects: list[tuple[int, int, int, int]] = []
+        if viewport_scroll_changed:
+            dirty_rects.extend(
+                self._viewport_scroll_dirty_rects(
+                    pre_viewport_scroll=pre_signature[2],
+                    post_viewport_scroll=post_signature[2],
+                )
+            )
         if not plane_changed:
+            normalized = self._normalize_local_dirty_rects(dirty_rects, view_w=view_w, view_h=view_h)
+            return normalized if normalized else full
+        if dirty_rects and self._has_camera_overlay_activity():
+            # Preserve visual parity when camera overlays are active.
             return full
-        if self._has_camera_overlay_activity():
+        if not dirty_rects and self._has_camera_overlay_activity():
             return full
         shift_x, shift_y = self._quantized_scroll_shift(dx, dy)
         adx = abs(int(shift_x))
@@ -1185,14 +1197,15 @@ class PlaneApp:
         rects: list[tuple[int, int, int, int]] = []
         # plane scroll delta > 0 moves content left/up in camera space.
         if shift_x < 0:
-            rects.append((view_w - adx, 0, adx, view_h))
+            dirty_rects.append((view_w - adx, 0, adx, view_h))
         elif shift_x > 0:
-            rects.append((0, 0, adx, view_h))
+            dirty_rects.append((0, 0, adx, view_h))
         if shift_y < 0:
-            rects.append((0, view_h - ady, view_w, ady))
+            dirty_rects.append((0, view_h - ady, view_w, ady))
         elif shift_y > 0:
-            rects.append((0, 0, view_w, ady))
-        normalized = self._normalize_local_dirty_rects(rects, view_w=view_w, view_h=view_h)
+            dirty_rects.append((0, 0, view_w, ady))
+        dirty_rects.extend(self._plane_scrollbar_dirty_rects())
+        normalized = self._normalize_local_dirty_rects(dirty_rects, view_w=view_w, view_h=view_h)
         return normalized if normalized else full
 
     def _compute_scroll_shift(
@@ -1240,8 +1253,81 @@ class PlaneApp:
                 continue
             if self._is_overlay_attached(component) or self._is_camera_fixed(component):
                 return True
+        return False
+
+    def _viewport_scroll_dirty_rects(
+        self,
+        *,
+        pre_viewport_scroll: tuple[tuple[str, float, float], ...],
+        post_viewport_scroll: tuple[tuple[str, float, float], ...],
+    ) -> list[tuple[int, int, int, int]]:
+        if self._ui_page is None:
+            return []
+        before = {item[0]: (float(item[1]), float(item[2])) for item in pre_viewport_scroll}
+        after = {item[0]: (float(item[1]), float(item[2])) for item in post_viewport_scroll}
+        changed_ids: set[str] = set()
+        for key in set(before.keys()) | set(after.keys()):
+            if key not in before or key not in after:
+                changed_ids.add(key)
+                continue
+            bx, by = before[key]
+            ax, ay = after[key]
+            if abs(ax - bx) > 1e-9 or abs(ay - by) > 1e-9:
+                changed_ids.add(key)
+        rects: list[tuple[int, int, int, int]] = []
+        for viewport_id in changed_ids:
+            component = self._component_index.get(viewport_id)
+            if component is None or component.component_type != "viewport":
+                continue
+            if not component.visible or not self._component_is_active(component):
+                continue
+            x, y = self._resolved_position(component)
+            rects.append(
+                (
+                    int(math.floor(x)),
+                    int(math.floor(y)),
+                    int(math.ceil(float(component.width))),
+                    int(math.ceil(float(component.height))),
+                )
+            )
+        return rects
+
+    def _plane_scrollbar_dirty_rects(self) -> list[tuple[int, int, int, int]]:
+        if self._ui_page is None:
+            return []
         max_x, max_y = self._plane_scroll_limits()
-        return max_x > 1e-9 or max_y > 1e-9
+        if max_x <= 1e-9 and max_y <= 1e-9:
+            return []
+        view_w = float(self._ui_page.matrix.width)
+        view_h = float(self._ui_page.matrix.height)
+        rects: list[tuple[int, int, int, int]] = []
+        if max_x > 1e-9:
+            track_h = 6.0
+            track_x = 4.0
+            track_y = view_h - track_h - 2.0
+            track_w = max(16.0, view_w - 12.0)
+            rects.append(
+                (
+                    int(math.floor(track_x)),
+                    int(math.floor(track_y)),
+                    int(math.ceil(track_w)),
+                    int(math.ceil(track_h)),
+                )
+            )
+        if max_y > 1e-9:
+            track_w = 6.0
+            track_x = view_w - track_w - 2.0
+            track_y = 72.0
+            track_h = max(16.0, view_h - 82.0)
+            rects.append(
+                (
+                    int(math.floor(track_x)),
+                    int(math.floor(track_y)),
+                    int(math.ceil(track_w)),
+                    int(math.ceil(track_h)),
+                )
+            )
+        return rects
 
     @staticmethod
     def _normalize_local_dirty_rects(

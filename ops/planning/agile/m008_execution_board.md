@@ -18,23 +18,7 @@ Last updated: `2026-03-03`
 1. None.
 
 ## Review
-1. `T-2301` Audit and reduce frequent `FullRewrite` submissions in interactive paths.
-- Evidence:
-- `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/scroll_drag_candidate.json` (pass).
-- `PYTHONPATH=. uv run pytest tests -k "scroll or viewport or dirty_rect" -q` (pass).
-2. `T-2302` Strengthen `ShiftFrame + ReplaceRect` strategy for scroll-heavy workflows.
-- Evidence:
-- `PYTHONPATH=. uv run pytest tests/test_window_matrix_protocol.py tests/test_app_runtime.py tests/test_planes_runtime.py -q` (pass).
-3. `T-2303` Enforce incremental-present policy gate with explicit invalidation escape hatch.
-- Evidence:
-- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "invalidation or incremental_present" -q` (pass).
-4. `T-2304` Add dirty-rect telemetry (count, dirty-area ratio, incremental/full percentage).
-- Evidence:
-- `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/scroll_drag_candidate.json` (pass).
-5. `T-2305` Add viewport/scroll visual artifact regression suite.
-- Evidence:
-- `PYTHONPATH=. uv run pytest tests -k "scroll or viewport or dirty_rect" -q` (pass).
-6. `T-804` Scrolling/viewport controls for dense plot surfaces.
+1. `T-804` Scrolling/viewport controls for dense plot surfaces.
 - Evidence:
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_planes_runtime.py -k "scroll or viewport" -q` (pass).
 7. `T-805` Table UI component system (sortable columns, pagination/virtualization, keyboard access).
@@ -270,7 +254,22 @@ Last updated: `2026-03-03`
 - `PYTHONPATH=. uv run python ops/ci/m008_perf_gate.py --samples 60 --budget-p95-ms 40 --budget-jitter-ms 25` (pass).
 
 ## Integration Ready
-1. None.
+1. `T-2301` Audit and reduce frequent `FullRewrite` submissions in interactive paths.
+- Evidence:
+- `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/scroll_drag_candidate.json` (pass).
+- `PYTHONPATH=. uv run pytest tests -k "scroll or viewport or dirty_rect" -q` (pass).
+2. `T-2302` Strengthen `ShiftFrame + ReplaceRect` strategy for scroll-heavy workflows.
+- Evidence:
+- `PYTHONPATH=. uv run pytest tests/test_window_matrix_protocol.py tests/test_app_runtime.py tests/test_planes_runtime.py -q` (pass).
+3. `T-2303` Enforce incremental-present policy gate with explicit invalidation escape hatch.
+- Evidence:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "invalidation or incremental_present" -q` (pass).
+4. `T-2304` Add dirty-rect telemetry (count, dirty-area ratio, incremental/full percentage).
+- Evidence:
+- `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/scroll_drag_candidate.json` (pass).
+5. `T-2305` Add viewport/scroll visual artifact regression suite.
+- Evidence:
+- `PYTHONPATH=. uv run pytest tests -k "scroll or viewport or dirty_rect" -q` (pass).
 
 ## Done
 1. `T-803` Multi-plot support (minimum 2-panel subplot layout in one figure/frame).
