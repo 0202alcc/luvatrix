@@ -59,14 +59,25 @@ Before planning or editing code, read:
 ## Planning API Usage (Required Flow)
 1. Always run API calls in dry-run first (no `--apply`).
 2. Re-run with `--apply` only after dry-run output is correct.
-3. Use API endpoints for planning changes:
+3. `planning_api.py --apply` is restricted to `main` only (global source of truth protection).
+4. Use API endpoints for planning changes:
    - `/milestones` for milestone create/update/delete
    - `/tasks` for task create/update/archive
    - `/boards` and `/frameworks` for Agile framework/board controls
    - `/backlog` for leftover/unattached tickets
-4. Do not manually edit planning JSON files unless API cannot express the needed operation.
-5. After planning changes, run:
+5. Do not manually edit planning JSON files unless API cannot express the needed operation.
+6. After planning changes, run:
    - `uv run python ops/planning/agile/validate_milestone_task_links.py`
+
+## Planning Sync SOP (Across Branches)
+1. `main:/ops/planning/*` is the only canonical planning source of truth.
+2. Milestone branches may run planning API in dry-run mode for checks/previews.
+3. All planning writes (`--apply`) must be executed on `main`.
+4. Workflow:
+   - perform implementation on milestone branch,
+   - switch to `main` and apply planning state updates via API,
+   - switch back and rebase/pull `main` into milestone branch.
+5. Do not keep long-lived planning deltas on milestone branches.
 
 ## GateFlow Workflow (Default)
 1. Default columns:

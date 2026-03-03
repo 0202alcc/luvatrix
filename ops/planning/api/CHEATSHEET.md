@@ -6,7 +6,8 @@ Fast command reference for milestone/task/board/backlog operations.
 
 1. Dry-run first (no `--apply`).
 2. Re-run with `--apply` once output looks correct.
-3. API `--apply` auto-regenerates:
+3. Run `--apply` only on `main` (`main:/ops/planning/*` is source of truth).
+4. API `--apply` auto-regenerates:
 - `ops/planning/gantt/milestones_gantt.md`
 - `ops/planning/gantt/milestones_gantt.png`
 

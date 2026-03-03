@@ -56,6 +56,7 @@ Quick operator reference:
 
 1. Dry-run by default (`--apply` required to write).
 2. Atomic writes to source files.
+3. `--apply` writes are restricted to `main` branch only (`main:/ops/planning/*` is canonical source of truth).
 3. Validates:
 - milestone/task id formats
 - task status values
@@ -75,6 +76,12 @@ Quick operator reference:
 8. `Done` transition guard requires task payload to include:
 - `actuals` numeric fields: `input_tokens`, `output_tokens`, `wall_time_sec`, `tool_calls`, `reopen_count`
 - `done_gate` boolean fields all `true`: `success_criteria_met`, `safety_tests_passed`, `implementation_tests_passed`, `edge_case_tests_passed`, `merged_to_main`, `required_checks_passed_on_main`
+
+## Planning Sync SOP
+
+1. Run planning API in dry-run mode on milestone branches when needed.
+2. Execute all planning writes (`--apply`) on `main`.
+3. After applying planning updates on `main`, sync milestone branches from `main`.
 
 ## Usage
 

@@ -33,11 +33,14 @@ not Discord-specific.
 
 1. Start milestone work in a dedicated milestone thread and dedicated milestone branch.
 2. Use `ops/planning/api/planning_api.py` to add/update milestone and task records.
-3. Use planning API board/framework endpoints to manage Agile board templates (GateFlow default).
-4. Keep `milestone_schedule.json.task_ids` aligned with task IDs in active/archived ledgers.
-5. Track milestone closing/reopening in `milestone_schedule.json -> lifecycle_events`.
-6. Use `backlog_misc.json` for leftover/unattached tickets instead of forcing them into unrelated milestones.
-7. Run integrity checks:
+3. `main:/ops/planning/*` is the only planning source of truth.
+4. `planning_api.py --apply` writes are restricted to `main`; milestone branches are dry-run only for planning API.
+5. Apply planning updates on `main`, then sync milestone branches from `main`.
+6. Use planning API board/framework endpoints to manage Agile board templates (GateFlow default).
+7. Keep `milestone_schedule.json.task_ids` aligned with task IDs in active/archived ledgers.
+8. Track milestone closing/reopening in `milestone_schedule.json -> lifecycle_events`.
+9. Use `backlog_misc.json` for leftover/unattached tickets instead of forcing them into unrelated milestones.
+10. Run integrity checks:
    - `uv run python ops/planning/agile/validate_milestone_task_links.py`
-8. Milestone completion is only recognized after all milestone thread changes are merged to `main` and required tests pass on `main`.
-9. Task `Done` transitions must include GateFlow completion telemetry (`actuals` + `done_gate`) via planning API payload.
+11. Milestone completion is only recognized after all milestone thread changes are merged to `main` and required tests pass on `main`.
+12. Task `Done` transitions must include GateFlow completion telemetry (`actuals` + `done_gate`) via planning API payload.

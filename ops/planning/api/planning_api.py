@@ -84,6 +84,16 @@ class ApiError(RuntimeError):
     pass
 
 
+def current_git_branch() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
 def regenerate_gantt_artifacts() -> None:
     commands = [
         [
@@ -944,6 +954,12 @@ def main() -> int:
     print(f"mode: {mode}")
     print(summary)
     if args.apply:
+        branch = current_git_branch()
+        if branch != "main":
+            raise ApiError(
+                "planning_api --apply is restricted to main branch only; "
+                f"current branch is '{branch}'. Run this write on main, then sync milestone branches."
+            )
         write_json(SCHEDULE_PATH, schedule)
         write_json(TASKS_MASTER_PATH, tasks_master)
         write_json(TASKS_ARCHIVED_PATH, tasks_archived)
