@@ -2122,7 +2122,7 @@
       "title": "Document protocol semantics for incremental-present policy and invalidation boundaries.",
       "epic_id": "E-2701",
       "milestone_id": "F-011",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2303"
       ],
@@ -2147,7 +2147,7 @@
       "title": "Document sensor fast-path/cached-path semantics and TTL behavior in protocol docs.",
       "epic_id": "E-2701",
       "milestone_id": "F-011",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2504"
       ],
@@ -2172,7 +2172,7 @@
       "title": "Publish compatibility/migration notes for performance-path changes with determinism guarantees.",
       "epic_id": "E-2701",
       "milestone_id": "F-011",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2404",
         "T-2604",
