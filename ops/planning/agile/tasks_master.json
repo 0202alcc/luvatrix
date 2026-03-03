@@ -706,7 +706,7 @@
       "title": "Scrolling and viewport controls for dense plot surfaces.",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Backlog",
+      "status": "Verification Review",
       "depends_on": [
         "T-803"
       ],
@@ -714,6 +714,12 @@
         "milestone:U-017",
         "team:runtime",
         "specialist:qa"
+      ],
+      "acceptance_criteria": [
+        "Scrolling and viewport behavior is deterministic, clamped, and regression-tested."
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_planes_runtime.py -k \"scroll or viewport\" -q"
       ]
     },
     {
@@ -721,7 +727,7 @@
       "title": "Table UI component system (sortable columns, pagination/virtualization, keyboard access).",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Backlog",
+      "status": "Verification Review",
       "depends_on": [
         "T-804"
       ],
@@ -729,6 +735,12 @@
         "milestone:U-017",
         "team:runtime",
         "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Table sorting, pagination/virtualization, and keyboard flows are deterministic with regression coverage."
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run pytest tests/test_luvatrix_ui_table.py -q"
       ]
     },
     {
@@ -767,7 +779,7 @@
       "title": "Define and implement native hot-path extraction plan for high-frequency camera/compose operations.",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Backlog",
+      "status": "Verification Review",
       "depends_on": [
         "T-833"
       ],
@@ -775,6 +787,12 @@
         "milestone:U-017",
         "team:runtime",
         "specialist:architecture"
+      ],
+      "acceptance_criteria": [
+        "Native hot-path extraction boundaries and rollback/fallback constraints are documented deterministically."
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py -q"
       ]
     },
     {
@@ -782,7 +800,7 @@
       "title": "Implement CI performance gate pack for camera-scroll, compositor, and frame-budget thresholds.",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Backlog",
+      "status": "Verification Review",
       "depends_on": [
         "T-834"
       ],
@@ -790,6 +808,13 @@
         "milestone:U-017",
         "team:platform-ci",
         "specialist:testing"
+      ],
+      "acceptance_criteria": [
+        "CI perf gate enforces deterministic camera-scroll/compositor budget checks with reproducible artifacts."
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run pytest tests/test_m008_perf_gate.py -q",
+        "PYTHONPATH=. uv run python ops/ci/m008_perf_gate.py --samples 60 --budget-p95-ms 40 --budget-jitter-ms 25"
       ]
     },
     {
@@ -797,7 +822,7 @@
       "title": "Implement shift-blit camera scroll compose path (translate previous frame + redraw exposed strips only).",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Backlog",
+      "status": "Verification Review",
       "depends_on": [
         "T-835"
       ],
@@ -805,6 +830,12 @@
         "milestone:U-017",
         "team:runtime",
         "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Shift-blit compose uses deterministic translation plus exposed-strip redraw without visual regressions."
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run pytest tests/test_window_matrix_protocol.py tests/test_app_runtime.py tests/test_planes_runtime.py -q"
       ]
     },
     {
@@ -812,7 +843,7 @@
       "title": "Add pre-rasterized bitmap cache path for stable SVG/text components during camera scrolling.",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Backlog",
+      "status": "Intake",
       "depends_on": [
         "T-836"
       ],
@@ -820,6 +851,12 @@
         "milestone:U-017",
         "team:rendering",
         "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Pre-rasterized bitmap cache path for stable SVG/text components is defined with parity tests and rollback path."
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k \"cache or svg\" -q"
       ]
     },
     {
@@ -827,7 +864,7 @@
       "title": "Add frame-paced scroll scheduler (coalesced input -> one render cadence update).",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Backlog",
+      "status": "Intake",
       "depends_on": [
         "T-837"
       ],
@@ -835,6 +872,12 @@
         "milestone:U-017",
         "team:runtime",
         "specialist:architecture"
+      ],
+      "acceptance_criteria": [
+        "Frame-paced scroll scheduler coalesces input into deterministic render cadence updates."
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k \"coalesced or scroll\" -q"
       ]
     },
     {
@@ -842,7 +885,7 @@
       "title": "Decouple input ingestion from render thread using deterministic intent queue handoff.",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Backlog",
+      "status": "Intake",
       "depends_on": [
         "T-838"
       ],
@@ -850,6 +893,12 @@
         "milestone:U-017",
         "team:runtime",
         "specialist:architecture"
+      ],
+      "acceptance_criteria": [
+        "Input ingestion is decoupled from render via deterministic intent queue handoff with ordering guarantees."
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run pytest tests/test_hdi_thread.py tests/test_planes_runtime.py -k \"input or queue or intent\" -q"
       ]
     },
     {
@@ -857,7 +906,7 @@
       "title": "Finalize scroll performance validation pack (latency/jitter budgets + visual artifact regression gates).",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Backlog",
+      "status": "Intake",
       "depends_on": [
         "T-839"
       ],
@@ -865,6 +914,13 @@
         "milestone:U-017",
         "team:platform-ci",
         "specialist:qa"
+      ],
+      "acceptance_criteria": [
+        "Final scroll validation pack enforces latency/jitter budgets and visual artifact regression gates."
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/scroll_drag_candidate.json",
+        "PYTHONPATH=. uv run pytest tests -k \"scroll or viewport or dirty_rect\" -q"
       ]
     },
     {
@@ -1414,7 +1470,7 @@
       "title": "Audit and reduce frequent FullRewrite submissions in interactive paths.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Done",
+      "status": "Verification Review",
       "depends_on": [
         "T-2102"
       ],
@@ -1428,8 +1484,8 @@
         "Incremental update percentage increases and frame-time variance improves without visual artifacts."
       ],
       "evidence_commands": [
-        "uv run python tools/perf/run_suite.py --scenario scroll_drag --out artifacts/perf/scroll_drag_candidate.json",
-        "uv run pytest tests/ui tests/rendering -k \"scroll or viewport or dirty_rect\" -q"
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/scroll_drag_candidate.json",
+        "PYTHONPATH=. uv run pytest tests -k \"scroll or viewport or dirty_rect\" -q"
       ],
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
@@ -1456,7 +1512,7 @@
       "title": "Strengthen ShiftFrame + ReplaceRect strategy for scroll-heavy workflows.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Done",
+      "status": "Verification Review",
       "depends_on": [
         "T-2301"
       ],
@@ -1470,8 +1526,8 @@
         "Incremental update percentage increases and frame-time variance improves without visual artifacts."
       ],
       "evidence_commands": [
-        "uv run python tools/perf/run_suite.py --scenario scroll_drag --out artifacts/perf/scroll_drag_candidate.json",
-        "uv run pytest tests/ui tests/rendering -k \"scroll or viewport or dirty_rect\" -q"
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/scroll_drag_candidate.json",
+        "PYTHONPATH=. uv run pytest tests -k \"scroll or viewport or dirty_rect\" -q"
       ],
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
@@ -1498,7 +1554,7 @@
       "title": "Enforce incremental-present policy gate with explicit invalidation escape hatch.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Done",
+      "status": "Verification Review",
       "depends_on": [
         "T-2302"
       ],
@@ -1512,8 +1568,8 @@
         "Incremental update percentage increases and frame-time variance improves without visual artifacts."
       ],
       "evidence_commands": [
-        "uv run python tools/perf/run_suite.py --scenario scroll_drag --out artifacts/perf/scroll_drag_candidate.json",
-        "uv run pytest tests/ui tests/rendering -k \"scroll or viewport or dirty_rect\" -q"
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/scroll_drag_candidate.json",
+        "PYTHONPATH=. uv run pytest tests -k \"scroll or viewport or dirty_rect\" -q"
       ],
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
@@ -1540,7 +1596,7 @@
       "title": "Add dirty-rect telemetry (count, dirty-area ratio, incremental/full percentage).",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Done",
+      "status": "Verification Review",
       "depends_on": [
         "T-2303"
       ],
@@ -1554,8 +1610,8 @@
         "Incremental update percentage increases and frame-time variance improves without visual artifacts."
       ],
       "evidence_commands": [
-        "uv run python tools/perf/run_suite.py --scenario scroll_drag --out artifacts/perf/scroll_drag_candidate.json",
-        "uv run pytest tests/ui tests/rendering -k \"scroll or viewport or dirty_rect\" -q"
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/scroll_drag_candidate.json",
+        "PYTHONPATH=. uv run pytest tests -k \"scroll or viewport or dirty_rect\" -q"
       ],
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
@@ -1582,7 +1638,7 @@
       "title": "Add viewport/scroll visual artifact regression suite.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Done",
+      "status": "Verification Review",
       "depends_on": [
         "T-2304"
       ],
@@ -1596,8 +1652,8 @@
         "Incremental update percentage increases and frame-time variance improves without visual artifacts."
       ],
       "evidence_commands": [
-        "uv run python tools/perf/run_suite.py --scenario scroll_drag --out artifacts/perf/scroll_drag_candidate.json",
-        "uv run pytest tests/ui tests/rendering -k \"scroll or viewport or dirty_rect\" -q"
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/scroll_drag_candidate.json",
+        "PYTHONPATH=. uv run pytest tests -k \"scroll or viewport or dirty_rect\" -q"
       ],
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
