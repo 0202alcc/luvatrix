@@ -2122,7 +2122,7 @@
       "title": "Document protocol semantics for incremental-present policy and invalidation boundaries.",
       "epic_id": "E-2701",
       "milestone_id": "F-011",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2303"
       ],
@@ -2140,14 +2140,29 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "M",
       "effort_bucket": "M",
-      "confidence": 0.81
+      "confidence": 0.81,
+      "actuals": {
+        "input_tokens": 5200,
+        "output_tokens": 1900,
+        "wall_time_sec": 5400,
+        "tool_calls": 52,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2702",
       "title": "Document sensor fast-path/cached-path semantics and TTL behavior in protocol docs.",
       "epic_id": "E-2701",
       "milestone_id": "F-011",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2504"
       ],
@@ -2165,14 +2180,29 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "M",
       "effort_bucket": "M",
-      "confidence": 0.81
+      "confidence": 0.81,
+      "actuals": {
+        "input_tokens": 5400,
+        "output_tokens": 2000,
+        "wall_time_sec": 5600,
+        "tool_calls": 55,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2703",
       "title": "Publish compatibility/migration notes for performance-path changes with determinism guarantees.",
       "epic_id": "E-2701",
       "milestone_id": "F-011",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2404",
         "T-2604",
@@ -2193,7 +2223,22 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "M",
       "effort_bucket": "M",
-      "confidence": 0.81
+      "confidence": 0.81,
+      "actuals": {
+        "input_tokens": 6100,
+        "output_tokens": 2300,
+        "wall_time_sec": 6000,
+        "tool_calls": 59,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     }
   ]
 }

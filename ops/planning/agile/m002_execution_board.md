@@ -2,8 +2,8 @@
 
 Milestone: `F-011` App protocol docs finalized
 Epic: `E-201`
-Task chain: `T-201 -> T-202 -> T-203 -> T-204 -> T-205 -> T-206 -> T-207 -> T-208 -> T-209 -> T-210 -> T-211 -> T-212 -> T-213 -> T-214 -> T-215 -> T-216 -> T-217 -> T-218 -> T-219`
-Last updated: `2026-03-01`
+Task chain: `T-201 -> T-202 -> T-203 -> T-204 -> T-205 -> T-206 -> T-207 -> T-208 -> T-209 -> T-210 -> T-211 -> T-212 -> T-213 -> T-214 -> T-215 -> T-216 -> T-217 -> T-218 -> T-219 -> T-2701 -> T-2702 -> T-2703`
+Last updated: `2026-03-03`
 
 ## Backlog
 1. None.
@@ -37,6 +37,9 @@ Last updated: `2026-03-01`
 17. `T-217` Implement first-party Planes runtime loader API (`load_plane_app`) for framework-managed parse/compile/render flow.
 18. `T-218` Refactor `planes_v2_poc` to tiny `load_plane_app(...)` pattern with app-specific handlers only.
 19. `T-219` Add Planes runtime tests/docs for dispatch behavior, viewport semantics, and PoC proof coverage.
+20. `T-2701` Document incremental-present policy and invalidation semantics for current runtime behavior.
+21. `T-2702` Document sensor fast-path/cached-path semantics and TTL/freshness behavior.
+22. `T-2703` Publish compatibility and migration notes for performance-path changes with determinism guarantees.
 
 Evidence:
 1. `PYTHONPATH=. uv run pytest tests/test_protocol_governance.py tests/test_app_runtime.py tests/test_unified_runtime.py tests/test_planes_protocol.py` (`40 passed`).
@@ -45,6 +48,10 @@ Evidence:
 4. `PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py` (`validation: PASS`).
 5. `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py tests/test_planes_protocol.py tests/test_protocol_governance.py tests/test_app_runtime.py tests/test_unified_runtime.py` (`45 passed`).
 6. `PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 10` (`run complete: ticks=10 frames=10 stopped_by_target_close=False stopped_by_energy_safety=False`).
+7. `PYTHONPATH=. python3 -m pytest tests/test_display_runtime.py -k "revision_snapshot_flag or parity or coalesces_to_latest_revision" -q` (`3 passed`).
+8. `PYTHONPATH=. python3 -m pytest tests/test_planes_runtime.py -k "incremental_present or invalidation_escape_hatch or scroll_visual_parity" -q` (`3 passed`).
+9. `PYTHONPATH=. python3 -m pytest tests/test_sensor_manager.py tests/test_app_runtime.py -k "sensor" -q` (`8 passed`).
+10. `PYTHONPATH=. python3 -m pytest tests/test_macos_vulkan_backend.py -k "persistent_map or transient_mode_maps_each_frame or upload_image_reuse or swapchain_invalidation" -q` (`5 passed`).
 
 ## Evidence Log
 1. `2026-03-01`: Added formal Planes spec: `docs/planes_protocol_v0.md`.
@@ -67,3 +74,9 @@ Evidence:
 9. `2026-03-01`: Added first-party Planes runtime loader `luvatrix_ui/planes_runtime.py` and exported `load_plane_app` for app authors.
 10. `2026-03-01`: Added runtime loader tests `tests/test_planes_runtime.py` (render mounting, handler dispatch, strict missing-handler failure).
 11. `2026-03-01`: Updated task statuses via planning API: `T-217..T-219 -> Done`.
+12. `2026-03-03`: Updated protocol docs for performance follow-up scope:
+   - `docs/app_protocol.md` (incremental-present/invalidation and sensor cache semantics),
+   - `docs/app_protocol_compatibility_policy.md` (performance-path compatibility contract),
+   - `docs/app_protocol_v2_migration.md` (operator migration sequence and determinism checks).
+13. `2026-03-03`: Applied GateFlow stage progression for `T-2701..T-2703` on `main` through `Integration Ready`, then `Done` with required `actuals` + `done_gate`.
+14. `2026-03-03`: Verified follow-up behavior on `main` with targeted deterministic regression commands and planning-link validation pass.
