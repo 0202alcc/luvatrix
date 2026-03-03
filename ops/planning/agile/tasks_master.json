@@ -1364,7 +1364,7 @@
       "title": "Refactor WindowMatrix commit path to avoid full-frame clone for localized writes.",
       "epic_id": "E-2201",
       "milestone_id": "R-022",
-      "status": "Prototype Stage 2+",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2102"
       ],
@@ -1390,7 +1390,7 @@
       "title": "Introduce safe revisioned or double-buffer snapshot strategy to reduce DisplayRuntime clone overhead.",
       "epic_id": "E-2201",
       "milestone_id": "R-022",
-      "status": "Prototype Stage 2+",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2201"
       ],
@@ -1416,7 +1416,7 @@
       "title": "Refactor Vulkan upload prep to minimize Python-level pack/copy overhead with contiguous memory views.",
       "epic_id": "E-2201",
       "milestone_id": "R-022",
-      "status": "Prototype Stage 2+",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2102"
       ],
@@ -1442,7 +1442,7 @@
       "title": "Add frame correctness + revision ordering parity tests for copy-elimination path.",
       "epic_id": "E-2201",
       "milestone_id": "R-022",
-      "status": "Verification Review",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2201",
         "T-2202",
