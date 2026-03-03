@@ -4,6 +4,7 @@ import json
 import math
 import os
 import time
+from collections import deque
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -51,6 +52,18 @@ class PlaneApp:
             "LUVATRIX_INCREMENTAL_PRESENT_ENABLED",
             default=True,
         )
+        self._scroll_bitmap_cache_enabled_default = _env_flag(
+            "LUVATRIX_SCROLL_BITMAP_CACHE_ENABLED",
+            default=False,
+        )
+        self._scroll_scheduler_enabled_default = _env_flag(
+            "LUVATRIX_SCROLL_SCHEDULER_ENABLED",
+            default=True,
+        )
+        self._intent_queue_enabled_default = _env_flag(
+            "LUVATRIX_INTENT_QUEUE_ENABLED",
+            default=True,
+        )
 
         self._planes = json.loads(self._plane_path.read_text(encoding="utf-8"))
         self.metadata = resolve_web_metadata(self._planes["app"])
@@ -64,6 +77,9 @@ class PlaneApp:
         self.state.setdefault("prefetch_margin_px", {"x": 96.0, "y": 96.0})
         self.state.setdefault("perf", {})
         self.state.setdefault("incremental_present_enabled", self._incremental_present_enabled_default)
+        self.state.setdefault("scroll_bitmap_cache_enabled", self._scroll_bitmap_cache_enabled_default)
+        self.state.setdefault("scroll_scheduler_enabled", self._scroll_scheduler_enabled_default)
+        self.state.setdefault("intent_queue_enabled", self._intent_queue_enabled_default)
         self.state.setdefault("force_full_invalidation", False)
         self.state.setdefault("force_full_invalidation_reason", None)
         self.state.setdefault(
@@ -99,8 +115,11 @@ class PlaneApp:
         self._hit_index_signature: tuple[tuple[float, float], tuple[tuple[str, float, float], ...], tuple[str, ...]] | None = None
         self._last_dirty_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]] | None = None
         self._last_plane_scroll: tuple[float, float] | None = None
+        self._intent_queue: deque[Any] = deque()
         self._event_batch_base = _env_int("LUVATRIX_EVENT_BATCH_BASE", default=128, min_value=1, max_value=4096)
         self._event_batch_max = _env_int("LUVATRIX_EVENT_BATCH_MAX", default=512, min_value=1, max_value=4096)
+        self._intent_ingest_max = _env_int("LUVATRIX_INTENT_INGEST_MAX", default=1024, min_value=1, max_value=8192)
+        self._intent_queue_max = _env_int("LUVATRIX_INTENT_QUEUE_MAX", default=4096, min_value=1, max_value=32768)
         if self._event_batch_max < self._event_batch_base:
             self._event_batch_max = self._event_batch_base
 
@@ -184,6 +203,16 @@ class PlaneApp:
                 "event_order_digest": event_order_digest,
                 "scroll_events": int(self._frame_counts.get("scroll_events", 0)),
                 "scroll_events_coalesced": int(self._frame_counts.get("scroll_events_coalesced", 0)),
+                "scroll_scheduler_enabled": bool(self._scroll_scheduler_enabled()),
+                "scroll_scheduler_applied": int(self._frame_counts.get("scroll_scheduler_applied", 0)),
+                "scroll_scheduler_coalesced_events": int(self._frame_counts.get("scroll_scheduler_coalesced_events", 0)),
+                "intent_queue_enabled": bool(self._intent_queue_enabled()),
+                "intent_queue_depth_before": int(self._frame_counts.get("intent_queue_depth_before", 0)),
+                "intent_queue_depth_after_enqueue": int(self._frame_counts.get("intent_queue_depth_after_enqueue", 0)),
+                "intent_queue_depth_after_drain": int(self._frame_counts.get("intent_queue_depth_after_drain", 0)),
+                "intent_queue_enqueued": int(self._frame_counts.get("intent_queue_enqueued", 0)),
+                "intent_queue_drained": int(self._frame_counts.get("intent_queue_drained", 0)),
+                "intent_queue_overflow_dropped": int(self._frame_counts.get("intent_queue_overflow_dropped", 0)),
                 "hdi_events_dropped": hdi_events_dropped,
                 "hdi_events_coalesced": hdi_events_coalesced,
                 "hdi_queue_latency_p95_ms": hdi_latency_p95_ms,
@@ -209,6 +238,10 @@ class PlaneApp:
                 "full_frames": int(counters.get("full_frames", 0)),
                 "idle_skipped_frames": int(counters.get("idle_skipped_frames", 0)),
                 "incremental_present_enabled": bool(self._incremental_present_enabled()),
+                "scroll_bitmap_cache_enabled": bool(self._scroll_bitmap_cache_enabled()),
+                "bitmap_cache_hits": 0,
+                "bitmap_cache_misses": 0,
+                "bitmap_cache_entry_count": 0,
                 "invalidation_escape_hatch_used": bool(invalidation_escape_hatch_used),
                 "invalidation_escape_hatch_reason": invalidation_escape_hatch_reason,
                 "copy_count": 0,
@@ -236,9 +269,13 @@ class PlaneApp:
                     "queue_present": 0.0,
                 },
             }
+            self._merge_renderer_bitmap_cache_stats()
             return
 
         raster_start_ns = time.perf_counter_ns()
+        set_bitmap_cache_enabled = getattr(self._renderer, "set_bitmap_cache_enabled", None)
+        if callable(set_bitmap_cache_enabled):
+            set_bitmap_cache_enabled(bool(self._scroll_bitmap_cache_enabled()))
         ctx.begin_ui_frame(
             self._renderer,
             content_width_px=float(self._ui_page.matrix.width),
@@ -310,6 +347,16 @@ class PlaneApp:
             "event_order_digest": event_order_digest,
             "scroll_events": int(self._frame_counts.get("scroll_events", 0)),
             "scroll_events_coalesced": int(self._frame_counts.get("scroll_events_coalesced", 0)),
+            "scroll_scheduler_enabled": bool(self._scroll_scheduler_enabled()),
+            "scroll_scheduler_applied": int(self._frame_counts.get("scroll_scheduler_applied", 0)),
+            "scroll_scheduler_coalesced_events": int(self._frame_counts.get("scroll_scheduler_coalesced_events", 0)),
+            "intent_queue_enabled": bool(self._intent_queue_enabled()),
+            "intent_queue_depth_before": int(self._frame_counts.get("intent_queue_depth_before", 0)),
+            "intent_queue_depth_after_enqueue": int(self._frame_counts.get("intent_queue_depth_after_enqueue", 0)),
+            "intent_queue_depth_after_drain": int(self._frame_counts.get("intent_queue_depth_after_drain", 0)),
+            "intent_queue_enqueued": int(self._frame_counts.get("intent_queue_enqueued", 0)),
+            "intent_queue_drained": int(self._frame_counts.get("intent_queue_drained", 0)),
+            "intent_queue_overflow_dropped": int(self._frame_counts.get("intent_queue_overflow_dropped", 0)),
             "hdi_events_dropped": hdi_events_dropped,
             "hdi_events_coalesced": hdi_events_coalesced,
             "hdi_queue_latency_p95_ms": hdi_latency_p95_ms,
@@ -335,6 +382,10 @@ class PlaneApp:
             "full_frames": int(counters.get("full_frames", 0)),
             "idle_skipped_frames": int(counters.get("idle_skipped_frames", 0)),
             "incremental_present_enabled": bool(self._incremental_present_enabled()),
+            "scroll_bitmap_cache_enabled": bool(self._scroll_bitmap_cache_enabled()),
+            "bitmap_cache_hits": 0,
+            "bitmap_cache_misses": 0,
+            "bitmap_cache_entry_count": 0,
             "invalidation_escape_hatch_used": bool(invalidation_escape_hatch_used),
             "invalidation_escape_hatch_reason": invalidation_escape_hatch_reason,
             "copy_count": int(estimated_copy.get("copy_count", 0)),
@@ -364,6 +415,7 @@ class PlaneApp:
         }
         ctx.finalize_ui_frame()
         self._merge_ctx_copy_telemetry(ctx)
+        self._merge_renderer_bitmap_cache_stats()
         self._add_perf_ns("present_ns", time.perf_counter_ns() - present_start_ns)
         self._add_perf_ns("frame_total_ns", time.perf_counter_ns() - frame_start_ns)
         perf = self.state.get("perf")
@@ -394,26 +446,52 @@ class PlaneApp:
     def _dispatch_events(self, ctx, dt: float) -> None:
         if self._ui_page is None:
             return
-        pending_before = self._ctx_pending_hdi_events(ctx)
-        budget = self._compute_event_budget(pending_before)
-        events = ctx.poll_hdi_events(budget)
-        pending_after = self._ctx_pending_hdi_events(ctx)
+        pending_before_hdi = self._ctx_pending_hdi_events(ctx)
+        pending_before_intent = int(len(self._intent_queue))
+        pending_before_total = int(pending_before_hdi + pending_before_intent)
+        enqueued = 0
+        if self._intent_queue_enabled():
+            ingest_budget = max(int(self._event_batch_base), int(pending_before_hdi))
+            ingest_budget = max(1, min(int(self._intent_ingest_max), ingest_budget))
+            polled = ctx.poll_hdi_events(ingest_budget)
+            self._frame_counts["events_polled"] = int(len(polled))
+            for event in polled:
+                if len(self._intent_queue) >= int(self._intent_queue_max):
+                    self._intent_queue.popleft()
+                    self._frame_counts["intent_queue_overflow_dropped"] = int(
+                        self._frame_counts.get("intent_queue_overflow_dropped", 0)
+                    ) + 1
+                self._intent_queue.append(event)
+                enqueued += 1
+            pending_after_enqueue = int(len(self._intent_queue))
+            budget = self._compute_event_budget(pending_after_enqueue)
+            drain_count = min(int(budget), pending_after_enqueue)
+            events = [self._intent_queue.popleft() for _ in range(drain_count)]
+            pending_after_total = int(len(self._intent_queue) + self._ctx_pending_hdi_events(ctx))
+            self._frame_counts["intent_queue_depth_before"] = int(pending_before_intent)
+            self._frame_counts["intent_queue_depth_after_enqueue"] = int(pending_after_enqueue)
+            self._frame_counts["intent_queue_depth_after_drain"] = int(len(self._intent_queue))
+            self._frame_counts["intent_queue_enqueued"] = int(enqueued)
+            self._frame_counts["intent_queue_drained"] = int(drain_count)
+        else:
+            budget = self._compute_event_budget(pending_before_hdi)
+            events = ctx.poll_hdi_events(budget)
+            pending_after_total = self._ctx_pending_hdi_events(ctx)
+            self._frame_counts["events_polled"] = int(len(events))
+            self._frame_counts["intent_queue_depth_before"] = int(0)
+            self._frame_counts["intent_queue_depth_after_enqueue"] = int(0)
+            self._frame_counts["intent_queue_depth_after_drain"] = int(0)
+            self._frame_counts["intent_queue_enqueued"] = int(0)
+            self._frame_counts["intent_queue_drained"] = int(0)
         self._frame_counts["event_budget"] = int(budget)
-        self._frame_counts["event_queue_pending_before"] = int(pending_before)
-        self._frame_counts["event_queue_pending_after"] = int(pending_after)
-        self._frame_counts["events_polled"] = int(len(events))
+        self._frame_counts["event_queue_pending_before"] = int(pending_before_total)
+        self._frame_counts["event_queue_pending_after"] = int(pending_after_total)
         processed_ids: list[int] = []
         if not events:
             self._merge_hdi_telemetry(ctx)
             return
         self._refresh_hit_test_index()
-        scroll_dx = 0.0
-        scroll_dy = 0.0
-        scroll_count = 0
-        scroll_source = "wheel"
-        scroll_latest_wins = False
-        scroll_phase = "update"
-        scroll_momentum_phase: str | None = None
+        scheduled_scroll_intent: ScrollIntent | None = None
         scroll_payload_for_hook: dict[str, Any] | None = None
         for event in events:
             processed_ids.append(int(event.event_id))
@@ -424,18 +502,10 @@ class PlaneApp:
                 intent = _scroll_intent_from_event(event.event_type, payload, event.device)
                 if intent is not None:
                     self._frame_counts["scroll_events"] = int(self._frame_counts.get("scroll_events", 0)) + 1
-                    scroll_count += 1
-                    if intent.source == "trackpad":
-                        # Latency-focused path: latest trackpad intent wins per frame.
-                        scroll_dx = float(intent.delta_x)
-                        scroll_dy = float(intent.delta_y)
-                        scroll_latest_wins = True
-                    elif not scroll_latest_wins:
-                        scroll_dx += float(intent.delta_x)
-                        scroll_dy += float(intent.delta_y)
-                    scroll_source = intent.source
-                    scroll_phase = intent.phase
-                    scroll_momentum_phase = intent.momentum_phase or scroll_momentum_phase
+                    scheduled_scroll_intent = self._coalesce_scroll_intent(
+                        current=scheduled_scroll_intent,
+                        incoming=intent,
+                    )
                     if scroll_payload_for_hook is None:
                         scroll_payload_for_hook = {}
                     if "x" in payload:
@@ -457,32 +527,60 @@ class PlaneApp:
             if target_component is None:
                 continue
             self._invoke_bindings(target_component, hook, event.event_type, payload, dt)
-        if scroll_count > 0:
+        if scheduled_scroll_intent is not None:
             self._frame_counts["scroll_events_coalesced"] = int(self._frame_counts.get("scroll_events_coalesced", 0)) + 1
-            intent = ScrollIntent(
-                delta_x=scroll_dx,
-                delta_y=scroll_dy,
-                source=scroll_source,
-                phase=scroll_phase,
-                momentum_phase=scroll_momentum_phase,
-                event_count=scroll_count,
-            )
+            self._frame_counts["scroll_scheduler_applied"] = int(1)
+            self._frame_counts["scroll_scheduler_coalesced_events"] = int(scheduled_scroll_intent.event_count)
             coalesced_payload = dict(scroll_payload_for_hook or {})
-            coalesced_payload["delta_x"] = float(-scroll_dx)
-            coalesced_payload["delta_y"] = float(-scroll_dy)
-            coalesced_payload["coalesced_count"] = int(scroll_count)
-            if scroll_latest_wins:
+            coalesced_payload["delta_x"] = float(-scheduled_scroll_intent.delta_x)
+            coalesced_payload["delta_y"] = float(-scheduled_scroll_intent.delta_y)
+            coalesced_payload["coalesced_count"] = int(scheduled_scroll_intent.event_count)
+            if str(coalesced_payload.get("coalesce_mode", "")) != "latest" and scheduled_scroll_intent.source == "trackpad":
                 coalesced_payload["coalesce_mode"] = "latest"
-            if scroll_momentum_phase is not None:
-                coalesced_payload["momentum_phase"] = scroll_momentum_phase
-            self._dispatch_viewport_scroll(coalesced_payload, intent)
+            if scheduled_scroll_intent.momentum_phase is not None:
+                coalesced_payload["momentum_phase"] = scheduled_scroll_intent.momentum_phase
+            self._dispatch_viewport_scroll(coalesced_payload, scheduled_scroll_intent)
             self._refresh_hit_test_index(force=True)
             hook = _hook_for_event("scroll", coalesced_payload)
             target_component = self._pick_component_for_event(coalesced_payload)
             if hook is not None and target_component is not None:
                 self._invoke_bindings(target_component, hook, "scroll", coalesced_payload, dt)
+        else:
+            self._frame_counts["scroll_scheduler_applied"] = int(0)
+            self._frame_counts["scroll_scheduler_coalesced_events"] = int(0)
         self._frame_counts["event_order_digest"] = _event_id_digest(processed_ids)
         self._merge_hdi_telemetry(ctx)
+
+    def _coalesce_scroll_intent(self, *, current: ScrollIntent | None, incoming: ScrollIntent) -> ScrollIntent:
+        if current is None:
+            return incoming
+        if not self._scroll_scheduler_enabled():
+            return ScrollIntent(
+                delta_x=float(current.delta_x + incoming.delta_x),
+                delta_y=float(current.delta_y + incoming.delta_y),
+                source=incoming.source,
+                phase=incoming.phase,
+                momentum_phase=incoming.momentum_phase or current.momentum_phase,
+                event_count=int(current.event_count + incoming.event_count),
+            )
+        if incoming.source == "trackpad":
+            # Trackpad path keeps latest event for lower latency while retaining count.
+            return ScrollIntent(
+                delta_x=float(incoming.delta_x),
+                delta_y=float(incoming.delta_y),
+                source=incoming.source,
+                phase=incoming.phase,
+                momentum_phase=incoming.momentum_phase or current.momentum_phase,
+                event_count=int(current.event_count + incoming.event_count),
+            )
+        return ScrollIntent(
+            delta_x=float(current.delta_x + incoming.delta_x),
+            delta_y=float(current.delta_y + incoming.delta_y),
+            source=incoming.source,
+            phase=incoming.phase,
+            momentum_phase=incoming.momentum_phase or current.momentum_phase,
+            event_count=int(current.event_count + incoming.event_count),
+        )
 
     def _compute_event_budget(self, pending_before: int) -> int:
         pending = max(0, int(pending_before))
@@ -1044,10 +1142,18 @@ class PlaneApp:
             "event_order_digest": "0",
             "scroll_events": 0,
             "scroll_events_coalesced": 0,
+            "scroll_scheduler_applied": 0,
+            "scroll_scheduler_coalesced_events": 0,
             "hdi_events_dropped": 0,
             "hdi_events_coalesced": 0,
             "hdi_queue_latency_ns_max": 0,
             "hdi_queue_latency_ns_p95": 0,
+            "intent_queue_depth_before": 0,
+            "intent_queue_depth_after_enqueue": 0,
+            "intent_queue_depth_after_drain": 0,
+            "intent_queue_enqueued": 0,
+            "intent_queue_drained": 0,
+            "intent_queue_overflow_dropped": 0,
             "hit_test_calls": 0,
             "hit_test_candidates_checked": 0,
             "hit_test_spatial_buckets": 0,
@@ -1420,11 +1526,44 @@ class PlaneApp:
         copy_timing["queue_submit"] = self._ns_to_ms(float(payload.get("queue_submit_ns", 0)))
         copy_timing["queue_present"] = self._ns_to_ms(float(payload.get("queue_present_ns", 0)))
 
+    def _merge_renderer_bitmap_cache_stats(self) -> None:
+        perf = self.state.get("perf")
+        if not isinstance(perf, dict):
+            return
+        consumer = getattr(self._renderer, "consume_bitmap_cache_stats", None)
+        if consumer is None or not callable(consumer):
+            return
+        payload = consumer()
+        if not isinstance(payload, dict):
+            return
+        perf["scroll_bitmap_cache_enabled"] = bool(payload.get("enabled", perf.get("scroll_bitmap_cache_enabled", False)))
+        perf["bitmap_cache_hits"] = int(payload.get("hits", perf.get("bitmap_cache_hits", 0)))
+        perf["bitmap_cache_misses"] = int(payload.get("misses", perf.get("bitmap_cache_misses", 0)))
+        perf["bitmap_cache_entry_count"] = int(payload.get("entry_count", perf.get("bitmap_cache_entry_count", 0)))
+
     def _incremental_present_enabled(self) -> bool:
         raw = self.state.get("incremental_present_enabled")
         if isinstance(raw, bool):
             return raw
         return bool(self._incremental_present_enabled_default)
+
+    def _scroll_bitmap_cache_enabled(self) -> bool:
+        raw = self.state.get("scroll_bitmap_cache_enabled")
+        if isinstance(raw, bool):
+            return raw
+        return bool(self._scroll_bitmap_cache_enabled_default)
+
+    def _scroll_scheduler_enabled(self) -> bool:
+        raw = self.state.get("scroll_scheduler_enabled")
+        if isinstance(raw, bool):
+            return raw
+        return bool(self._scroll_scheduler_enabled_default)
+
+    def _intent_queue_enabled(self) -> bool:
+        raw = self.state.get("intent_queue_enabled")
+        if isinstance(raw, bool):
+            return raw
+        return bool(self._intent_queue_enabled_default)
 
     def _consume_invalidation_escape_hatch(self) -> tuple[bool, str | None]:
         raw = self.state.get("force_full_invalidation")

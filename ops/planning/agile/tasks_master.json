@@ -3084,7 +3084,7 @@
       "title": "Audit and reduce frequent FullRewrite submissions in interactive paths.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2102"
       ],
@@ -3106,10 +3106,10 @@
       "effort_bucket": "M",
       "confidence": 0.76,
       "actuals": {
-        "input_tokens": 2200,
-        "output_tokens": 2600,
-        "wall_time_sec": 1800,
-        "tool_calls": 30,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
         "reopen_count": 0
       },
       "done_gate": {
@@ -3128,9 +3128,9 @@
         "iteration_risk": 48
       },
       "cost_confidence": 0.35,
-      "cost_score": 38.4,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.7,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true
     },
@@ -3139,7 +3139,7 @@
       "title": "Strengthen ShiftFrame + ReplaceRect strategy for scroll-heavy workflows.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2301"
       ],
@@ -3161,10 +3161,10 @@
       "effort_bucket": "M",
       "confidence": 0.76,
       "actuals": {
-        "input_tokens": 2200,
-        "output_tokens": 2600,
-        "wall_time_sec": 1800,
-        "tool_calls": 30,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
         "reopen_count": 0
       },
       "done_gate": {
@@ -3183,9 +3183,9 @@
         "iteration_risk": 48
       },
       "cost_confidence": 0.35,
-      "cost_score": 38.4,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.7,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true
     },
@@ -3194,7 +3194,7 @@
       "title": "Enforce incremental-present policy gate with explicit invalidation escape hatch.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2302"
       ],
@@ -3216,10 +3216,10 @@
       "effort_bucket": "M",
       "confidence": 0.76,
       "actuals": {
-        "input_tokens": 2200,
-        "output_tokens": 2600,
-        "wall_time_sec": 1800,
-        "tool_calls": 30,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
         "reopen_count": 0
       },
       "done_gate": {
@@ -3238,9 +3238,9 @@
         "iteration_risk": 48
       },
       "cost_confidence": 0.35,
-      "cost_score": 38.57,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.7,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true
     },
@@ -3249,7 +3249,7 @@
       "title": "Add dirty-rect telemetry (count, dirty-area ratio, incremental/full percentage).",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2303"
       ],
@@ -3271,10 +3271,10 @@
       "effort_bucket": "M",
       "confidence": 0.76,
       "actuals": {
-        "input_tokens": 2200,
-        "output_tokens": 2600,
-        "wall_time_sec": 1800,
-        "tool_calls": 30,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
         "reopen_count": 0
       },
       "done_gate": {
@@ -3293,9 +3293,9 @@
         "iteration_risk": 48
       },
       "cost_confidence": 0.35,
-      "cost_score": 38.57,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.7,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true
     },
@@ -3304,7 +3304,7 @@
       "title": "Add viewport/scroll visual artifact regression suite.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2304"
       ],
@@ -3326,10 +3326,10 @@
       "effort_bucket": "M",
       "confidence": 0.76,
       "actuals": {
-        "input_tokens": 2200,
-        "output_tokens": 2600,
-        "wall_time_sec": 1800,
-        "tool_calls": 30,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
         "reopen_count": 0
       },
       "done_gate": {
@@ -3348,9 +3348,9 @@
         "iteration_risk": 48
       },
       "cost_confidence": 0.35,
-      "cost_score": 38.4,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.7,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true
     },

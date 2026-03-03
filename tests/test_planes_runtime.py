@@ -795,6 +795,12 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertGreaterEqual(int(perf.get("hit_test_calls", 0)), 1)
             self.assertGreaterEqual(int(perf.get("hit_test_candidates_checked", 0)), 1)
             self.assertGreaterEqual(int(perf.get("hit_test_spatial_buckets", 0)), 1)
+            self.assertGreaterEqual(int(perf.get("scroll_scheduler_coalesced_events", 0)), 0)
+            self.assertGreaterEqual(int(perf.get("intent_queue_depth_before", 0)), 0)
+            self.assertGreaterEqual(int(perf.get("intent_queue_depth_after_enqueue", 0)), 0)
+            self.assertGreaterEqual(int(perf.get("intent_queue_depth_after_drain", 0)), 0)
+            self.assertGreaterEqual(int(perf.get("bitmap_cache_hits", 0)), 0)
+            self.assertGreaterEqual(int(perf.get("bitmap_cache_misses", 0)), 0)
             self.assertGreaterEqual(int(perf.get("layout_cache_hits", 0)), 1)
             self.assertGreaterEqual(int(perf.get("layout_cache_misses", 0)), 1)
             self.assertGreaterEqual(int(perf.get("renderer_batch_groups", 0)), 0)
@@ -812,6 +818,9 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertGreaterEqual(float(perf.get("dirty_rect_area_ratio", 0.0)), 0.0)
             self.assertGreaterEqual(float(perf.get("incremental_present_pct", 0.0)), 0.0)
             self.assertGreaterEqual(float(perf.get("full_present_pct", 0.0)), 0.0)
+            self.assertTrue(isinstance(perf.get("intent_queue_enabled", False), bool))
+            self.assertTrue(isinstance(perf.get("scroll_scheduler_enabled", False), bool))
+            self.assertTrue(isinstance(perf.get("scroll_bitmap_cache_enabled", False), bool))
             copy_timing = perf.get("copy_timing_ms", {})
             self.assertIsInstance(copy_timing, dict)
             for key in (
@@ -825,6 +834,49 @@ class PlanesRuntimeTests(unittest.TestCase):
                 "queue_present",
             ):
                 self.assertGreaterEqual(float(copy_timing.get(key, 0.0)), 0.0)
+
+    def test_plane_runtime_intent_queue_handoff_limits_frame_drain(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_scroll_hook_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={"handlers::on_scroll": lambda event_ctx, state: None})
+            app.state["intent_queue_enabled"] = True
+            app._event_batch_base = 2
+            app._event_batch_max = 2
+            app._intent_ingest_max = 8
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            for i in range(8):
+                ctx.queue(
+                    HDIEvent(
+                        event_id=i + 1,
+                        ts_ns=i + 1,
+                        window_id="w",
+                        device="trackpad",
+                        event_type="scroll",
+                        status="OK",
+                        payload={"x": 20.0, "y": 20.0, "delta_x": -1.0, "delta_y": -1.0, "phase": "changed"},
+                    )
+                )
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(int(perf.get("events_processed", 0)), 2)
+            self.assertEqual(int(perf.get("intent_queue_enqueued", 0)), 8)
+            self.assertEqual(int(perf.get("intent_queue_drained", 0)), 2)
+            self.assertEqual(int(perf.get("intent_queue_depth_after_drain", -1)), 6)
+            self.assertGreaterEqual(int(perf.get("event_queue_pending_after", 0)), 6)
+
+    def test_plane_runtime_scroll_bitmap_cache_toggle_reflected_in_perf(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_scroll_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            app.state["scroll_bitmap_cache_enabled"] = True
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertTrue(bool(perf.get("scroll_bitmap_cache_enabled", False)))
+            self.assertGreaterEqual(int(perf.get("bitmap_cache_hits", 0)), 0)
+            self.assertGreaterEqual(int(perf.get("bitmap_cache_misses", 0)), 0)
 
     def test_plane_runtime_scrollable_plane_prefers_shift_plus_dirty_strip_compose(self) -> None:
         with tempfile.TemporaryDirectory() as td:

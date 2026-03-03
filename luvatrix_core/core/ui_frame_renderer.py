@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from functools import lru_cache
 import hashlib
+import math
+import os
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -11,8 +15,8 @@ import torch
 from PIL import Image, ImageDraw, ImageFont
 
 from luvatrix_ui.component_schema import DisplayableArea
-from luvatrix_ui.controls.svg_renderer import SVGRenderBatch
-from luvatrix_ui.text.renderer import FontSpec, TextLayoutMetrics, TextMeasureRequest, TextRenderBatch
+from luvatrix_ui.controls.svg_renderer import SVGRenderBatch, SVGRenderCommand
+from luvatrix_ui.text.renderer import FontSpec, TextLayoutMetrics, TextMeasureRequest, TextRenderBatch, TextRenderCommand
 
 from luvatrix_core.render.svg import SvgDocument
 
@@ -46,6 +50,14 @@ class MatrixUIFrameRenderer:
     _grid_y: torch.Tensor | None = None
     _svg_cache: dict[str, SvgDocument] = field(default_factory=dict)
     _font_atlas_cache: dict[tuple[str, int], _FontAtlas] = field(default_factory=dict)
+    _bitmap_cache_enabled_default: bool = field(default_factory=lambda: _env_flag("LUVATRIX_SCROLL_BITMAP_CACHE_ENABLED", False))
+    _bitmap_cache_enabled_override: bool | None = None
+    _bitmap_cache_max_entries: int = field(default_factory=lambda: _env_int("LUVATRIX_SCROLL_BITMAP_CACHE_MAX_ENTRIES", 128, 1, 4096))
+    _bitmap_cache_max_pixels: int = field(default_factory=lambda: _env_int("LUVATRIX_SCROLL_BITMAP_CACHE_MAX_PIXELS", 2_000_000, 4096, 16_000_000))
+    _svg_bitmap_cache: OrderedDict[tuple[Any, ...], torch.Tensor] = field(default_factory=OrderedDict)
+    _text_bitmap_cache: OrderedDict[tuple[Any, ...], torch.Tensor] = field(default_factory=OrderedDict)
+    _bitmap_cache_hits: int = 0
+    _bitmap_cache_misses: int = 0
 
     def begin_frame(self, display: DisplayableArea, clear_color: tuple[int, int, int, int]) -> None:
         self._display = display
@@ -60,6 +72,19 @@ class MatrixUIFrameRenderer:
         self._frame[:, :, 3] = clear_color[3]
         self._grid_x = torch.arange(width, dtype=torch.float32).unsqueeze(0).expand(height, width)
         self._grid_y = torch.arange(height, dtype=torch.float32).unsqueeze(1).expand(height, width)
+        self._bitmap_cache_hits = 0
+        self._bitmap_cache_misses = 0
+
+    def set_bitmap_cache_enabled(self, enabled: bool) -> None:
+        self._bitmap_cache_enabled_override = bool(enabled)
+
+    def consume_bitmap_cache_stats(self) -> dict[str, int | bool]:
+        return {
+            "enabled": bool(self._bitmap_cache_enabled()),
+            "hits": int(self._bitmap_cache_hits),
+            "misses": int(self._bitmap_cache_misses),
+            "entry_count": int(len(self._svg_bitmap_cache) + len(self._text_bitmap_cache)),
+        }
 
     def prepare_font(self, font: FontSpec, *, size_px: float, charset: str) -> None:
         atlas = self._ensure_atlas(font, size_px)
@@ -87,6 +112,20 @@ class MatrixUIFrameRenderer:
         if self._frame is None:
             raise RuntimeError("begin_frame must be called before draw_text_batch")
         for command in batch.commands:
+            if self._bitmap_cache_enabled() and self._command_is_pixel_aligned(command.x, command.y):
+                key = self._text_bitmap_key(command)
+                cached = self._text_bitmap_cache.get(key)
+                if cached is not None:
+                    self._bitmap_cache_hits += 1
+                    self._text_bitmap_cache.move_to_end(key)
+                    self._blend_bitmap(cached, x=int(round(command.x)), y=int(round(command.y)))
+                    continue
+                bitmap = self._rasterize_text_bitmap(command)
+                if self._bitmap_cacheable(bitmap):
+                    self._bitmap_cache_misses += 1
+                    self._cache_put(self._text_bitmap_cache, key, bitmap)
+                    self._blend_bitmap(bitmap, x=int(round(command.x)), y=int(round(command.y)))
+                    continue
             atlas = self._ensure_atlas(command.font, command.font_size_px)
             lines = self._wrap_lines(
                 command.text,
@@ -111,6 +150,24 @@ class MatrixUIFrameRenderer:
         if self._frame is None or self._grid_x is None or self._grid_y is None:
             raise RuntimeError("begin_frame must be called before draw_svg_batch")
         for command in batch.commands:
+            if (
+                self._bitmap_cache_enabled()
+                and self._command_is_pixel_aligned(command.x, command.y)
+                and self._command_is_pixel_aligned(command.width, command.height)
+            ):
+                key = self._svg_bitmap_key(command)
+                cached = self._svg_bitmap_cache.get(key)
+                if cached is not None:
+                    self._bitmap_cache_hits += 1
+                    self._svg_bitmap_cache.move_to_end(key)
+                    self._blend_bitmap(cached, x=int(round(command.x)), y=int(round(command.y)))
+                    continue
+                bitmap = self._rasterize_svg_bitmap(command)
+                if self._bitmap_cacheable(bitmap):
+                    self._bitmap_cache_misses += 1
+                    self._cache_put(self._svg_bitmap_cache, key, bitmap)
+                    self._blend_bitmap(bitmap, x=int(round(command.x)), y=int(round(command.y)))
+                    continue
             doc = self._doc_for_markup(command.svg_markup)
             self._render_svg_document(doc, command)
 
@@ -132,6 +189,143 @@ class MatrixUIFrameRenderer:
         doc = SvgDocument.from_markup(svg_markup)
         self._svg_cache[key] = doc
         return doc
+
+    def _bitmap_cache_enabled(self) -> bool:
+        if self._bitmap_cache_enabled_override is not None:
+            return bool(self._bitmap_cache_enabled_override)
+        return bool(self._bitmap_cache_enabled_default)
+
+    @staticmethod
+    def _command_is_pixel_aligned(*values: float) -> bool:
+        for raw in values:
+            if abs(float(raw) - round(float(raw))) > 1e-6:
+                return False
+        return True
+
+    def _bitmap_cacheable(self, bitmap: torch.Tensor) -> bool:
+        if bitmap.ndim != 3:
+            return False
+        h = int(bitmap.shape[0])
+        w = int(bitmap.shape[1])
+        if h <= 0 or w <= 0:
+            return False
+        return int(h * w) <= int(self._bitmap_cache_max_pixels)
+
+    def _cache_put(self, cache: OrderedDict[tuple[Any, ...], torch.Tensor], key: tuple[Any, ...], value: torch.Tensor) -> None:
+        cache[key] = value.clone()
+        cache.move_to_end(key)
+        while len(cache) > int(self._bitmap_cache_max_entries):
+            cache.popitem(last=False)
+
+    def _svg_bitmap_key(self, command: SVGRenderCommand) -> tuple[Any, ...]:
+        return (
+            hashlib.sha256(command.svg_markup.encode("utf-8")).hexdigest(),
+            int(round(float(command.width))),
+            int(round(float(command.height))),
+            int(round(float(command.opacity) * 1000)),
+        )
+
+    def _text_bitmap_key(self, command: TextRenderCommand) -> tuple[Any, ...]:
+        return (
+            command.text,
+            command.font.family,
+            str(command.font.file_path or ""),
+            int(command.font.weight),
+            str(command.font.slant),
+            int(round(float(command.font_size_px) * 100)),
+            command.appearance.color_hex,
+            int(round(float(command.appearance.opacity) * 1000)),
+            int(round(float(command.appearance.letter_spacing_px) * 100)),
+            int(round(float(command.appearance.line_height_multiplier) * 100)),
+            int(round(float(command.max_width_px) * 100)) if command.max_width_px is not None else None,
+        )
+
+    def _rasterize_svg_bitmap(self, command: SVGRenderCommand) -> torch.Tensor:
+        width = max(1, int(round(float(command.width))))
+        height = max(1, int(round(float(command.height))))
+        frame = torch.zeros((height, width, 4), dtype=torch.uint8)
+        grid_x = torch.arange(width, dtype=torch.float32).unsqueeze(0).expand(height, width)
+        grid_y = torch.arange(height, dtype=torch.float32).unsqueeze(1).expand(height, width)
+        saved_frame = self._frame
+        saved_grid_x = self._grid_x
+        saved_grid_y = self._grid_y
+        self._frame = frame
+        self._grid_x = grid_x
+        self._grid_y = grid_y
+        try:
+            doc = self._doc_for_markup(command.svg_markup)
+            local_cmd = SVGRenderCommand(
+                component_id=command.component_id,
+                svg_markup=command.svg_markup,
+                x=0.0,
+                y=0.0,
+                width=float(command.width),
+                height=float(command.height),
+                frame=command.frame,
+                opacity=float(command.opacity),
+            )
+            self._render_svg_document(doc, local_cmd)
+            return frame
+        finally:
+            self._frame = saved_frame
+            self._grid_x = saved_grid_x
+            self._grid_y = saved_grid_y
+
+    def _rasterize_text_bitmap(self, command: TextRenderCommand) -> torch.Tensor:
+        atlas = self._ensure_atlas(command.font, command.font_size_px)
+        lines = self._wrap_lines(
+            command.text,
+            atlas,
+            max_width_px=command.max_width_px,
+            letter_spacing_px=command.appearance.letter_spacing_px,
+        )
+        widths = [self._line_advance(line, atlas, command.appearance.letter_spacing_px) for line in lines]
+        line_h = max(atlas.line_height, command.font_size_px * command.appearance.line_height_multiplier)
+        width = max(1, int(math.ceil(max(widths) if widths else 1.0)))
+        height = max(1, int(math.ceil(max(command.font_size_px, float(len(lines)) * line_h))))
+        frame = torch.zeros((height, width, 4), dtype=torch.uint8)
+        saved_frame = self._frame
+        self._frame = frame
+        try:
+            color = _parse_rgba_u8(command.appearance.color_hex, command.appearance.opacity)
+            for i, line in enumerate(lines):
+                self._draw_line(
+                    line,
+                    atlas,
+                    x=0.0,
+                    top_y=float(i) * float(line_h),
+                    color=color,
+                    letter_spacing_px=command.appearance.letter_spacing_px,
+                )
+            return frame
+        finally:
+            self._frame = saved_frame
+
+    def _blend_bitmap(self, bitmap: torch.Tensor, *, x: int, y: int) -> None:
+        if self._frame is None:
+            return
+        h = int(bitmap.shape[0])
+        w = int(bitmap.shape[1])
+        if h <= 0 or w <= 0:
+            return
+        x0 = max(0, int(x))
+        y0 = max(0, int(y))
+        x1 = min(int(self._frame.shape[1]), int(x + w))
+        y1 = min(int(self._frame.shape[0]), int(y + h))
+        if x1 <= x0 or y1 <= y0:
+            return
+        sx0 = x0 - int(x)
+        sy0 = y0 - int(y)
+        sx1 = sx0 + (x1 - x0)
+        sy1 = sy0 + (y1 - y0)
+        src = bitmap[sy0:sy1, sx0:sx1].to(torch.float32)
+        dst = self._frame[y0:y1, x0:x1].to(torch.float32)
+        src_alpha = (src[:, :, 3:4] / 255.0).clamp(0.0, 1.0)
+        dst_alpha = (dst[:, :, 3:4] / 255.0).clamp(0.0, 1.0)
+        out_alpha = src_alpha + dst_alpha * (1.0 - src_alpha)
+        out_rgb = src[:, :, 0:3] * src_alpha + dst[:, :, 0:3] * (1.0 - src_alpha)
+        self._frame[y0:y1, x0:x1, 0:3] = torch.clamp(out_rgb, 0, 255).to(torch.uint8)
+        self._frame[y0:y1, x0:x1, 3:4] = torch.clamp(out_alpha * 255.0, 0, 255).to(torch.uint8)
 
     def _ensure_atlas(self, font: FontSpec, size_px: float) -> _FontAtlas:
         if size_px <= 0:
@@ -366,6 +560,29 @@ class MatrixUIFrameRenderer:
 
         patch[:, :, :3] = torch.from_numpy(np.clip(out_rgb, 0, 255).astype(np.uint8))
         patch[:, :, 3] = torch.from_numpy(np.clip(out_alpha * 255.0, 0, 255).astype(np.uint8))
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return bool(default)
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
+
+
+def _env_int(name: str, default: int, min_value: int, max_value: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return int(default)
+    try:
+        value = int(raw)
+    except ValueError:
+        return int(default)
+    return max(int(min_value), min(int(max_value), int(value)))
 
 
 def _resolve_font_path(font: FontSpec) -> str:

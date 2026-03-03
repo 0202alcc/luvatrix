@@ -34,6 +34,41 @@ class _NoopSensor:
 
 
 class MatrixUIFrameRendererTests(unittest.TestCase):
+    def test_bitmap_cache_hits_for_repeat_svg_and_text_draws(self) -> None:
+        from luvatrix_ui.component_schema import DisplayableArea
+
+        renderer = MatrixUIFrameRenderer()
+        renderer.set_bitmap_cache_enabled(True)
+        area = DisplayableArea(content_width_px=80, content_height_px=50)
+        svg = SVGComponent(
+            component_id="rect",
+            svg_markup='<svg width="10" height="5" viewBox="0 0 10 5"><rect x="0" y="0" width="10" height="5" fill="#ff0000"/></svg>',
+            position=CoordinatePoint(3.0, 4.0, "screen_tl"),
+            width=20.0,
+            height=10.0,
+        )
+        text = TextComponent(
+            component_id="txt",
+            text="cache",
+            position=CoordinatePoint(4.0, 20.0, "screen_tl"),
+            appearance=TextAppearance(color_hex="#ffffff"),
+            size=TextSizeSpec(unit="px", value=14.0),
+        )
+
+        renderer.begin_frame(area, clear_color=(0, 0, 0, 255))
+        svg.render(renderer)
+        text.render(renderer, area)
+        renderer.end_frame()
+
+        renderer.begin_frame(area, clear_color=(0, 0, 0, 255))
+        svg.render(renderer)
+        text.render(renderer, area)
+        renderer.end_frame()
+        stats = renderer.consume_bitmap_cache_stats()
+        self.assertTrue(bool(stats.get("enabled", False)))
+        self.assertGreaterEqual(int(stats.get("hits", 0)), 2)
+        self.assertEqual(int(stats.get("misses", 0)), 0)
+
     def test_svg_renders_to_explicit_target_size(self) -> None:
         renderer = MatrixUIFrameRenderer()
         from luvatrix_ui.component_schema import DisplayableArea
