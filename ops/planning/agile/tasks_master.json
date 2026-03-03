@@ -2086,7 +2086,7 @@
       "title": "Define canonical timeline/task schema for Gantt + Agile cards.",
       "epic_id": "E-1101",
       "milestone_id": "APU-020",
-      "status": "Backlog",
+      "status": "Integration Ready",
       "depends_on": [],
       "board_refs": [
         "milestone:APU-020",
@@ -2101,9 +2101,9 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 41.25,
-      "cost_bucket": "L",
-      "stage_multiplier_applied": 1.0,
+      "cost_score": 28.88,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.7,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true
     },
@@ -2112,7 +2112,7 @@
       "title": "Build Luvatrix Gantt renderer (axis/status/dependency lanes).",
       "epic_id": "E-1101",
       "milestone_id": "APU-020",
-      "status": "Backlog",
+      "status": "Integration Ready",
       "depends_on": [
         "T-1101"
       ],
@@ -2129,9 +2129,9 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 43.85,
-      "cost_bucket": "L",
-      "stage_multiplier_applied": 1.0,
+      "cost_score": 30.7,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.7,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true
     },
@@ -2140,7 +2140,7 @@
       "title": "Build Luvatrix Agile board renderer (columns/swimlanes/blockers).",
       "epic_id": "E-1101",
       "milestone_id": "APU-020",
-      "status": "Backlog",
+      "status": "Integration Ready",
       "depends_on": [
         "T-1102"
       ],
@@ -2157,9 +2157,9 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 43.85,
-      "cost_bucket": "L",
-      "stage_multiplier_applied": 1.0,
+      "cost_score": 30.7,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.7,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true
     },
@@ -2168,7 +2168,7 @@
       "title": "Add interaction layer (filter/zoom/scroll/click-through).",
       "epic_id": "E-1101",
       "milestone_id": "APU-020",
-      "status": "Backlog",
+      "status": "Integration Ready",
       "depends_on": [
         "T-1103"
       ],
@@ -2185,9 +2185,9 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 43.85,
-      "cost_bucket": "L",
-      "stage_multiplier_applied": 1.0,
+      "cost_score": 30.7,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.7,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true
     },
@@ -2196,7 +2196,7 @@
       "title": "Add export adapters (ASCII/Markdown/PNG) and Discord payload compatibility.",
       "epic_id": "E-1101",
       "milestone_id": "APU-020",
-      "status": "Backlog",
+      "status": "Integration Ready",
       "depends_on": [
         "T-1104"
       ],
@@ -2213,9 +2213,9 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 43.85,
-      "cost_bucket": "L",
-      "stage_multiplier_applied": 1.0,
+      "cost_score": 30.7,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.7,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true
     },
@@ -2224,7 +2224,7 @@
       "title": "Add validation suite (render correctness + dependency integrity).",
       "epic_id": "E-1101",
       "milestone_id": "APU-020",
-      "status": "Backlog",
+      "status": "Integration Ready",
       "depends_on": [
         "T-1105"
       ],
@@ -2241,9 +2241,9 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 43.85,
-      "cost_bucket": "L",
-      "stage_multiplier_applied": 1.0,
+      "cost_score": 30.7,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.7,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true
     },

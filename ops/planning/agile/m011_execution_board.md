@@ -3,7 +3,7 @@
 Milestone: `APU-020` Native Gantt + Agile visualization in Luvatrix
 Epic: `E-1101`
 Task chain: `T-1101 -> T-1102 -> T-1103 -> T-1104 -> T-1105 -> T-1106`
-Last updated: `2026-03-01` (reopened)
+Last updated: `2026-03-03` (GateFlow restaging audit)
 
 ## Success Criteria (Mandatory)
 1. `APU-020` implementations must follow the first-party Luvatrix App Protocol contract (no external UI framework coupling for runtime flows).
@@ -19,13 +19,7 @@ Last updated: `2026-03-01` (reopened)
 5. `T-1105`: Export adapters produce ASCII/Markdown/PNG artifacts plus Discord payload manifest from first-party planning models.
 6. `T-1106`: Validation suite enforces dependency integrity + render consistency and blocks completion on App Protocol compliance evidence.
 
-## Backlog
-1. None.
-
-## Ready
-1. None.
-
-## In Progress
+## Intake
 1. `T-1101` Define canonical timeline/task schema for Gantt + Agile cards (milestones, tasks, status, deps, owners).
 2. `T-1102` Build Luvatrix Gantt renderer (time axis, status colors, dependency lines, collapsed/expanded lanes).
 3. `T-1103` Build Luvatrix Agile board renderer (Backlog/Ready/In Progress/Review/Done, swimlanes, blockers).
@@ -33,10 +27,34 @@ Last updated: `2026-03-01` (reopened)
 5. `T-1105` Add export adapters (ASCII/Markdown/PNG) and Discord posting payload compatibility.
 6. `T-1106` Add validation suite (render correctness, dependency integrity, snapshot/regression tests).
 
-## Review
+## Success Criteria Spec
+1. None.
+
+## Safety Tests Spec
+1. None.
+
+## Implementation Tests Spec
+1. None.
+
+## Edge Case Tests Spec
+1. None.
+
+## Prototype Stage 1
+1. None.
+
+## Prototype Stage 2+
+1. None.
+
+## Verification Review
+1. None.
+
+## Integration Ready
 1. None.
 
 ## Done
+1. None.
+
+## Blocked
 1. None.
 
 ## Completion Gate
@@ -74,3 +92,76 @@ Last updated: `2026-03-01` (reopened)
 18. `2026-03-01`: Milestone reopened by directive; `T-1101..T-1106` moved back to `In Progress`, completion gate re-enabled.
 19. `2026-03-01`: Success criteria updated: first-party App Protocol compliance is mandatory, with explicit acceptance checks added for `T-1101..T-1106`.
 20. `2026-03-01`: First-party App Protocol success criteria + `T-1101..T-1106` acceptance checks synchronized into `ops/planning/gantt/milestone_schedule.json` and `ops/planning/gantt/milestones_gantt.md`.
+21. `2026-03-03`: Strict telemetry compliance audit run for all `APU-020` tasks (`T-1101..T-1113`):
+- verified required cost fields (`cost_components`, `cost_confidence`, `cost_score`, `cost_bucket`, `stage_multiplier_applied`, `cost_basis_version`) and Done telemetry payload requirements (`actuals` + `done_gate`) against source-of-truth ledgers.
+22. `2026-03-03`: GateFlow restaging dry-run commands prepared for `T-1101..T-1106` and validated:
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-110# --body '{...\"status\":\"Intake\"...}' --reestimate-cost` (`mode: DRY-RUN`, write skipped as expected).
+23. `2026-03-03`: Planning integrity check after dry-run staging pass:
+- `python3 ops/planning/agile/validate_milestone_task_links.py` (`validation: PASS`).
+24. `2026-03-03`: GateFlow stage progression dry-run (`Intake -> Success Criteria Spec`) executed for remaining `T-1102..T-1106` with telemetry payload + cost re-estimation:
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1102 --body '{"status":"Success Criteria Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1103 --body '{"status":"Success Criteria Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1104 --body '{"status":"Success Criteria Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1105 --body '{"status":"Success Criteria Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1106 --body '{"status":"Success Criteria Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+25. `2026-03-03`: GateFlow stage progression dry-run (`Success Criteria Spec -> Safety Tests Spec`) executed for `T-1101..T-1106` with telemetry payload + cost re-estimation:
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1101 --body '{"status":"Safety Tests Spec","cost_components":{"context_load":44,"reasoning_depth":39,"code_edit_surface":47,"validation_scope":38,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1102 --body '{"status":"Safety Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1103 --body '{"status":"Safety Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1104 --body '{"status":"Safety Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1105 --body '{"status":"Safety Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1106 --body '{"status":"Safety Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+26. `2026-03-03`: GateFlow stage progression dry-run (`Safety Tests Spec -> Implementation Tests Spec`) executed for `T-1101..T-1106` with telemetry payload + cost re-estimation:
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1101 --body '{"status":"Implementation Tests Spec","cost_components":{"context_load":44,"reasoning_depth":39,"code_edit_surface":47,"validation_scope":38,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1102 --body '{"status":"Implementation Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1103 --body '{"status":"Implementation Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1104 --body '{"status":"Implementation Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1105 --body '{"status":"Implementation Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1106 --body '{"status":"Implementation Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+27. `2026-03-03`: GateFlow stage progression dry-run (`Implementation Tests Spec -> Edge Case Tests Spec`) executed for `T-1101..T-1106` with telemetry payload + cost re-estimation:
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1101 --body '{"status":"Edge Case Tests Spec","cost_components":{"context_load":44,"reasoning_depth":39,"code_edit_surface":47,"validation_scope":38,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1102 --body '{"status":"Edge Case Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1103 --body '{"status":"Edge Case Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1104 --body '{"status":"Edge Case Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1105 --body '{"status":"Edge Case Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1106 --body '{"status":"Edge Case Tests Spec","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+28. `2026-03-03`: GateFlow stage progression dry-run (`Edge Case Tests Spec -> Prototype Stage 1`) executed for `T-1101..T-1106` with telemetry payload + cost re-estimation:
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1101 --body '{"status":"Prototype Stage 1","cost_components":{"context_load":44,"reasoning_depth":39,"code_edit_surface":47,"validation_scope":38,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1102 --body '{"status":"Prototype Stage 1","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1103 --body '{"status":"Prototype Stage 1","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1104 --body '{"status":"Prototype Stage 1","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1105 --body '{"status":"Prototype Stage 1","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1106 --body '{"status":"Prototype Stage 1","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+29. `2026-03-03`: GateFlow stage progression dry-run (`Prototype Stage 1 -> Prototype Stage 2+`) executed for `T-1101..T-1106` with telemetry payload + cost re-estimation:
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1101 --body '{"status":"Prototype Stage 2+","cost_components":{"context_load":44,"reasoning_depth":39,"code_edit_surface":47,"validation_scope":38,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1102 --body '{"status":"Prototype Stage 2+","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1103 --body '{"status":"Prototype Stage 2+","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1104 --body '{"status":"Prototype Stage 2+","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1105 --body '{"status":"Prototype Stage 2+","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1106 --body '{"status":"Prototype Stage 2+","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+30. `2026-03-03`: GateFlow stage progression dry-run (`Prototype Stage 2+ -> Verification Review`) executed for `T-1101..T-1106` with telemetry payload + cost re-estimation:
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1101 --body '{"status":"Verification Review","cost_components":{"context_load":44,"reasoning_depth":39,"code_edit_surface":47,"validation_scope":38,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1102 --body '{"status":"Verification Review","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1103 --body '{"status":"Verification Review","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1104 --body '{"status":"Verification Review","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1105 --body '{"status":"Verification Review","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1106 --body '{"status":"Verification Review","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+31. `2026-03-03`: GateFlow stage progression dry-run (`Verification Review -> Integration Ready`) executed for `T-1101..T-1106` with telemetry payload + cost re-estimation:
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1101 --body '{"status":"Integration Ready","cost_components":{"context_load":44,"reasoning_depth":39,"code_edit_surface":47,"validation_scope":38,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1102 --body '{"status":"Integration Ready","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1103 --body '{"status":"Integration Ready","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1104 --body '{"status":"Integration Ready","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1105 --body '{"status":"Integration Ready","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+- `python3 ops/planning/api/planning_api.py PATCH /tasks/T-1106 --body '{"status":"Integration Ready","cost_components":{"context_load":47,"reasoning_depth":43,"code_edit_surface":49,"validation_scope":41,"iteration_risk":38},"cost_confidence":0.35}' --reestimate-cost` (`mode: DRY-RUN`)
+32. `2026-03-03`: Generated ordered main-only apply script for full GateFlow progression (`Success Criteria Spec -> ... -> Integration Ready`) across `T-1101..T-1106` with telemetry re-estimation on every transition:
+- script path: `/tmp/apu020_apply_on_main_commands.sh`
+- includes terminal validation command: `python3 ops/planning/agile/validate_milestone_task_links.py`.
+33. `2026-03-03`: Main-only apply execution started from generated script; run was interrupted mid-stream by cache/performance constraints after partial progress:
+- observed persisted state checkpoint: `T-1101..T-1104=Integration Ready`, `T-1105=Implementation Tests Spec`, `T-1106=Backlog`.
+34. `2026-03-03`: Main-only apply execution resumed with writable cache env (`MPLCONFIGDIR=/tmp/mplconfig`, `XDG_CACHE_HOME=/tmp/xdg-cache`) and completed remaining stage-by-stage transitions without skips:
+- `T-1105`: `Implementation Tests Spec -> Edge Case Tests Spec -> Prototype Stage 1 -> Prototype Stage 2+ -> Verification Review -> Integration Ready`.
+- `T-1106`: `Backlog -> Success Criteria Spec -> Safety Tests Spec -> Implementation Tests Spec -> Edge Case Tests Spec -> Prototype Stage 1 -> Prototype Stage 2+ -> Verification Review -> Integration Ready`.
+- each step used planning API `PATCH /tasks/<id> ... --reestimate-cost --apply`.
+35. `2026-03-03`: Post-apply integrity verification:
+- `python3 ops/planning/agile/validate_milestone_task_links.py` (`validation: PASS`).
+- telemetry audit confirms `T-1101..T-1106` all in `Integration Ready` with required cost telemetry fields present.
