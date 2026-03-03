@@ -120,6 +120,9 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
     copy_pack_ms: list[float] = []
     copy_map_ms: list[float] = []
     copy_memcpy_ms: list[float] = []
+    queue_submit_ms: list[float] = []
+    queue_present_ms: list[float] = []
+    swapchain_recreate_counts: list[int] = []
     dirty_area_ratios: list[float] = []
     events_processed: list[int] = []
     event_budgets: list[int] = []
@@ -184,6 +187,9 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
         copy_pack_ms.append(float(copy_timing.get("upload_pack", 0.0)) + float(copy_timing.get("ui_pack", 0.0)))
         copy_map_ms.append(float(copy_timing.get("upload_map", 0.0)))
         copy_memcpy_ms.append(float(copy_timing.get("upload_memcpy", 0.0)))
+        queue_submit_ms.append(float(copy_timing.get("queue_submit", 0.0)))
+        queue_present_ms.append(float(copy_timing.get("queue_present", 0.0)))
+        swapchain_recreate_counts.append(int(perf.get("swapchain_recreate_count", 0)))
         dirty_area_ratios.append(float(perf.get("dirty_rect_area_ratio", 0.0)))
         events_processed.append(int(perf.get("events_processed", 0)))
         event_budgets.append(int(perf.get("event_budget", 0)))
@@ -207,6 +213,9 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
         "p95_copy_pack_ms": float(_percentile(copy_pack_ms, 95.0)),
         "p95_copy_map_ms": float(_percentile(copy_map_ms, 95.0)),
         "p95_copy_memcpy_ms": float(_percentile(copy_memcpy_ms, 95.0)),
+        "p95_queue_submit_ms": float(_percentile(queue_submit_ms, 95.0)),
+        "p95_queue_present_ms": float(_percentile(queue_present_ms, 95.0)),
+        "p95_swapchain_recreate_count": int(round(_percentile([float(v) for v in swapchain_recreate_counts], 95.0))),
         "p95_dirty_area_ratio": float(_percentile(dirty_area_ratios, 95.0)),
         "incremental_present_pct": float(incremental_pct),
         "full_present_pct": float(full_pct),

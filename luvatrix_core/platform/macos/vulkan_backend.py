@@ -57,15 +57,32 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._staging_buffer = None
         self._staging_memory = None
         self._staging_size = 0
+        self._staging_mapped_ptr = None
         self._upload_image = None
         self._upload_image_memory = None
         self._upload_image_extent: tuple[int, int] = (0, 0)
+        self._upload_image_format = None
         self._upload_image_layout = None
         self._upload_extent: tuple[int, int] = (0, 0)
         self._clear_color = (0.0, 0.0, 0.0, 1.0)
         self._vk_proc_cache: dict[str, Any] = {}
         self._frame_wait_timeout_ns = 50_000_000  # 50ms safety bound to keep UI responsive
         self._consecutive_acquire_timeouts = 0
+        self._swapchain_recreate_count = 0
+        self._swapchain_recreate_failures = 0
+        self._swapchain_recreate_debounced = 0
+        self._last_swapchain_recreate_ns = 0
+        self._swapchain_recreate_min_interval_ns = max(
+            0, int(float(os.getenv("LUVATRIX_VK_SWAPCHAIN_RECREATE_MIN_INTERVAL_MS", "16.0")) * 1_000_000.0)
+        )
+        self._swapchain_max_failures_before_fallback = max(
+            1, int(os.getenv("LUVATRIX_VK_SWAPCHAIN_MAX_FAILURES", "3"))
+        )
+        self._persistent_staging_enabled = os.getenv("LUVATRIX_VK_PERSISTENT_STAGING_MAP", "1").strip() != "0"
+        self._transfer_growth_enabled = os.getenv("LUVATRIX_VK_TRANSFER_GROWTH", "1").strip() != "0"
+        self._upload_image_reuse_enabled = os.getenv("LUVATRIX_VK_UPLOAD_IMAGE_REUSE", "1").strip() != "0"
+        self._fast_upload_path_enabled = os.getenv("LUVATRIX_VK_FAST_UPLOAD_PATH", "1").strip() != "0"
+        self._debounced_swapchain_recreate_enabled = os.getenv("LUVATRIX_VK_DEBOUNCE_SWAPCHAIN_RECREATE", "1").strip() != "0"
         self._fallback_last_cf_data = None
         self._fallback_last_image = None
         self._fallback_last_ns_image = None
@@ -120,6 +137,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._validate_dimensions(width, height)
         self._wait_device_idle()
         self._recreate_swapchain(width, height)
+        self._record_swapchain_recreate()
         return VulkanContext(width=width, height=height, title=context.title)
 
     def shutdown(self, context: VulkanContext) -> None:
@@ -547,13 +565,28 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         width, height = self._resolve_surface_size()
         if width <= 0 or height <= 0:
             return
+        if self._debounced_swapchain_recreate_enabled:
+            now_ns = time.perf_counter_ns()
+            if now_ns - self._last_swapchain_recreate_ns < self._swapchain_recreate_min_interval_ns:
+                self._swapchain_recreate_debounced += 1
+                return
         try:
             # Avoid blocking app responsiveness while user is actively resizing.
             self._recreate_swapchain(width, height)
+            self._record_swapchain_recreate()
         except Exception as exc:  # noqa: BLE001
-            LOGGER.warning("swapchain recreation failed; falling back to layer-blit: %s", exc)
-            self._vulkan_available = False
-            self._vulkan_note = "Swapchain recreation failed; fallback layer-blit mode enabled."
+            self._swapchain_recreate_failures += 1
+            if self._swapchain_recreate_failures >= self._swapchain_max_failures_before_fallback:
+                LOGGER.warning("swapchain recreation failed repeatedly; falling back to layer-blit: %s", exc)
+                self._vulkan_available = False
+                self._vulkan_note = "Swapchain recreation failed repeatedly; fallback layer-blit mode enabled."
+            else:
+                LOGGER.warning(
+                    "swapchain recreation failed (%d/%d): %s",
+                    self._swapchain_recreate_failures,
+                    self._swapchain_max_failures_before_fallback,
+                    exc,
+                )
 
     def _resolve_surface_size(self) -> tuple[int, int]:
         if self._window_handle is not None:
@@ -601,23 +634,16 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             upload_h = min(upload_h, swap_h)
         if upload_w <= 0 or upload_h <= 0:
             raise RuntimeError("invalid upload extent for Vulkan staging upload")
-        clipped = rgba_upload[:upload_h, :upload_w, :].contiguous()
+        clipped = self._upload_clip_if_needed(rgba_upload, upload_w=upload_w, upload_h=upload_h)
         self._ensure_upload_image(upload_w, upload_h)
         pack_started = time.perf_counter_ns()
-        upload_array = clipped.cpu().numpy()
+        clipped_cpu = clipped.cpu() if clipped.device.type != "cpu" else clipped
+        upload_array = clipped_cpu.numpy()
         src_view = memoryview(upload_array)
         packed_nbytes = int(src_view.nbytes)
         pack_ns = time.perf_counter_ns() - pack_started
         self._ensure_staging_buffer(packed_nbytes)
-        map_started = time.perf_counter_ns()
-        mapped_ptr = vk.vkMapMemory(
-            self._logical_device,
-            self._staging_memory,
-            0,
-            packed_nbytes,
-            0,
-        )
-        map_ns = time.perf_counter_ns() - map_started
+        mapped_ptr, map_ns, should_unmap, map_count = self._resolve_staging_ptr(size=packed_nbytes)
         memcpy_ns = 0
         try:
             # vulkan-python returns ffi.buffer(...) for vkMapMemory on some builds.
@@ -633,16 +659,66 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             ctypes.memmove(dest_ptr, upload_array.ctypes.data, packed_nbytes)
             memcpy_ns = time.perf_counter_ns() - memcpy_started
         finally:
-            vk.vkUnmapMemory(self._logical_device, self._staging_memory)
+            if should_unmap:
+                vk.vkUnmapMemory(self._logical_device, self._staging_memory)
         add_copy_telemetry(
             copy_count=1,
             copy_bytes=packed_nbytes,
+            upload_bytes=packed_nbytes,
             upload_pack_ns=pack_ns,
             upload_map_ns=map_ns,
             upload_memcpy_ns=memcpy_ns,
+            staging_map_count=map_count,
         )
         self._upload_extent = (upload_w, upload_h)
         self._clear_color = (0.0, 0.0, 0.0, 1.0)
+
+    def _resolve_staging_ptr(self, size: int) -> tuple[Any, int, bool, int]:
+        if self._logical_device is None or self._staging_memory is None:
+            raise RuntimeError("Vulkan staging memory is not initialized")
+        vk = self._require_vk()
+        if not self._persistent_staging_enabled:
+            started = time.perf_counter_ns()
+            ptr = vk.vkMapMemory(self._logical_device, self._staging_memory, 0, size, 0)
+            return (ptr, time.perf_counter_ns() - started, True, 1)
+        if self._staging_mapped_ptr is None:
+            started = time.perf_counter_ns()
+            self._staging_mapped_ptr = vk.vkMapMemory(self._logical_device, self._staging_memory, 0, self._staging_size, 0)
+            return (self._staging_mapped_ptr, time.perf_counter_ns() - started, False, 1)
+        return (self._staging_mapped_ptr, 0, False, 0)
+
+    def _upload_clip_if_needed(self, rgba_upload: torch.Tensor, upload_w: int, upload_h: int) -> torch.Tensor:
+        if not self._fast_upload_path_enabled:
+            return rgba_upload[:upload_h, :upload_w, :].contiguous()
+        if upload_w == int(rgba_upload.shape[1]) and upload_h == int(rgba_upload.shape[0]):
+            if rgba_upload.is_contiguous():
+                return rgba_upload
+            return rgba_upload.contiguous()
+        return rgba_upload[:upload_h, :upload_w, :].contiguous()
+
+    def _next_transfer_allocation_size(self, required_size: int) -> int:
+        if required_size <= 0:
+            return required_size
+        if not self._transfer_growth_enabled:
+            return required_size
+        base = max(64 * 1024, required_size)
+        if base & (base - 1) == 0:
+            return base
+        return 1 << base.bit_length()
+
+    def _next_upload_extent(self, size: int) -> int:
+        if size <= 0:
+            return size
+        if not self._transfer_growth_enabled:
+            return size
+        block = 64
+        return int(((int(size) + block - 1) // block) * block)
+
+    def _record_swapchain_recreate(self) -> None:
+        self._swapchain_recreate_count += 1
+        self._swapchain_recreate_failures = 0
+        self._last_swapchain_recreate_ns = time.perf_counter_ns()
+        add_copy_telemetry(swapchain_recreate_count=1)
 
     def _prepare_upload_frame(self, rgba: torch.Tensor) -> torch.Tensor:
         source = rgba
@@ -655,6 +731,8 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         swap_w, swap_h = self._swapchain_extent
         if swap_w <= 0 or swap_h <= 0:
             return source
+        if int(source.shape[1]) == int(swap_w) and int(source.shape[0]) == int(swap_h):
+            return source if source.is_contiguous() else source.contiguous()
         return prepare_frame_for_extent(
             source,
             target_w=swap_w,
@@ -769,7 +847,9 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             pSignalSemaphores=[self._render_finished_semaphore],
         )
         self._vk_reset_fence(self._logical_device, self._in_flight_fence)
-        vk.vkQueueSubmit(self._graphics_queue, 1, [submit], self._in_flight_fence)
+        submit_started = time.perf_counter_ns()
+        self._queue_submit(self._graphics_queue, submit, self._in_flight_fence)
+        add_copy_telemetry(queue_submit_ns=time.perf_counter_ns() - submit_started)
 
     def _record_upload_copy_and_scale(self, cmd, swapchain_image) -> None:
         if self._upload_image is None:
@@ -927,6 +1007,10 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             getattr(vk, "VK_FILTER_LINEAR", 1),
         )
 
+    def _queue_submit(self, queue, submit, fence) -> None:
+        vk = self._require_vk()
+        vk.vkQueueSubmit(queue, 1, [submit], fence)
+
     def _present_swapchain_image(self) -> None:
         if self._vulkan_available:
             self._set_active_present_path("vulkan")
@@ -948,7 +1032,9 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
                 pResults=None,
             )
             try:
+                present_started = time.perf_counter_ns()
                 self._vk_queue_present(self._graphics_queue, present_info)
+                add_copy_telemetry(queue_present_ns=time.perf_counter_ns() - present_started)
             except SwapchainOutOfDateError:
                 self._handle_swapchain_invalidation()
             return
@@ -964,7 +1050,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
     def _recreate_swapchain(self, width: int, height: int) -> None:
         if not self._vulkan_available:
             return
-        self._destroy_command_resources()
+        self._destroy_command_resources(destroy_transfer_resources=False)
         self._destroy_swapchain()
         self._create_swapchain(width, height)
         self._create_command_resources()
@@ -985,14 +1071,15 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             vk.vkDestroySemaphore(self._logical_device, self._image_available_semaphore, None)
             self._image_available_semaphore = None
 
-    def _destroy_command_resources(self) -> None:
+    def _destroy_command_resources(self, *, destroy_transfer_resources: bool = True) -> None:
         if not self._vulkan_available:
             return
         if self._logical_device is None:
             return
         vk = self._require_vk()
-        self._destroy_staging_resources()
-        self._destroy_upload_image_resources()
+        if destroy_transfer_resources:
+            self._destroy_staging_resources()
+            self._destroy_upload_image_resources()
         if self._command_pool is not None:
             vk.vkDestroyCommandPool(self._logical_device, self._command_pool, None)
             self._command_pool = None
@@ -1431,13 +1518,14 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         if self._staging_buffer is not None and self._staging_size >= required_size:
             return
         self._destroy_staging_resources()
+        alloc_size = self._next_transfer_allocation_size(required_size)
         vk = self._require_vk()
         usage_transfer_src = getattr(vk, "VK_BUFFER_USAGE_TRANSFER_SRC_BIT", 0x00000001)
         buffer_ci = vk.VkBufferCreateInfo(
             sType=vk.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
             pNext=None,
             flags=0,
-            size=required_size,
+            size=alloc_size,
             usage=usage_transfer_src,
             sharingMode=getattr(vk, "VK_SHARING_MODE_EXCLUSIVE", 0),
             queueFamilyIndexCount=0,
@@ -1460,16 +1548,24 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         )
         self._staging_memory = vk.vkAllocateMemory(self._logical_device, alloc_info, None)
         vk.vkBindBufferMemory(self._logical_device, self._staging_buffer, self._staging_memory, 0)
-        self._staging_size = required_size
+        self._staging_size = alloc_size
+        add_copy_telemetry(staging_realloc_count=1)
 
     def _destroy_staging_resources(self) -> None:
         if self._logical_device is None:
             self._staging_buffer = None
             self._staging_memory = None
             self._staging_size = 0
+            self._staging_mapped_ptr = None
             self._upload_extent = (0, 0)
             return
         vk = self._require_vk()
+        if self._staging_mapped_ptr is not None and self._staging_memory is not None:
+            try:
+                vk.vkUnmapMemory(self._logical_device, self._staging_memory)
+            except Exception:  # noqa: BLE001
+                pass
+            self._staging_mapped_ptr = None
         if self._staging_buffer is not None:
             vk.vkDestroyBuffer(self._logical_device, self._staging_buffer, None)
             self._staging_buffer = None
@@ -1484,6 +1580,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             self._upload_image = None
             self._upload_image_memory = None
             self._upload_image_extent = (0, 0)
+            self._upload_image_format = None
             self._upload_image_layout = None
             return
         vk = self._require_vk()
@@ -1494,6 +1591,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             vk.vkFreeMemory(self._logical_device, self._upload_image_memory, None)
             self._upload_image_memory = None
         self._upload_image_extent = (0, 0)
+        self._upload_image_format = None
         self._upload_image_layout = None
 
     def _ensure_upload_image(self, width: int, height: int) -> None:
@@ -1507,10 +1605,17 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             if self._swapchain_image_format is not None
             else getattr(vk, "VK_FORMAT_R8G8B8A8_UNORM", 37)
         )
-        same_extent = self._upload_image_extent == (width, height)
-        same_format = self._swapchain_image_format is None or desired_format == int(self._swapchain_image_format)
-        if self._upload_image is not None and same_extent and same_format:
+        current_w, current_h = self._upload_image_extent
+        same_extent = (current_w, current_h) == (width, height)
+        reusable_extent = self._upload_image_reuse_enabled and current_w >= width and current_h >= height
+        same_format = self._upload_image_format is None or desired_format == int(self._upload_image_format)
+        if self._upload_image is not None and same_format and (same_extent or reusable_extent):
             return
+        alloc_w = width
+        alloc_h = height
+        if self._transfer_growth_enabled:
+            alloc_w = self._next_upload_extent(width)
+            alloc_h = self._next_upload_extent(height)
         self._destroy_upload_image_resources()
         image_ci = vk.VkImageCreateInfo(
             sType=vk.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -1518,7 +1623,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             flags=0,
             imageType=getattr(vk, "VK_IMAGE_TYPE_2D", 1),
             format=desired_format,
-            extent=(int(width), int(height), 1),
+            extent=(int(alloc_w), int(alloc_h), 1),
             mipLevels=1,
             arrayLayers=1,
             samples=getattr(vk, "VK_SAMPLE_COUNT_1_BIT", 1),
@@ -1547,8 +1652,10 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         )
         self._upload_image_memory = vk.vkAllocateMemory(self._logical_device, alloc_info, None)
         vk.vkBindImageMemory(self._logical_device, self._upload_image, self._upload_image_memory, 0)
-        self._upload_image_extent = (width, height)
+        self._upload_image_extent = (int(alloc_w), int(alloc_h))
+        self._upload_image_format = desired_format
         self._upload_image_layout = getattr(vk, "VK_IMAGE_LAYOUT_UNDEFINED", 0)
+        add_copy_telemetry(upload_image_realloc_count=1)
 
     def _can_use_gpu_blit(self) -> bool:
         if not self._vulkan_available:

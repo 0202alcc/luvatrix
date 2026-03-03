@@ -821,6 +821,8 @@ class PlanesRuntimeTests(unittest.TestCase):
                 "upload_pack",
                 "upload_map",
                 "upload_memcpy",
+                "queue_submit",
+                "queue_present",
             ):
                 self.assertGreaterEqual(float(copy_timing.get(key, 0.0)), 0.0)
 

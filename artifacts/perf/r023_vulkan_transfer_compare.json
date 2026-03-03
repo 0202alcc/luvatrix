@@ -1,0 +1,25 @@
+{
+  "baseline": {
+    "avg_transfer_present_ms": 2.2794838222222222,
+    "frames": 90,
+    "mode": "baseline_legacy_flags",
+    "p95_transfer_present_ms": 2.6290539499999994,
+    "p95_upload_bytes": 3686400,
+    "swapchain_recreate_events": 90
+  },
+  "candidate": {
+    "avg_transfer_present_ms": 0.9560027,
+    "frames": 90,
+    "mode": "candidate_r023_flags",
+    "p95_transfer_present_ms": 2.1027327000000002,
+    "p95_upload_bytes": 3686400,
+    "swapchain_recreate_events": 23
+  },
+  "delta_ms": {
+    "avg_transfer_present_ms": -1.3234811222222223,
+    "p95_transfer_present_ms": -0.5263212499999992
+  },
+  "frames": 90,
+  "height": 720,
+  "width": 1280
+}
