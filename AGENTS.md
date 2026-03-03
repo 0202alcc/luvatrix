@@ -53,6 +53,8 @@ Before planning or editing code, read:
 9. Milestone lifecycle must be tracked via `lifecycle_events` in `milestone_schedule.json` (close/reopen + framework notes).
 10. Use the operator command reference for standard actions:
    - `ops/planning/api/CHEATSHEET.md`
+11. Cost scoring rubric reference:
+   - `ops/planning/agile/gateflow_cost_rubric.md`
 
 ## Planning API Usage (Required Flow)
 1. Always run API calls in dry-run first (no `--apply`).
@@ -87,6 +89,38 @@ Before planning or editing code, read:
    - `GET /frameworks`
    - `PATCH /frameworks` (set default framework)
    - `GET|POST|PATCH|DELETE /boards[/id]`
+
+## GateFlow Cost Scoring (Recommended, Near-Required)
+1. Add optional cost fields on tasks at intake:
+   - `cost_components` (`context_load`, `reasoning_depth`, `code_edit_surface`, `validation_scope`, `iteration_risk`)
+   - `cost_confidence` (`0..1`)
+2. Re-estimate before build stages using API:
+   - `uv run python ops/planning/api/planning_api.py PATCH /tasks/<task_id> --body '{...}' --reestimate-cost`
+3. API auto-derives:
+   - `cost_score` (`0..100`)
+   - `cost_bucket` (`S|M|L|XL|XXL`)
+   - `stage_multiplier_applied`
+   - `cost_basis_version=gateflow_cost_v1`
+4. Gate policy:
+   - `XL/XXL` tasks should be split before entering `Prototype Stage 1`.
+   - if `cost_confidence < 0.35`, refine specs before prototype stages.
+5. On `Blocked` transitions, confidence is reduced automatically by API (`-0.15` floor at `0.0`).
+
+## GateFlow Completion Telemetry (Required for Done Transition)
+1. When moving a task into `Done`, include `actuals`:
+   - `input_tokens` (number, `>= 0`)
+   - `output_tokens` (number, `>= 0`)
+   - `wall_time_sec` (number, `>= 0`)
+   - `tool_calls` (number, `>= 0`)
+   - `reopen_count` (number, `>= 0`)
+2. When moving a task into `Done`, include `done_gate` checklist with all values `true`:
+   - `success_criteria_met`
+   - `safety_tests_passed`
+   - `implementation_tests_passed`
+   - `edge_case_tests_passed`
+   - `merged_to_main`
+   - `required_checks_passed_on_main`
+3. API enforces this only when a task transitions into `Done` (historical done tasks are not retroactively blocked).
 
 ## Agile Board Update Policy
 1. Each milestone must have a live execution board file: `ops/planning/agile/m<milestone>_execution_board.md`.

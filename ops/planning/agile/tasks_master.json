@@ -7,6 +7,46 @@
     "team": "Engineering team boards (cross-milestone by domain).",
     "specialist": "Specialist role boards (cross-milestone by function)."
   },
+  "cost_model": {
+    "basis_version": "gateflow_cost_v1",
+    "optional_fields": [
+      "cost_score",
+      "cost_bucket",
+      "cost_confidence",
+      "cost_basis_version",
+      "cost_components",
+      "stage_multiplier_applied",
+      "actuals"
+    ],
+    "actuals_schema": {
+      "required_on_done_transition": true,
+      "fields": {
+        "input_tokens": "number>=0",
+        "output_tokens": "number>=0",
+        "wall_time_sec": "number>=0",
+        "tool_calls": "number>=0",
+        "reopen_count": "number>=0"
+      }
+    },
+    "done_gate_schema": {
+      "required_on_done_transition": true,
+      "fields": {
+        "success_criteria_met": "boolean:true",
+        "safety_tests_passed": "boolean:true",
+        "implementation_tests_passed": "boolean:true",
+        "edge_case_tests_passed": "boolean:true",
+        "merged_to_main": "boolean:true",
+        "required_checks_passed_on_main": "boolean:true"
+      }
+    },
+    "cost_buckets": [
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ]
+  },
   "status_values": [
     "Intake",
     "Success Criteria Spec",

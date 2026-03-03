@@ -25,6 +25,9 @@ Default framework: `Luvatrix GateFlow (gateflow_v1)`.
 - Misc backlog ledger for carryover, unscoped, or unattached tickets.
 - Use this instead of assigning tickets to placeholder milestones.
 
+5. `gateflow_cost_rubric.md`
+- Cost model rubric for model-normalized task effort scoring.
+
 ## Contract
 
 1. Every task ID is globally unique (e.g., `T-1103`).
@@ -35,6 +38,13 @@ Default framework: `Luvatrix GateFlow (gateflow_v1)`.
 6. Every `task_id` in a milestone must exist in either `tasks_master.json` or `tasks_archived.json`.
 7. Default board template is `gateflow_v1` unless a board overrides `framework_template`.
 8. Misc backlog items must live in `backlog_misc.json` and use `B-###` IDs.
+9. Cost fields are optional but strongly recommended for every new ticket:
+- `cost_components`, `cost_confidence`, `cost_score`, `cost_bucket`, `cost_basis_version`.
+10. `Done` transition requires completion telemetry payload:
+- `actuals` with numeric fields:
+  - `input_tokens`, `output_tokens`, `wall_time_sec`, `tool_calls`, `reopen_count`
+- `done_gate` with boolean checks all set to `true`:
+  - `success_criteria_met`, `safety_tests_passed`, `implementation_tests_passed`, `edge_case_tests_passed`, `merged_to_main`, `required_checks_passed_on_main`
 
 ## GateFlow Columns (Default)
 
@@ -60,6 +70,8 @@ Default framework: `Luvatrix GateFlow (gateflow_v1)`.
 5. Regenerate derived Gantt assets (automatic on API `--apply`).
 6. Edit board/framework definitions via planning API endpoints instead of manual JSON edits.
 7. Use planning API backlog endpoints (`/backlog`) for misc ticket triage.
+8. Use `--reestimate-cost` on task POST/PATCH when cost components are updated.
+9. When moving a task to `Done`, include required `actuals` + `done_gate` payload.
 
 ## Validation
 

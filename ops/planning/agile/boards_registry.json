@@ -63,7 +63,10 @@
       "title",
       "status",
       "milestone_id",
-      "depends_on"
+      "depends_on",
+      "cost_bucket",
+      "cost_score",
+      "cost_confidence"
     ],
     "wip_limits": {
       "Prototype Stage 1": 3,

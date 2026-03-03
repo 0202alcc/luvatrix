@@ -68,6 +68,13 @@ Quick operator reference:
 - `ops/planning/gantt/milestones_gantt.md`
 - `ops/planning/gantt/milestones_gantt.png`
 6. Task statuses are validated against framework template status columns (GateFlow default) plus legacy compatibility statuses.
+7. Optional task cost model is supported (`gateflow_cost_v1`) with:
+- `cost_components` (`0..100` each)
+- `cost_confidence` (`0..1`)
+- derived fields (`cost_score`, `cost_bucket`, `stage_multiplier_applied`) via `--reestimate-cost`
+8. `Done` transition guard requires task payload to include:
+- `actuals` numeric fields: `input_tokens`, `output_tokens`, `wall_time_sec`, `tool_calls`, `reopen_count`
+- `done_gate` boolean fields all `true`: `success_criteria_met`, `safety_tests_passed`, `implementation_tests_passed`, `edge_case_tests_passed`, `merged_to_main`, `required_checks_passed_on_main`
 
 ## Usage
 
@@ -89,33 +96,48 @@ python ops/planning/api/planning_api.py PATCH /tasks/T-1201 \
   --apply
 ```
 
-4. Archive task:
+4. Re-estimate task cost from rubric components:
+```bash
+python ops/planning/api/planning_api.py PATCH /tasks/T-1201 \
+  --body '{"status":"Prototype Stage 1","cost_components":{"context_load":50,"reasoning_depth":60,"code_edit_surface":40,"validation_scope":55,"iteration_risk":45},"cost_confidence":0.72}' \
+  --reestimate-cost \
+  --apply
+```
+
+5. Archive task:
 ```bash
 python ops/planning/api/planning_api.py DELETE /tasks/T-1201 --apply
 ```
 
-5. Show framework templates + default:
+6. Show framework templates + default:
 ```bash
 python ops/planning/api/planning_api.py GET /frameworks
 ```
 
-6. Set default framework to GateFlow:
+7. Set default framework to GateFlow:
 ```bash
 python ops/planning/api/planning_api.py PATCH /frameworks \
   --body '{"default_framework_template":"gateflow_v1"}' \
   --apply
 ```
 
-7. Create a board with GateFlow template:
+8. Create a board with GateFlow template:
 ```bash
 python ops/planning/api/planning_api.py POST /boards \
   --body '{"id":"milestone:A-021","title":"A-021 Board","type":"milestone","framework_template":"gateflow_v1","source_filter":{"milestone_id":"A-021"},"discord":{"channel":"#milestone-a-021-board","threads_enabled":true}}' \
   --apply
 ```
 
-8. Add an unattached carryover ticket to misc backlog:
+9. Add an unattached carryover ticket to misc backlog:
 ```bash
 python ops/planning/api/planning_api.py POST /backlog \
   --body '{"id":"B-001","title":"Refine old milestone handoff note","status":"Open","bucket":"Carryover","source_milestone_id":"U-017"}' \
+  --apply
+```
+
+10. Move task to `Done` with required telemetry:
+```bash
+python ops/planning/api/planning_api.py PATCH /tasks/T-1201 \
+  --body '{"status":"Done","actuals":{"input_tokens":1800,"output_tokens":2400,"wall_time_sec":920,"tool_calls":14,"reopen_count":1},"done_gate":{"success_criteria_met":true,"safety_tests_passed":true,"implementation_tests_passed":true,"edge_case_tests_passed":true,"merged_to_main":true,"required_checks_passed_on_main":true}}' \
   --apply
 ```

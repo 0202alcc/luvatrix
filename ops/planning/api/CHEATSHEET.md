@@ -76,6 +76,15 @@ uv run python ops/planning/api/planning_api.py PATCH /tasks/T-1201 \
   --apply
 ```
 
+Re-estimate cost from rubric components:
+
+```bash
+uv run python ops/planning/api/planning_api.py PATCH /tasks/T-1201 \
+  --body '{"status":"Prototype Stage 1","cost_components":{"context_load":45,"reasoning_depth":55,"code_edit_surface":40,"validation_scope":50,"iteration_risk":35},"cost_confidence":0.78}' \
+  --reestimate-cost \
+  --apply
+```
+
 ## 5) Close/reopen milestone lifecycle
 
 Update milestone status:
@@ -145,3 +154,11 @@ Milestone is considered complete only when:
 
 1. milestone thread changes are merged to `main`
 2. required checks pass on `main`
+
+When moving a task to `Done`, include required `actuals` + `done_gate`:
+
+```bash
+uv run python ops/planning/api/planning_api.py PATCH /tasks/T-1201 \
+  --body '{"status":"Done","actuals":{"input_tokens":1800,"output_tokens":2400,"wall_time_sec":920,"tool_calls":14,"reopen_count":1},"done_gate":{"success_criteria_met":true,"safety_tests_passed":true,"implementation_tests_passed":true,"edge_case_tests_passed":true,"merged_to_main":true,"required_checks_passed_on_main":true}}' \
+  --apply
+```

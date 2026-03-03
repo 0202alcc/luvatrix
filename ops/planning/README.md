@@ -17,6 +17,7 @@ not Discord-specific.
 - `tasks_archived.json` (archived historical task ledger for completed milestones)
 - `backlog_misc.json` (misc backlog ledger for carryover/unscoped/unattached tickets)
 - `boards_registry.json` (board definitions + formatting/rendering config, GateFlow default template)
+- `gateflow_cost_rubric.md` (model-normalized task effort scoring rubric)
 - `validate_milestone_task_links.py` (ensures each gantt milestone task exists in active or archived ledger)
 - `README.md` (data contract + update workflow)
 - `agile_board_seed.md` (cross-milestone epic/task seeds)
@@ -39,3 +40,4 @@ not Discord-specific.
 7. Run integrity checks:
    - `uv run python ops/planning/agile/validate_milestone_task_links.py`
 8. Milestone completion is only recognized after all milestone thread changes are merged to `main` and required tests pass on `main`.
+9. Task `Done` transitions must include GateFlow completion telemetry (`actuals` + `done_gate`) via planning API payload.

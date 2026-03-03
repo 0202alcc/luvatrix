@@ -36,6 +36,48 @@ TASK_ID_RE = re.compile(r"^(T|A-H)\-\d{3,4}(?:-\d{2})?$")
 BACKLOG_ID_RE = re.compile(r"^B-\d{3,4}$")
 BACKLOG_STATUS = {"Open", "Triaged", "Assigned", "Closed"}
 BACKLOG_BUCKETS = {"Carryover", "Unscoped", "ParkingLot", "Backfill"}
+COST_BASIS_VERSION = "gateflow_cost_v1"
+COST_COMPONENT_KEYS = {
+    "context_load",
+    "reasoning_depth",
+    "code_edit_surface",
+    "validation_scope",
+    "iteration_risk",
+}
+COST_COMPONENT_WEIGHTS = {
+    "context_load": 0.20,
+    "reasoning_depth": 0.25,
+    "code_edit_surface": 0.20,
+    "validation_scope": 0.20,
+    "iteration_risk": 0.15,
+}
+GATEFLOW_STAGE_MULTIPLIERS = {
+    "Intake": 0.60,
+    "Success Criteria Spec": 0.80,
+    "Safety Tests Spec": 0.90,
+    "Implementation Tests Spec": 0.90,
+    "Edge Case Tests Spec": 0.95,
+    "Prototype Stage 1": 1.00,
+    "Prototype Stage 2+": 1.10,
+    "Verification Review": 0.85,
+    "Integration Ready": 0.70,
+    "Done": 0.00,
+}
+DONE_REQUIRED_ACTUALS_KEYS = {
+    "input_tokens",
+    "output_tokens",
+    "wall_time_sec",
+    "tool_calls",
+    "reopen_count",
+}
+DONE_REQUIRED_GATE_KEYS = {
+    "success_criteria_met",
+    "safety_tests_passed",
+    "implementation_tests_passed",
+    "edge_case_tests_passed",
+    "merged_to_main",
+    "required_checks_passed_on_main",
+}
 
 
 class ApiError(RuntimeError):
@@ -114,6 +156,176 @@ def validate_board_refs(task: dict[str, Any], board_ids: set[str]) -> None:
 def validate_dep_id_format(task_id: str, dep: str) -> None:
     if not TASK_ID_RE.match(dep):
         raise ApiError(f"task {task_id} has invalid dependency id format: {dep}")
+
+
+def clamp_score(value: float) -> float:
+    return max(0.0, min(100.0, value))
+
+
+def derive_cost_bucket(score: float) -> str:
+    if score <= 20:
+        return "S"
+    if score <= 40:
+        return "M"
+    if score <= 60:
+        return "L"
+    if score <= 80:
+        return "XL"
+    return "XXL"
+
+
+def validate_cost_fields(task: dict[str, Any]) -> None:
+    if "cost_score" in task:
+        score = task["cost_score"]
+        if not isinstance(score, (int, float)):
+            raise ApiError(f"task {task.get('id')} cost_score must be numeric")
+        if score < 0 or score > 100:
+            raise ApiError(f"task {task.get('id')} cost_score must be in [0,100]")
+
+    if "cost_confidence" in task:
+        conf = task["cost_confidence"]
+        if not isinstance(conf, (int, float)):
+            raise ApiError(f"task {task.get('id')} cost_confidence must be numeric")
+        if conf < 0 or conf > 1:
+            raise ApiError(f"task {task.get('id')} cost_confidence must be in [0,1]")
+
+    if "cost_bucket" in task and task["cost_bucket"] not in {"S", "M", "L", "XL", "XXL"}:
+        raise ApiError(f"task {task.get('id')} cost_bucket must be one of S/M/L/XL/XXL")
+
+    if "cost_score" in task and "cost_bucket" in task:
+        expected_bucket = derive_cost_bucket(float(task["cost_score"]))
+        if task["cost_bucket"] != expected_bucket:
+            raise ApiError(
+                f"task {task.get('id')} cost_bucket {task['cost_bucket']} does not match cost_score-derived bucket {expected_bucket}"
+            )
+
+    components = task.get("cost_components")
+    if components is not None:
+        if not isinstance(components, dict):
+            raise ApiError(f"task {task.get('id')} cost_components must be an object")
+        missing = sorted(COST_COMPONENT_KEYS - set(components))
+        if missing:
+            raise ApiError(f"task {task.get('id')} cost_components missing keys: {', '.join(missing)}")
+        for key in COST_COMPONENT_KEYS:
+            value = components.get(key)
+            if not isinstance(value, (int, float)):
+                raise ApiError(f"task {task.get('id')} cost_components.{key} must be numeric")
+            if value < 0 or value > 100:
+                raise ApiError(f"task {task.get('id')} cost_components.{key} must be in [0,100]")
+
+    if (
+        "cost_score" in task
+        or "cost_components" in task
+        or "cost_bucket" in task
+        or "cost_confidence" in task
+    ):
+        basis = task.get("cost_basis_version")
+        if basis is not None and basis != COST_BASIS_VERSION:
+            raise ApiError(f"task {task.get('id')} unsupported cost_basis_version: {basis}")
+
+    if "stage_multiplier_applied" in task:
+        mult = task["stage_multiplier_applied"]
+        if not isinstance(mult, (int, float)):
+            raise ApiError(f"task {task.get('id')} stage_multiplier_applied must be numeric")
+        if mult < 0:
+            raise ApiError(f"task {task.get('id')} stage_multiplier_applied must be >= 0")
+
+    if "actuals" in task:
+        actuals = task["actuals"]
+        if not isinstance(actuals, dict):
+            raise ApiError(f"task {task.get('id')} actuals must be an object")
+        numeric_keys = DONE_REQUIRED_ACTUALS_KEYS
+        for key in numeric_keys:
+            if key in actuals:
+                value = actuals[key]
+                if not isinstance(value, (int, float)):
+                    raise ApiError(f"task {task.get('id')} actuals.{key} must be numeric")
+                if value < 0:
+                    raise ApiError(f"task {task.get('id')} actuals.{key} must be >= 0")
+
+    if "done_gate" in task:
+        done_gate = task["done_gate"]
+        if not isinstance(done_gate, dict):
+            raise ApiError(f"task {task.get('id')} done_gate must be an object")
+        for key in DONE_REQUIRED_GATE_KEYS:
+            if key in done_gate and not isinstance(done_gate[key], bool):
+                raise ApiError(f"task {task.get('id')} done_gate.{key} must be boolean")
+
+
+def validate_done_gate_requirements(task: dict[str, Any], *, require: bool) -> None:
+    if not require:
+        return
+
+    task_id = task.get("id")
+    actuals = task.get("actuals")
+    if not isinstance(actuals, dict):
+        raise ApiError(
+            f"task {task_id} moving to Done must include actuals with keys: "
+            f"{', '.join(sorted(DONE_REQUIRED_ACTUALS_KEYS))}"
+        )
+    missing_actuals = sorted(k for k in DONE_REQUIRED_ACTUALS_KEYS if k not in actuals)
+    if missing_actuals:
+        raise ApiError(
+            f"task {task_id} moving to Done missing actuals keys: {', '.join(missing_actuals)}"
+        )
+
+    done_gate = task.get("done_gate")
+    if not isinstance(done_gate, dict):
+        raise ApiError(
+            f"task {task_id} moving to Done must include done_gate with keys: "
+            f"{', '.join(sorted(DONE_REQUIRED_GATE_KEYS))}"
+        )
+    missing_done_gate = sorted(k for k in DONE_REQUIRED_GATE_KEYS if k not in done_gate)
+    if missing_done_gate:
+        raise ApiError(
+            f"task {task_id} moving to Done missing done_gate keys: {', '.join(missing_done_gate)}"
+        )
+    failed_keys = sorted(k for k in DONE_REQUIRED_GATE_KEYS if done_gate.get(k) is not True)
+    if failed_keys:
+        raise ApiError(
+            f"task {task_id} cannot move to Done; failed done_gate checks: {', '.join(failed_keys)}"
+        )
+
+
+def compute_weighted_cost_score(components: dict[str, Any]) -> float:
+    score = 0.0
+    for key, weight in COST_COMPONENT_WEIGHTS.items():
+        score += float(components[key]) * weight
+    return clamp_score(score)
+
+
+def apply_stage_multiplier(status: str, score: float) -> tuple[float, float]:
+    if status in GATEFLOW_STAGE_MULTIPLIERS:
+        mult = GATEFLOW_STAGE_MULTIPLIERS[status]
+        return clamp_score(score * mult), mult
+    # legacy/non-GateFlow statuses: neutral multiplier
+    return clamp_score(score), 1.0
+
+
+def normalize_task_cost(
+    task: dict[str, Any],
+    *,
+    reestimate: bool = False,
+    blocked_confidence_drop: bool = False,
+) -> None:
+    validate_cost_fields(task)
+
+    score = task.get("cost_score")
+    components = task.get("cost_components")
+
+    if components is not None and (reestimate or score is None):
+        score = compute_weighted_cost_score(components)
+
+    if score is not None:
+        score = float(score)
+        score, mult = apply_stage_multiplier(task.get("status", ""), score)
+        task["cost_score"] = round(score, 2)
+        task["stage_multiplier_applied"] = mult
+        task["cost_bucket"] = derive_cost_bucket(score)
+        task["cost_basis_version"] = COST_BASIS_VERSION
+
+    if blocked_confidence_drop and "cost_confidence" in task and isinstance(task["cost_confidence"], (int, float)):
+        task["cost_confidence"] = round(max(0.0, float(task["cost_confidence"]) - 0.15), 2)
 
 
 def allowed_task_statuses(boards: dict[str, Any]) -> set[str]:
@@ -206,6 +418,7 @@ def validate_cross_refs(
             raise ApiError(f"task {tid} depends_on must be a list")
         for dep in deps:
             validate_dep_id_format(tid, dep)
+        validate_cost_fields(task)
 
     validate_milestone_task_links(schedule, tasks_master, tasks_archived)
     validate_backlog_registry(backlog, set(milestones), all_task_ids)
@@ -275,6 +488,8 @@ def create_task(
     boards: dict[str, Any],
     body: dict[str, Any],
     all_task_ids: set[str],
+    *,
+    reestimate_cost: bool = False,
 ) -> str:
     required = {"id", "title", "milestone_id", "status", "depends_on", "board_refs"}
     missing = sorted(required - set(body))
@@ -297,6 +512,8 @@ def create_task(
         raise ApiError("depends_on must be a list")
     for dep in deps:
         validate_dep_id_format(tid, dep)
+    normalize_task_cost(body, reestimate=reestimate_cost)
+    validate_done_gate_requirements(body, require=body.get("status") == "Done")
 
     tasks_master.setdefault("tasks", []).append(body)
     # Maintain milestone task index contract.
@@ -313,6 +530,8 @@ def patch_task(
     task_id: str,
     body: dict[str, Any],
     all_task_ids: set[str],
+    *,
+    reestimate_cost: bool = False,
 ) -> str:
     rows = index_by_id(tasks_master.get("tasks", []))
     if task_id not in rows:
@@ -322,6 +541,7 @@ def patch_task(
 
     row = rows[task_id]
     old_mid = row.get("milestone_id")
+    old_status = row.get("status")
     for k, v in body.items():
         row[k] = v
 
@@ -336,6 +556,10 @@ def patch_task(
         raise ApiError("depends_on must be a list")
     for dep in row.get("depends_on", []):
         validate_dep_id_format(task_id, dep)
+    became_blocked = old_status != "Blocked" and row.get("status") == "Blocked"
+    normalize_task_cost(row, reestimate=reestimate_cost, blocked_confidence_drop=became_blocked)
+    became_done = old_status != "Done" and row.get("status") == "Done"
+    validate_done_gate_requirements(row, require=became_done)
 
     # If milestone changed, move index link.
     new_mid = row["milestone_id"]
@@ -597,6 +821,11 @@ def main() -> int:
         action="store_true",
         help="When deleting task, remove dependency links from active tasks",
     )
+    parser.add_argument(
+        "--reestimate-cost",
+        action="store_true",
+        help="Recompute task cost_score from cost_components and apply stage multiplier for task POST/PATCH.",
+    )
     args = parser.parse_args()
 
     method = args.method.upper()
@@ -639,11 +868,19 @@ def main() -> int:
         if method == "POST":
             if ident is not None:
                 raise ApiError("POST /tasks must not include id in path")
-            summary = create_task(tasks_master, schedule, boards, body, all_task_ids)
+            summary = create_task(tasks_master, schedule, boards, body, all_task_ids, reestimate_cost=args.reestimate_cost)
         elif method == "PATCH":
             if ident is None:
                 raise ApiError("PATCH /tasks/{id} requires id in path")
-            summary = patch_task(tasks_master, schedule, boards, ident, body, all_task_ids)
+            summary = patch_task(
+                tasks_master,
+                schedule,
+                boards,
+                ident,
+                body,
+                all_task_ids,
+                reestimate_cost=args.reestimate_cost,
+            )
         elif method == "DELETE":
             if ident is None:
                 raise ApiError("DELETE /tasks/{id} requires id in path")
