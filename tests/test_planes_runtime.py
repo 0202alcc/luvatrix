@@ -7,7 +7,12 @@ import tempfile
 from typing import Any
 import unittest
 
+import torch
+
+from luvatrix_core.core.app_runtime import AppContext
 from luvatrix_core.core.hdi_thread import HDIEvent
+from luvatrix_core.core.sensor_manager import SensorSample
+from luvatrix_core.core.window_matrix import WindowMatrix
 from luvatrix_ui.planes_runtime import PlaneApp, load_plane_app
 
 
@@ -51,13 +56,55 @@ class _FakeCtx:
         self.finalize_calls += 1
 
     def poll_hdi_events(self, max_events: int):
-        _ = max_events
-        out = list(self._events)
-        self._events = []
+        out = list(self._events[: max(0, int(max_events))])
+        self._events = self._events[max(0, int(max_events)) :]
         return out
 
     def queue(self, event: HDIEvent) -> None:
         self._events.append(event)
+
+    def pending_hdi_events(self) -> int:
+        return len(self._events)
+
+    def consume_hdi_telemetry(self) -> dict[str, int]:
+        return {}
+
+
+class _QueuedHDI:
+    def __init__(self) -> None:
+        self._events: list[HDIEvent] = []
+
+    def start(self) -> None:
+        return None
+
+    def stop(self) -> None:
+        return None
+
+    def queue(self, event: HDIEvent) -> None:
+        self._events.append(event)
+
+    def poll_events(self, max_events: int) -> list[HDIEvent]:
+        out = list(self._events[:max_events])
+        self._events = self._events[max_events:]
+        return out
+
+
+class _NoopSensorManager:
+    def start(self) -> None:
+        return None
+
+    def stop(self) -> None:
+        return None
+
+    def read_sensor(self, sensor_type: str) -> SensorSample:
+        return SensorSample(
+            sample_id=0,
+            ts_ns=0,
+            sensor_type=sensor_type,
+            status="UNAVAILABLE",
+            value=None,
+            unit=None,
+        )
 
 
 def _build_plane_file(root: Path) -> Path:
@@ -762,6 +809,9 @@ class PlanesRuntimeTests(unittest.TestCase):
                 self.assertGreaterEqual(value, 0.0)
             self.assertGreaterEqual(int(perf.get("copy_count", 0)), 0)
             self.assertGreaterEqual(int(perf.get("copy_bytes", 0)), 0)
+            self.assertGreaterEqual(float(perf.get("dirty_rect_area_ratio", 0.0)), 0.0)
+            self.assertGreaterEqual(float(perf.get("incremental_present_pct", 0.0)), 0.0)
+            self.assertGreaterEqual(float(perf.get("full_present_pct", 0.0)), 0.0)
             copy_timing = perf.get("copy_timing_ms", {})
             self.assertIsInstance(copy_timing, dict)
             for key in (
@@ -797,6 +847,7 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertEqual(str(perf.get("compose_mode", "")), "full_frame")
             self.assertEqual(int(perf.get("dirty_rect_count", 0)), 1)
             self.assertEqual(int(perf.get("dirty_rect_area_px", 0)), 320 * 180)
+            self.assertAlmostEqual(float(perf.get("dirty_rect_area_ratio", 0.0)), 1.0, places=6)
             self.assertIsNone(ctx.last_scroll_shift)
 
     def test_plane_runtime_subpixel_scroll_uses_full_frame_compose(self) -> None:
@@ -844,6 +895,117 @@ class PlanesRuntimeTests(unittest.TestCase):
             perf = app.state.get("perf", {})
             self.assertEqual(str(perf.get("compose_mode", "")), "full_frame")
             self.assertIsNone(ctx.last_scroll_shift)
+
+    def test_plane_runtime_invalidation_escape_hatch_forces_full_frame_once(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_scroll_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 40.0, "y": 40.0, "delta_x": -10.0, "delta_y": 0.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            app.state["force_full_invalidation"] = True
+            app.state["force_full_invalidation_reason"] = "regression_guard"
+            ctx.queue(
+                HDIEvent(
+                    event_id=2,
+                    ts_ns=2,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 40.0, "y": 40.0, "delta_x": -10.0, "delta_y": 0.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(str(perf.get("compose_mode", "")), "full_frame")
+            self.assertTrue(bool(perf.get("invalidation_escape_hatch_used", False)))
+            self.assertEqual(str(perf.get("invalidation_escape_hatch_reason", "")), "regression_guard")
+            self.assertIsNone(ctx.last_scroll_shift)
+            self.assertFalse(bool(app.state.get("force_full_invalidation", False)))
+
+    def test_plane_runtime_incremental_present_toggle_forces_full_path(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_scroll_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            app.state["incremental_present_enabled"] = False
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="scroll",
+                    status="OK",
+                    payload={"x": 40.0, "y": 40.0, "delta_x": -10.0, "delta_y": 0.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(str(perf.get("compose_mode", "")), "full_frame")
+            self.assertFalse(bool(perf.get("incremental_present_enabled", True)))
+            self.assertIsNone(ctx.last_scroll_shift)
+
+    def test_plane_runtime_scroll_visual_parity_incremental_vs_full(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_scroll_plane_file(Path(td))
+            sequence = [
+                {"x": 40.0, "y": 40.0, "delta_x": -10.0, "delta_y": 0.0},
+                {"x": 40.0, "y": 40.0, "delta_x": -8.0, "delta_y": -4.0},
+                {"x": 40.0, "y": 40.0, "delta_x": 5.0, "delta_y": 2.0},
+            ]
+
+            def _run(*, force_full: bool) -> list[torch.Tensor]:
+                hdi = _QueuedHDI()
+                ctx = AppContext(
+                    matrix=WindowMatrix(180, 320),
+                    hdi=hdi,  # type: ignore[arg-type]
+                    sensor_manager=_NoopSensorManager(),  # type: ignore[arg-type]
+                    granted_capabilities={"window.write", "hdi.mouse"},
+                )
+                app = load_plane_app(plane_path, handlers={})
+                app.init(ctx)
+                app.loop(ctx, 0.016)
+                snaps: list[torch.Tensor] = [ctx.read_matrix_snapshot()]
+                for i, payload in enumerate(sequence, start=1):
+                    if force_full:
+                        app.state["force_full_invalidation"] = True
+                        app.state["force_full_invalidation_reason"] = "visual_regression_suite"
+                    hdi.queue(
+                        HDIEvent(
+                            event_id=i,
+                            ts_ns=i,
+                            window_id="w",
+                            device="mouse",
+                            event_type="scroll",
+                            status="OK",
+                            payload=dict(payload),
+                        )
+                    )
+                    app.loop(ctx, 0.016)
+                    snaps.append(ctx.read_matrix_snapshot())
+                return snaps
+
+            incremental_snaps = _run(force_full=False)
+            full_snaps = _run(force_full=True)
+            self.assertEqual(len(incremental_snaps), len(full_snaps))
+            for lhs, rhs in zip(incremental_snaps, full_snaps):
+                self.assertTrue(torch.equal(lhs, rhs))
 
     def test_plane_runtime_coalesces_scroll_events_and_preserves_phases(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -900,6 +1062,58 @@ class PlanesRuntimeTests(unittest.TestCase):
             perf = app.state.get("perf", {})
             self.assertEqual(int(perf.get("scroll_events", 0)), 2)
             self.assertEqual(int(perf.get("scroll_events_coalesced", 0)), 1)
+
+    def test_plane_runtime_adaptive_event_budget_drains_bursts(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_scroll_hook_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={"handlers::on_scroll": lambda event_ctx, state: None})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            for i in range(300):
+                ctx.queue(
+                    HDIEvent(
+                        event_id=i + 1,
+                        ts_ns=i + 1,
+                        window_id="w",
+                        device="trackpad",
+                        event_type="scroll",
+                        status="OK",
+                        payload={"x": 20.0, "y": 20.0, "delta_x": -1.0, "delta_y": -1.0, "phase": "changed"},
+                    )
+                )
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertGreaterEqual(int(perf.get("event_budget", 0)), 300)
+            self.assertEqual(int(perf.get("events_processed", 0)), 300)
+            self.assertEqual(int(perf.get("event_queue_pending_after", -1)), 0)
+
+    def test_plane_runtime_event_order_digest_is_deterministic_for_same_burst(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_scroll_hook_plane_file(Path(td))
+
+            def _run_once() -> str:
+                app = load_plane_app(plane_path, handlers={})
+                ctx = _FakeCtx(width=320, height=180)
+                app.init(ctx)
+                for i in range(96):
+                    ctx.queue(
+                        HDIEvent(
+                            event_id=i + 1,
+                            ts_ns=i + 1,
+                            window_id="w",
+                            device="mouse",
+                            event_type="pointer_move",
+                            status="OK",
+                            payload={"x": 16.0 + float(i % 9), "y": 12.0 + float(i % 7)},
+                        )
+                    )
+                app.loop(ctx, 0.016)
+                perf = app.state.get("perf", {})
+                return str(perf.get("event_order_digest", ""))
+
+            first = _run_once()
+            second = _run_once()
+            self.assertEqual(first, second)
 
     def test_plane_runtime_supports_v2_attachment_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as td:

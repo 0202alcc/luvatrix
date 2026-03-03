@@ -21,6 +21,7 @@ class _PerfCtx:
     def __init__(self, *, width: int, height: int) -> None:
         self.matrix = _Matrix(width=width, height=height)
         self._events: list[HDIEvent] = []
+        self.polled_event_ids: list[list[int]] = []
 
     def begin_ui_frame(
         self,
@@ -41,13 +42,16 @@ class _PerfCtx:
         return None
 
     def poll_hdi_events(self, max_events: int):
-        _ = max_events
-        out = list(self._events)
-        self._events = []
+        out = list(self._events[: max(0, int(max_events))])
+        self._events = self._events[max(0, int(max_events)) :]
+        self.polled_event_ids.append([int(event.event_id) for event in out])
         return out
 
     def queue(self, event: HDIEvent) -> None:
         self._events.append(event)
+
+    def pending_hdi_events(self) -> int:
+        return len(self._events)
 
 
 def _percentile(values: list[float], q: float) -> float:
@@ -116,11 +120,52 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
     copy_pack_ms: list[float] = []
     copy_map_ms: list[float] = []
     copy_memcpy_ms: list[float] = []
+    dirty_area_ratios: list[float] = []
+    events_processed: list[int] = []
+    event_budgets: list[int] = []
+    pending_after_frame: list[int] = []
+    event_order_digest_trace: list[str] = []
 
+    event_id_counter = 1
     for i in range(samples):
-        event = _scenario_event(scenario, i)
-        if event is not None:
-            ctx.queue(event)
+        if scenario == "input_burst":
+            if i % 24 == 3:
+                for j in range(512):
+                    ctx.queue(
+                        HDIEvent(
+                            event_id=event_id_counter,
+                            ts_ns=(i * 1_000_000) + j + 1,
+                            window_id="perf",
+                            device="trackpad",
+                            event_type="scroll",
+                            status="OK",
+                            payload={
+                                "x": 180.0 + float(j % 7),
+                                "y": 200.0 + float(j % 5),
+                                "delta_x": -3.0,
+                                "delta_y": -1.0,
+                                "phase": "changed",
+                            },
+                        )
+                    )
+                    event_id_counter += 1
+            elif i % 6 == 0:
+                ctx.queue(
+                    HDIEvent(
+                        event_id=event_id_counter,
+                        ts_ns=(i * 1_000_000) + 1,
+                        window_id="perf",
+                        device="mouse",
+                        event_type="pointer_move",
+                        status="OK",
+                        payload={"x": 120.0 + float(i % 11), "y": 140.0 + float(i % 7)},
+                    )
+                )
+                event_id_counter += 1
+        else:
+            event = _scenario_event(scenario, i)
+            if event is not None:
+                ctx.queue(event)
         w, h = _scenario_matrix_dims(scenario, i, width, height)
         if (w, h) != (ctx.matrix.width, ctx.matrix.height):
             ctx.matrix.width = w
@@ -139,9 +184,19 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
         copy_pack_ms.append(float(copy_timing.get("upload_pack", 0.0)) + float(copy_timing.get("ui_pack", 0.0)))
         copy_map_ms.append(float(copy_timing.get("upload_map", 0.0)))
         copy_memcpy_ms.append(float(copy_timing.get("upload_memcpy", 0.0)))
+        dirty_area_ratios.append(float(perf.get("dirty_rect_area_ratio", 0.0)))
+        events_processed.append(int(perf.get("events_processed", 0)))
+        event_budgets.append(int(perf.get("event_budget", 0)))
+        pending_after_frame.append(int(perf.get("event_queue_pending_after", 0)))
+        event_order_digest_trace.append(str(perf.get("event_order_digest", "0")))
 
     p95_ms = _percentile(frame_total_ms, 95.0)
     p50_ms = _percentile(frame_total_ms, 50.0)
+    incremental_frames = int(sum(1 for mode in compose_modes if mode == "partial_dirty"))
+    full_frames = int(sum(1 for mode in compose_modes if mode == "full_frame"))
+    presented_frames = int(incremental_frames + full_frames)
+    incremental_pct = (float(incremental_frames) * 100.0 / float(presented_frames)) if presented_frames > 0 else 0.0
+    full_pct = (float(full_frames) * 100.0 / float(presented_frames)) if presented_frames > 0 else 0.0
     return {
         "samples": int(samples),
         "p95_frame_total_ms": float(p95_ms),
@@ -152,10 +207,25 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
         "p95_copy_pack_ms": float(_percentile(copy_pack_ms, 95.0)),
         "p95_copy_map_ms": float(_percentile(copy_map_ms, 95.0)),
         "p95_copy_memcpy_ms": float(_percentile(copy_memcpy_ms, 95.0)),
+        "p95_dirty_area_ratio": float(_percentile(dirty_area_ratios, 95.0)),
+        "incremental_present_pct": float(incremental_pct),
+        "full_present_pct": float(full_pct),
+        "incremental_frames": int(incremental_frames),
+        "full_frames": int(full_frames),
+        "presented_frames": int(presented_frames),
         "compose_modes": compose_modes,
         "dirty_counts": dirty_counts,
         "copy_counts": copy_counts,
         "copy_bytes": copy_bytes,
+        "events_processed": events_processed,
+        "p95_events_processed": float(_percentile([float(v) for v in events_processed], 95.0)),
+        "event_budget_trace": event_budgets,
+        "p95_event_budget": float(_percentile([float(v) for v in event_budgets], 95.0)),
+        "pending_after_trace": pending_after_frame,
+        "max_pending_after": int(max(pending_after_frame) if pending_after_frame else 0),
+        "p95_pending_after": float(_percentile([float(v) for v in pending_after_frame], 95.0)),
+        "event_order_digest_trace": event_order_digest_trace,
+        "event_poll_trace": ctx.polled_event_ids,
     }
 
 
@@ -167,6 +237,11 @@ def _run_scenario(scenario: str, samples: int, width: int, height: int) -> dict[
         and first["dirty_counts"] == second["dirty_counts"]
         and first["copy_counts"] == second["copy_counts"]
         and first["copy_bytes"] == second["copy_bytes"]
+        and first["events_processed"] == second["events_processed"]
+        and first["event_budget_trace"] == second["event_budget_trace"]
+        and first["pending_after_trace"] == second["pending_after_trace"]
+        and first["event_order_digest_trace"] == second["event_order_digest_trace"]
+        and first["event_poll_trace"] == second["event_poll_trace"]
     )
     return {"deterministic": bool(deterministic), "result": first}
 
@@ -202,7 +277,7 @@ def _copy_chain_map(width: int, height: int) -> list[dict[str, Any]]:
 
 
 def run_suite(scenario: str, samples: int, width: int, height: int) -> dict[str, Any]:
-    valid = {"render_copy_chain", "idle", "scroll", "drag", "resize_stress", "all_interactive"}
+    valid = {"render_copy_chain", "idle", "scroll", "drag", "resize_stress", "input_burst", "all_interactive"}
     if scenario not in valid:
         raise ValueError(f"unsupported scenario: {scenario}")
     scenario_list = ["idle", "scroll", "drag", "resize_stress"] if scenario == "all_interactive" else [scenario]

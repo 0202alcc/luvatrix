@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import time
 from pathlib import Path
 from dataclasses import dataclass
@@ -46,6 +47,10 @@ class PlaneApp:
         self._renderer = MatrixUIFrameRenderer()
         self.state: dict[str, Any] = {}
         self._svg_markup_cache: dict[Path, str] = {}
+        self._incremental_present_enabled_default = _env_flag(
+            "LUVATRIX_INCREMENTAL_PRESENT_ENABLED",
+            default=True,
+        )
 
         self._planes = json.loads(self._plane_path.read_text(encoding="utf-8"))
         self.metadata = resolve_web_metadata(self._planes["app"])
@@ -58,6 +63,18 @@ class PlaneApp:
         self.state.setdefault("plane_scroll", {"x": 0.0, "y": 0.0})
         self.state.setdefault("prefetch_margin_px", {"x": 96.0, "y": 96.0})
         self.state.setdefault("perf", {})
+        self.state.setdefault("incremental_present_enabled", self._incremental_present_enabled_default)
+        self.state.setdefault("force_full_invalidation", False)
+        self.state.setdefault("force_full_invalidation_reason", None)
+        self.state.setdefault(
+            "present_counters",
+            {
+                "presented_frames": 0,
+                "incremental_frames": 0,
+                "full_frames": 0,
+                "idle_skipped_frames": 0,
+            },
+        )
         self._component_index: dict[str, Any] = {}
         self._plane_index: dict[str, Any] = {}
         self._frame_perf: dict[str, float] = {}
@@ -82,6 +99,10 @@ class PlaneApp:
         self._hit_index_signature: tuple[tuple[float, float], tuple[tuple[str, float, float], ...], tuple[str, ...]] | None = None
         self._last_dirty_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]] | None = None
         self._last_plane_scroll: tuple[float, float] | None = None
+        self._event_batch_base = _env_int("LUVATRIX_EVENT_BATCH_BASE", default=128, min_value=1, max_value=4096)
+        self._event_batch_max = _env_int("LUVATRIX_EVENT_BATCH_MAX", default=512, min_value=1, max_value=4096)
+        if self._event_batch_max < self._event_batch_base:
+            self._event_batch_max = self._event_batch_base
 
     def register_handler(self, target: str, handler: EventHandler) -> None:
         self._handlers[target] = handler
@@ -117,13 +138,36 @@ class PlaneApp:
         )
         self._last_plane_scroll = post_plane_scroll
         self._last_dirty_signature = post_signature
+        invalidation_escape_hatch_used, invalidation_escape_hatch_reason = self._consume_invalidation_escape_hatch()
+        if invalidation_escape_hatch_used and self._ui_page is not None:
+            dirty_rects = [(0, 0, int(self._ui_page.matrix.width), int(self._ui_page.matrix.height))]
+            scroll_shift = None
+        elif dirty_rects and not self._incremental_present_enabled():
+            dirty_rects = [(0, 0, int(self._ui_page.matrix.width), int(self._ui_page.matrix.height))]
+            scroll_shift = None
         dirty_count = int(len(dirty_rects))
         dirty_area = int(sum((w * h) for (_, _, w, h) in dirty_rects))
+        full_area = (
+            int(self._ui_page.matrix.width) * int(self._ui_page.matrix.height)
+            if self._ui_page is not None
+            else 0
+        )
+        dirty_area_ratio = (float(dirty_area) / float(full_area)) if full_area > 0 else 0.0
+        event_budget = int(self._frame_counts.get("event_budget", 0))
+        queue_pending_before = int(self._frame_counts.get("event_queue_pending_before", 0))
+        queue_pending_after = int(self._frame_counts.get("event_queue_pending_after", 0))
+        event_order_digest = str(self._frame_counts.get("event_order_digest", "0"))
+        hdi_latency_p95_ms = self._ns_to_ms(float(self._frame_counts.get("hdi_queue_latency_ns_p95", 0)))
+        hdi_latency_max_ms = self._ns_to_ms(float(self._frame_counts.get("hdi_queue_latency_ns_max", 0)))
+        hdi_events_dropped = int(self._frame_counts.get("hdi_events_dropped", 0))
+        hdi_events_coalesced = int(self._frame_counts.get("hdi_events_coalesced", 0))
+        compose_mode = "partial_dirty" if not self._is_full_frame_dirty(dirty_rects) else "full_frame"
         estimated_copy = self._estimate_copy_telemetry(
-            compose_mode=("partial_dirty" if not self._is_full_frame_dirty(dirty_rects) else "full_frame"),
+            compose_mode=compose_mode,
             dirty_rects=dirty_rects,
         )
         if dirty_count == 0:
+            counters = self._update_present_counters("idle_skip")
             self._add_perf_ns("frame_total_ns", time.perf_counter_ns() - frame_start_ns)
             self.state["perf"] = {
                 "components_considered": 0,
@@ -134,8 +178,16 @@ class PlaneApp:
                 "svg_cache_size": int(len(self._svg_markup_cache)),
                 "events_polled": int(self._frame_counts.get("events_polled", 0)),
                 "events_processed": int(self._frame_counts.get("events_processed", 0)),
+                "event_budget": event_budget,
+                "event_queue_pending_before": queue_pending_before,
+                "event_queue_pending_after": queue_pending_after,
+                "event_order_digest": event_order_digest,
                 "scroll_events": int(self._frame_counts.get("scroll_events", 0)),
                 "scroll_events_coalesced": int(self._frame_counts.get("scroll_events_coalesced", 0)),
+                "hdi_events_dropped": hdi_events_dropped,
+                "hdi_events_coalesced": hdi_events_coalesced,
+                "hdi_queue_latency_p95_ms": hdi_latency_p95_ms,
+                "hdi_queue_latency_max_ms": hdi_latency_max_ms,
                 "hit_test_calls": int(self._frame_counts.get("hit_test_calls", 0)),
                 "hit_test_candidates_checked": int(self._frame_counts.get("hit_test_candidates_checked", 0)),
                 "hit_test_spatial_buckets": int(self._frame_counts.get("hit_test_spatial_buckets", 0)),
@@ -148,7 +200,17 @@ class PlaneApp:
                 "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
                 "dirty_rect_count": 0,
                 "dirty_rect_area_px": 0,
+                "dirty_rect_area_ratio": 0.0,
                 "compose_mode": "idle_skip",
+                "incremental_present_pct": float(counters.get("incremental_present_pct", 0.0)),
+                "full_present_pct": float(counters.get("full_present_pct", 0.0)),
+                "presented_frames": int(counters.get("presented_frames", 0)),
+                "incremental_frames": int(counters.get("incremental_frames", 0)),
+                "full_frames": int(counters.get("full_frames", 0)),
+                "idle_skipped_frames": int(counters.get("idle_skipped_frames", 0)),
+                "incremental_present_enabled": bool(self._incremental_present_enabled()),
+                "invalidation_escape_hatch_used": bool(invalidation_escape_hatch_used),
+                "invalidation_escape_hatch_reason": invalidation_escape_hatch_reason,
                 "copy_count": 0,
                 "copy_bytes": 0,
                 "timing_ms": {
@@ -228,6 +290,7 @@ class PlaneApp:
         self._mount_plane_scrollbars(ctx)
         self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_scrollbar_start_ns)
         present_start_ns = time.perf_counter_ns()
+        counters = self._update_present_counters(compose_mode)
         self.state["perf"] = {
             "components_considered": int(considered),
             "components_culled": int(culled),
@@ -237,8 +300,16 @@ class PlaneApp:
             "svg_cache_size": int(len(self._svg_markup_cache)),
             "events_polled": int(self._frame_counts.get("events_polled", 0)),
             "events_processed": int(self._frame_counts.get("events_processed", 0)),
+            "event_budget": event_budget,
+            "event_queue_pending_before": queue_pending_before,
+            "event_queue_pending_after": queue_pending_after,
+            "event_order_digest": event_order_digest,
             "scroll_events": int(self._frame_counts.get("scroll_events", 0)),
             "scroll_events_coalesced": int(self._frame_counts.get("scroll_events_coalesced", 0)),
+            "hdi_events_dropped": hdi_events_dropped,
+            "hdi_events_coalesced": hdi_events_coalesced,
+            "hdi_queue_latency_p95_ms": hdi_latency_p95_ms,
+            "hdi_queue_latency_max_ms": hdi_latency_max_ms,
             "hit_test_calls": int(self._frame_counts.get("hit_test_calls", 0)),
             "hit_test_candidates_checked": int(self._frame_counts.get("hit_test_candidates_checked", 0)),
             "hit_test_spatial_buckets": int(self._frame_counts.get("hit_test_spatial_buckets", 0)),
@@ -251,7 +322,17 @@ class PlaneApp:
             "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
             "dirty_rect_count": dirty_count,
             "dirty_rect_area_px": dirty_area,
-            "compose_mode": ("partial_dirty" if not self._is_full_frame_dirty(dirty_rects) else "full_frame"),
+            "dirty_rect_area_ratio": float(dirty_area_ratio),
+            "compose_mode": compose_mode,
+            "incremental_present_pct": float(counters.get("incremental_present_pct", 0.0)),
+            "full_present_pct": float(counters.get("full_present_pct", 0.0)),
+            "presented_frames": int(counters.get("presented_frames", 0)),
+            "incremental_frames": int(counters.get("incremental_frames", 0)),
+            "full_frames": int(counters.get("full_frames", 0)),
+            "idle_skipped_frames": int(counters.get("idle_skipped_frames", 0)),
+            "incremental_present_enabled": bool(self._incremental_present_enabled()),
+            "invalidation_escape_hatch_used": bool(invalidation_escape_hatch_used),
+            "invalidation_escape_hatch_reason": invalidation_escape_hatch_reason,
             "copy_count": int(estimated_copy.get("copy_count", 0)),
             "copy_bytes": int(estimated_copy.get("copy_bytes", 0)),
             "timing_ms": {
@@ -305,9 +386,17 @@ class PlaneApp:
     def _dispatch_events(self, ctx, dt: float) -> None:
         if self._ui_page is None:
             return
-        events = ctx.poll_hdi_events(128)
+        pending_before = self._ctx_pending_hdi_events(ctx)
+        budget = self._compute_event_budget(pending_before)
+        events = ctx.poll_hdi_events(budget)
+        pending_after = self._ctx_pending_hdi_events(ctx)
+        self._frame_counts["event_budget"] = int(budget)
+        self._frame_counts["event_queue_pending_before"] = int(pending_before)
+        self._frame_counts["event_queue_pending_after"] = int(pending_after)
         self._frame_counts["events_polled"] = int(len(events))
+        processed_ids: list[int] = []
         if not events:
+            self._merge_hdi_telemetry(ctx)
             return
         self._refresh_hit_test_index()
         scroll_dx = 0.0
@@ -319,6 +408,7 @@ class PlaneApp:
         scroll_momentum_phase: str | None = None
         scroll_payload_for_hook: dict[str, Any] | None = None
         for event in events:
+            processed_ids.append(int(event.event_id))
             self._frame_counts["events_processed"] = int(self._frame_counts.get("events_processed", 0)) + 1
             payload = event.payload if isinstance(event.payload, dict) else {}
             self._record_pointer_xy(payload)
@@ -383,6 +473,42 @@ class PlaneApp:
             target_component = self._pick_component_for_event(coalesced_payload)
             if hook is not None and target_component is not None:
                 self._invoke_bindings(target_component, hook, "scroll", coalesced_payload, dt)
+        self._frame_counts["event_order_digest"] = _event_id_digest(processed_ids)
+        self._merge_hdi_telemetry(ctx)
+
+    def _compute_event_budget(self, pending_before: int) -> int:
+        pending = max(0, int(pending_before))
+        target = max(int(self._event_batch_base), pending)
+        return max(1, min(int(self._event_batch_max), target))
+
+    @staticmethod
+    def _ctx_pending_hdi_events(ctx) -> int:
+        getter = getattr(ctx, "pending_hdi_events", None)
+        if callable(getter):
+            try:
+                return max(0, int(getter()))
+            except Exception:  # noqa: BLE001
+                return 0
+        hdi = getattr(ctx, "hdi", None)
+        pending = getattr(hdi, "pending_count", None)
+        if callable(pending):
+            try:
+                return max(0, int(pending()))
+            except Exception:  # noqa: BLE001
+                return 0
+        return 0
+
+    def _merge_hdi_telemetry(self, ctx) -> None:
+        consumer = getattr(ctx, "consume_hdi_telemetry", None)
+        if consumer is None or not callable(consumer):
+            return
+        payload = consumer()
+        if not isinstance(payload, dict):
+            return
+        self._frame_counts["hdi_events_dropped"] = int(payload.get("events_dropped", 0))
+        self._frame_counts["hdi_events_coalesced"] = int(payload.get("events_coalesced", 0))
+        self._frame_counts["hdi_queue_latency_ns_max"] = int(payload.get("queue_latency_ns_max", 0))
+        self._frame_counts["hdi_queue_latency_ns_p95"] = int(payload.get("queue_latency_ns_p95", 0))
 
     def _dispatch_hover(self, payload: dict[str, Any], dt: float) -> None:
         if self._ui_page is None:
@@ -904,8 +1030,16 @@ class PlaneApp:
         self._frame_counts = {
             "events_polled": 0,
             "events_processed": 0,
+            "event_budget": 0,
+            "event_queue_pending_before": 0,
+            "event_queue_pending_after": 0,
+            "event_order_digest": "0",
             "scroll_events": 0,
             "scroll_events_coalesced": 0,
+            "hdi_events_dropped": 0,
+            "hdi_events_coalesced": 0,
+            "hdi_queue_latency_ns_max": 0,
+            "hdi_queue_latency_ns_p95": 0,
             "hit_test_calls": 0,
             "hit_test_candidates_checked": 0,
             "hit_test_spatial_buckets": 0,
@@ -1018,7 +1152,13 @@ class PlaneApp:
         full = [(0, 0, view_w, view_h)]
         if self._last_dirty_signature is None or self._last_plane_scroll is None:
             return full
-        if pre_signature == post_signature and pre_plane_scroll == post_plane_scroll and events_processed == 0:
+        if (
+            pre_signature == post_signature
+            and pre_plane_scroll == post_plane_scroll
+            and events_processed == 0
+            and self._last_dirty_signature == post_signature
+            and self._last_plane_scroll == post_plane_scroll
+        ):
             return []
         theme_or_hover_changed = pre_signature[0:2] != post_signature[0:2]
         viewport_scroll_changed = pre_signature[2] != post_signature[2]
@@ -1036,6 +1176,9 @@ class PlaneApp:
         ady = abs(int(shift_y))
         if adx == 0 and ady == 0:
             # Subpixel scroll deltas cannot be safely represented via integer shift+strip compose.
+            return full
+        if adx > 0 and ady > 0:
+            # Bi-axial scroll updates are currently routed to full compose to avoid seam artifacts.
             return full
         if adx >= view_w or ady >= view_h:
             return full
@@ -1076,6 +1219,8 @@ class PlaneApp:
             return None
         shift_x, shift_y = self._quantized_scroll_shift(dx, dy)
         if shift_x == 0 and shift_y == 0:
+            return None
+        if abs(int(shift_x)) > 0 and abs(int(shift_y)) > 0:
             return None
         return (shift_x, shift_y)
 
@@ -1174,6 +1319,60 @@ class PlaneApp:
         copy_timing["upload_pack"] = self._ns_to_ms(float(payload.get("upload_pack_ns", 0)))
         copy_timing["upload_map"] = self._ns_to_ms(float(payload.get("upload_map_ns", 0)))
         copy_timing["upload_memcpy"] = self._ns_to_ms(float(payload.get("upload_memcpy_ns", 0)))
+
+    def _incremental_present_enabled(self) -> bool:
+        raw = self.state.get("incremental_present_enabled")
+        if isinstance(raw, bool):
+            return raw
+        return bool(self._incremental_present_enabled_default)
+
+    def _consume_invalidation_escape_hatch(self) -> tuple[bool, str | None]:
+        raw = self.state.get("force_full_invalidation")
+        if not isinstance(raw, bool) or not raw:
+            return (False, None)
+        self.state["force_full_invalidation"] = False
+        reason_raw = self.state.get("force_full_invalidation_reason")
+        reason = str(reason_raw) if isinstance(reason_raw, str) and reason_raw else "requested"
+        self.state["force_full_invalidation_reason"] = None
+        return (True, reason)
+
+    def _update_present_counters(self, compose_mode: str) -> dict[str, int | float]:
+        raw = self.state.get("present_counters")
+        if not isinstance(raw, dict):
+            raw = {}
+            self.state["present_counters"] = raw
+        presented = int(raw.get("presented_frames", 0))
+        incremental = int(raw.get("incremental_frames", 0))
+        full = int(raw.get("full_frames", 0))
+        idle = int(raw.get("idle_skipped_frames", 0))
+        if compose_mode == "partial_dirty":
+            incremental += 1
+            presented += 1
+        elif compose_mode == "full_frame":
+            full += 1
+            presented += 1
+        elif compose_mode == "idle_skip":
+            idle += 1
+        raw["presented_frames"] = int(presented)
+        raw["incremental_frames"] = int(incremental)
+        raw["full_frames"] = int(full)
+        raw["idle_skipped_frames"] = int(idle)
+        if presented <= 0:
+            incremental_pct = 0.0
+            full_pct = 0.0
+        else:
+            incremental_pct = float(incremental) * 100.0 / float(presented)
+            full_pct = float(full) * 100.0 / float(presented)
+        raw["incremental_present_pct"] = float(incremental_pct)
+        raw["full_present_pct"] = float(full_pct)
+        return {
+            "presented_frames": int(presented),
+            "incremental_frames": int(incremental),
+            "full_frames": int(full),
+            "idle_skipped_frames": int(idle),
+            "incremental_present_pct": float(incremental_pct),
+            "full_present_pct": float(full_pct),
+        }
 
     def _add_perf_ns(self, key: str, delta_ns: int) -> None:
         self._frame_perf[key] = float(self._frame_perf.get(key, 0.0) + max(0, int(delta_ns)))
@@ -1683,6 +1882,37 @@ def _scroll_intent_from_event(event_type: str, payload: dict[str, Any], device: 
         momentum = str(momentum_phase) if isinstance(momentum_phase, str) and momentum_phase else None
         return ScrollIntent(delta_x=-dx, delta_y=-dy, source="touch_drag", phase=phase, momentum_phase=momentum)
     return None
+
+
+def _env_flag(name: str, *, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return bool(default)
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
+
+
+def _env_int(name: str, *, default: int, min_value: int, max_value: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return int(default)
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return int(default)
+    return max(int(min_value), min(int(max_value), int(value)))
+
+
+def _event_id_digest(event_ids: list[int]) -> str:
+    h = 1469598103934665603
+    for event_id in event_ids:
+        h ^= int(event_id) & 0xFFFFFFFFFFFFFFFF
+        h = (h * 1099511628211) & 0xFFFFFFFFFFFFFFFF
+    return f"{h:016x}"
 
 
 def _parse_hex_rgba(value: str) -> tuple[int, int, int, int]:

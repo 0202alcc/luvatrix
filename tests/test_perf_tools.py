@@ -24,6 +24,9 @@ class PerfToolsTests(unittest.TestCase):
             result = payload.get("result", {})
             self.assertGreaterEqual(float(result.get("p95_frame_total_ms", -1.0)), 0.0)
             self.assertGreaterEqual(int(result.get("p95_copy_bytes", -1)), 0)
+            self.assertGreaterEqual(float(result.get("p95_dirty_area_ratio", -1.0)), 0.0)
+            self.assertGreaterEqual(float(result.get("incremental_present_pct", -1.0)), 0.0)
+            self.assertGreaterEqual(float(result.get("full_present_pct", -1.0)), 0.0)
 
     def test_assert_thresholds_contract(self) -> None:
         baseline = run_suite(
@@ -43,6 +46,22 @@ class PerfToolsTests(unittest.TestCase):
         out = assert_thresholds("baseline_contract", baseline, contract)
         self.assertTrue(bool(out.get("passed", False)))
         self.assertEqual(out.get("errors"), [])
+
+    def test_run_suite_input_burst_exports_latency_and_replay_contract(self) -> None:
+        summary = run_suite(
+            scenario="input_burst",
+            samples=16,
+            width=640,
+            height=360,
+        )
+        payload = summary.get("scenarios", {}).get("input_burst", {})
+        self.assertTrue(bool(payload.get("deterministic", False)))
+        result = payload.get("result", {})
+        self.assertGreaterEqual(float(result.get("p95_events_processed", -1.0)), 0.0)
+        self.assertGreaterEqual(float(result.get("p95_event_budget", -1.0)), 0.0)
+        self.assertGreaterEqual(float(result.get("p95_pending_after", -1.0)), 0.0)
+        self.assertIsInstance(result.get("event_order_digest_trace", []), list)
+        self.assertIsInstance(result.get("event_poll_trace", []), list)
 
 
 if __name__ == "__main__":
