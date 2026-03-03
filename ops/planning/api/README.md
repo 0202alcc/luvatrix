@@ -22,6 +22,7 @@ Quick operator reference:
 - `POST /milestones`
 - `PATCH /milestones/{id}`
 - `DELETE /milestones/{id}` (`--force` required if active tasks still linked)
+- note: `task_ids` may be omitted or empty at milestone creation; attach tasks later or stage in backlog.
 
 2. Tasks
 - `GET /tasks`
@@ -61,7 +62,7 @@ Quick operator reference:
 - milestone/task id formats
 - task status values
 - board references exist in `boards_registry.json`
-- milestone `task_ids` all resolve in active or archived task ledgers
+- milestone `task_ids` (if populated) all resolve in active or archived task ledgers
 - task dependency IDs are well-formed (`T-###` style)
 - backlog item IDs/status/bucket formats and optional references
 4. Prevents unsafe deletes unless force flags are explicit.

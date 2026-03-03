@@ -94,74 +94,27 @@
   },
   "boards": [
     {
-      "id": "milestone:P-010",
-      "title": "P-010 Discord Infrastructure",
-      "type": "milestone",
+      "id": "backlog:misc",
+      "title": "Misc Backlog Board",
+      "type": "backlog",
+      "framework_template": "gateflow_v1",
       "source_filter": {
-        "milestone_id": "P-010"
+        "backlog_ledger": "ops/planning/agile/backlog_misc.json"
       },
       "discord": {
-        "channel": "#milestone-m-001-board",
+        "channel": "#agile-backlog-misc",
         "threads_enabled": true
       }
     },
     {
-      "id": "milestone:F-011",
-      "title": "F-011 Documentation Completion",
+      "id": "milestone:APU-020",
+      "title": "APU-020 Native Gantt and Agile Visualization",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "F-011"
+        "milestone_id": "APU-020"
       },
       "discord": {
-        "channel": "#milestone-m-002-board",
-        "threads_enabled": true
-      }
-    },
-    {
-      "id": "milestone:R-012",
-      "title": "R-012 Vulkan Stabilization",
-      "type": "milestone",
-      "source_filter": {
-        "milestone_id": "R-012"
-      },
-      "discord": {
-        "channel": "#milestone-m-003-board",
-        "threads_enabled": true
-      }
-    },
-    {
-      "id": "milestone:P-013",
-      "title": "P-013 CI Hardening",
-      "type": "milestone",
-      "source_filter": {
-        "milestone_id": "P-013"
-      },
-      "discord": {
-        "channel": "#milestone-m-004-board",
-        "threads_enabled": true
-      }
-    },
-    {
-      "id": "milestone:F-014",
-      "title": "F-014 Retention and Records",
-      "type": "milestone",
-      "source_filter": {
-        "milestone_id": "F-014"
-      },
-      "discord": {
-        "channel": "#milestone-m-005-board",
-        "threads_enabled": true
-      }
-    },
-    {
-      "id": "milestone:P-015",
-      "title": "P-015 Release Readiness",
-      "type": "milestone",
-      "source_filter": {
-        "milestone_id": "P-015"
-      },
-      "discord": {
-        "channel": "#milestone-m-006-board",
+        "channel": "#milestone-m-011-board",
         "threads_enabled": true
       }
     },
@@ -174,18 +127,6 @@
       },
       "discord": {
         "channel": "#milestone-m-007-board",
-        "threads_enabled": true
-      }
-    },
-    {
-      "id": "milestone:U-017",
-      "title": "U-017 Visualization UX Expansion",
-      "type": "milestone",
-      "source_filter": {
-        "milestone_id": "U-017"
-      },
-      "discord": {
-        "channel": "#milestone-m-008-board",
         "threads_enabled": true
       }
     },
@@ -214,86 +155,158 @@
       }
     },
     {
-      "id": "milestone:APU-020",
-      "title": "APU-020 Native Gantt and Agile Visualization",
+      "id": "milestone:F-011",
+      "title": "F-011 Documentation Completion",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "APU-020"
+        "milestone_id": "F-011"
       },
       "discord": {
-        "channel": "#milestone-m-011-board",
+        "channel": "#milestone-m-002-board",
         "threads_enabled": true
       }
     },
     {
-      "id": "team:runtime",
-      "title": "Team Runtime Board",
-      "type": "team",
+      "id": "milestone:F-014",
+      "title": "F-014 Retention and Records",
+      "type": "milestone",
       "source_filter": {
-        "board_ref": "team:runtime"
+        "milestone_id": "F-014"
       },
       "discord": {
-        "channel": "#team-runtime-board",
+        "channel": "#milestone-m-005-board",
         "threads_enabled": true
       }
     },
     {
-      "id": "team:protocol",
-      "title": "Team Protocol Board",
-      "type": "team",
+      "id": "milestone:F-024",
+      "title": "F-024 Sensor Perf Modernization",
+      "type": "milestone",
       "source_filter": {
-        "board_ref": "team:protocol"
+        "milestone_id": "F-024"
       },
       "discord": {
-        "channel": "#team-protocol-board",
+        "channel": "#milestone-f-024-board",
         "threads_enabled": true
       }
     },
     {
-      "id": "team:rendering",
-      "title": "Team Rendering Board",
-      "type": "team",
+      "id": "milestone:P-010",
+      "title": "P-010 Discord Infrastructure",
+      "type": "milestone",
       "source_filter": {
-        "board_ref": "team:rendering"
+        "milestone_id": "P-010"
       },
       "discord": {
-        "channel": "#team-rendering-board",
+        "channel": "#milestone-m-001-board",
         "threads_enabled": true
       }
     },
     {
-      "id": "team:platform-ci",
-      "title": "Team Platform and CI Board",
-      "type": "team",
+      "id": "milestone:P-013",
+      "title": "P-013 CI Hardening",
+      "type": "milestone",
       "source_filter": {
-        "board_ref": "team:platform-ci"
+        "milestone_id": "P-013"
       },
       "discord": {
-        "channel": "#team-platform-ci-board",
+        "channel": "#milestone-m-004-board",
         "threads_enabled": true
       }
     },
     {
-      "id": "team:security-quality",
-      "title": "Team Security and Quality Board",
-      "type": "team",
+      "id": "milestone:P-015",
+      "title": "P-015 Release Readiness",
+      "type": "milestone",
       "source_filter": {
-        "board_ref": "team:security-quality"
+        "milestone_id": "P-015"
       },
       "discord": {
-        "channel": "#team-security-quality-board",
+        "channel": "#milestone-m-006-board",
         "threads_enabled": true
       }
     },
     {
-      "id": "specialist:pm",
-      "title": "Specialist PM Board",
-      "type": "specialist",
+      "id": "milestone:P-021",
+      "title": "P-021 Perf Baseline + Telemetry",
+      "type": "milestone",
       "source_filter": {
-        "board_ref": "specialist:pm"
+        "milestone_id": "P-021"
       },
       "discord": {
-        "channel": "#specialist-pm-board",
+        "channel": "#milestone-p-021-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:R-012",
+      "title": "R-012 Vulkan Stabilization",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "R-012"
+      },
+      "discord": {
+        "channel": "#milestone-m-003-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:R-022",
+      "title": "R-022 Render Copy Elimination",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "R-022"
+      },
+      "discord": {
+        "channel": "#milestone-r-022-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:R-023",
+      "title": "R-023 Vulkan Transfer Efficiency",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "R-023"
+      },
+      "discord": {
+        "channel": "#milestone-r-023-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:R-025",
+      "title": "R-025 Event Loop/Input Scheduling",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "R-025"
+      },
+      "discord": {
+        "channel": "#milestone-r-025-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:U-017",
+      "title": "U-017 UI/UX Foundations",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "U-017"
+      },
+      "discord": {
+        "channel": "#milestone-m-008-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:U-021",
+      "title": "U-021 Plots Module Foundations",
+      "type": "milestone",
+      "source_filter": {
+        "milestone_id": "U-021"
+      },
+      "discord": {
+        "channel": "#milestone-u-021-board",
         "threads_enabled": true
       }
     },
@@ -322,14 +335,14 @@
       }
     },
     {
-      "id": "specialist:testing",
-      "title": "Specialist Testing Board",
+      "id": "specialist:pm",
+      "title": "Specialist PM Board",
       "type": "specialist",
       "source_filter": {
-        "board_ref": "specialist:testing"
+        "board_ref": "specialist:pm"
       },
       "discord": {
-        "channel": "#specialist-testing-board",
+        "channel": "#specialist-pm-board",
         "threads_enabled": true
       }
     },
@@ -346,18 +359,6 @@
       }
     },
     {
-      "id": "specialist:safety",
-      "title": "Specialist Safety Board",
-      "type": "specialist",
-      "source_filter": {
-        "board_ref": "specialist:safety"
-      },
-      "discord": {
-        "channel": "#specialist-safety-board",
-        "threads_enabled": true
-      }
-    },
-    {
       "id": "specialist:release",
       "title": "Specialist Release Board",
       "type": "specialist",
@@ -370,15 +371,86 @@
       }
     },
     {
-      "id": "backlog:misc",
-      "title": "Misc Backlog Board",
-      "type": "backlog",
-      "framework_template": "gateflow_v1",
+      "id": "specialist:safety",
+      "title": "Specialist Safety Board",
+      "type": "specialist",
       "source_filter": {
-        "backlog_ledger": "ops/planning/agile/backlog_misc.json"
+        "board_ref": "specialist:safety"
       },
       "discord": {
-        "channel": "#agile-backlog-misc",
+        "channel": "#specialist-safety-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "specialist:testing",
+      "title": "Specialist Testing Board",
+      "type": "specialist",
+      "source_filter": {
+        "board_ref": "specialist:testing"
+      },
+      "discord": {
+        "channel": "#specialist-testing-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "team:platform-ci",
+      "title": "Team Platform and CI Board",
+      "type": "team",
+      "source_filter": {
+        "board_ref": "team:platform-ci"
+      },
+      "discord": {
+        "channel": "#team-platform-ci-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "team:protocol",
+      "title": "Team Protocol Board",
+      "type": "team",
+      "source_filter": {
+        "board_ref": "team:protocol"
+      },
+      "discord": {
+        "channel": "#team-protocol-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "team:rendering",
+      "title": "Team Rendering Board",
+      "type": "team",
+      "source_filter": {
+        "board_ref": "team:rendering"
+      },
+      "discord": {
+        "channel": "#team-rendering-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "team:runtime",
+      "title": "Team Runtime Board",
+      "type": "team",
+      "source_filter": {
+        "board_ref": "team:runtime"
+      },
+      "discord": {
+        "channel": "#team-runtime-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "team:security-quality",
+      "title": "Team Security and Quality Board",
+      "type": "team",
+      "source_filter": {
+        "board_ref": "team:security-quality"
+      },
+      "discord": {
+        "channel": "#team-security-quality-board",
         "threads_enabled": true
       }
     }

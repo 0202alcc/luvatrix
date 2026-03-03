@@ -380,8 +380,11 @@ def validate_milestone_task_links(
     for milestone in schedule.get("milestones", []):
         mid = milestone.get("id", "<unknown>")
         task_ids = milestone.get("task_ids")
-        if not isinstance(task_ids, list) or not task_ids:
-            raise ApiError(f"{mid}: missing non-empty task_ids")
+        if task_ids is None:
+            task_ids = []
+            milestone["task_ids"] = task_ids
+        if not isinstance(task_ids, list):
+            raise ApiError(f"{mid}: task_ids must be a list")
         for tid in task_ids:
             if tid in active:
                 if active[tid].get("milestone_id") != mid:
@@ -435,7 +438,7 @@ def validate_cross_refs(
 
 
 def create_milestone(schedule: dict[str, Any], body: dict[str, Any], task_ids_all: set[str]) -> str:
-    required = {"id", "name", "emoji", "start_week", "end_week", "status", "task_ids"}
+    required = {"id", "name", "emoji", "start_week", "end_week", "status"}
     missing = sorted(required - set(body))
     if missing:
         raise ApiError(f"POST /milestones missing fields: {', '.join(missing)}")
@@ -447,9 +450,10 @@ def create_milestone(schedule: dict[str, Any], body: dict[str, Any], task_ids_al
         raise ApiError(f"milestone already exists: {mid}")
     if body["status"] not in ALLOWED_MILESTONE_STATUS:
         raise ApiError(f"invalid milestone status: {body['status']}")
-    if not isinstance(body["task_ids"], list) or not body["task_ids"]:
-        raise ApiError("milestone task_ids must be a non-empty list")
-    for tid in body["task_ids"]:
+    body.setdefault("task_ids", [])
+    if not isinstance(body["task_ids"], list):
+        raise ApiError("milestone task_ids must be a list")
+    for tid in body.get("task_ids", []):
         if tid not in task_ids_all:
             raise ApiError(f"milestone task_id not found in task ledgers: {tid}")
     milestones.append(body)
@@ -467,9 +471,10 @@ def patch_milestone(schedule: dict[str, Any], milestone_id: str, body: dict[str,
         row[k] = v
     if row.get("status") not in ALLOWED_MILESTONE_STATUS:
         raise ApiError(f"invalid milestone status: {row.get('status')}")
-    if not isinstance(row.get("task_ids"), list) or not row["task_ids"]:
-        raise ApiError("milestone task_ids must be non-empty")
-    for tid in row["task_ids"]:
+    row.setdefault("task_ids", [])
+    if not isinstance(row.get("task_ids"), list):
+        raise ApiError("milestone task_ids must be a list")
+    for tid in row.get("task_ids", []):
         if tid not in task_ids_all:
             raise ApiError(f"milestone task_id not found in task ledgers: {tid}")
     return f"updated milestone {milestone_id}"
@@ -576,8 +581,6 @@ def patch_task(
     if new_mid != old_mid:
         old_m = next(m for m in schedule["milestones"] if m["id"] == old_mid)
         old_m["task_ids"] = [tid for tid in old_m["task_ids"] if tid != task_id]
-        if not old_m["task_ids"]:
-            raise ApiError(f"cannot move last task out of milestone {old_mid}; add replacement first")
         new_m = next(m for m in schedule["milestones"] if m["id"] == new_mid)
         if task_id not in new_m["task_ids"]:
             new_m["task_ids"].append(task_id)

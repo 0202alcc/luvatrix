@@ -154,709 +154,6 @@
       ]
     },
     {
-      "id": "T-301",
-      "title": "Collect and classify top swapchain/surface/fence failure modes.",
-      "epic_id": "E-301",
-      "milestone_id": "R-012",
-      "status": "Backlog",
-      "depends_on": [],
-      "board_refs": [
-        "milestone:R-012",
-        "team:rendering",
-        "specialist:testing"
-      ]
-    },
-    {
-      "id": "T-302",
-      "title": "Add targeted regression tests for each failure class.",
-      "epic_id": "E-301",
-      "milestone_id": "R-012",
-      "status": "Backlog",
-      "depends_on": [
-        "T-301"
-      ],
-      "board_refs": [
-        "milestone:R-012",
-        "team:rendering",
-        "specialist:testing"
-      ]
-    },
-    {
-      "id": "T-303",
-      "title": "Implement resiliency fixes and fallback parity checks.",
-      "epic_id": "E-301",
-      "milestone_id": "R-012",
-      "status": "Backlog",
-      "depends_on": [
-        "T-302"
-      ],
-      "board_refs": [
-        "milestone:R-012",
-        "team:rendering",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-304",
-      "title": "Run stability soak and publish defect burn-down.",
-      "epic_id": "E-301",
-      "milestone_id": "R-012",
-      "status": "Backlog",
-      "depends_on": [
-        "T-303"
-      ],
-      "board_refs": [
-        "milestone:R-012",
-        "team:runtime",
-        "specialist:qa"
-      ]
-    },
-    {
-      "id": "T-401",
-      "title": "Define deterministic gate ownership and required pass criteria.",
-      "epic_id": "E-401",
-      "milestone_id": "P-013",
-      "status": "Backlog",
-      "depends_on": [],
-      "board_refs": [
-        "milestone:P-013",
-        "team:platform-ci",
-        "specialist:pm"
-      ]
-    },
-    {
-      "id": "T-402",
-      "title": "Add flaky test quarantine + remediation workflow.",
-      "epic_id": "E-401",
-      "milestone_id": "P-013",
-      "status": "Backlog",
-      "depends_on": [
-        "T-401"
-      ],
-      "board_refs": [
-        "milestone:P-013",
-        "team:platform-ci",
-        "specialist:qa"
-      ]
-    },
-    {
-      "id": "T-403",
-      "title": "Improve smoke signal visibility and artifact links.",
-      "epic_id": "E-401",
-      "milestone_id": "P-013",
-      "status": "Backlog",
-      "depends_on": [
-        "T-401"
-      ],
-      "board_refs": [
-        "milestone:P-013",
-        "team:platform-ci",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-501",
-      "title": "Define retention policy defaults and rationale.",
-      "epic_id": "E-501",
-      "milestone_id": "F-014",
-      "status": "Backlog",
-      "depends_on": [],
-      "board_refs": [
-        "milestone:F-014",
-        "team:security-quality",
-        "specialist:safety"
-      ]
-    },
-    {
-      "id": "T-502",
-      "title": "Validate prune/report workflows under realistic load.",
-      "epic_id": "E-501",
-      "milestone_id": "F-014",
-      "status": "Backlog",
-      "depends_on": [
-        "T-501"
-      ],
-      "board_refs": [
-        "milestone:F-014",
-        "team:security-quality",
-        "specialist:qa"
-      ]
-    },
-    {
-      "id": "T-503",
-      "title": "Publish operational playbook for retention management.",
-      "epic_id": "E-501",
-      "milestone_id": "F-014",
-      "status": "Backlog",
-      "depends_on": [
-        "T-502"
-      ],
-      "board_refs": [
-        "milestone:F-014",
-        "team:security-quality",
-        "specialist:pm"
-      ]
-    },
-    {
-      "id": "T-601",
-      "title": "Assemble milestone completion evidence packet.",
-      "epic_id": "E-601",
-      "milestone_id": "P-015",
-      "status": "Backlog",
-      "depends_on": [],
-      "board_refs": [
-        "milestone:P-015",
-        "team:security-quality",
-        "specialist:release"
-      ]
-    },
-    {
-      "id": "T-602",
-      "title": "Review unresolved risks/defects and required mitigations.",
-      "epic_id": "E-601",
-      "milestone_id": "P-015",
-      "status": "Backlog",
-      "depends_on": [
-        "T-601"
-      ],
-      "board_refs": [
-        "milestone:P-015",
-        "team:security-quality",
-        "specialist:safety"
-      ]
-    },
-    {
-      "id": "T-603",
-      "title": "Publish go/no-go recommendation with rationale and decision log links.",
-      "epic_id": "E-601",
-      "milestone_id": "P-015",
-      "status": "Backlog",
-      "depends_on": [
-        "T-602"
-      ],
-      "board_refs": [
-        "milestone:P-015",
-        "team:security-quality",
-        "specialist:release"
-      ]
-    },
-    {
-      "id": "T-701",
-      "title": "Add platform-aware runtime path: macOS windowed + non-macOS headless.",
-      "epic_id": "E-701",
-      "milestone_id": "ARU-016",
-      "status": "Backlog",
-      "depends_on": [],
-      "board_refs": [
-        "milestone:ARU-016",
-        "team:runtime",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-702",
-      "title": "Keep animation/frame behavior identical across platform paths.",
-      "epic_id": "E-701",
-      "milestone_id": "ARU-016",
-      "status": "Backlog",
-      "depends_on": [
-        "T-701"
-      ],
-      "board_refs": [
-        "milestone:ARU-016",
-        "team:runtime",
-        "specialist:qa"
-      ]
-    },
-    {
-      "id": "T-703",
-      "title": "Add non-macOS system telemetry providers and unavailable fallbacks.",
-      "epic_id": "E-701",
-      "milestone_id": "ARU-016",
-      "status": "Backlog",
-      "depends_on": [
-        "T-701"
-      ],
-      "board_refs": [
-        "milestone:ARU-016",
-        "team:runtime",
-        "specialist:safety"
-      ]
-    },
-    {
-      "id": "T-704",
-      "title": "Update tests/docs and validate no regression in dashboard formatting.",
-      "epic_id": "E-701",
-      "milestone_id": "ARU-016",
-      "status": "Backlog",
-      "depends_on": [
-        "T-702",
-        "T-703"
-      ],
-      "board_refs": [
-        "milestone:ARU-016",
-        "team:runtime",
-        "specialist:testing"
-      ]
-    },
-    {
-      "id": "T-801",
-      "title": "Sideways x-axis rule labels for long names with readable wrapping/fallbacks.",
-      "epic_id": "E-801",
-      "milestone_id": "U-017",
-      "status": "Backlog",
-      "depends_on": [],
-      "board_refs": [
-        "milestone:U-017",
-        "team:rendering",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-802",
-      "title": "Bar chart renderer support (static + interactive parity).",
-      "epic_id": "E-801",
-      "milestone_id": "U-017",
-      "status": "Backlog",
-      "depends_on": [
-        "T-801"
-      ],
-      "board_refs": [
-        "milestone:U-017",
-        "team:rendering",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-803",
-      "title": "Multiple plot support (subplot-like layout orchestration).",
-      "epic_id": "E-801",
-      "milestone_id": "U-017",
-      "status": "Backlog",
-      "depends_on": [
-        "T-802"
-      ],
-      "board_refs": [
-        "milestone:U-017",
-        "team:rendering",
-        "specialist:architecture"
-      ]
-    },
-    {
-      "id": "T-804",
-      "title": "Scrolling and viewport controls for dense plot surfaces.",
-      "epic_id": "E-801",
-      "milestone_id": "U-017",
-      "status": "Backlog",
-      "depends_on": [
-        "T-803"
-      ],
-      "board_refs": [
-        "milestone:U-017",
-        "team:runtime",
-        "specialist:qa"
-      ]
-    },
-    {
-      "id": "T-805",
-      "title": "Table UI component system (sortable columns, pagination/virtualization, keyboard access).",
-      "epic_id": "E-801",
-      "milestone_id": "U-017",
-      "status": "Backlog",
-      "depends_on": [
-        "T-804"
-      ],
-      "board_refs": [
-        "milestone:U-017",
-        "team:runtime",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-834",
-      "title": "Define and implement native hot-path extraction plan for high-frequency camera/compose operations.",
-      "epic_id": "E-801",
-      "milestone_id": "U-017",
-      "status": "Backlog",
-      "depends_on": [
-        "T-833"
-      ],
-      "board_refs": [
-        "milestone:U-017",
-        "team:runtime",
-        "specialist:architecture"
-      ]
-    },
-    {
-      "id": "T-835",
-      "title": "Implement CI performance gate pack for camera-scroll, compositor, and frame-budget thresholds.",
-      "epic_id": "E-801",
-      "milestone_id": "U-017",
-      "status": "Backlog",
-      "depends_on": [
-        "T-834"
-      ],
-      "board_refs": [
-        "milestone:U-017",
-        "team:platform-ci",
-        "specialist:testing"
-      ]
-    },
-    {
-      "id": "T-836",
-      "title": "Implement shift-blit camera scroll compose path (translate previous frame + redraw exposed strips only).",
-      "epic_id": "E-801",
-      "milestone_id": "U-017",
-      "status": "Backlog",
-      "depends_on": [
-        "T-835"
-      ],
-      "board_refs": [
-        "milestone:U-017",
-        "team:runtime",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-837",
-      "title": "Add pre-rasterized bitmap cache path for stable SVG/text components during camera scrolling.",
-      "epic_id": "E-801",
-      "milestone_id": "U-017",
-      "status": "Backlog",
-      "depends_on": [
-        "T-836"
-      ],
-      "board_refs": [
-        "milestone:U-017",
-        "team:rendering",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-838",
-      "title": "Add frame-paced scroll scheduler (coalesced input -> one render cadence update).",
-      "epic_id": "E-801",
-      "milestone_id": "U-017",
-      "status": "Backlog",
-      "depends_on": [
-        "T-837"
-      ],
-      "board_refs": [
-        "milestone:U-017",
-        "team:runtime",
-        "specialist:architecture"
-      ]
-    },
-    {
-      "id": "T-839",
-      "title": "Decouple input ingestion from render thread using deterministic intent queue handoff.",
-      "epic_id": "E-801",
-      "milestone_id": "U-017",
-      "status": "Backlog",
-      "depends_on": [
-        "T-838"
-      ],
-      "board_refs": [
-        "milestone:U-017",
-        "team:runtime",
-        "specialist:architecture"
-      ]
-    },
-    {
-      "id": "T-840",
-      "title": "Finalize scroll performance validation pack (latency/jitter budgets + visual artifact regression gates).",
-      "epic_id": "E-801",
-      "milestone_id": "U-017",
-      "status": "Backlog",
-      "depends_on": [
-        "T-839"
-      ],
-      "board_refs": [
-        "milestone:U-017",
-        "team:platform-ci",
-        "specialist:qa"
-      ]
-    },
-    {
-      "id": "T-901",
-      "title": "Calendar app component (day/week/month views + event rendering contract).",
-      "epic_id": "E-901",
-      "milestone_id": "AU-018",
-      "status": "Backlog",
-      "depends_on": [],
-      "board_refs": [
-        "milestone:AU-018",
-        "team:runtime",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-902",
-      "title": "Calendar workflow integration with data workspace navigation/state sync.",
-      "epic_id": "E-901",
-      "milestone_id": "AU-018",
-      "status": "Backlog",
-      "depends_on": [
-        "T-901"
-      ],
-      "board_refs": [
-        "milestone:AU-018",
-        "team:runtime",
-        "specialist:qa"
-      ]
-    },
-    {
-      "id": "T-1001",
-      "title": "Marketbook schema + ingestion adapter contract.",
-      "epic_id": "E-1001",
-      "milestone_id": "AU-019",
-      "status": "Backlog",
-      "depends_on": [],
-      "board_refs": [
-        "milestone:AU-019",
-        "team:protocol",
-        "specialist:architecture"
-      ]
-    },
-    {
-      "id": "T-1002",
-      "title": "Dedicated dynamic marketbook renderer (depth ladder, spread, imbalance traces).",
-      "epic_id": "E-1001",
-      "milestone_id": "AU-019",
-      "status": "Backlog",
-      "depends_on": [
-        "T-1001"
-      ],
-      "board_refs": [
-        "milestone:AU-019",
-        "team:rendering",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-1003",
-      "title": "Streaming update strategy + latency/perf budgets.",
-      "epic_id": "E-1001",
-      "milestone_id": "AU-019",
-      "status": "Backlog",
-      "depends_on": [
-        "T-1002"
-      ],
-      "board_refs": [
-        "milestone:AU-019",
-        "team:runtime",
-        "specialist:qa"
-      ]
-    },
-    {
-      "id": "T-1004",
-      "title": "Regression/safety tests and operator docs.",
-      "epic_id": "E-1001",
-      "milestone_id": "AU-019",
-      "status": "Backlog",
-      "depends_on": [
-        "T-1003"
-      ],
-      "board_refs": [
-        "milestone:AU-019",
-        "team:security-quality",
-        "specialist:testing"
-      ]
-    },
-    {
-      "id": "T-1101",
-      "title": "Define canonical timeline/task schema for Gantt + Agile cards.",
-      "epic_id": "E-1101",
-      "milestone_id": "APU-020",
-      "status": "Backlog",
-      "depends_on": [],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:rendering",
-        "specialist:architecture"
-      ]
-    },
-    {
-      "id": "T-1102",
-      "title": "Build Luvatrix Gantt renderer (axis/status/dependency lanes).",
-      "epic_id": "E-1101",
-      "milestone_id": "APU-020",
-      "status": "Backlog",
-      "depends_on": [
-        "T-1101"
-      ],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:rendering",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-1103",
-      "title": "Build Luvatrix Agile board renderer (columns/swimlanes/blockers).",
-      "epic_id": "E-1101",
-      "milestone_id": "APU-020",
-      "status": "Backlog",
-      "depends_on": [
-        "T-1102"
-      ],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:rendering",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-1104",
-      "title": "Add interaction layer (filter/zoom/scroll/click-through).",
-      "epic_id": "E-1101",
-      "milestone_id": "APU-020",
-      "status": "Backlog",
-      "depends_on": [
-        "T-1103"
-      ],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:runtime",
-        "specialist:qa"
-      ]
-    },
-    {
-      "id": "T-1105",
-      "title": "Add export adapters (ASCII/Markdown/PNG) and Discord payload compatibility.",
-      "epic_id": "E-1101",
-      "milestone_id": "APU-020",
-      "status": "Backlog",
-      "depends_on": [
-        "T-1104"
-      ],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:runtime",
-        "specialist:release"
-      ]
-    },
-    {
-      "id": "T-1106",
-      "title": "Add validation suite (render correctness + dependency integrity).",
-      "epic_id": "E-1101",
-      "milestone_id": "APU-020",
-      "status": "Backlog",
-      "depends_on": [
-        "T-1105"
-      ],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:platform-ci",
-        "specialist:testing"
-      ]
-    },
-    {
-      "id": "T-1107",
-      "title": "Define Agile source-of-truth contract (tasks master + board registry + data workflow).",
-      "epic_id": "E-1102",
-      "milestone_id": "APU-020",
-      "status": "Done",
-      "depends_on": [
-        "T-1101"
-      ],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:protocol",
-        "specialist:architecture"
-      ]
-    },
-    {
-      "id": "T-1108",
-      "title": "Backfill milestone task indexes and create archived task ledger for historical milestones.",
-      "epic_id": "E-1102",
-      "milestone_id": "APU-020",
-      "status": "Done",
-      "depends_on": [
-        "T-1107"
-      ],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:platform-ci",
-        "specialist:pm"
-      ]
-    },
-    {
-      "id": "T-1109",
-      "title": "Implement milestone-task link validator enforcing active/archived resolution.",
-      "epic_id": "E-1102",
-      "milestone_id": "APU-020",
-      "status": "Done",
-      "depends_on": [
-        "T-1108"
-      ],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:platform-ci",
-        "specialist:testing"
-      ]
-    },
-    {
-      "id": "T-1110",
-      "title": "Build standardized endpoint-style planning API for safe milestone/task CRUD.",
-      "epic_id": "E-1102",
-      "milestone_id": "APU-020",
-      "status": "Done",
-      "depends_on": [
-        "T-1109"
-      ],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:runtime",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-1111",
-      "title": "Document planning API usage and verify data-integrity smoke tests.",
-      "epic_id": "E-1102",
-      "milestone_id": "APU-020",
-      "status": "Done",
-      "depends_on": [
-        "T-1110"
-      ],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:platform-ci",
-        "specialist:release"
-      ]
-    },
-    {
-      "id": "T-1112",
-      "title": "Consolidate Gantt markdown outputs into a single canonical milestones_gantt.md and retire legacy .txt/.md duplicates.",
-      "epic_id": "E-1102",
-      "milestone_id": "APU-020",
-      "status": "Done",
-      "depends_on": [
-        "T-1110"
-      ],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:protocol",
-        "specialist:development"
-      ]
-    },
-    {
-      "id": "T-1113",
-      "title": "Wire planning API apply path to auto-regenerate Gantt markdown/detailed markdown/PNG artifacts after successful writes.",
-      "epic_id": "E-1102",
-      "milestone_id": "APU-020",
-      "status": "Done",
-      "depends_on": [
-        "T-1112"
-      ],
-      "board_refs": [
-        "milestone:APU-020",
-        "team:platform-ci",
-        "specialist:testing"
-      ]
-    },
-    {
       "id": "T-204",
       "title": "Define App Protocol v2 superset wire spec with v1 backward-compatibility guarantees.",
       "epic_id": "E-201",
@@ -1114,6 +411,1478 @@
         "team:protocol",
         "specialist:testing"
       ]
+    },
+    {
+      "id": "T-301",
+      "title": "Collect and classify top swapchain/surface/fence failure modes.",
+      "epic_id": "E-301",
+      "milestone_id": "R-012",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:R-012",
+        "team:rendering",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-302",
+      "title": "Add targeted regression tests for each failure class.",
+      "epic_id": "E-301",
+      "milestone_id": "R-012",
+      "status": "Backlog",
+      "depends_on": [
+        "T-301"
+      ],
+      "board_refs": [
+        "milestone:R-012",
+        "team:rendering",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-303",
+      "title": "Implement resiliency fixes and fallback parity checks.",
+      "epic_id": "E-301",
+      "milestone_id": "R-012",
+      "status": "Backlog",
+      "depends_on": [
+        "T-302"
+      ],
+      "board_refs": [
+        "milestone:R-012",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-304",
+      "title": "Run stability soak and publish defect burn-down.",
+      "epic_id": "E-301",
+      "milestone_id": "R-012",
+      "status": "Backlog",
+      "depends_on": [
+        "T-303"
+      ],
+      "board_refs": [
+        "milestone:R-012",
+        "team:runtime",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-401",
+      "title": "Define deterministic gate ownership and required pass criteria.",
+      "epic_id": "E-401",
+      "milestone_id": "P-013",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:P-013",
+        "team:platform-ci",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-402",
+      "title": "Add flaky test quarantine + remediation workflow.",
+      "epic_id": "E-401",
+      "milestone_id": "P-013",
+      "status": "Backlog",
+      "depends_on": [
+        "T-401"
+      ],
+      "board_refs": [
+        "milestone:P-013",
+        "team:platform-ci",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-403",
+      "title": "Improve smoke signal visibility and artifact links.",
+      "epic_id": "E-401",
+      "milestone_id": "P-013",
+      "status": "Backlog",
+      "depends_on": [
+        "T-401"
+      ],
+      "board_refs": [
+        "milestone:P-013",
+        "team:platform-ci",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-501",
+      "title": "Define retention policy defaults and rationale.",
+      "epic_id": "E-501",
+      "milestone_id": "F-014",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:F-014",
+        "team:security-quality",
+        "specialist:safety"
+      ]
+    },
+    {
+      "id": "T-502",
+      "title": "Validate prune/report workflows under realistic load.",
+      "epic_id": "E-501",
+      "milestone_id": "F-014",
+      "status": "Backlog",
+      "depends_on": [
+        "T-501"
+      ],
+      "board_refs": [
+        "milestone:F-014",
+        "team:security-quality",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-503",
+      "title": "Publish operational playbook for retention management.",
+      "epic_id": "E-501",
+      "milestone_id": "F-014",
+      "status": "Backlog",
+      "depends_on": [
+        "T-502"
+      ],
+      "board_refs": [
+        "milestone:F-014",
+        "team:security-quality",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-601",
+      "title": "Assemble milestone completion evidence packet.",
+      "epic_id": "E-601",
+      "milestone_id": "P-015",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:P-015",
+        "team:security-quality",
+        "specialist:release"
+      ]
+    },
+    {
+      "id": "T-602",
+      "title": "Review unresolved risks/defects and required mitigations.",
+      "epic_id": "E-601",
+      "milestone_id": "P-015",
+      "status": "Backlog",
+      "depends_on": [
+        "T-601"
+      ],
+      "board_refs": [
+        "milestone:P-015",
+        "team:security-quality",
+        "specialist:safety"
+      ]
+    },
+    {
+      "id": "T-603",
+      "title": "Publish go/no-go recommendation with rationale and decision log links.",
+      "epic_id": "E-601",
+      "milestone_id": "P-015",
+      "status": "Backlog",
+      "depends_on": [
+        "T-602"
+      ],
+      "board_refs": [
+        "milestone:P-015",
+        "team:security-quality",
+        "specialist:release"
+      ]
+    },
+    {
+      "id": "T-701",
+      "title": "Add platform-aware runtime path: macOS windowed + non-macOS headless.",
+      "epic_id": "E-701",
+      "milestone_id": "ARU-016",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:ARU-016",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-702",
+      "title": "Keep animation/frame behavior identical across platform paths.",
+      "epic_id": "E-701",
+      "milestone_id": "ARU-016",
+      "status": "Backlog",
+      "depends_on": [
+        "T-701"
+      ],
+      "board_refs": [
+        "milestone:ARU-016",
+        "team:runtime",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-703",
+      "title": "Add non-macOS system telemetry providers and unavailable fallbacks.",
+      "epic_id": "E-701",
+      "milestone_id": "ARU-016",
+      "status": "Backlog",
+      "depends_on": [
+        "T-701"
+      ],
+      "board_refs": [
+        "milestone:ARU-016",
+        "team:runtime",
+        "specialist:safety"
+      ]
+    },
+    {
+      "id": "T-704",
+      "title": "Update tests/docs and validate no regression in dashboard formatting.",
+      "epic_id": "E-701",
+      "milestone_id": "ARU-016",
+      "status": "Backlog",
+      "depends_on": [
+        "T-702",
+        "T-703"
+      ],
+      "board_refs": [
+        "milestone:ARU-016",
+        "team:runtime",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-801",
+      "title": "Sideways x-axis rule labels for long names with readable wrapping/fallbacks.",
+      "epic_id": "E-801",
+      "milestone_id": "U-021",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:U-021",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-802",
+      "title": "Bar chart renderer support (static + interactive parity).",
+      "epic_id": "E-801",
+      "milestone_id": "U-021",
+      "status": "Backlog",
+      "depends_on": [
+        "T-801"
+      ],
+      "board_refs": [
+        "milestone:U-021",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-803",
+      "title": "Multiple plot support (subplot-like layout orchestration).",
+      "epic_id": "E-801",
+      "milestone_id": "U-021",
+      "status": "Backlog",
+      "depends_on": [
+        "T-802"
+      ],
+      "board_refs": [
+        "milestone:U-021",
+        "team:rendering",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-804",
+      "title": "Scrolling and viewport controls for dense plot surfaces.",
+      "epic_id": "E-801",
+      "milestone_id": "U-017",
+      "status": "Backlog",
+      "depends_on": [
+        "T-803"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:runtime",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-805",
+      "title": "Table UI component system (sortable columns, pagination/virtualization, keyboard access).",
+      "epic_id": "E-801",
+      "milestone_id": "U-017",
+      "status": "Backlog",
+      "depends_on": [
+        "T-804"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-821",
+      "title": "Dynamic data plotting primitives (incremental redraw windows, axis rescale policy, stream cadence hooks).",
+      "epic_id": "E-801",
+      "milestone_id": "U-021",
+      "status": "Backlog",
+      "depends_on": [
+        "T-803"
+      ],
+      "board_refs": [
+        "milestone:U-021",
+        "team:rendering",
+        "team:runtime",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-822",
+      "title": "Financial visualization profile pack (OHLC/candles/volume overlays) for downstream marketbook rendering.",
+      "epic_id": "E-801",
+      "milestone_id": "U-021",
+      "status": "Backlog",
+      "depends_on": [
+        "T-821"
+      ],
+      "board_refs": [
+        "milestone:U-021",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-834",
+      "title": "Define and implement native hot-path extraction plan for high-frequency camera/compose operations.",
+      "epic_id": "E-801",
+      "milestone_id": "U-017",
+      "status": "Backlog",
+      "depends_on": [
+        "T-833"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:runtime",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-835",
+      "title": "Implement CI performance gate pack for camera-scroll, compositor, and frame-budget thresholds.",
+      "epic_id": "E-801",
+      "milestone_id": "U-017",
+      "status": "Backlog",
+      "depends_on": [
+        "T-834"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:platform-ci",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-836",
+      "title": "Implement shift-blit camera scroll compose path (translate previous frame + redraw exposed strips only).",
+      "epic_id": "E-801",
+      "milestone_id": "U-017",
+      "status": "Backlog",
+      "depends_on": [
+        "T-835"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-837",
+      "title": "Add pre-rasterized bitmap cache path for stable SVG/text components during camera scrolling.",
+      "epic_id": "E-801",
+      "milestone_id": "U-017",
+      "status": "Backlog",
+      "depends_on": [
+        "T-836"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-838",
+      "title": "Add frame-paced scroll scheduler (coalesced input -> one render cadence update).",
+      "epic_id": "E-801",
+      "milestone_id": "U-017",
+      "status": "Backlog",
+      "depends_on": [
+        "T-837"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:runtime",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-839",
+      "title": "Decouple input ingestion from render thread using deterministic intent queue handoff.",
+      "epic_id": "E-801",
+      "milestone_id": "U-017",
+      "status": "Backlog",
+      "depends_on": [
+        "T-838"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:runtime",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-840",
+      "title": "Finalize scroll performance validation pack (latency/jitter budgets + visual artifact regression gates).",
+      "epic_id": "E-801",
+      "milestone_id": "U-017",
+      "status": "Backlog",
+      "depends_on": [
+        "T-839"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:platform-ci",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-901",
+      "title": "Calendar app component (day/week/month views + event rendering contract).",
+      "epic_id": "E-901",
+      "milestone_id": "AU-018",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:AU-018",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-902",
+      "title": "Calendar workflow integration with data workspace navigation/state sync.",
+      "epic_id": "E-901",
+      "milestone_id": "AU-018",
+      "status": "Backlog",
+      "depends_on": [
+        "T-901"
+      ],
+      "board_refs": [
+        "milestone:AU-018",
+        "team:runtime",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-1001",
+      "title": "Marketbook schema + ingestion adapter contract.",
+      "epic_id": "E-1001",
+      "milestone_id": "AU-019",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:AU-019",
+        "team:protocol",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-1002",
+      "title": "Dedicated dynamic marketbook renderer (depth ladder, spread, imbalance traces).",
+      "epic_id": "E-1001",
+      "milestone_id": "AU-019",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1001",
+        "T-822"
+      ],
+      "board_refs": [
+        "milestone:AU-019",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-1003",
+      "title": "Streaming update strategy + latency/perf budgets.",
+      "epic_id": "E-1001",
+      "milestone_id": "AU-019",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1002"
+      ],
+      "board_refs": [
+        "milestone:AU-019",
+        "team:runtime",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-1004",
+      "title": "Regression/safety tests and operator docs.",
+      "epic_id": "E-1001",
+      "milestone_id": "AU-019",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1003"
+      ],
+      "board_refs": [
+        "milestone:AU-019",
+        "team:security-quality",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-1101",
+      "title": "Define canonical timeline/task schema for Gantt + Agile cards.",
+      "epic_id": "E-1101",
+      "milestone_id": "APU-020",
+      "status": "Backlog",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:rendering",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-1102",
+      "title": "Build Luvatrix Gantt renderer (axis/status/dependency lanes).",
+      "epic_id": "E-1101",
+      "milestone_id": "APU-020",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1101"
+      ],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-1103",
+      "title": "Build Luvatrix Agile board renderer (columns/swimlanes/blockers).",
+      "epic_id": "E-1101",
+      "milestone_id": "APU-020",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1102"
+      ],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:rendering",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-1104",
+      "title": "Add interaction layer (filter/zoom/scroll/click-through).",
+      "epic_id": "E-1101",
+      "milestone_id": "APU-020",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1103"
+      ],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:runtime",
+        "specialist:qa"
+      ]
+    },
+    {
+      "id": "T-1105",
+      "title": "Add export adapters (ASCII/Markdown/PNG) and Discord payload compatibility.",
+      "epic_id": "E-1101",
+      "milestone_id": "APU-020",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1104"
+      ],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:runtime",
+        "specialist:release"
+      ]
+    },
+    {
+      "id": "T-1106",
+      "title": "Add validation suite (render correctness + dependency integrity).",
+      "epic_id": "E-1101",
+      "milestone_id": "APU-020",
+      "status": "Backlog",
+      "depends_on": [
+        "T-1105"
+      ],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:platform-ci",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-1107",
+      "title": "Define Agile source-of-truth contract (tasks master + board registry + data workflow).",
+      "epic_id": "E-1102",
+      "milestone_id": "APU-020",
+      "status": "Done",
+      "depends_on": [
+        "T-1101"
+      ],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:protocol",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-1108",
+      "title": "Backfill milestone task indexes and create archived task ledger for historical milestones.",
+      "epic_id": "E-1102",
+      "milestone_id": "APU-020",
+      "status": "Done",
+      "depends_on": [
+        "T-1107"
+      ],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:platform-ci",
+        "specialist:pm"
+      ]
+    },
+    {
+      "id": "T-1109",
+      "title": "Implement milestone-task link validator enforcing active/archived resolution.",
+      "epic_id": "E-1102",
+      "milestone_id": "APU-020",
+      "status": "Done",
+      "depends_on": [
+        "T-1108"
+      ],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:platform-ci",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-1110",
+      "title": "Build standardized endpoint-style planning API for safe milestone/task CRUD.",
+      "epic_id": "E-1102",
+      "milestone_id": "APU-020",
+      "status": "Done",
+      "depends_on": [
+        "T-1109"
+      ],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:runtime",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-1111",
+      "title": "Document planning API usage and verify data-integrity smoke tests.",
+      "epic_id": "E-1102",
+      "milestone_id": "APU-020",
+      "status": "Done",
+      "depends_on": [
+        "T-1110"
+      ],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:platform-ci",
+        "specialist:release"
+      ]
+    },
+    {
+      "id": "T-1112",
+      "title": "Consolidate Gantt markdown outputs into a single canonical milestones_gantt.md and retire legacy .txt/.md duplicates.",
+      "epic_id": "E-1102",
+      "milestone_id": "APU-020",
+      "status": "Done",
+      "depends_on": [
+        "T-1110"
+      ],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:protocol",
+        "specialist:development"
+      ]
+    },
+    {
+      "id": "T-1113",
+      "title": "Wire planning API apply path to auto-regenerate Gantt markdown/detailed markdown/PNG artifacts after successful writes.",
+      "epic_id": "E-1102",
+      "milestone_id": "APU-020",
+      "status": "Done",
+      "depends_on": [
+        "T-1112"
+      ],
+      "board_refs": [
+        "milestone:APU-020",
+        "team:platform-ci",
+        "specialist:testing"
+      ]
+    },
+    {
+      "id": "T-2101",
+      "title": "Map exact per-frame copy chain across WindowMatrix, DisplayRuntime snapshot, and Vulkan upload stages.",
+      "epic_id": "E-2101",
+      "milestone_id": "P-021",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:P-021",
+        "team:runtime",
+        "team:rendering",
+        "specialist:architecture"
+      ],
+      "acceptance_criteria": [
+        "Copy chain documented with stage-by-stage byte movement and ownership boundaries."
+      ],
+      "evidence_commands": [
+        "uv run pytest tests/runtime -k copy_chain -q"
+      ],
+      "impact_bucket": "XL",
+      "effort_bucket": "M",
+      "confidence": 0.9
+    },
+    {
+      "id": "T-2102",
+      "title": "Add baseline instrumentation counters/timers for copy bytes/count and CPU pack/map/memcpy timings.",
+      "epic_id": "E-2101",
+      "milestone_id": "P-021",
+      "status": "Intake",
+      "depends_on": [
+        "T-2101"
+      ],
+      "board_refs": [
+        "milestone:P-021",
+        "team:runtime",
+        "team:platform-ci",
+        "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Perf telemetry emitted deterministically for all core interactive scenarios."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario render_copy_chain --out artifacts/perf/render_copy_baseline.json"
+      ],
+      "impact_bucket": "XL",
+      "effort_bucket": "M",
+      "confidence": 0.9
+    },
+    {
+      "id": "T-2103",
+      "title": "Add scenario harness coverage: idle, scroll-heavy, drag-heavy, and resize-stress.",
+      "epic_id": "E-2101",
+      "milestone_id": "P-021",
+      "status": "Intake",
+      "depends_on": [
+        "T-2102"
+      ],
+      "board_refs": [
+        "milestone:P-021",
+        "team:platform-ci",
+        "specialist:testing"
+      ],
+      "acceptance_criteria": [
+        "Scenario harness runs reproducibly and exports comparable telemetry artifacts."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/interactive_baseline.json"
+      ],
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.84
+    },
+    {
+      "id": "T-2104",
+      "title": "Define baseline perf-gate thresholds and CI guard contracts.",
+      "epic_id": "E-2101",
+      "milestone_id": "P-021",
+      "status": "Intake",
+      "depends_on": [
+        "T-2103"
+      ],
+      "board_refs": [
+        "milestone:P-021",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "acceptance_criteria": [
+        "CI gate spec includes fail conditions for copy, latency, and determinism regressions."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/assert_thresholds.py --suite baseline_contract --baseline artifacts/perf/interactive_baseline.json"
+      ],
+      "impact_bucket": "L",
+      "effort_bucket": "S",
+      "confidence": 0.85
+    },
+    {
+      "id": "T-2201",
+      "title": "Refactor WindowMatrix commit path to avoid full-frame clone for localized writes.",
+      "epic_id": "E-2201",
+      "milestone_id": "R-022",
+      "status": "Intake",
+      "depends_on": [
+        "T-2102"
+      ],
+      "board_refs": [
+        "milestone:R-022",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Reduced copy count/bytes with deterministic parity and no frame correctness regressions."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario render_copy_chain --out artifacts/perf/render_copy_candidate.json",
+        "uv run pytest tests/runtime tests/rendering -k \"revision or frame_correctness\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "XL",
+      "effort_bucket": "L",
+      "confidence": 0.75
+    },
+    {
+      "id": "T-2202",
+      "title": "Introduce safe revisioned or double-buffer snapshot strategy to reduce DisplayRuntime clone overhead.",
+      "epic_id": "E-2201",
+      "milestone_id": "R-022",
+      "status": "Intake",
+      "depends_on": [
+        "T-2201"
+      ],
+      "board_refs": [
+        "milestone:R-022",
+        "team:runtime",
+        "specialist:architecture"
+      ],
+      "acceptance_criteria": [
+        "Reduced copy count/bytes with deterministic parity and no frame correctness regressions."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario render_copy_chain --out artifacts/perf/render_copy_candidate.json",
+        "uv run pytest tests/runtime tests/rendering -k \"revision or frame_correctness\" -q"
+      ],
+      "rollback_strategy": "Feature flag + dual-path execution and fast rollback to previous stable implementation on regression detection.",
+      "impact_bucket": "XXL",
+      "effort_bucket": "XL",
+      "confidence": 0.62
+    },
+    {
+      "id": "T-2203",
+      "title": "Refactor Vulkan upload prep to minimize Python-level pack/copy overhead with contiguous memory views.",
+      "epic_id": "E-2201",
+      "milestone_id": "R-022",
+      "status": "Intake",
+      "depends_on": [
+        "T-2102"
+      ],
+      "board_refs": [
+        "milestone:R-022",
+        "team:rendering",
+        "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Reduced copy count/bytes with deterministic parity and no frame correctness regressions."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario render_copy_chain --out artifacts/perf/render_copy_candidate.json",
+        "uv run pytest tests/runtime tests/rendering -k \"revision or frame_correctness\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "XL",
+      "effort_bucket": "L",
+      "confidence": 0.7
+    },
+    {
+      "id": "T-2204",
+      "title": "Add frame correctness + revision ordering parity tests for copy-elimination path.",
+      "epic_id": "E-2201",
+      "milestone_id": "R-022",
+      "status": "Intake",
+      "depends_on": [
+        "T-2201",
+        "T-2202",
+        "T-2203"
+      ],
+      "board_refs": [
+        "milestone:R-022",
+        "team:platform-ci",
+        "specialist:testing"
+      ],
+      "acceptance_criteria": [
+        "Reduced copy count/bytes with deterministic parity and no frame correctness regressions."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario render_copy_chain --out artifacts/perf/render_copy_candidate.json",
+        "uv run pytest tests/runtime tests/rendering -k \"revision or frame_correctness\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.78
+    },
+    {
+      "id": "T-2301",
+      "title": "Audit and reduce frequent FullRewrite submissions in interactive paths.",
+      "epic_id": "E-2301",
+      "milestone_id": "U-017",
+      "status": "Intake",
+      "depends_on": [
+        "T-2102"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:runtime",
+        "team:rendering",
+        "specialist:architecture"
+      ],
+      "acceptance_criteria": [
+        "Incremental update percentage increases and frame-time variance improves without visual artifacts."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario scroll_drag --out artifacts/perf/scroll_drag_candidate.json",
+        "uv run pytest tests/ui tests/rendering -k \"scroll or viewport or dirty_rect\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.76
+    },
+    {
+      "id": "T-2302",
+      "title": "Strengthen ShiftFrame + ReplaceRect strategy for scroll-heavy workflows.",
+      "epic_id": "E-2301",
+      "milestone_id": "U-017",
+      "status": "Intake",
+      "depends_on": [
+        "T-2301"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:runtime",
+        "team:rendering",
+        "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Incremental update percentage increases and frame-time variance improves without visual artifacts."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario scroll_drag --out artifacts/perf/scroll_drag_candidate.json",
+        "uv run pytest tests/ui tests/rendering -k \"scroll or viewport or dirty_rect\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.76
+    },
+    {
+      "id": "T-2303",
+      "title": "Enforce incremental-present policy gate with explicit invalidation escape hatch.",
+      "epic_id": "E-2301",
+      "milestone_id": "U-017",
+      "status": "Intake",
+      "depends_on": [
+        "T-2302"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:runtime",
+        "team:rendering",
+        "specialist:safety"
+      ],
+      "acceptance_criteria": [
+        "Incremental update percentage increases and frame-time variance improves without visual artifacts."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario scroll_drag --out artifacts/perf/scroll_drag_candidate.json",
+        "uv run pytest tests/ui tests/rendering -k \"scroll or viewport or dirty_rect\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.76
+    },
+    {
+      "id": "T-2304",
+      "title": "Add dirty-rect telemetry (count, dirty-area ratio, incremental/full percentage).",
+      "epic_id": "E-2301",
+      "milestone_id": "U-017",
+      "status": "Intake",
+      "depends_on": [
+        "T-2303"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:runtime",
+        "team:rendering",
+        "specialist:testing"
+      ],
+      "acceptance_criteria": [
+        "Incremental update percentage increases and frame-time variance improves without visual artifacts."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario scroll_drag --out artifacts/perf/scroll_drag_candidate.json",
+        "uv run pytest tests/ui tests/rendering -k \"scroll or viewport or dirty_rect\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.76
+    },
+    {
+      "id": "T-2305",
+      "title": "Add viewport/scroll visual artifact regression suite.",
+      "epic_id": "E-2301",
+      "milestone_id": "U-017",
+      "status": "Intake",
+      "depends_on": [
+        "T-2304"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:runtime",
+        "team:rendering",
+        "specialist:qa"
+      ],
+      "acceptance_criteria": [
+        "Incremental update percentage increases and frame-time variance improves without visual artifacts."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario scroll_drag --out artifacts/perf/scroll_drag_candidate.json",
+        "uv run pytest tests/ui tests/rendering -k \"scroll or viewport or dirty_rect\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.76
+    },
+    {
+      "id": "T-2401",
+      "title": "Implement/verify persistent mapped staging memory lifecycle.",
+      "epic_id": "E-2401",
+      "milestone_id": "R-023",
+      "status": "Intake",
+      "depends_on": [
+        "T-2203"
+      ],
+      "board_refs": [
+        "milestone:R-023",
+        "team:rendering",
+        "team:runtime",
+        "specialist:architecture"
+      ],
+      "acceptance_criteria": [
+        "Average and p95 transfer+present metrics improve with resize/fallback parity intact."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario vulkan_transfer --out artifacts/perf/vulkan_transfer_candidate.json",
+        "uv run pytest tests/rendering -k \"vulkan or fallback or swapchain\" -q"
+      ],
+      "rollback_strategy": "Feature flag + dual-path execution and fast rollback to previous stable implementation on regression detection.",
+      "impact_bucket": "XL",
+      "effort_bucket": "L",
+      "confidence": 0.7
+    },
+    {
+      "id": "T-2402",
+      "title": "Reduce repeated allocation/reallocation churn for transfer resources.",
+      "epic_id": "E-2401",
+      "milestone_id": "R-023",
+      "status": "Intake",
+      "depends_on": [
+        "T-2401"
+      ],
+      "board_refs": [
+        "milestone:R-023",
+        "team:rendering",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Average and p95 transfer+present metrics improve with resize/fallback parity intact."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario vulkan_transfer --out artifacts/perf/vulkan_transfer_candidate.json",
+        "uv run pytest tests/rendering -k \"vulkan or fallback or swapchain\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.78
+    },
+    {
+      "id": "T-2403",
+      "title": "Minimize per-frame format conversion and clipping overhead where safe.",
+      "epic_id": "E-2401",
+      "milestone_id": "R-023",
+      "status": "Intake",
+      "depends_on": [
+        "T-2402"
+      ],
+      "board_refs": [
+        "milestone:R-023",
+        "team:rendering",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Average and p95 transfer+present metrics improve with resize/fallback parity intact."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario vulkan_transfer --out artifacts/perf/vulkan_transfer_candidate.json",
+        "uv run pytest tests/rendering -k \"vulkan or fallback or swapchain\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.72
+    },
+    {
+      "id": "T-2404",
+      "title": "Harden swapchain recreation paths to avoid avoidable fallback/latency spikes.",
+      "epic_id": "E-2401",
+      "milestone_id": "R-023",
+      "status": "Intake",
+      "depends_on": [
+        "T-2403"
+      ],
+      "board_refs": [
+        "milestone:R-023",
+        "team:rendering",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "acceptance_criteria": [
+        "Average and p95 transfer+present metrics improve with resize/fallback parity intact."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario vulkan_transfer --out artifacts/perf/vulkan_transfer_candidate.json",
+        "uv run pytest tests/rendering -k \"vulkan or fallback or swapchain\" -q"
+      ],
+      "rollback_strategy": "Feature flag + dual-path execution and fast rollback to previous stable implementation on regression detection.",
+      "impact_bucket": "M",
+      "effort_bucket": "L",
+      "confidence": 0.68
+    },
+    {
+      "id": "T-2501",
+      "title": "Profile sensor provider cost/jitter and classify fast-path vs cached metadata providers.",
+      "epic_id": "E-2501",
+      "milestone_id": "F-024",
+      "status": "Intake",
+      "depends_on": [
+        "T-2102"
+      ],
+      "board_refs": [
+        "milestone:F-024",
+        "team:runtime",
+        "team:security-quality",
+        "specialist:architecture"
+      ],
+      "acceptance_criteria": [
+        "Polling CPU/jitter reduced with unchanged security/capability semantics."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario sensor_polling --out artifacts/perf/sensor_polling_candidate.json",
+        "uv run pytest tests/sensors tests/audit tests/security -k \"consent or capability or denial or sensor\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.8
+    },
+    {
+      "id": "T-2502",
+      "title": "Introduce TTL caching for slow-changing metadata providers.",
+      "epic_id": "E-2501",
+      "milestone_id": "F-024",
+      "status": "Intake",
+      "depends_on": [
+        "T-2501"
+      ],
+      "board_refs": [
+        "milestone:F-024",
+        "team:runtime",
+        "team:security-quality",
+        "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Polling CPU/jitter reduced with unchanged security/capability semantics."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario sensor_polling --out artifacts/perf/sensor_polling_candidate.json",
+        "uv run pytest tests/sensors tests/audit tests/security -k \"consent or capability or denial or sensor\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "S",
+      "confidence": 0.82
+    },
+    {
+      "id": "T-2503",
+      "title": "Replace high-cost subprocess sensor reads with direct/native API access where feasible.",
+      "epic_id": "E-2501",
+      "milestone_id": "F-024",
+      "status": "Intake",
+      "depends_on": [
+        "T-2501"
+      ],
+      "board_refs": [
+        "milestone:F-024",
+        "team:runtime",
+        "team:security-quality",
+        "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Polling CPU/jitter reduced with unchanged security/capability semantics."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario sensor_polling --out artifacts/perf/sensor_polling_candidate.json",
+        "uv run pytest tests/sensors tests/audit tests/security -k \"consent or capability or denial or sensor\" -q"
+      ],
+      "rollback_strategy": "Feature flag + dual-path execution and fast rollback to previous stable implementation on regression detection.",
+      "impact_bucket": "XL",
+      "effort_bucket": "XL",
+      "confidence": 0.58
+    },
+    {
+      "id": "T-2504",
+      "title": "Enforce capability/consent/audit parity tests for sensor modernization.",
+      "epic_id": "E-2501",
+      "milestone_id": "F-024",
+      "status": "Intake",
+      "depends_on": [
+        "T-2502",
+        "T-2503"
+      ],
+      "board_refs": [
+        "milestone:F-024",
+        "team:runtime",
+        "team:security-quality",
+        "specialist:safety"
+      ],
+      "acceptance_criteria": [
+        "Polling CPU/jitter reduced with unchanged security/capability semantics."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario sensor_polling --out artifacts/perf/sensor_polling_candidate.json",
+        "uv run pytest tests/sensors tests/audit tests/security -k \"consent or capability or denial or sensor\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.74
+    },
+    {
+      "id": "T-2601",
+      "title": "Profile HDIThread/event queue behavior under idle and burst input.",
+      "epic_id": "E-2601",
+      "milestone_id": "R-025",
+      "status": "Intake",
+      "depends_on": [
+        "T-2102"
+      ],
+      "board_refs": [
+        "milestone:R-025",
+        "team:runtime",
+        "specialist:architecture"
+      ],
+      "acceptance_criteria": [
+        "Idle CPU reduces and burst responsiveness improves with deterministic event ordering preserved."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario input_burst --out artifacts/perf/input_burst_candidate.json",
+        "uv run pytest tests/hdi tests/runtime -k \"event_order or coalescing or determinism\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.79
+    },
+    {
+      "id": "T-2602",
+      "title": "Tune coalescing and max-event processing policy for pointer/scroll bursts.",
+      "epic_id": "E-2601",
+      "milestone_id": "R-025",
+      "status": "Intake",
+      "depends_on": [
+        "T-2601"
+      ],
+      "board_refs": [
+        "milestone:R-025",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Idle CPU reduces and burst responsiveness improves with deterministic event ordering preserved."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario input_burst --out artifacts/perf/input_burst_candidate.json",
+        "uv run pytest tests/hdi tests/runtime -k \"event_order or coalescing or determinism\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "M",
+      "confidence": 0.72
+    },
+    {
+      "id": "T-2603",
+      "title": "Skip unnecessary render-loop work when no frame state changes are pending.",
+      "epic_id": "E-2601",
+      "milestone_id": "R-025",
+      "status": "Intake",
+      "depends_on": [
+        "T-2601"
+      ],
+      "board_refs": [
+        "milestone:R-025",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "acceptance_criteria": [
+        "Idle CPU reduces and burst responsiveness improves with deterministic event ordering preserved."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario input_burst --out artifacts/perf/input_burst_candidate.json",
+        "uv run pytest tests/hdi tests/runtime -k \"event_order or coalescing or determinism\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "L",
+      "effort_bucket": "S",
+      "confidence": 0.8
+    },
+    {
+      "id": "T-2604",
+      "title": "Add deterministic event normalization/ordering regression tests and latency telemetry.",
+      "epic_id": "E-2601",
+      "milestone_id": "R-025",
+      "status": "Intake",
+      "depends_on": [
+        "T-2602",
+        "T-2603"
+      ],
+      "board_refs": [
+        "milestone:R-025",
+        "team:runtime",
+        "specialist:testing"
+      ],
+      "acceptance_criteria": [
+        "Idle CPU reduces and burst responsiveness improves with deterministic event ordering preserved."
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario input_burst --out artifacts/perf/input_burst_candidate.json",
+        "uv run pytest tests/hdi tests/runtime -k \"event_order or coalescing or determinism\" -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "M",
+      "effort_bucket": "M",
+      "confidence": 0.75
+    },
+    {
+      "id": "T-2701",
+      "title": "Document protocol semantics for incremental-present policy and invalidation boundaries.",
+      "epic_id": "E-2701",
+      "milestone_id": "F-011",
+      "status": "Intake",
+      "depends_on": [
+        "T-2303"
+      ],
+      "board_refs": [
+        "milestone:F-011",
+        "team:protocol",
+        "specialist:pm"
+      ],
+      "acceptance_criteria": [
+        "Protocol docs encode new behavior without breaking compatibility or determinism requirements."
+      ],
+      "evidence_commands": [
+        "uv run pytest tests/protocol -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "M",
+      "effort_bucket": "M",
+      "confidence": 0.81
+    },
+    {
+      "id": "T-2702",
+      "title": "Document sensor fast-path/cached-path semantics and TTL behavior in protocol docs.",
+      "epic_id": "E-2701",
+      "milestone_id": "F-011",
+      "status": "Intake",
+      "depends_on": [
+        "T-2504"
+      ],
+      "board_refs": [
+        "milestone:F-011",
+        "team:protocol",
+        "specialist:pm"
+      ],
+      "acceptance_criteria": [
+        "Protocol docs encode new behavior without breaking compatibility or determinism requirements."
+      ],
+      "evidence_commands": [
+        "uv run pytest tests/protocol -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "M",
+      "effort_bucket": "M",
+      "confidence": 0.81
+    },
+    {
+      "id": "T-2703",
+      "title": "Publish compatibility/migration notes for performance-path changes with determinism guarantees.",
+      "epic_id": "E-2701",
+      "milestone_id": "F-011",
+      "status": "Intake",
+      "depends_on": [
+        "T-2404",
+        "T-2604",
+        "T-2701",
+        "T-2702"
+      ],
+      "board_refs": [
+        "milestone:F-011",
+        "team:protocol",
+        "specialist:release"
+      ],
+      "acceptance_criteria": [
+        "Protocol docs encode new behavior without breaking compatibility or determinism requirements."
+      ],
+      "evidence_commands": [
+        "uv run pytest tests/protocol -q"
+      ],
+      "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
+      "impact_bucket": "M",
+      "effort_bucket": "M",
+      "confidence": 0.81
     }
   ]
 }

@@ -41,6 +41,13 @@ uv run python ops/planning/api/planning_api.py POST /milestones \
   --body '{"id":"A-021","emoji":"🧩","name":"Example app project","start_week":13,"end_week":16,"status":"Planned","task_ids":["T-1201"],"lifecycle_events":[{"date":"2026-03-03","event":"active","framework":"gateflow_v1","note":"opened"}]}'
 ```
 
+Bootstrap milestone (no tasks yet):
+
+```bash
+uv run python ops/planning/api/planning_api.py POST /milestones \
+  --body '{"id":"U-099","emoji":"🧪","name":"New milestone bootstrap","start_week":13,"end_week":14,"status":"Planned","task_ids":[]}'
+```
+
 ```bash
 uv run python ops/planning/api/planning_api.py POST /boards \
   --body '{"id":"milestone:A-021","title":"A-021 Example app project","type":"milestone","framework_template":"gateflow_v1","source_filter":{"milestone_id":"A-021"},"discord":{"channel":"#milestone-a-021-board","threads_enabled":true}}'

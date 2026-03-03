@@ -15,462 +15,6 @@
   },
   "milestones": [
     {
-      "id": "F-001",
-      "emoji": "\ud83e\uddec",
-      "name": "Core package transition and repository cleanup",
-      "start_week": 1,
-      "end_week": 1,
-      "status": "Complete",
-      "task_ids": [
-        "A-H001-01",
-        "A-H001-02"
-      ],
-      "completed_on": "2026-02-23",
-      "legacy_id": "H-001",
-      "lifecycle_events": [
-        {
-          "date": "2026-02-23",
-          "event": "closed",
-          "framework": "legacy-kanban",
-          "note": "historical completion"
-        }
-      ]
-    },
-    {
-      "id": "R-002",
-      "emoji": "\ud83d\udda5\ufe0f",
-      "name": "macOS visual runtime foundation merged to main",
-      "start_week": 1,
-      "end_week": 1,
-      "status": "Complete",
-      "task_ids": [
-        "A-H002-01",
-        "A-H002-02"
-      ],
-      "completed_on": "2026-02-23",
-      "legacy_id": "H-002",
-      "lifecycle_events": [
-        {
-          "date": "2026-02-23",
-          "event": "closed",
-          "framework": "legacy-kanban",
-          "note": "historical completion"
-        }
-      ]
-    },
-    {
-      "id": "F-003",
-      "emoji": "\u26a1",
-      "name": "Runtime safety controller and audit pipeline hardening",
-      "start_week": 1,
-      "end_week": 1,
-      "status": "Complete",
-      "task_ids": [
-        "A-H003-01",
-        "A-H003-02"
-      ],
-      "completed_on": "2026-02-24",
-      "legacy_id": "H-003",
-      "lifecycle_events": [
-        {
-          "date": "2026-02-24",
-          "event": "closed",
-          "framework": "legacy-kanban",
-          "note": "historical completion"
-        }
-      ]
-    },
-    {
-      "id": "FR-004",
-      "emoji": "\ud83e\udded",
-      "name": "Platform variant routing and HDI phase standardization",
-      "start_week": 1,
-      "end_week": 1,
-      "status": "Complete",
-      "task_ids": [
-        "A-H004-01",
-        "A-H004-02"
-      ],
-      "completed_on": "2026-02-26",
-      "legacy_id": "H-004",
-      "lifecycle_events": [
-        {
-          "date": "2026-02-26",
-          "event": "closed",
-          "framework": "legacy-kanban",
-          "note": "historical completion"
-        }
-      ]
-    },
-    {
-      "id": "R-005",
-      "emoji": "\ud83c\udfaf",
-      "name": "Rendering fallback, smoke docs, and GPU blit path",
-      "start_week": 1,
-      "end_week": 1,
-      "status": "Complete",
-      "task_ids": [
-        "A-H005-01",
-        "A-H005-02"
-      ],
-      "completed_on": "2026-02-26",
-      "legacy_id": "H-005",
-      "lifecycle_events": [
-        {
-          "date": "2026-02-26",
-          "event": "closed",
-          "framework": "legacy-kanban",
-          "note": "historical completion"
-        }
-      ]
-    },
-    {
-      "id": "UF-006",
-      "emoji": "\ud83d\udcc8",
-      "name": "Interactive plot module and UI IR integration",
-      "start_week": 1,
-      "end_week": 1,
-      "status": "Complete",
-      "task_ids": [
-        "A-H006-01",
-        "A-H006-02"
-      ],
-      "completed_on": "2026-02-26",
-      "legacy_id": "H-006",
-      "lifecycle_events": [
-        {
-          "date": "2026-02-26",
-          "event": "closed",
-          "framework": "legacy-kanban",
-          "note": "historical completion"
-        }
-      ]
-    },
-    {
-      "id": "U-007",
-      "emoji": "\ud83d\udd0c",
-      "name": "Plot stabilization and stream simulation integration",
-      "start_week": 1,
-      "end_week": 1,
-      "status": "Complete",
-      "task_ids": [
-        "A-H007-01",
-        "A-H007-02"
-      ],
-      "completed_on": "2026-02-27",
-      "legacy_id": "H-007",
-      "lifecycle_events": [
-        {
-          "date": "2026-02-27",
-          "event": "closed",
-          "framework": "legacy-kanban",
-          "note": "historical completion"
-        }
-      ]
-    },
-    {
-      "id": "P-008",
-      "emoji": "\ud83d\uddc2\ufe0f",
-      "name": "Discord ops consolidation under /discord",
-      "start_week": 1,
-      "end_week": 1,
-      "status": "Complete",
-      "task_ids": [
-        "A-H008-01",
-        "A-H008-02"
-      ],
-      "completed_on": "2026-02-26",
-      "legacy_id": "H-008",
-      "lifecycle_events": [
-        {
-          "date": "2026-02-26",
-          "event": "closed",
-          "framework": "legacy-kanban",
-          "note": "historical completion"
-        }
-      ]
-    },
-    {
-      "id": "RF-009",
-      "emoji": "\ud83d\udce6",
-      "name": "Packaging metadata and Vulkan runtime preflight guidance",
-      "start_week": 1,
-      "end_week": 1,
-      "status": "Complete",
-      "task_ids": [
-        "A-H009-01",
-        "A-H009-02"
-      ],
-      "completed_on": "2026-02-27",
-      "legacy_id": "H-009",
-      "lifecycle_events": [
-        {
-          "date": "2026-02-27",
-          "event": "closed",
-          "framework": "legacy-kanban",
-          "note": "historical completion"
-        }
-      ]
-    },
-    {
-      "id": "P-010",
-      "emoji": "\ud83e\uddf1",
-      "name": "Discord governance artifacts and onboarding system",
-      "start_week": 1,
-      "end_week": 2,
-      "status": "In Progress",
-      "task_ids": [
-        "T-101",
-        "T-102",
-        "T-103"
-      ],
-      "legacy_id": "M-001",
-      "lifecycle_events": [
-        {
-          "date": "2026-03-03",
-          "event": "active",
-          "framework": "gateflow_v1",
-          "note": "active milestone in current planning cycle"
-        }
-      ]
-    },
-    {
-      "id": "F-011",
-      "emoji": "\ud83d\udcdc",
-      "name": "App protocol docs finalized",
-      "start_week": 2,
-      "end_week": 3,
-      "status": "Complete",
-      "task_ids": [
-        "T-201",
-        "T-202",
-        "T-203",
-        "T-204",
-        "T-205",
-        "T-206",
-        "T-207",
-        "T-208",
-        "T-209",
-        "T-210",
-        "T-211",
-        "T-212",
-        "T-213",
-        "T-214",
-        "T-215",
-        "T-216",
-        "T-217",
-        "T-218",
-        "T-219"
-      ],
-      "legacy_id": "M-002",
-      "lifecycle_events": [
-        {
-          "date": "2026-03-03",
-          "event": "closed",
-          "framework": "kanban_v1",
-          "note": "documentation sprint closed"
-        },
-        {
-          "date": "2026-03-03",
-          "event": "reopened",
-          "framework": "gateflow_v1",
-          "note": "reopened for GateFlow-aligned continuation"
-        }
-      ]
-    },
-    {
-      "id": "R-012",
-      "emoji": "\ud83c\udfae",
-      "name": "Vulkan stabilization",
-      "start_week": 3,
-      "end_week": 6,
-      "status": "Planned",
-      "task_ids": [
-        "T-301",
-        "T-302",
-        "T-303",
-        "T-304"
-      ],
-      "legacy_id": "M-003",
-      "lifecycle_events": [
-        {
-          "date": "2026-03-03",
-          "event": "active",
-          "framework": "gateflow_v1",
-          "note": "active milestone in current planning cycle"
-        }
-      ]
-    },
-    {
-      "id": "P-013",
-      "emoji": "\ud83e\uddea",
-      "name": "CI hardening and flaky governance",
-      "start_week": 4,
-      "end_week": 6,
-      "status": "Planned",
-      "task_ids": [
-        "T-401",
-        "T-402",
-        "T-403"
-      ],
-      "legacy_id": "M-004",
-      "lifecycle_events": [
-        {
-          "date": "2026-03-03",
-          "event": "active",
-          "framework": "gateflow_v1",
-          "note": "active milestone in current planning cycle"
-        }
-      ]
-    },
-    {
-      "id": "F-014",
-      "emoji": "\ud83d\udee1\ufe0f",
-      "name": "Audit retention lifecycle",
-      "start_week": 5,
-      "end_week": 7,
-      "status": "Planned",
-      "task_ids": [
-        "T-501",
-        "T-502",
-        "T-503"
-      ],
-      "legacy_id": "M-005",
-      "lifecycle_events": [
-        {
-          "date": "2026-03-03",
-          "event": "active",
-          "framework": "gateflow_v1",
-          "note": "active milestone in current planning cycle"
-        }
-      ]
-    },
-    {
-      "id": "P-015",
-      "emoji": "\ud83d\ude80",
-      "name": "Production-hardening go/no-go review",
-      "start_week": 8,
-      "end_week": 10,
-      "status": "Planned",
-      "task_ids": [
-        "T-601",
-        "T-602",
-        "T-603"
-      ],
-      "legacy_id": "M-006",
-      "lifecycle_events": [
-        {
-          "date": "2026-03-03",
-          "event": "active",
-          "framework": "gateflow_v1",
-          "note": "active milestone in current planning cycle"
-        }
-      ]
-    },
-    {
-      "id": "ARU-016",
-      "emoji": "\ud83c\udf10",
-      "name": "Cross-platform full-suite interactive generalization",
-      "start_week": 1,
-      "end_week": 4,
-      "status": "In Progress",
-      "task_ids": [
-        "T-701",
-        "T-702",
-        "T-703",
-        "T-704"
-      ],
-      "legacy_id": "M-007",
-      "lifecycle_events": [
-        {
-          "date": "2026-03-03",
-          "event": "active",
-          "framework": "gateflow_v1",
-          "note": "active milestone in current planning cycle"
-        }
-      ]
-    },
-    {
-      "id": "U-017",
-      "emoji": "\ud83d\udcca",
-      "name": "Plot + data UX foundations (labels, bars, subplots, scrolling, table UI)",
-      "start_week": 4,
-      "end_week": 8,
-      "status": "In Progress",
-      "task_ids": [
-        "T-801",
-        "T-802",
-        "T-803",
-        "T-804",
-        "T-805"
-      ],
-      "legacy_id": "M-008",
-      "lifecycle_events": [
-        {
-          "date": "2026-03-01",
-          "event": "closed",
-          "framework": "kanban_v1",
-          "note": "sprint closure"
-        },
-        {
-          "date": "2026-03-01",
-          "event": "reopened",
-          "framework": "kanban_v1",
-          "note": "follow-up tasks added"
-        },
-        {
-          "date": "2026-03-03",
-          "event": "active",
-          "framework": "gateflow_v1",
-          "note": "framework migration cycle"
-        }
-      ]
-    },
-    {
-      "id": "AU-018",
-      "emoji": "\ud83d\uddd3\ufe0f",
-      "name": "Data workspace UI (calendar app)",
-      "start_week": 8,
-      "end_week": 9,
-      "status": "Planned",
-      "task_ids": [
-        "T-901",
-        "T-902"
-      ],
-      "legacy_id": "M-009",
-      "lifecycle_events": [
-        {
-          "date": "2026-03-03",
-          "event": "active",
-          "framework": "gateflow_v1",
-          "note": "active milestone in current planning cycle"
-        }
-      ]
-    },
-    {
-      "id": "AU-019",
-      "emoji": "\ud83d\udcc8",
-      "name": "Custom marketbook dynamic plotting system",
-      "start_week": 9,
-      "end_week": 12,
-      "status": "Planned",
-      "task_ids": [
-        "T-1001",
-        "T-1002",
-        "T-1003",
-        "T-1004"
-      ],
-      "legacy_id": "M-010",
-      "lifecycle_events": [
-        {
-          "date": "2026-03-03",
-          "event": "active",
-          "framework": "gateflow_v1",
-          "note": "active milestone in current planning cycle"
-        }
-      ]
-    },
-    {
       "id": "APU-020",
       "emoji": "\ud83e\udded",
       "name": "Native Gantt + Agile visualization in Luvatrix",
@@ -524,6 +68,625 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "framework migration cycle"
+        }
+      ]
+    },
+    {
+      "id": "ARU-016",
+      "emoji": "\ud83c\udf10",
+      "name": "Cross-platform full-suite interactive generalization",
+      "start_week": 1,
+      "end_week": 4,
+      "status": "In Progress",
+      "task_ids": [
+        "T-701",
+        "T-702",
+        "T-703",
+        "T-704"
+      ],
+      "legacy_id": "M-007",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ]
+    },
+    {
+      "id": "AU-018",
+      "emoji": "\ud83d\uddd3\ufe0f",
+      "name": "Data workspace UI (calendar app)",
+      "start_week": 8,
+      "end_week": 9,
+      "status": "Planned",
+      "task_ids": [
+        "T-901",
+        "T-902"
+      ],
+      "legacy_id": "M-009",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ]
+    },
+    {
+      "id": "AU-019",
+      "emoji": "\ud83d\udcc8",
+      "name": "Custom marketbook dynamic plotting system (integrated with U-021 plots module)",
+      "start_week": 9,
+      "end_week": 12,
+      "status": "Planned",
+      "task_ids": [
+        "T-1001",
+        "T-1002",
+        "T-1003",
+        "T-1004"
+      ],
+      "legacy_id": "M-010",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "integrated dependency path added for U-021 plot module outputs"
+        }
+      ]
+    },
+    {
+      "id": "F-001",
+      "emoji": "\ud83e\uddec",
+      "name": "Core package transition and repository cleanup",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H001-01",
+        "A-H001-02"
+      ],
+      "completed_on": "2026-02-23",
+      "legacy_id": "H-001",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-23",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
+    },
+    {
+      "id": "F-003",
+      "emoji": "\u26a1",
+      "name": "Runtime safety controller and audit pipeline hardening",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H003-01",
+        "A-H003-02"
+      ],
+      "completed_on": "2026-02-24",
+      "legacy_id": "H-003",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-24",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
+    },
+    {
+      "id": "F-011",
+      "emoji": "\ud83d\udcdc",
+      "name": "App protocol docs finalized",
+      "start_week": 2,
+      "end_week": 3,
+      "status": "In Progress",
+      "task_ids": [
+        "T-201",
+        "T-202",
+        "T-203",
+        "T-204",
+        "T-205",
+        "T-206",
+        "T-207",
+        "T-208",
+        "T-209",
+        "T-210",
+        "T-211",
+        "T-212",
+        "T-213",
+        "T-214",
+        "T-215",
+        "T-216",
+        "T-217",
+        "T-218",
+        "T-219",
+        "T-2701",
+        "T-2702",
+        "T-2703"
+      ],
+      "legacy_id": "M-002",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "closed",
+          "framework": "kanban_v1",
+          "note": "documentation sprint closed"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "reopened for GateFlow-aligned continuation"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "performance follow-up scope opened for incremental present and sensor/runtime semantics"
+        }
+      ]
+    },
+    {
+      "id": "F-014",
+      "emoji": "\ud83d\udee1\ufe0f",
+      "name": "Audit retention lifecycle",
+      "start_week": 5,
+      "end_week": 7,
+      "status": "Planned",
+      "task_ids": [
+        "T-501",
+        "T-502",
+        "T-503"
+      ],
+      "legacy_id": "M-005",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ]
+    },
+    {
+      "id": "F-024",
+      "emoji": "\ud83d\udef0\ufe0f",
+      "name": "Sensor backend performance modernization",
+      "start_week": 14,
+      "end_week": 17,
+      "status": "Planned",
+      "task_ids": [
+        "T-2501",
+        "T-2502",
+        "T-2503",
+        "T-2504"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "planned from architect performance directives"
+        }
+      ]
+    },
+    {
+      "id": "FR-004",
+      "emoji": "\ud83e\udded",
+      "name": "Platform variant routing and HDI phase standardization",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H004-01",
+        "A-H004-02"
+      ],
+      "completed_on": "2026-02-26",
+      "legacy_id": "H-004",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-26",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
+    },
+    {
+      "id": "P-008",
+      "emoji": "\ud83d\uddc2\ufe0f",
+      "name": "Discord ops consolidation under /discord",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H008-01",
+        "A-H008-02"
+      ],
+      "completed_on": "2026-02-26",
+      "legacy_id": "H-008",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-26",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
+    },
+    {
+      "id": "P-010",
+      "emoji": "\ud83e\uddf1",
+      "name": "Discord governance artifacts and onboarding system",
+      "start_week": 1,
+      "end_week": 2,
+      "status": "In Progress",
+      "task_ids": [
+        "T-101",
+        "T-102",
+        "T-103"
+      ],
+      "legacy_id": "M-001",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ]
+    },
+    {
+      "id": "P-013",
+      "emoji": "\ud83e\uddea",
+      "name": "CI hardening and flaky governance",
+      "start_week": 4,
+      "end_week": 6,
+      "status": "Planned",
+      "task_ids": [
+        "T-401",
+        "T-402",
+        "T-403"
+      ],
+      "legacy_id": "M-004",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ]
+    },
+    {
+      "id": "P-015",
+      "emoji": "\ud83d\ude80",
+      "name": "Production-hardening go/no-go review",
+      "start_week": 8,
+      "end_week": 10,
+      "status": "Planned",
+      "task_ids": [
+        "T-601",
+        "T-602",
+        "T-603"
+      ],
+      "legacy_id": "M-006",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ]
+    },
+    {
+      "id": "P-021",
+      "emoji": "\ud83d\udccf",
+      "name": "Performance baseline and telemetry gates",
+      "start_week": 13,
+      "end_week": 14,
+      "status": "In Progress",
+      "task_ids": [
+        "T-2101",
+        "T-2102",
+        "T-2103",
+        "T-2104"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "performance modernization baseline kickoff"
+        }
+      ]
+    },
+    {
+      "id": "R-002",
+      "emoji": "\ud83d\udda5\ufe0f",
+      "name": "macOS visual runtime foundation merged to main",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H002-01",
+        "A-H002-02"
+      ],
+      "completed_on": "2026-02-23",
+      "legacy_id": "H-002",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-23",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
+    },
+    {
+      "id": "R-005",
+      "emoji": "\ud83c\udfaf",
+      "name": "Rendering fallback, smoke docs, and GPU blit path",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H005-01",
+        "A-H005-02"
+      ],
+      "completed_on": "2026-02-26",
+      "legacy_id": "H-005",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-26",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
+    },
+    {
+      "id": "R-012",
+      "emoji": "\ud83c\udfae",
+      "name": "Vulkan stabilization",
+      "start_week": 3,
+      "end_week": 6,
+      "status": "Planned",
+      "task_ids": [
+        "T-301",
+        "T-302",
+        "T-303",
+        "T-304"
+      ],
+      "legacy_id": "M-003",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ]
+    },
+    {
+      "id": "R-022",
+      "emoji": "\ud83e\uddec",
+      "name": "Render copy elimination",
+      "start_week": 13,
+      "end_week": 16,
+      "status": "Planned",
+      "task_ids": [
+        "T-2201",
+        "T-2202",
+        "T-2203",
+        "T-2204"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "planned from architect performance directives"
+        }
+      ]
+    },
+    {
+      "id": "R-023",
+      "emoji": "\ud83d\ude9a",
+      "name": "Vulkan transfer path efficiency",
+      "start_week": 14,
+      "end_week": 17,
+      "status": "Planned",
+      "task_ids": [
+        "T-2401",
+        "T-2402",
+        "T-2403",
+        "T-2404"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "planned from architect performance directives"
+        }
+      ]
+    },
+    {
+      "id": "R-025",
+      "emoji": "\ud83c\udf9b\ufe0f",
+      "name": "Event loop and input scheduling tightening",
+      "start_week": 13,
+      "end_week": 16,
+      "status": "Planned",
+      "task_ids": [
+        "T-2601",
+        "T-2602",
+        "T-2603",
+        "T-2604"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "planned from architect performance directives"
+        }
+      ]
+    },
+    {
+      "id": "RF-009",
+      "emoji": "\ud83d\udce6",
+      "name": "Packaging metadata and Vulkan runtime preflight guidance",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H009-01",
+        "A-H009-02"
+      ],
+      "completed_on": "2026-02-27",
+      "legacy_id": "H-009",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-27",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
+    },
+    {
+      "id": "U-007",
+      "emoji": "\ud83d\udd0c",
+      "name": "Plot stabilization and stream simulation integration",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H007-01",
+        "A-H007-02"
+      ],
+      "completed_on": "2026-02-27",
+      "legacy_id": "H-007",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-27",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
+    },
+    {
+      "id": "U-017",
+      "emoji": "\ud83d\udcca",
+      "name": "UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)",
+      "start_week": 4,
+      "end_week": 9,
+      "status": "In Progress",
+      "task_ids": [
+        "T-804",
+        "T-805",
+        "T-834",
+        "T-835",
+        "T-836",
+        "T-837",
+        "T-838",
+        "T-839",
+        "T-840",
+        "T-2301",
+        "T-2302",
+        "T-2303",
+        "T-2304",
+        "T-2305"
+      ],
+      "legacy_id": "M-008",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-01",
+          "event": "closed",
+          "framework": "kanban_v1",
+          "note": "sprint closure"
+        },
+        {
+          "date": "2026-03-01",
+          "event": "reopened",
+          "framework": "kanban_v1",
+          "note": "follow-up tasks added"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "framework migration cycle"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "scope split: plotting work moved into U-021 while UI/UX foundations remain in U-017"
+        }
+      ]
+    },
+    {
+      "id": "U-021",
+      "emoji": "\ud83d\udcc9",
+      "name": "Plots module foundations (labels, bars, subplots, dynamic data, financial visualizations)",
+      "start_week": 4,
+      "end_week": 11,
+      "status": "In Progress",
+      "task_ids": [
+        "T-801",
+        "T-802",
+        "T-803",
+        "T-821",
+        "T-822"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "split from U-017 to isolate plotting stack and integrate with AU-019"
+        }
+      ]
+    },
+    {
+      "id": "UF-006",
+      "emoji": "\ud83d\udcc8",
+      "name": "Interactive plot module and UI IR integration",
+      "start_week": 1,
+      "end_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H006-01",
+        "A-H006-02"
+      ],
+      "completed_on": "2026-02-26",
+      "legacy_id": "H-006",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-26",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
         }
       ]
     }

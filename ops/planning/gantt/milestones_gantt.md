@@ -3,179 +3,40 @@
 Canonical schedule source: `ops/planning/gantt/milestone_schedule.json`
 
 ```text
-                                                                                  |W01    W02    W03    W04    W05    W06    W07    W08    W09    W10    W11    W12    W13    |
-                                                                                  |02/23  03/02  03/09  03/16  03/23  03/30  04/06  04/13  04/20  04/27  05/04  05/11  05/18  |
-----------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-F-001 🧬 Core package transition and repository cleanup                            |=======                                                                                    | Complete (2026-02-23)
-R-002 🖥️ macOS visual runtime foundation merged to main                           |=======                                                                                    | Complete (2026-02-23)
-F-003 ⚡ Runtime safety controller and audit pipeline hardening                    |=======                                                                                    | Complete (2026-02-24)
-FR-004 🧭 Platform variant routing and HDI phase standardization                   |=======                                                                                    | Complete (2026-02-26)
-R-005 🎯 Rendering fallback, smoke docs, and GPU blit path                         |=======                                                                                    | Complete (2026-02-26)
-UF-006 📈 Interactive plot module and UI IR integration                            |=======                                                                                    | Complete (2026-02-26)
-U-007 🔌 Plot stabilization and stream simulation integration                      |=======                                                                                    | Complete (2026-02-27)
-P-008 🗂️ Discord ops consolidation under /discord                                 |=======                                                                                    | Complete (2026-02-26)
-RF-009 📦 Packaging metadata and Vulkan runtime preflight guidance                 |=======                                                                                    | Complete (2026-02-27)
-P-010 🧱 Discord governance artifacts and onboarding system                        |##############                                                                             | In Progress
-F-011 📜 App protocol docs finalized                                               |       ==============                                                                      | Complete
-R-012 🎮 Vulkan stabilization                                                      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                 | Planned
-P-013 🧪 CI hardening and flaky governance                                         |                     ~~~~~~~~~~~~~~~~~~~~~                                                 | Planned
-F-014 🛡️ Audit retention lifecycle                                                |                            ~~~~~~~~~~~~~~~~~~~~~                                          | Planned
-P-015 🚀 Production-hardening go/no-go review                                      |                                                 ~~~~~~~~~~~~~~~~~~~~~                     | Planned
-ARU-016 🌐 Cross-platform full-suite interactive generalization                    |############################                                                               | In Progress
-U-017 📊 Plot + data UX foundations (labels, bars, subplots, scrolling, table UI)  |                     ###################################                                   | In Progress
-AU-018 🗓️ Data workspace UI (calendar app)                                        |                                                 ~~~~~~~~~~~~~~                            | Planned
-AU-019 📈 Custom marketbook dynamic plotting system                                |                                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~       | Planned
-APU-020 🧭 Native Gantt + Agile visualization in Luvatrix                          |                                                               ############################| In Progress
+                                                                                                   |W01    W02    W03    W04    W05    W06    W07    W08    W09    W10    W11    W12    W13    W14    W15    W16    W17    |
+                                                                                                   |02/23  03/02  03/09  03/16  03/23  03/30  04/06  04/13  04/20  04/27  05/04  05/11  05/18  05/25  06/01  06/08  06/15  |
+---------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+APU-020 🧭 Native Gantt + Agile visualization in Luvatrix                                           |                                                               ############################                            | In Progress
+ARU-016 🌐 Cross-platform full-suite interactive generalization                                     |############################                                                                                           | In Progress
+AU-018 🗓️ Data workspace UI (calendar app)                                                         |                                                 ~~~~~~~~~~~~~~                                                        | Planned
+AU-019 📈 Custom marketbook dynamic plotting system (integrated with U-021 plots module)            |                                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                   | Planned
+F-001 🧬 Core package transition and repository cleanup                                             |=======                                                                                                                | Complete (2026-02-23)
+F-003 ⚡ Runtime safety controller and audit pipeline hardening                                     |=======                                                                                                                | Complete (2026-02-24)
+F-011 📜 App protocol docs finalized                                                                |       ##############                                                                                                  | In Progress
+F-014 🛡️ Audit retention lifecycle                                                                 |                            ~~~~~~~~~~~~~~~~~~~~~                                                                      | Planned
+F-024 🛰️ Sensor backend performance modernization                                                  |                                                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Planned
+FR-004 🧭 Platform variant routing and HDI phase standardization                                    |=======                                                                                                                | Complete (2026-02-26)
+P-008 🗂️ Discord ops consolidation under /discord                                                  |=======                                                                                                                | Complete (2026-02-26)
+P-010 🧱 Discord governance artifacts and onboarding system                                         |##############                                                                                                         | In Progress
+P-013 🧪 CI hardening and flaky governance                                                          |                     ~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
+P-015 🚀 Production-hardening go/no-go review                                                       |                                                 ~~~~~~~~~~~~~~~~~~~~~                                                 | Planned
+P-021 📏 Performance baseline and telemetry gates                                                   |                                                                                    ##############                     | In Progress
+R-002 🖥️ macOS visual runtime foundation merged to main                                            |=======                                                                                                                | Complete (2026-02-23)
+R-005 🎯 Rendering fallback, smoke docs, and GPU blit path                                          |=======                                                                                                                | Complete (2026-02-26)
+R-012 🎮 Vulkan stabilization                                                                       |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
+R-022 🧬 Render copy elimination                                                                    |                                                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~       | Planned
+R-023 🚚 Vulkan transfer path efficiency                                                            |                                                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Planned
+R-025 🎛️ Event loop and input scheduling tightening                                                |                                                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~       | Planned
+RF-009 📦 Packaging metadata and Vulkan runtime preflight guidance                                  |=======                                                                                                                | Complete (2026-02-27)
+U-007 🔌 Plot stabilization and stream simulation integration                                       |=======                                                                                                                | Complete (2026-02-27)
+U-017 📊 UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)                      |                     ##########################################                                                        | In Progress
+U-021 📉 Plots module foundations (labels, bars, subplots, dynamic data, financial visualizations)  |                     ########################################################                                          | In Progress
+UF-006 📈 Interactive plot module and UI IR integration                                             |=======                                                                                                                | Complete (2026-02-26)
 
 Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 ```
 
 ## Milestone Details
-
-### F-001 🧬 Core package transition and repository cleanup
-- Status: Complete
-- Target window: Week 1-1
-- Completed on: 2026-02-23
-- Tasks: `A-H001-01, A-H001-02`
-- Lifecycle events:
-  - 2026-02-23 closed (framework=legacy-kanban) - historical completion
-
-### R-002 🖥️ macOS visual runtime foundation merged to main
-- Status: Complete
-- Target window: Week 1-1
-- Completed on: 2026-02-23
-- Tasks: `A-H002-01, A-H002-02`
-- Lifecycle events:
-  - 2026-02-23 closed (framework=legacy-kanban) - historical completion
-
-### F-003 ⚡ Runtime safety controller and audit pipeline hardening
-- Status: Complete
-- Target window: Week 1-1
-- Completed on: 2026-02-24
-- Tasks: `A-H003-01, A-H003-02`
-- Lifecycle events:
-  - 2026-02-24 closed (framework=legacy-kanban) - historical completion
-
-### FR-004 🧭 Platform variant routing and HDI phase standardization
-- Status: Complete
-- Target window: Week 1-1
-- Completed on: 2026-02-26
-- Tasks: `A-H004-01, A-H004-02`
-- Lifecycle events:
-  - 2026-02-26 closed (framework=legacy-kanban) - historical completion
-
-### R-005 🎯 Rendering fallback, smoke docs, and GPU blit path
-- Status: Complete
-- Target window: Week 1-1
-- Completed on: 2026-02-26
-- Tasks: `A-H005-01, A-H005-02`
-- Lifecycle events:
-  - 2026-02-26 closed (framework=legacy-kanban) - historical completion
-
-### UF-006 📈 Interactive plot module and UI IR integration
-- Status: Complete
-- Target window: Week 1-1
-- Completed on: 2026-02-26
-- Tasks: `A-H006-01, A-H006-02`
-- Lifecycle events:
-  - 2026-02-26 closed (framework=legacy-kanban) - historical completion
-
-### U-007 🔌 Plot stabilization and stream simulation integration
-- Status: Complete
-- Target window: Week 1-1
-- Completed on: 2026-02-27
-- Tasks: `A-H007-01, A-H007-02`
-- Lifecycle events:
-  - 2026-02-27 closed (framework=legacy-kanban) - historical completion
-
-### P-008 🗂️ Discord ops consolidation under /discord
-- Status: Complete
-- Target window: Week 1-1
-- Completed on: 2026-02-26
-- Tasks: `A-H008-01, A-H008-02`
-- Lifecycle events:
-  - 2026-02-26 closed (framework=legacy-kanban) - historical completion
-
-### RF-009 📦 Packaging metadata and Vulkan runtime preflight guidance
-- Status: Complete
-- Target window: Week 1-1
-- Completed on: 2026-02-27
-- Tasks: `A-H009-01, A-H009-02`
-- Lifecycle events:
-  - 2026-02-27 closed (framework=legacy-kanban) - historical completion
-
-### P-010 🧱 Discord governance artifacts and onboarding system
-- Status: In Progress
-- Target window: Week 1-2
-- Tasks: `T-101, T-102, T-103`
-- Lifecycle events:
-  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
-
-### F-011 📜 App protocol docs finalized
-- Status: Complete
-- Target window: Week 2-3
-- Tasks: `T-201, T-202, T-203, T-204, T-205, T-206, T-207, T-208, T-209, T-210, T-211, T-212, T-213, T-214, T-215, T-216, T-217, T-218, T-219`
-- Lifecycle events:
-  - 2026-03-03 closed (framework=kanban_v1) - documentation sprint closed
-  - 2026-03-03 reopened (framework=gateflow_v1) - reopened for GateFlow-aligned continuation
-
-### R-012 🎮 Vulkan stabilization
-- Status: Planned
-- Target window: Week 3-6
-- Tasks: `T-301, T-302, T-303, T-304`
-- Lifecycle events:
-  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
-
-### P-013 🧪 CI hardening and flaky governance
-- Status: Planned
-- Target window: Week 4-6
-- Tasks: `T-401, T-402, T-403`
-- Lifecycle events:
-  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
-
-### F-014 🛡️ Audit retention lifecycle
-- Status: Planned
-- Target window: Week 5-7
-- Tasks: `T-501, T-502, T-503`
-- Lifecycle events:
-  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
-
-### P-015 🚀 Production-hardening go/no-go review
-- Status: Planned
-- Target window: Week 8-10
-- Tasks: `T-601, T-602, T-603`
-- Lifecycle events:
-  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
-
-### ARU-016 🌐 Cross-platform full-suite interactive generalization
-- Status: In Progress
-- Target window: Week 1-4
-- Tasks: `T-701, T-702, T-703, T-704`
-- Lifecycle events:
-  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
-
-### U-017 📊 Plot + data UX foundations (labels, bars, subplots, scrolling, table UI)
-- Status: In Progress
-- Target window: Week 4-8
-- Tasks: `T-801, T-802, T-803, T-804, T-805`
-- Lifecycle events:
-  - 2026-03-01 closed (framework=kanban_v1) - sprint closure
-  - 2026-03-01 reopened (framework=kanban_v1) - follow-up tasks added
-  - 2026-03-03 active (framework=gateflow_v1) - framework migration cycle
-
-### AU-018 🗓️ Data workspace UI (calendar app)
-- Status: Planned
-- Target window: Week 8-9
-- Tasks: `T-901, T-902`
-- Lifecycle events:
-  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
-
-### AU-019 📈 Custom marketbook dynamic plotting system
-- Status: Planned
-- Target window: Week 9-12
-- Tasks: `T-1001, T-1002, T-1003, T-1004`
-- Lifecycle events:
-  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
 
 ### APU-020 🧭 Native Gantt + Agile visualization in Luvatrix
 - Status: In Progress
@@ -196,6 +57,196 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - `T-1104`: Filtering/zoom/scroll/click-through interactions are deterministic, clamped, and compatible with first-party planning state types.
   - `T-1105`: Export adapters produce ASCII/Markdown/PNG artifacts and Discord payload manifests from first-party planning models.
   - `T-1106`: Validation suite enforces dependency integrity and render consistency; App Protocol compliance evidence is required to clear completion.
+
+### ARU-016 🌐 Cross-platform full-suite interactive generalization
+- Status: In Progress
+- Target window: Week 1-4
+- Tasks: `T-701, T-702, T-703, T-704`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
+
+### AU-018 🗓️ Data workspace UI (calendar app)
+- Status: Planned
+- Target window: Week 8-9
+- Tasks: `T-901, T-902`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
+
+### AU-019 📈 Custom marketbook dynamic plotting system (integrated with U-021 plots module)
+- Status: Planned
+- Target window: Week 9-12
+- Tasks: `T-1001, T-1002, T-1003, T-1004`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
+  - 2026-03-03 reopened (framework=gateflow_v1) - integrated dependency path added for U-021 plot module outputs
+
+### F-001 🧬 Core package transition and repository cleanup
+- Status: Complete
+- Target window: Week 1-1
+- Completed on: 2026-02-23
+- Tasks: `A-H001-01, A-H001-02`
+- Lifecycle events:
+  - 2026-02-23 closed (framework=legacy-kanban) - historical completion
+
+### F-003 ⚡ Runtime safety controller and audit pipeline hardening
+- Status: Complete
+- Target window: Week 1-1
+- Completed on: 2026-02-24
+- Tasks: `A-H003-01, A-H003-02`
+- Lifecycle events:
+  - 2026-02-24 closed (framework=legacy-kanban) - historical completion
+
+### F-011 📜 App protocol docs finalized
+- Status: In Progress
+- Target window: Week 2-3
+- Tasks: `T-201, T-202, T-203, T-204, T-205, T-206, T-207, T-208, T-209, T-210, T-211, T-212, T-213, T-214, T-215, T-216, T-217, T-218, T-219, T-2701, T-2702, T-2703`
+- Lifecycle events:
+  - 2026-03-03 closed (framework=kanban_v1) - documentation sprint closed
+  - 2026-03-03 reopened (framework=gateflow_v1) - reopened for GateFlow-aligned continuation
+  - 2026-03-03 reopened (framework=gateflow_v1) - performance follow-up scope opened for incremental present and sensor/runtime semantics
+
+### F-014 🛡️ Audit retention lifecycle
+- Status: Planned
+- Target window: Week 5-7
+- Tasks: `T-501, T-502, T-503`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
+
+### F-024 🛰️ Sensor backend performance modernization
+- Status: Planned
+- Target window: Week 14-17
+- Tasks: `T-2501, T-2502, T-2503, T-2504`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - planned from architect performance directives
+
+### FR-004 🧭 Platform variant routing and HDI phase standardization
+- Status: Complete
+- Target window: Week 1-1
+- Completed on: 2026-02-26
+- Tasks: `A-H004-01, A-H004-02`
+- Lifecycle events:
+  - 2026-02-26 closed (framework=legacy-kanban) - historical completion
+
+### P-008 🗂️ Discord ops consolidation under /discord
+- Status: Complete
+- Target window: Week 1-1
+- Completed on: 2026-02-26
+- Tasks: `A-H008-01, A-H008-02`
+- Lifecycle events:
+  - 2026-02-26 closed (framework=legacy-kanban) - historical completion
+
+### P-010 🧱 Discord governance artifacts and onboarding system
+- Status: In Progress
+- Target window: Week 1-2
+- Tasks: `T-101, T-102, T-103`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
+
+### P-013 🧪 CI hardening and flaky governance
+- Status: Planned
+- Target window: Week 4-6
+- Tasks: `T-401, T-402, T-403`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
+
+### P-015 🚀 Production-hardening go/no-go review
+- Status: Planned
+- Target window: Week 8-10
+- Tasks: `T-601, T-602, T-603`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
+
+### P-021 📏 Performance baseline and telemetry gates
+- Status: In Progress
+- Target window: Week 13-14
+- Tasks: `T-2101, T-2102, T-2103, T-2104`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - performance modernization baseline kickoff
+
+### R-002 🖥️ macOS visual runtime foundation merged to main
+- Status: Complete
+- Target window: Week 1-1
+- Completed on: 2026-02-23
+- Tasks: `A-H002-01, A-H002-02`
+- Lifecycle events:
+  - 2026-02-23 closed (framework=legacy-kanban) - historical completion
+
+### R-005 🎯 Rendering fallback, smoke docs, and GPU blit path
+- Status: Complete
+- Target window: Week 1-1
+- Completed on: 2026-02-26
+- Tasks: `A-H005-01, A-H005-02`
+- Lifecycle events:
+  - 2026-02-26 closed (framework=legacy-kanban) - historical completion
+
+### R-012 🎮 Vulkan stabilization
+- Status: Planned
+- Target window: Week 3-6
+- Tasks: `T-301, T-302, T-303, T-304`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
+
+### R-022 🧬 Render copy elimination
+- Status: Planned
+- Target window: Week 13-16
+- Tasks: `T-2201, T-2202, T-2203, T-2204`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - planned from architect performance directives
+
+### R-023 🚚 Vulkan transfer path efficiency
+- Status: Planned
+- Target window: Week 14-17
+- Tasks: `T-2401, T-2402, T-2403, T-2404`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - planned from architect performance directives
+
+### R-025 🎛️ Event loop and input scheduling tightening
+- Status: Planned
+- Target window: Week 13-16
+- Tasks: `T-2601, T-2602, T-2603, T-2604`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - planned from architect performance directives
+
+### RF-009 📦 Packaging metadata and Vulkan runtime preflight guidance
+- Status: Complete
+- Target window: Week 1-1
+- Completed on: 2026-02-27
+- Tasks: `A-H009-01, A-H009-02`
+- Lifecycle events:
+  - 2026-02-27 closed (framework=legacy-kanban) - historical completion
+
+### U-007 🔌 Plot stabilization and stream simulation integration
+- Status: Complete
+- Target window: Week 1-1
+- Completed on: 2026-02-27
+- Tasks: `A-H007-01, A-H007-02`
+- Lifecycle events:
+  - 2026-02-27 closed (framework=legacy-kanban) - historical completion
+
+### U-017 📊 UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)
+- Status: In Progress
+- Target window: Week 4-9
+- Tasks: `T-804, T-805, T-834, T-835, T-836, T-837, T-838, T-839, T-840, T-2301, T-2302, T-2303, T-2304, T-2305`
+- Lifecycle events:
+  - 2026-03-01 closed (framework=kanban_v1) - sprint closure
+  - 2026-03-01 reopened (framework=kanban_v1) - follow-up tasks added
+  - 2026-03-03 active (framework=gateflow_v1) - framework migration cycle
+  - 2026-03-03 reopened (framework=gateflow_v1) - scope split: plotting work moved into U-021 while UI/UX foundations remain in U-017
+
+### U-021 📉 Plots module foundations (labels, bars, subplots, dynamic data, financial visualizations)
+- Status: In Progress
+- Target window: Week 4-11
+- Tasks: `T-801, T-802, T-803, T-821, T-822`
+- Lifecycle events:
+  - 2026-03-03 active (framework=gateflow_v1) - split from U-017 to isolate plotting stack and integrate with AU-019
+
+### UF-006 📈 Interactive plot module and UI IR integration
+- Status: Complete
+- Target window: Week 1-1
+- Completed on: 2026-02-26
+- Tasks: `A-H006-01, A-H006-02`
+- Lifecycle events:
+  - 2026-02-26 closed (framework=legacy-kanban) - historical completion
 
 ## Branching and Merge Gate Policy
 1. Each milestone is implemented first on its own milestone branch.

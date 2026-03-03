@@ -45,9 +45,9 @@ def main() -> int:
 
     for milestone in schedule.get("milestones", []):
         milestone_id = milestone.get("id", "<unknown>")
-        task_ids = milestone.get("task_ids")
-        if not isinstance(task_ids, list) or not task_ids:
-            errors.append(f"{milestone_id}: missing non-empty task_ids list")
+        task_ids = milestone.get("task_ids", [])
+        if not isinstance(task_ids, list):
+            errors.append(f"{milestone_id}: task_ids must be a list")
             continue
 
         for task_id in task_ids:

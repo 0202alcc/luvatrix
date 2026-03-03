@@ -41,8 +41,8 @@ Before planning or editing code, read:
    - `ops/planning/agile/boards_registry.json` (board definitions and formatting config)
    - `ops/planning/gantt/milestone_schedule.json` (milestones + `task_ids`)
 2. Use `ops/planning/api/planning_api.py` for milestone/task CRUD instead of manual JSON edits whenever possible.
-3. Every milestone must have a non-empty `task_ids` list.
-4. Every milestone `task_id` must exist in active or archived task ledgers.
+3. Every milestone must have a `task_ids` list (empty allowed for bootstrap/split states).
+4. Every populated milestone `task_id` must exist in active or archived task ledgers.
 5. Validate links with:
    - `uv run python ops/planning/agile/validate_milestone_task_links.py`
 6. On successful `planning_api.py --apply`, Gantt markdown and PNG are regenerated automatically.
