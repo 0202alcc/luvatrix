@@ -519,7 +519,7 @@
       "name": "Vulkan transfer path efficiency",
       "start_week": 14,
       "end_week": 17,
-      "status": "Planned",
+      "status": "Complete",
       "task_ids": [
         "T-2401",
         "T-2402",
@@ -533,7 +533,8 @@
           "framework": "gateflow_v1",
           "note": "planned from architect performance directives"
         }
-      ]
+      ],
+      "completed_on": "2026-03-03"
     },
     {
       "id": "R-025",

@@ -25,7 +25,7 @@ R-002 🖥️ macOS visual runtime foundation merged to main                    
 R-005 🎯 Rendering fallback, smoke docs, and GPU blit path                                          |=======                                                                                                                | Complete (2026-02-26)
 R-012 🎮 Vulkan stabilization                                                                       |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
 R-022 🧬 Render copy elimination                                                                    |                                                                                    ============================       | Complete (2026-03-03)
-R-023 🚚 Vulkan transfer path efficiency                                                            |                                                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Planned
+R-023 🚚 Vulkan transfer path efficiency                                                            |                                                                                           ============================| Complete (2026-03-03)
 R-025 🎛️ Event loop and input scheduling tightening                                                |                                                                                    ============================       | Complete
 RF-009 📦 Packaging metadata and Vulkan runtime preflight guidance                                  |=======                                                                                                                | Complete (2026-02-27)
 U-007 🔌 Plot stabilization and stream simulation integration                                       |=======                                                                                                                | Complete (2026-02-27)
@@ -196,8 +196,9 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - 2026-03-03 active (framework=gateflow_v1) - planned from architect performance directives
 
 ### R-023 🚚 Vulkan transfer path efficiency
-- Status: Planned
+- Status: Complete
 - Target window: Week 14-17
+- Completed on: 2026-03-03
 - Tasks: `T-2401, T-2402, T-2403, T-2404`
 - Lifecycle events:
   - 2026-03-03 active (framework=gateflow_v1) - planned from architect performance directives

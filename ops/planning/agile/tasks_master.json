@@ -3359,7 +3359,7 @@
       "title": "Implement/verify persistent mapped staging memory lifecycle.",
       "epic_id": "E-2401",
       "milestone_id": "R-023",
-      "status": "Prototype Stage 2+",
+      "status": "Done",
       "depends_on": [
         "T-2203"
       ],
@@ -3388,18 +3388,33 @@
         "iteration_risk": 73
       },
       "cost_confidence": 0.35,
-      "cost_score": 83.16,
-      "cost_bucket": "XXL",
-      "stage_multiplier_applied": 1.1,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 3200,
+        "output_tokens": 1700,
+        "wall_time_sec": 1600,
+        "tool_calls": 28,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2402",
       "title": "Reduce repeated allocation/reallocation churn for transfer resources.",
       "epic_id": "E-2401",
       "milestone_id": "R-023",
-      "status": "Prototype Stage 2+",
+      "status": "Done",
       "depends_on": [
         "T-2401"
       ],
@@ -3428,18 +3443,33 @@
         "iteration_risk": 73
       },
       "cost_confidence": 0.35,
-      "cost_score": 83.16,
-      "cost_bucket": "XXL",
-      "stage_multiplier_applied": 1.1,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 3000,
+        "output_tokens": 1600,
+        "wall_time_sec": 1500,
+        "tool_calls": 24,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2403",
       "title": "Minimize per-frame format conversion and clipping overhead where safe.",
       "epic_id": "E-2401",
       "milestone_id": "R-023",
-      "status": "Prototype Stage 2+",
+      "status": "Done",
       "depends_on": [
         "T-2402"
       ],
@@ -3468,18 +3498,33 @@
         "iteration_risk": 73
       },
       "cost_confidence": 0.35,
-      "cost_score": 83.16,
-      "cost_bucket": "XXL",
-      "stage_multiplier_applied": 1.1,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 2800,
+        "output_tokens": 1500,
+        "wall_time_sec": 1400,
+        "tool_calls": 22,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2404",
       "title": "Harden swapchain recreation paths to avoid avoidable fallback/latency spikes.",
       "epic_id": "E-2401",
       "milestone_id": "R-023",
-      "status": "Prototype Stage 2+",
+      "status": "Done",
       "depends_on": [
         "T-2403"
       ],
@@ -3508,11 +3553,26 @@
         "iteration_risk": 73
       },
       "cost_confidence": 0.35,
-      "cost_score": 83.16,
-      "cost_bucket": "XXL",
-      "stage_multiplier_applied": 1.1,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 3400,
+        "output_tokens": 1800,
+        "wall_time_sec": 1700,
+        "tool_calls": 30,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2501",
