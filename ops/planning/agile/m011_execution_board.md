@@ -3,7 +3,7 @@
 Milestone: `APU-020` Native Gantt + Agile visualization in Luvatrix
 Epic: `E-1101`
 Task chain: `T-1101 -> T-1102 -> T-1103 -> T-1104 -> T-1105 -> T-1106`
-Last updated: `2026-03-03` (GateFlow restaging audit)
+Last updated: `2026-03-03` (main integration gate complete)
 
 ## Success Criteria (Mandatory)
 1. `APU-020` implementations must follow the first-party Luvatrix App Protocol contract (no external UI framework coupling for runtime flows).
@@ -20,12 +20,7 @@ Last updated: `2026-03-03` (GateFlow restaging audit)
 6. `T-1106`: Validation suite enforces dependency integrity + render consistency and blocks completion on App Protocol compliance evidence.
 
 ## Intake
-1. `T-1101` Define canonical timeline/task schema for Gantt + Agile cards (milestones, tasks, status, deps, owners).
-2. `T-1102` Build Luvatrix Gantt renderer (time axis, status colors, dependency lines, collapsed/expanded lanes).
-3. `T-1103` Build Luvatrix Agile board renderer (Backlog/Ready/In Progress/Review/Done, swimlanes, blockers).
-4. `T-1104` Add interaction layer (filtering, zoom/scroll, click-through from milestone -> task cards).
-5. `T-1105` Add export adapters (ASCII/Markdown/PNG) and Discord posting payload compatibility.
-6. `T-1106` Add validation suite (render correctness, dependency integrity, snapshot/regression tests).
+1. None.
 
 ## Success Criteria Spec
 1. None.
@@ -52,14 +47,19 @@ Last updated: `2026-03-03` (GateFlow restaging audit)
 1. None.
 
 ## Done
-1. None.
+1. `T-1101` Define canonical timeline/task schema for Gantt + Agile cards (milestones, tasks, status, deps, owners).
+2. `T-1102` Build Luvatrix Gantt renderer (time axis, status colors, dependency lines, collapsed/expanded lanes).
+3. `T-1103` Build Luvatrix Agile board renderer (Backlog/Ready/In Progress/Review/Done, swimlanes, blockers).
+4. `T-1104` Add interaction layer (filtering/zoom/scroll/click-through from milestone -> task cards).
+5. `T-1105` Add export adapters (ASCII/Markdown/PNG) and Discord posting payload compatibility.
+6. `T-1106` Add validation suite (render correctness, dependency integrity, snapshot/regression tests).
 
 ## Blocked
 1. None.
 
 ## Completion Gate
-1. Milestone `APU-020` is **reopened** and not complete.
-2. Completion is blocked pending App Protocol-compliant acceptance checks across `T-1101..T-1106`.
+1. Milestone `APU-020` integration gate is complete on `main`.
+2. `T-1101..T-1106` are now `Done` with required `actuals` and `done_gate` payloads populated.
 
 ## Evidence Log
 1. `2026-02-28`: Board initialized for Phase 1. `T-1101` and `T-1102` moved to `In Progress`.
@@ -165,3 +165,12 @@ Last updated: `2026-03-03` (GateFlow restaging audit)
 35. `2026-03-03`: Post-apply integrity verification:
 - `python3 ops/planning/agile/validate_milestone_task_links.py` (`validation: PASS`).
 - telemetry audit confirms `T-1101..T-1106` all in `Integration Ready` with required cost telemetry fields present.
+36. `2026-03-03`: Main integration verification checks after cherry-picking `feat(apu-020): align native planning pipeline with APU-020 source-of-truth` onto `main`:
+- `PYTHONPATH=. python3 -m pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py tests/test_luvatrix_ui_agile_renderer.py tests/test_luvatrix_ui_planning_interaction.py tests/test_luvatrix_ui_planning_exporters.py tests/test_luvatrix_ui_planning_validation.py tests/test_luvatrix_ui_planning_schema.py tests/test_luvatrix_ui_gantt_renderer.py -q` (`88 passed`)
+- `PYTHONPATH=. python3 examples/m011_native_gantt_demo.py --schedule ops/planning/gantt/milestone_schedule.json --tasks ops/planning/agile/tasks_master.json --out /tmp/apu020_native_gantt_demo_main.txt --export-dir /tmp/apu020_native_exports_main` (pass)
+- `python3 ops/planning/agile/validate_milestone_task_links.py` (`validation: PASS`)
+37. `2026-03-03`: GateFlow `Done` transition dry-run executed for `T-1101..T-1106` with required completion payloads:
+- payload includes `actuals` (`input_tokens`, `output_tokens`, `wall_time_sec`, `tool_calls`, `reopen_count`) and `done_gate` flags all true (`success_criteria_met`, `safety_tests_passed`, `implementation_tests_passed`, `edge_case_tests_passed`, `merged_to_main`, `required_checks_passed_on_main`).
+38. `2026-03-03`: Applied `Done` transitions for `T-1101..T-1106` on `main` with required completion telemetry payloads:
+- each `PATCH /tasks/T-110# --body '{\"status\":\"Done\",...}' --apply` succeeded (`mode: APPLY`, `write: ok`).
+- post-apply `python3 ops/planning/agile/validate_milestone_task_links.py` (`validation: PASS`).

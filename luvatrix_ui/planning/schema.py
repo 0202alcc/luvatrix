@@ -7,7 +7,23 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 MILESTONE_STATUSES: tuple[str, ...] = ("Planned", "In Progress", "At Risk", "Blocked", "Complete")
-TASK_STATUSES: tuple[str, ...] = ("Backlog", "Ready", "In Progress", "Review", "Done", "Blocked")
+TASK_STATUSES: tuple[str, ...] = (
+    "Backlog",
+    "Ready",
+    "In Progress",
+    "Review",
+    "Intake",
+    "Success Criteria Spec",
+    "Safety Tests Spec",
+    "Implementation Tests Spec",
+    "Edge Case Tests Spec",
+    "Prototype Stage 1",
+    "Prototype Stage 2+",
+    "Verification Review",
+    "Integration Ready",
+    "Done",
+    "Blocked",
+)
 
 STATUS_COLORS: dict[str, str] = {
     "Planned": "#94A3B8",
@@ -17,6 +33,15 @@ STATUS_COLORS: dict[str, str] = {
     "Complete": "#16A34A",
     "Backlog": "#9CA3AF",
     "Ready": "#0EA5E9",
+    "Intake": "#9CA3AF",
+    "Success Criteria Spec": "#1D4ED8",
+    "Safety Tests Spec": "#2563EB",
+    "Implementation Tests Spec": "#0EA5E9",
+    "Edge Case Tests Spec": "#0284C7",
+    "Prototype Stage 1": "#7C3AED",
+    "Prototype Stage 2+": "#6D28D9",
+    "Verification Review": "#B45309",
+    "Integration Ready": "#16A34A",
     "Review": "#8B5CF6",
     "Done": "#16A34A",
 }

@@ -2086,7 +2086,7 @@
       "title": "Define canonical timeline/task schema for Gantt + Agile cards.",
       "epic_id": "E-1101",
       "milestone_id": "APU-020",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:APU-020",
@@ -2101,18 +2101,33 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 28.88,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.7,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 1800,
+        "output_tokens": 1200,
+        "wall_time_sec": 900,
+        "tool_calls": 6,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-1102",
       "title": "Build Luvatrix Gantt renderer (axis/status/dependency lanes).",
       "epic_id": "E-1101",
       "milestone_id": "APU-020",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-1101"
       ],
@@ -2129,18 +2144,33 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 30.7,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.7,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 2200,
+        "output_tokens": 1400,
+        "wall_time_sec": 1100,
+        "tool_calls": 8,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-1103",
       "title": "Build Luvatrix Agile board renderer (columns/swimlanes/blockers).",
       "epic_id": "E-1101",
       "milestone_id": "APU-020",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-1102"
       ],
@@ -2157,18 +2187,33 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 30.7,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.7,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 2100,
+        "output_tokens": 1350,
+        "wall_time_sec": 1050,
+        "tool_calls": 8,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-1104",
       "title": "Add interaction layer (filter/zoom/scroll/click-through).",
       "epic_id": "E-1101",
       "milestone_id": "APU-020",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-1103"
       ],
@@ -2185,18 +2230,33 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 30.7,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.7,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 2400,
+        "output_tokens": 1500,
+        "wall_time_sec": 1200,
+        "tool_calls": 9,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-1105",
       "title": "Add export adapters (ASCII/Markdown/PNG) and Discord payload compatibility.",
       "epic_id": "E-1101",
       "milestone_id": "APU-020",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-1104"
       ],
@@ -2213,18 +2273,33 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 30.7,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.7,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 2500,
+        "output_tokens": 1600,
+        "wall_time_sec": 1300,
+        "tool_calls": 10,
+        "reopen_count": 1
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-1106",
       "title": "Add validation suite (render correctness + dependency integrity).",
       "epic_id": "E-1101",
       "milestone_id": "APU-020",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-1105"
       ],
@@ -2241,11 +2316,26 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 30.7,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.7,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 2300,
+        "output_tokens": 1450,
+        "wall_time_sec": 1150,
+        "tool_calls": 9,
+        "reopen_count": 1
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-1107",
