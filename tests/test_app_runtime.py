@@ -491,6 +491,11 @@ class AppRuntimeTests(unittest.TestCase):
         snap = matrix.read_snapshot()
         self.assertEqual(snap[0, :, 0].tolist(), [2, 3, 0])
         self.assertEqual(snap[1, :, 0].tolist(), [5, 6, 0])
+        telemetry = ctx.consume_ui_copy_telemetry()
+        self.assertGreaterEqual(int(telemetry.get("copy_count", 0)), 1)
+        self.assertGreaterEqual(int(telemetry.get("copy_bytes", 0)), 8)
+        self.assertGreaterEqual(int(telemetry.get("ui_pack_ns", 0)), 0)
+        self.assertGreaterEqual(int(telemetry.get("matrix_stage_clone_ns", 0)), 0)
 
     def test_app_context_sensor_denied_without_sensor_capability(self) -> None:
         from luvatrix_core.core.app_runtime import AppContext

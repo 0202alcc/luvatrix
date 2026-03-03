@@ -24,6 +24,11 @@ from .frame_rate_controller import FrameRateController
 from .protocol_governance import CURRENT_PROTOCOL_VERSION, check_protocol_compatibility
 from .sensor_manager import SensorManagerThread, SensorSample
 from .window_matrix import CallBlitEvent, FullRewrite, ReplaceRect, ShiftFrame, WindowMatrix, WriteBatch
+from luvatrix_core.perf.copy_telemetry import (
+    add_copy_telemetry,
+    begin_copy_telemetry_frame,
+    snapshot_copy_telemetry,
+)
 
 LOGGER = logging.getLogger(__name__)
 APP_PROTOCOL_VERSION = CURRENT_PROTOCOL_VERSION
@@ -107,6 +112,7 @@ class AppContext:
     _ui_dirty_rects: list[tuple[int, int, int, int]] | None = field(default=None, init=False, repr=False)
     _ui_scroll_shift: tuple[int, int] | None = field(default=None, init=False, repr=False)
     _ui_clear_color: tuple[int, int, int, int] = field(default=(0, 0, 0, 255), init=False, repr=False)
+    _last_ui_copy_telemetry: dict[str, int] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.coordinate_frames is None:
@@ -224,6 +230,7 @@ class AppContext:
     def finalize_ui_frame(self) -> CallBlitEvent:
         if self._ui_renderer is None or self._ui_display is None:
             raise RuntimeError("ui frame is not active; call begin_ui_frame first")
+        begin_copy_telemetry_frame()
         renderer = self._ui_renderer
         display = self._ui_display
         components = list(self._ui_components)
@@ -251,24 +258,42 @@ class AppContext:
                     ]
                 else:
                     ops = []
-                ops.extend(
-                    ReplaceRect(
-                        x=x,
-                        y=y,
-                        width=w,
-                        height=h,
-                        rect_h_w_4=frame[y : y + h, x : x + w, :].clone(),
+                ui_pack_ns = 0
+                patch_bytes = 0
+                for (x, y, w, h) in self._ui_dirty_rects:
+                    started = time.perf_counter_ns()
+                    patch = frame[y : y + h, x : x + w, :].clone()
+                    ui_pack_ns += time.perf_counter_ns() - started
+                    patch_bytes += int(patch.numel())
+                    ops.append(
+                        ReplaceRect(
+                            x=x,
+                            y=y,
+                            width=w,
+                            height=h,
+                            rect_h_w_4=patch,
+                        )
                     )
-                    for (x, y, w, h) in self._ui_dirty_rects
+                add_copy_telemetry(
+                    copy_count=max(0, len(self._ui_dirty_rects)),
+                    copy_bytes=patch_bytes,
+                    ui_pack_ns=ui_pack_ns,
                 )
                 return self.submit_write_batch(WriteBatch(ops))
+            add_copy_telemetry(copy_count=1, copy_bytes=int(frame.numel()))
             return self.submit_write_batch(WriteBatch([FullRewrite(frame)]))
         finally:
+            self._last_ui_copy_telemetry = snapshot_copy_telemetry()
             self._ui_renderer = None
             self._ui_display = None
             self._ui_components = []
             self._ui_dirty_rects = None
             self._ui_scroll_shift = None
+
+    def consume_ui_copy_telemetry(self) -> dict[str, int]:
+        payload = dict(self._last_ui_copy_telemetry)
+        self._last_ui_copy_telemetry = {}
+        return payload
 
     def _require_capability(self, capability: str) -> None:
         if capability not in self.granted_capabilities:

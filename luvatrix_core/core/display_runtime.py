@@ -9,6 +9,7 @@ from typing import Optional
 import torch
 
 from .window_matrix import CallBlitEvent, WindowMatrix
+from luvatrix_core.perf.copy_telemetry import begin_copy_telemetry_frame, snapshot_copy_telemetry
 from luvatrix_core.targets.base import DisplayFrame, RenderTarget
 
 LOGGER = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ class DisplayRuntime:
         self._thread: Optional[threading.Thread] = None
         self._target_started = False
         self._last_error: Exception | None = None
+        self._last_copy_telemetry: dict[str, int] = {}
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -71,8 +73,10 @@ class DisplayRuntime:
             self.stop()
 
     def run_once(self, timeout: float | None = None) -> RenderTick | None:
+        begin_copy_telemetry_frame()
         event = self._matrix.pop_call_blit(timeout=timeout)
         if event is None:
+            self._last_copy_telemetry = snapshot_copy_telemetry()
             return None
 
         # Coalesce queued blits to newest revision so frame data and revision stay aligned.
@@ -85,6 +89,7 @@ class DisplayRuntime:
         snapshot = self._matrix.read_snapshot()
         frame = _build_frame(snapshot=snapshot, revision=event.revision)
         self._target.present_frame(frame)
+        self._last_copy_telemetry = snapshot_copy_telemetry()
         return RenderTick(event=event, frame=frame)
 
     def _run_loop(self) -> None:
@@ -110,6 +115,10 @@ class DisplayRuntime:
     @property
     def last_error(self) -> Exception | None:
         return self._last_error
+
+    @property
+    def last_copy_telemetry(self) -> dict[str, int]:
+        return dict(self._last_copy_telemetry)
 
 
 def _build_frame(snapshot: torch.Tensor, revision: int) -> DisplayFrame:

@@ -760,6 +760,19 @@ class PlanesRuntimeTests(unittest.TestCase):
             for key in expected_keys:
                 value = float(timing.get(key, 0.0))
                 self.assertGreaterEqual(value, 0.0)
+            self.assertGreaterEqual(int(perf.get("copy_count", 0)), 0)
+            self.assertGreaterEqual(int(perf.get("copy_bytes", 0)), 0)
+            copy_timing = perf.get("copy_timing_ms", {})
+            self.assertIsInstance(copy_timing, dict)
+            for key in (
+                "ui_pack",
+                "matrix_stage_clone",
+                "matrix_snapshot_clone",
+                "upload_pack",
+                "upload_map",
+                "upload_memcpy",
+            ):
+                self.assertGreaterEqual(float(copy_timing.get(key, 0.0)), 0.0)
 
     def test_plane_runtime_scrollable_plane_uses_full_frame_compose(self) -> None:
         with tempfile.TemporaryDirectory() as td:
