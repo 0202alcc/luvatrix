@@ -72,6 +72,14 @@ class HDIThread:
         self._last_tap_up_ns: dict[str, int] = {}
         self._last_window_active = True
         self._next_synth_event_id = 2_000_000_000
+        self._latency_samples_ns: deque[int] = deque(maxlen=4096)
+        self._telemetry_window: dict[str, int] = {
+            "events_enqueued": 0,
+            "events_dequeued": 0,
+            "events_dropped": 0,
+            "events_coalesced": 0,
+            "queue_latency_ns_max": 0,
+        }
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -90,14 +98,36 @@ class HDIThread:
         if max_events <= 0:
             raise ValueError("max_events must be > 0")
         out: list[HDIEvent] = []
+        now_ns = time.time_ns()
         with self._lock:
             while self._queue and len(out) < max_events:
-                out.append(self._queue.popleft())
+                event = self._queue.popleft()
+                out.append(event)
+                self._telemetry_window["events_dequeued"] += 1
+                latency_ns = max(0, int(now_ns - int(event.ts_ns)))
+                self._latency_samples_ns.append(latency_ns)
+                if latency_ns > int(self._telemetry_window.get("queue_latency_ns_max", 0)):
+                    self._telemetry_window["queue_latency_ns_max"] = latency_ns
         return out
 
     def pending_count(self) -> int:
         with self._lock:
             return len(self._queue)
+
+    def consume_telemetry(self) -> dict[str, int]:
+        with self._lock:
+            samples = sorted(int(v) for v in self._latency_samples_ns)
+            self._latency_samples_ns.clear()
+            out = dict(self._telemetry_window)
+            out["queue_latency_ns_p95"] = _percentile_int(samples, 95.0)
+            self._telemetry_window = {
+                "events_enqueued": 0,
+                "events_dequeued": 0,
+                "events_dropped": 0,
+                "events_coalesced": 0,
+                "queue_latency_ns_max": 0,
+            }
+        return out
 
     @property
     def last_error(self) -> Exception | None:
@@ -342,35 +372,47 @@ class HDIThread:
 
     def _enqueue(self, event: HDIEvent) -> None:
         with self._lock:
-            if _is_move_event(event):
-                idx = self._find_last_move_index(event)
+            if _is_motion_event(event):
+                idx = self._find_last_motion_index(event)
                 if idx is not None:
-                    self._queue[idx] = event
+                    self._queue[idx] = _merge_motion_events(self._queue[idx], event)
+                    self._telemetry_window["events_coalesced"] += 1
                     return
             if len(self._queue) < self._max_queue_size:
                 self._queue.append(event)
+                self._telemetry_window["events_enqueued"] += 1
                 return
             if _is_keyboard_transition(event):
                 if self._drop_one_non_keyboard():
                     self._queue.append(event)
+                    self._telemetry_window["events_enqueued"] += 1
                     return
                 raise RuntimeError("HDI queue saturated with keyboard transitions; refusing to drop keyboard events")
-            if _is_move_event(event):
+            if _is_motion_event(event):
+                self._telemetry_window["events_dropped"] += 1
                 return
             self._queue.popleft()
             self._queue.append(event)
+            self._telemetry_window["events_dropped"] += 1
+            self._telemetry_window["events_enqueued"] += 1
 
-    def _find_last_move_index(self, incoming: HDIEvent) -> int | None:
+    def _find_last_motion_index(self, incoming: HDIEvent) -> int | None:
         for i in range(len(self._queue) - 1, -1, -1):
             e = self._queue[i]
-            if _is_move_event(e) and e.device == incoming.device and e.window_id == incoming.window_id:
-                return i
+            if not _is_motion_event(e):
+                continue
+            if e.device != incoming.device or e.window_id != incoming.window_id:
+                continue
+            if _motion_coalesce_key(e) != _motion_coalesce_key(incoming):
+                continue
+            return i
         return None
 
     def _drop_one_non_keyboard(self) -> bool:
         for i, event in enumerate(self._queue):
             if not _is_keyboard_transition(event):
                 del self._queue[i]
+                self._telemetry_window["events_dropped"] += 1
                 return True
         return False
 
@@ -387,6 +429,47 @@ def _is_keyboard_transition(event: HDIEvent) -> bool:
 
 def _is_move_event(event: HDIEvent) -> bool:
     return event.event_type in ("pointer_move", "mouse_move", "trackpad_move")
+
+
+def _is_scroll_event(event: HDIEvent) -> bool:
+    return event.event_type in ("scroll", "pan", "swipe")
+
+
+def _is_motion_event(event: HDIEvent) -> bool:
+    return _is_move_event(event) or _is_scroll_event(event)
+
+
+def _motion_coalesce_key(event: HDIEvent) -> tuple[str, str]:
+    if _is_move_event(event):
+        return ("move", "")
+    if _is_scroll_event(event):
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        phase = str(payload.get("phase", ""))
+        momentum = str(payload.get("momentum_phase", ""))
+        return ("scroll", f"{phase}|{momentum}")
+    return ("", "")
+
+
+def _merge_motion_events(existing: HDIEvent, incoming: HDIEvent) -> HDIEvent:
+    payload_existing = existing.payload if isinstance(existing.payload, dict) else {}
+    payload_incoming = incoming.payload if isinstance(incoming.payload, dict) else {}
+    merged = dict(payload_existing)
+    merged.update(payload_incoming)
+    if _is_scroll_event(incoming):
+        ex_dx = _float_or_zero(payload_existing.get("delta_x", 0.0))
+        ex_dy = _float_or_zero(payload_existing.get("delta_y", 0.0))
+        in_dx = _float_or_zero(payload_incoming.get("delta_x", 0.0))
+        in_dy = _float_or_zero(payload_incoming.get("delta_y", 0.0))
+        if incoming.device == "trackpad":
+            merged["delta_x"] = in_dx
+            merged["delta_y"] = in_dy
+            merged["coalesce_mode"] = "latest"
+        else:
+            merged["delta_x"] = ex_dx + in_dx
+            merged["delta_y"] = ex_dy + in_dy
+            merged["coalesce_mode"] = "sum"
+        merged["coalesced_count"] = int(payload_existing.get("coalesced_count", 1)) + 1
+    return replace(incoming, payload=merged)
 
 
 def _requires_pointer_position(event_type: str) -> bool:
@@ -411,3 +494,26 @@ class _KeyPressState:
     down_ts_ns: int
     hold_started: bool
     last_hold_tick_ns: int
+
+
+def _percentile_int(values: list[int], q: float) -> int:
+    if not values:
+        return 0
+    if q <= 0:
+        return int(values[0])
+    if q >= 100:
+        return int(values[-1])
+    idx = (len(values) - 1) * (q / 100.0)
+    lo = int(idx)
+    hi = min(len(values) - 1, lo + 1)
+    if lo == hi:
+        return int(values[lo])
+    blend = idx - float(lo)
+    return int(round((float(values[lo]) * (1.0 - blend)) + (float(values[hi]) * blend)))
+
+
+def _float_or_zero(value: object) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
