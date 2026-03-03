@@ -119,6 +119,10 @@ class PlaneApp:
         self._last_dirty_signature = post_signature
         dirty_count = int(len(dirty_rects))
         dirty_area = int(sum((w * h) for (_, _, w, h) in dirty_rects))
+        estimated_copy = self._estimate_copy_telemetry(
+            compose_mode=("partial_dirty" if not self._is_full_frame_dirty(dirty_rects) else "full_frame"),
+            dirty_rects=dirty_rects,
+        )
         if dirty_count == 0:
             self._add_perf_ns("frame_total_ns", time.perf_counter_ns() - frame_start_ns)
             self.state["perf"] = {
@@ -145,6 +149,8 @@ class PlaneApp:
                 "dirty_rect_count": 0,
                 "dirty_rect_area_px": 0,
                 "compose_mode": "idle_skip",
+                "copy_count": 0,
+                "copy_bytes": 0,
                 "timing_ms": {
                     "input": self._ns_to_ms(self._frame_perf.get("input_ns", 0.0)),
                     "hit_test": self._ns_to_ms(self._frame_perf.get("hit_test_ns", 0.0)),
@@ -154,6 +160,14 @@ class PlaneApp:
                     "raster": 0.0,
                     "present": 0.0,
                     "frame_total": self._ns_to_ms(self._frame_perf.get("frame_total_ns", 0.0)),
+                },
+                "copy_timing_ms": {
+                    "ui_pack": 0.0,
+                    "matrix_stage_clone": 0.0,
+                    "matrix_snapshot_clone": 0.0,
+                    "upload_pack": 0.0,
+                    "upload_map": 0.0,
+                    "upload_memcpy": 0.0,
                 },
             }
             return
@@ -238,6 +252,8 @@ class PlaneApp:
             "dirty_rect_count": dirty_count,
             "dirty_rect_area_px": dirty_area,
             "compose_mode": ("partial_dirty" if not self._is_full_frame_dirty(dirty_rects) else "full_frame"),
+            "copy_count": int(estimated_copy.get("copy_count", 0)),
+            "copy_bytes": int(estimated_copy.get("copy_bytes", 0)),
             "timing_ms": {
                 "input": self._ns_to_ms(self._frame_perf.get("input_ns", 0.0)),
                 "hit_test": self._ns_to_ms(self._frame_perf.get("hit_test_ns", 0.0)),
@@ -248,8 +264,17 @@ class PlaneApp:
                 "present": 0.0,
                 "frame_total": 0.0,
             },
+            "copy_timing_ms": {
+                "ui_pack": self._ns_to_ms(float(estimated_copy.get("ui_pack_ns", 0))),
+                "matrix_stage_clone": self._ns_to_ms(float(estimated_copy.get("matrix_stage_clone_ns", 0))),
+                "matrix_snapshot_clone": self._ns_to_ms(float(estimated_copy.get("matrix_snapshot_clone_ns", 0))),
+                "upload_pack": self._ns_to_ms(float(estimated_copy.get("upload_pack_ns", 0))),
+                "upload_map": self._ns_to_ms(float(estimated_copy.get("upload_map_ns", 0))),
+                "upload_memcpy": self._ns_to_ms(float(estimated_copy.get("upload_memcpy_ns", 0))),
+            },
         }
         ctx.finalize_ui_frame()
+        self._merge_ctx_copy_telemetry(ctx)
         self._add_perf_ns("present_ns", time.perf_counter_ns() - present_start_ns)
         self._add_perf_ns("frame_total_ns", time.perf_counter_ns() - frame_start_ns)
         perf = self.state.get("perf")
@@ -1110,6 +1135,45 @@ class PlaneApp:
             return False
         x, y, w, h = dirty_rects[0]
         return x == 0 and y == 0 and w == int(self._ui_page.matrix.width) and h == int(self._ui_page.matrix.height)
+
+    def _estimate_copy_telemetry(
+        self,
+        *,
+        compose_mode: str,
+        dirty_rects: list[tuple[int, int, int, int]],
+    ) -> dict[str, int]:
+        if self._ui_page is None:
+            return {"copy_count": 0, "copy_bytes": 0}
+        if compose_mode == "full_frame":
+            return {
+                "copy_count": 1,
+                "copy_bytes": int(self._ui_page.matrix.width) * int(self._ui_page.matrix.height) * 4,
+            }
+        return {
+            "copy_count": int(len(dirty_rects)),
+            "copy_bytes": int(sum((w * h * 4) for (_, _, w, h) in dirty_rects)),
+        }
+
+    def _merge_ctx_copy_telemetry(self, ctx) -> None:
+        if not hasattr(ctx, "consume_ui_copy_telemetry"):
+            return
+        payload = ctx.consume_ui_copy_telemetry()
+        if not isinstance(payload, dict):
+            return
+        perf = self.state.get("perf")
+        if not isinstance(perf, dict):
+            return
+        perf["copy_count"] = int(payload.get("copy_count", perf.get("copy_count", 0)))
+        perf["copy_bytes"] = int(payload.get("copy_bytes", perf.get("copy_bytes", 0)))
+        copy_timing = perf.get("copy_timing_ms")
+        if not isinstance(copy_timing, dict):
+            return
+        copy_timing["ui_pack"] = self._ns_to_ms(float(payload.get("ui_pack_ns", 0)))
+        copy_timing["matrix_stage_clone"] = self._ns_to_ms(float(payload.get("matrix_stage_clone_ns", 0)))
+        copy_timing["matrix_snapshot_clone"] = self._ns_to_ms(float(payload.get("matrix_snapshot_clone_ns", 0)))
+        copy_timing["upload_pack"] = self._ns_to_ms(float(payload.get("upload_pack_ns", 0)))
+        copy_timing["upload_map"] = self._ns_to_ms(float(payload.get("upload_map_ns", 0)))
+        copy_timing["upload_memcpy"] = self._ns_to_ms(float(payload.get("upload_memcpy_ns", 0)))
 
     def _add_perf_ns(self, key: str, delta_ns: int) -> None:
         self._frame_perf[key] = float(self._frame_perf.get(key, 0.0) + max(0, int(delta_ns)))

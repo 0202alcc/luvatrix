@@ -12,6 +12,7 @@ import torch
 from ..frame_pipeline import prepare_frame_for_extent
 from ..vulkan_scaling import RenderScaleController, compute_blit_rect
 from ..vulkan_compat import SwapchainOutOfDateError, VulkanKHRCompatMixin, decode_vk_string
+from luvatrix_core.perf.copy_telemetry import add_copy_telemetry
 from .vulkan_presenter import VulkanContext
 from .window_system import AppKitWindowSystem, MacOSWindowHandle, MacOSWindowSystem
 
@@ -571,7 +572,13 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
     def _upload_rgba_to_staging(self, rgba: torch.Tensor) -> None:
         # Keep CPU-side frame copy only when fallback presenter is active.
         if not self._vulkan_available:
+            started = time.perf_counter_ns()
             self._pending_rgba = rgba.contiguous().clone()
+            add_copy_telemetry(
+                copy_count=1,
+                copy_bytes=int(self._pending_rgba.numel()),
+                upload_pack_ns=time.perf_counter_ns() - started,
+            )
         else:
             self._pending_rgba = None
         if not self._vulkan_available:
@@ -596,8 +603,11 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             raise RuntimeError("invalid upload extent for Vulkan staging upload")
         clipped = rgba_upload[:upload_h, :upload_w, :].contiguous()
         self._ensure_upload_image(upload_w, upload_h)
+        pack_started = time.perf_counter_ns()
         data = clipped.cpu().numpy().tobytes(order="C")
+        pack_ns = time.perf_counter_ns() - pack_started
         self._ensure_staging_buffer(len(data))
+        map_started = time.perf_counter_ns()
         mapped_ptr = vk.vkMapMemory(
             self._logical_device,
             self._staging_memory,
@@ -605,16 +615,29 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             len(data),
             0,
         )
+        map_ns = time.perf_counter_ns() - map_started
+        memcpy_ns = 0
         try:
             # vulkan-python returns ffi.buffer(...) for vkMapMemory on some builds.
+            memcpy_started = time.perf_counter_ns()
             mapped_cdata = vk.ffi.from_buffer(mapped_ptr)
             vk.ffi.memmove(mapped_cdata, data, len(data))
+            memcpy_ns = time.perf_counter_ns() - memcpy_started
         except Exception:
             # Fallback for bindings that return an integer-like pointer.
+            memcpy_started = time.perf_counter_ns()
             dest_ptr = ctypes.c_void_p(int(mapped_ptr))
             ctypes.memmove(dest_ptr, data, len(data))
+            memcpy_ns = time.perf_counter_ns() - memcpy_started
         finally:
             vk.vkUnmapMemory(self._logical_device, self._staging_memory)
+        add_copy_telemetry(
+            copy_count=1,
+            copy_bytes=len(data),
+            upload_pack_ns=pack_ns,
+            upload_map_ns=map_ns,
+            upload_memcpy_ns=memcpy_ns,
+        )
         self._upload_extent = (upload_w, upload_h)
         self._clear_color = (0.0, 0.0, 0.0, 1.0)
 

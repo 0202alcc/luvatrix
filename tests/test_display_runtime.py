@@ -82,6 +82,10 @@ class DisplayRuntimeTests(unittest.TestCase):
         self.assertEqual(presenter.stopped, 1)
         self.assertEqual(len(presenter.presented), 1)
         self.assertTrue(torch.equal(presenter.presented[0][1], payload))
+        telemetry = runtime.last_copy_telemetry
+        self.assertGreaterEqual(int(telemetry.get("copy_count", 0)), 1)
+        self.assertGreaterEqual(int(telemetry.get("copy_bytes", 0)), 16)
+        self.assertGreaterEqual(int(telemetry.get("matrix_snapshot_clone_ns", 0)), 0)
 
     def test_run_once_without_event_returns_none(self) -> None:
         matrix = WindowMatrix(height=1, width=1)

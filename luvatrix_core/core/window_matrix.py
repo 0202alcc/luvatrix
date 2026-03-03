@@ -9,6 +9,8 @@ from typing import TypeAlias
 
 import torch
 
+from luvatrix_core.perf.copy_telemetry import add_copy_telemetry
+
 
 LOGGER = logging.getLogger(__name__)
 MAGENTA = torch.tensor([255, 0, 255, 255], dtype=torch.uint8)
@@ -105,7 +107,14 @@ class WindowMatrix:
     def read_snapshot(self) -> torch.Tensor:
         """Safe read view for external consumers."""
         with self._write_lock:
-            return self._matrix.clone()
+            started = time.perf_counter_ns()
+            out = self._matrix.clone()
+            add_copy_telemetry(
+                copy_count=1,
+                copy_bytes=int(out.numel()),
+                matrix_snapshot_clone_ns=time.perf_counter_ns() - started,
+            )
+            return out
 
     def _unsafe_matrix_view(self) -> torch.Tensor:
         """Internal-only no-copy handle."""
@@ -116,7 +125,13 @@ class WindowMatrix:
             raise ValueError("write batch must include at least one operation")
 
         with self._write_lock:
+            stage_started = time.perf_counter_ns()
             staged = self._matrix.clone()
+            add_copy_telemetry(
+                copy_count=1,
+                copy_bytes=int(staged.numel()),
+                matrix_stage_clone_ns=time.perf_counter_ns() - stage_started,
+            )
             offending_pixels = 0
 
             for op in batch.operations:

@@ -1,0 +1,41 @@
+{
+  "suite": "baseline_contract",
+  "scenarios": {
+    "idle": {
+      "p95_frame_total_ms": 20.0,
+      "jitter_ms": 10.0,
+      "p95_copy_bytes": 0,
+      "p95_copy_count": 0,
+      "p95_copy_pack_ms": 2.0,
+      "p95_copy_map_ms": 1.0,
+      "p95_copy_memcpy_ms": 1.0
+    },
+    "scroll": {
+      "p95_frame_total_ms": 45.0,
+      "jitter_ms": 20.0,
+      "p95_copy_bytes": 8000000,
+      "p95_copy_count": 12,
+      "p95_copy_pack_ms": 10.0,
+      "p95_copy_map_ms": 2.0,
+      "p95_copy_memcpy_ms": 2.0
+    },
+    "drag": {
+      "p95_frame_total_ms": 45.0,
+      "jitter_ms": 20.0,
+      "p95_copy_bytes": 8000000,
+      "p95_copy_count": 12,
+      "p95_copy_pack_ms": 10.0,
+      "p95_copy_map_ms": 2.0,
+      "p95_copy_memcpy_ms": 2.0
+    },
+    "resize_stress": {
+      "p95_frame_total_ms": 60.0,
+      "jitter_ms": 25.0,
+      "p95_copy_bytes": 12000000,
+      "p95_copy_count": 20,
+      "p95_copy_pack_ms": 14.0,
+      "p95_copy_map_ms": 2.0,
+      "p95_copy_memcpy_ms": 2.0
+    }
+  }
+}

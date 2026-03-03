@@ -1,0 +1,21 @@
+name: m021-perf-gate
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  perf-gate:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync deps
+        run: uv sync
+      - name: Perf baseline tests
+        run: PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_app_runtime.py tests/test_display_runtime.py tests/test_perf_tools.py
+      - name: Build interactive baseline artifact
+        run: PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/interactive_baseline.json
+      - name: Enforce P-021 perf contract
+        run: PYTHONPATH=. uv run python tools/perf/assert_thresholds.py --suite baseline_contract --baseline artifacts/perf/interactive_baseline.json
