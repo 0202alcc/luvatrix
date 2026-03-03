@@ -1911,7 +1911,7 @@
       ],
       "evidence_commands": [
         "uv run python tools/perf/run_suite.py --scenario input_burst --out artifacts/perf/input_burst_candidate.json",
-        "uv run pytest tests/hdi tests/runtime -k \"event_order or coalescing or determinism\" -q"
+        "uv run pytest tests -k \"event_order or coalescing or determinism\" -q"
       ],
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
@@ -1952,7 +1952,7 @@
       ],
       "evidence_commands": [
         "uv run python tools/perf/run_suite.py --scenario input_burst --out artifacts/perf/input_burst_candidate.json",
-        "uv run pytest tests/hdi tests/runtime -k \"event_order or coalescing or determinism\" -q"
+        "uv run pytest tests -k \"event_order or coalescing or determinism\" -q"
       ],
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
@@ -1993,7 +1993,7 @@
       ],
       "evidence_commands": [
         "uv run python tools/perf/run_suite.py --scenario input_burst --out artifacts/perf/input_burst_candidate.json",
-        "uv run pytest tests/hdi tests/runtime -k \"event_order or coalescing or determinism\" -q"
+        "uv run pytest tests -k \"event_order or coalescing or determinism\" -q"
       ],
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
@@ -2035,7 +2035,7 @@
       ],
       "evidence_commands": [
         "uv run python tools/perf/run_suite.py --scenario input_burst --out artifacts/perf/input_burst_candidate.json",
-        "uv run pytest tests/hdi tests/runtime -k \"event_order or coalescing or determinism\" -q"
+        "uv run pytest tests -k \"event_order or coalescing or determinism\" -q"
       ],
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "M",

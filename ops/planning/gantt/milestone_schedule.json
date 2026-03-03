@@ -553,6 +553,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "planned from architect performance directives"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "gateflow compliance audit complete; tasks done and verified on main"
         }
       ]
     },

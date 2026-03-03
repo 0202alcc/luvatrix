@@ -207,6 +207,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 - Tasks: `T-2601, T-2602, T-2603, T-2604`
 - Lifecycle events:
   - 2026-03-03 active (framework=gateflow_v1) - planned from architect performance directives
+  - 2026-03-03 closed (framework=gateflow_v1) - gateflow compliance audit complete; tasks done and verified on main
 
 ### RF-009 📦 Packaging metadata and Vulkan runtime preflight guidance
 - Status: Complete
