@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import unittest
 import torch
 
@@ -169,6 +170,68 @@ class DisplayRuntimeTests(unittest.TestCase):
         presenter.closed = True
         self.assertTrue(target.should_close())
         target.stop()
+
+    def test_run_once_revision_snapshot_flag_preserves_frame_and_revision(self) -> None:
+        old = os.environ.get("LUVATRIX_ENABLE_REVISIONED_SNAPSHOT")
+        os.environ["LUVATRIX_ENABLE_REVISIONED_SNAPSHOT"] = "1"
+        try:
+            matrix = WindowMatrix(height=1, width=1)
+            presenter = _FakePresenter()
+            target = VulkanTarget(presenter=presenter)
+            runtime = DisplayRuntime(matrix=matrix, target=target)
+            target.start()
+            matrix.submit_write_batch(
+                WriteBatch([FullRewrite(torch.tensor([[[9, 1, 2, 255]]], dtype=torch.uint8))])
+            )
+            tick = runtime.run_once(timeout=0.01)
+            target.stop()
+            self.assertIsNotNone(tick)
+            assert tick is not None
+            self.assertEqual(tick.event.revision, 1)
+            self.assertEqual(tick.frame.revision, 1)
+            self.assertEqual(int(tick.frame.rgba[0, 0, 0].item()), 9)
+            self.assertEqual(len(presenter.presented), 1)
+            self.assertEqual(presenter.presented[0][0], 1)
+            self.assertEqual(int(presenter.presented[0][1][0, 0, 0].item()), 9)
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_ENABLE_REVISIONED_SNAPSHOT", None)
+            else:
+                os.environ["LUVATRIX_ENABLE_REVISIONED_SNAPSHOT"] = old
+
+    def test_revision_order_parity_with_and_without_snapshot_flag(self) -> None:
+        def _run(flag_enabled: bool) -> tuple[int, int]:
+            old = os.environ.get("LUVATRIX_ENABLE_REVISIONED_SNAPSHOT")
+            if flag_enabled:
+                os.environ["LUVATRIX_ENABLE_REVISIONED_SNAPSHOT"] = "1"
+            else:
+                os.environ.pop("LUVATRIX_ENABLE_REVISIONED_SNAPSHOT", None)
+            try:
+                matrix = WindowMatrix(height=1, width=1)
+                presenter = _FakePresenter()
+                target = VulkanTarget(presenter=presenter)
+                runtime = DisplayRuntime(matrix=matrix, target=target)
+                target.start()
+                matrix.submit_write_batch(
+                    WriteBatch([FullRewrite(torch.tensor([[[1, 0, 0, 255]]], dtype=torch.uint8))])
+                )
+                matrix.submit_write_batch(
+                    WriteBatch([FullRewrite(torch.tensor([[[2, 0, 0, 255]]], dtype=torch.uint8))])
+                )
+                tick = runtime.run_once(timeout=0.01)
+                target.stop()
+                assert tick is not None
+                return (tick.event.revision, int(tick.frame.rgba[0, 0, 0].item()))
+            finally:
+                if old is None:
+                    os.environ.pop("LUVATRIX_ENABLE_REVISIONED_SNAPSHOT", None)
+                else:
+                    os.environ["LUVATRIX_ENABLE_REVISIONED_SNAPSHOT"] = old
+
+        legacy = _run(flag_enabled=False)
+        revisioned = _run(flag_enabled=True)
+        self.assertEqual(legacy, revisioned)
+        self.assertEqual(legacy, (2, 2))
 
 
 if __name__ == "__main__":
