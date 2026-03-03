@@ -12,7 +12,7 @@ AU-018 🗓️ Data workspace UI (calendar app)                                 
 AU-019 📈 Custom marketbook dynamic plotting system (integrated with U-021 plots module)            |                                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                   | Planned
 F-001 🧬 Core package transition and repository cleanup                                             |=======                                                                                                                | Complete (2026-02-23)
 F-003 ⚡ Runtime safety controller and audit pipeline hardening                                     |=======                                                                                                                | Complete (2026-02-24)
-F-011 📜 App protocol docs finalized                                                                |       ##############                                                                                                  | In Progress
+F-011 📜 App protocol docs finalized                                                                |       ==============                                                                                                  | Complete (2026-03-03)
 F-014 🛡️ Audit retention lifecycle                                                                 |                            ~~~~~~~~~~~~~~~~~~~~~                                                                      | Planned
 F-024 🛰️ Sensor backend performance modernization                                                  |                                                                                           ============================| Complete
 FR-004 🧭 Platform variant routing and HDI phase standardization                                    |=======                                                                                                                | Complete (2026-02-26)
@@ -97,13 +97,15 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - 2026-02-24 closed (framework=legacy-kanban) - historical completion
 
 ### F-011 📜 App protocol docs finalized
-- Status: In Progress
+- Status: Complete
 - Target window: Week 2-3
+- Completed on: 2026-03-03
 - Tasks: `T-201, T-202, T-203, T-204, T-205, T-206, T-207, T-208, T-209, T-210, T-211, T-212, T-213, T-214, T-215, T-216, T-217, T-218, T-219, T-2701, T-2702, T-2703`
 - Lifecycle events:
   - 2026-03-03 closed (framework=kanban_v1) - documentation sprint closed
   - 2026-03-03 reopened (framework=gateflow_v1) - reopened for GateFlow-aligned continuation
   - 2026-03-03 reopened (framework=gateflow_v1) - performance follow-up scope opened for incremental present and sensor/runtime semantics
+  - 2026-03-03 closed (framework=gateflow_v1) - follow-up scope complete; tasks T-2701/T-2702/T-2703 done and merged to main
 
 ### F-014 🛡️ Audit retention lifecycle
 - Status: Planned
