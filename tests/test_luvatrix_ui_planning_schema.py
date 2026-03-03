@@ -11,6 +11,7 @@ from luvatrix_ui.planning.schema import (
     PlanningTimeline,
     build_m011_task_cards,
     load_timeline_model,
+    load_task_cards_from_ledger,
     planning_timeline_schema,
     timeline_from_dict,
 )
@@ -85,8 +86,41 @@ class PlanningSchemaTests(unittest.TestCase):
         self.assertEqual(len(cards), 6)
         self.assertIsInstance(cards[0], AgileTaskCard)
         self.assertEqual(cards[0].task_id, "T-1101")
+        self.assertEqual(cards[0].milestone_id, "APU-020")
         self.assertEqual(cards[1].dependencies, ("T-1101",))
         self.assertEqual(cards[-1].dependencies, ("T-1105",))
+
+    def test_load_task_cards_from_ledger_filters_by_milestone(self) -> None:
+        payload = {
+            "tasks": [
+                {
+                    "id": "T-1101",
+                    "title": "Schema contract",
+                    "milestone_id": "APU-020",
+                    "status": "Backlog",
+                    "depends_on": [],
+                },
+                {
+                    "id": "T-1102",
+                    "title": "Renderer",
+                    "milestone_id": "APU-020",
+                    "status": "Backlog",
+                    "depends_on": ["T-1101"],
+                },
+                {
+                    "id": "T-9999",
+                    "title": "Other milestone task",
+                    "milestone_id": "X-001",
+                    "status": "Backlog",
+                },
+            ]
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tasks.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            cards = load_task_cards_from_ledger(path, milestone_id="APU-020")
+        self.assertEqual([card.task_id for card in cards], ["T-1101", "T-1102"])
+        self.assertEqual(cards[1].dependencies, ("T-1101",))
 
 
 if __name__ == "__main__":

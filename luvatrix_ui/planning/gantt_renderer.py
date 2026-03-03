@@ -75,6 +75,7 @@ def attach_dependency_defaults(model: PlanningTimeline) -> PlanningTimeline:
         "M-009": ("M-008",),
         "M-010": ("M-008", "M-009"),
         "M-011": ("M-008",),
+        "APU-020": ("U-017",),
     }
     updated = []
     for milestone in model.milestones:

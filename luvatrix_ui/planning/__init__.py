@@ -29,6 +29,7 @@ from .schema import (
     TimelineMilestone,
     build_m011_task_cards,
     load_timeline_model,
+    load_task_cards_from_ledger,
     planning_timeline_schema,
     timeline_from_dict,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "clamp_week_window",
     "export_planning_bundle",
     "load_timeline_model",
+    "load_task_cards_from_ledger",
     "milestone_clickthrough_map",
     "pan_week_window",
     "planning_timeline_schema",

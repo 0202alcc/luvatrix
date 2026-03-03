@@ -10,29 +10,31 @@ if str(REPO_ROOT) not in sys.path:
 
 from luvatrix_ui.planning import (
     attach_dependency_defaults,
-    build_m011_task_cards,
     build_discord_payload,
     export_planning_bundle,
     load_timeline_model,
+    load_task_cards_from_ledger,
 )
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Native M-011 planning demo renderer.")
+    parser = argparse.ArgumentParser(description="Native APU-020 planning demo renderer.")
     parser.add_argument("--schedule", default="ops/planning/gantt/milestone_schedule.json")
-    parser.add_argument("--out", default="ops/planning/gantt/m011_native_gantt_demo.txt")
-    parser.add_argument("--export-dir", default="ops/planning/gantt/m011_native_exports")
+    parser.add_argument("--tasks", default="ops/planning/agile/tasks_master.json")
+    parser.add_argument("--out", default="ops/planning/gantt/apu020_native_gantt_demo.txt")
+    parser.add_argument("--export-dir", default="ops/planning/gantt/apu020_native_exports")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    model = load_timeline_model(args.schedule, tasks=build_m011_task_cards())
+    cards = load_task_cards_from_ledger(args.tasks, milestone_id="APU-020")
+    model = load_timeline_model(args.schedule, tasks=cards)
     model = attach_dependency_defaults(model)
 
-    bundle = export_planning_bundle(model, out_dir=args.export_dir, prefix="m011_native")
+    bundle = export_planning_bundle(model, out_dir=args.export_dir, prefix="apu020_native")
     payload = build_discord_payload(
-        title="M-011 Native Planning Export",
+        title="APU-020 Native Planning Export",
         summary="ASCII/Markdown/PNG artifacts generated from milestone_schedule.json.",
         bundle=bundle,
     )
@@ -40,7 +42,7 @@ def main() -> int:
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
-        "M-011 Native Planning Demo\n"
+        "APU-020 Native Planning Demo\n"
         + f"Export root: {args.export_dir}\n\n"
         + "Artifacts:\n"
         + "\n".join(f"- {key}: {value}" for key, value in bundle.as_dict().items())
