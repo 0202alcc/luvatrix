@@ -1354,7 +1354,7 @@
       "title": "Audit and reduce frequent FullRewrite submissions in interactive paths.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2102"
       ],
@@ -1374,14 +1374,29 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
       "effort_bucket": "M",
-      "confidence": 0.76
+      "confidence": 0.76,
+      "actuals": {
+        "input_tokens": 2200,
+        "output_tokens": 2600,
+        "wall_time_sec": 1800,
+        "tool_calls": 30,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2302",
       "title": "Strengthen ShiftFrame + ReplaceRect strategy for scroll-heavy workflows.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2301"
       ],
@@ -1401,14 +1416,29 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
       "effort_bucket": "M",
-      "confidence": 0.76
+      "confidence": 0.76,
+      "actuals": {
+        "input_tokens": 2200,
+        "output_tokens": 2600,
+        "wall_time_sec": 1800,
+        "tool_calls": 30,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2303",
       "title": "Enforce incremental-present policy gate with explicit invalidation escape hatch.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2302"
       ],
@@ -1428,14 +1458,29 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
       "effort_bucket": "M",
-      "confidence": 0.76
+      "confidence": 0.76,
+      "actuals": {
+        "input_tokens": 2200,
+        "output_tokens": 2600,
+        "wall_time_sec": 1800,
+        "tool_calls": 30,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2304",
       "title": "Add dirty-rect telemetry (count, dirty-area ratio, incremental/full percentage).",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2303"
       ],
@@ -1455,14 +1500,29 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
       "effort_bucket": "M",
-      "confidence": 0.76
+      "confidence": 0.76,
+      "actuals": {
+        "input_tokens": 2200,
+        "output_tokens": 2600,
+        "wall_time_sec": 1800,
+        "tool_calls": 30,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2305",
       "title": "Add viewport/scroll visual artifact regression suite.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2304"
       ],
@@ -1482,7 +1542,22 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
       "effort_bucket": "M",
-      "confidence": 0.76
+      "confidence": 0.76,
+      "actuals": {
+        "input_tokens": 2200,
+        "output_tokens": 2600,
+        "wall_time_sec": 1800,
+        "tool_calls": 30,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2401",
