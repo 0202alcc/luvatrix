@@ -604,15 +604,17 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         clipped = rgba_upload[:upload_h, :upload_w, :].contiguous()
         self._ensure_upload_image(upload_w, upload_h)
         pack_started = time.perf_counter_ns()
-        data = clipped.cpu().numpy().tobytes(order="C")
+        upload_array = clipped.cpu().numpy()
+        src_view = memoryview(upload_array)
+        packed_nbytes = int(src_view.nbytes)
         pack_ns = time.perf_counter_ns() - pack_started
-        self._ensure_staging_buffer(len(data))
+        self._ensure_staging_buffer(packed_nbytes)
         map_started = time.perf_counter_ns()
         mapped_ptr = vk.vkMapMemory(
             self._logical_device,
             self._staging_memory,
             0,
-            len(data),
+            packed_nbytes,
             0,
         )
         map_ns = time.perf_counter_ns() - map_started
@@ -621,19 +623,20 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             # vulkan-python returns ffi.buffer(...) for vkMapMemory on some builds.
             memcpy_started = time.perf_counter_ns()
             mapped_cdata = vk.ffi.from_buffer(mapped_ptr)
-            vk.ffi.memmove(mapped_cdata, data, len(data))
+            src_cdata = vk.ffi.from_buffer(src_view)
+            vk.ffi.memmove(mapped_cdata, src_cdata, packed_nbytes)
             memcpy_ns = time.perf_counter_ns() - memcpy_started
         except Exception:
             # Fallback for bindings that return an integer-like pointer.
             memcpy_started = time.perf_counter_ns()
             dest_ptr = ctypes.c_void_p(int(mapped_ptr))
-            ctypes.memmove(dest_ptr, data, len(data))
+            ctypes.memmove(dest_ptr, upload_array.ctypes.data, packed_nbytes)
             memcpy_ns = time.perf_counter_ns() - memcpy_started
         finally:
             vk.vkUnmapMemory(self._logical_device, self._staging_memory)
         add_copy_telemetry(
             copy_count=1,
-            copy_bytes=len(data),
+            copy_bytes=packed_nbytes,
             upload_pack_ns=pack_ns,
             upload_map_ns=map_ns,
             upload_memcpy_ns=memcpy_ns,

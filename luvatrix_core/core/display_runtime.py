@@ -86,7 +86,9 @@ class DisplayRuntime:
                 break
             event = newer
 
-        snapshot = self._matrix.read_snapshot()
+        snapshot = self._matrix.read_revision_snapshot(event.revision)
+        if snapshot is None:
+            snapshot = self._matrix.read_snapshot()
         frame = _build_frame(snapshot=snapshot, revision=event.revision)
         self._target.present_frame(frame)
         self._last_copy_telemetry = snapshot_copy_telemetry()

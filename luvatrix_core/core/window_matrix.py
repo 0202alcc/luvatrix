@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 import logging
+import os
 import threading
 import time
 from typing import TypeAlias
@@ -97,8 +98,13 @@ class WindowMatrix:
         self._events: deque[CallBlitEvent] = deque()
         self._next_event_id = 1
         self._revision = 0
+        self._revision_snapshot_enabled = os.getenv("LUVATRIX_ENABLE_REVISIONED_SNAPSHOT", "0").strip() == "1"
+        self._revision_snapshot: torch.Tensor | None = None
+        self._revision_snapshot_revision = 0
         bg = torch.tensor(background, dtype=torch.uint8).view(1, 1, 4)
         self._matrix = bg.expand(height, width, 4).clone()
+        if self._revision_snapshot_enabled:
+            self._revision_snapshot = self._matrix.clone()
 
     @property
     def revision(self) -> int:
@@ -116,6 +122,17 @@ class WindowMatrix:
             )
             return out
 
+    def read_revision_snapshot(self, revision: int) -> torch.Tensor | None:
+        """Return a zero-copy snapshot only for matching revision when enabled."""
+        with self._write_lock:
+            if not self._revision_snapshot_enabled:
+                return None
+            if self._revision_snapshot is None:
+                return None
+            if int(revision) != int(self._revision_snapshot_revision):
+                return None
+            return self._revision_snapshot
+
     def _unsafe_matrix_view(self) -> torch.Tensor:
         """Internal-only no-copy handle."""
         return self._matrix
@@ -125,18 +142,22 @@ class WindowMatrix:
             raise ValueError("write batch must include at least one operation")
 
         with self._write_lock:
-            stage_started = time.perf_counter_ns()
-            staged = self._matrix.clone()
-            add_copy_telemetry(
-                copy_count=1,
-                copy_bytes=int(staged.numel()),
-                matrix_stage_clone_ns=time.perf_counter_ns() - stage_started,
-            )
             offending_pixels = 0
-
-            for op in batch.operations:
-                staged, op_offending = self._apply_operation(staged, op)
-                offending_pixels += op_offending
+            if self._is_localized_commit_batch(batch.operations):
+                prepared, offending_pixels = self._prepare_localized_ops(batch.operations)
+                self._apply_prepared_localized_ops(prepared)
+            else:
+                stage_started = time.perf_counter_ns()
+                staged = self._matrix.clone()
+                add_copy_telemetry(
+                    copy_count=1,
+                    copy_bytes=int(staged.numel()),
+                    matrix_stage_clone_ns=time.perf_counter_ns() - stage_started,
+                )
+                for op in batch.operations:
+                    staged, op_offending = self._apply_operation(staged, op)
+                    offending_pixels += op_offending
+                self._matrix = staged
 
             if offending_pixels > 0:
                 LOGGER.warning(
@@ -144,8 +165,8 @@ class WindowMatrix:
                     offending_pixels,
                 )
 
-            self._matrix = staged
             self._revision += 1
+            self._refresh_revision_snapshot()
             event = CallBlitEvent(
                 event_id=self._next_event_id,
                 revision=self._revision,
@@ -236,6 +257,63 @@ class WindowMatrix:
             out = torch.clamp(torch.round(out), 0, 255).to(torch.uint8)
             return out, 0
         raise TypeError(f"Unsupported write op: {type(op)!r}")
+
+    @staticmethod
+    def _is_localized_commit_batch(operations: list[WriteOp]) -> bool:
+        return all(isinstance(op, (ReplaceRect, ReplaceRow, ReplaceColumn)) for op in operations)
+
+    def _prepare_localized_ops(
+        self,
+        operations: list[WriteOp],
+    ) -> tuple[list[tuple[str, int, int, int, int, torch.Tensor]], int]:
+        prepared: list[tuple[str, int, int, int, int, torch.Tensor]] = []
+        offending_pixels = 0
+        for op in operations:
+            if isinstance(op, ReplaceColumn):
+                _validate_index(op.index, self.width, "column index")
+                col, offending = _sanitize_rgba_tensor(op.column_h_4, (self.height, 4))
+                prepared.append(("column", int(op.index), 0, 1, self.height, col))
+                offending_pixels += offending
+                continue
+            if isinstance(op, ReplaceRow):
+                _validate_index(op.index, self.height, "row index")
+                row, offending = _sanitize_rgba_tensor(op.row_w_4, (self.width, 4))
+                prepared.append(("row", 0, int(op.index), self.width, 1, row))
+                offending_pixels += offending
+                continue
+            if isinstance(op, ReplaceRect):
+                _validate_rect(op.x, op.y, op.width, op.height, self.width, self.height)
+                patch, offending = _sanitize_rgba_tensor(op.rect_h_w_4, (op.height, op.width, 4))
+                prepared.append(("rect", int(op.x), int(op.y), int(op.width), int(op.height), patch))
+                offending_pixels += offending
+                continue
+            raise TypeError(f"Unsupported localized write op: {type(op)!r}")
+        return prepared, offending_pixels
+
+    def _apply_prepared_localized_ops(self, prepared: list[tuple[str, int, int, int, int, torch.Tensor]]) -> None:
+        for kind, x, y, width, height, payload in prepared:
+            if kind == "column":
+                self._matrix[:, x, :] = payload
+                continue
+            if kind == "row":
+                self._matrix[y, :, :] = payload
+                continue
+            if kind == "rect":
+                self._matrix[y : y + height, x : x + width, :] = payload
+                continue
+            raise RuntimeError(f"Unsupported prepared localized write kind: {kind}")
+
+    def _refresh_revision_snapshot(self) -> None:
+        if not self._revision_snapshot_enabled:
+            return
+        started = time.perf_counter_ns()
+        self._revision_snapshot = self._matrix.clone()
+        self._revision_snapshot_revision = int(self._revision)
+        add_copy_telemetry(
+            copy_count=1,
+            copy_bytes=int(self._revision_snapshot.numel()),
+            matrix_snapshot_clone_ns=time.perf_counter_ns() - started,
+        )
 
 
 def _validate_index(index: int, upper_bound: int, label: str) -> None:

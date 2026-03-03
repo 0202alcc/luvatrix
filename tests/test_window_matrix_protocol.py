@@ -5,6 +5,7 @@ import unittest
 
 import torch
 
+from luvatrix_core.perf.copy_telemetry import begin_copy_telemetry_frame, snapshot_copy_telemetry
 from luvatrix_core.core.window_matrix import (
     FullRewrite,
     Multiply,
@@ -212,6 +213,17 @@ class WindowMatrixProtocolTests(unittest.TestCase):
             t.join()
         self.assertEqual(matrix.revision, 10)
         self.assertEqual(matrix.pending_call_blit_count(), 10)
+
+    def test_localized_commit_path_skips_full_frame_stage_clone(self) -> None:
+        matrix = WindowMatrix(height=4, width=4)
+        patch = torch.full((2, 2, 4), fill_value=7, dtype=torch.uint8)
+        begin_copy_telemetry_frame()
+        matrix.submit_write_batch(WriteBatch([ReplaceRect(x=1, y=1, width=2, height=2, rect_h_w_4=patch)]))
+        telemetry = snapshot_copy_telemetry()
+        self.assertEqual(int(telemetry.get("matrix_stage_clone_ns", -1)), 0)
+        snap = matrix.read_snapshot()
+        self.assertEqual(int(snap[1, 1, 0].item()), 7)
+        self.assertEqual(int(snap[2, 2, 0].item()), 7)
 
 
 if __name__ == "__main__":

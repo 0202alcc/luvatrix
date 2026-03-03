@@ -1,0 +1,31 @@
+{
+  "matrix": {
+    "width": 1600,
+    "height": 1000
+  },
+  "full_rewrite": {
+    "copy_count": 1,
+    "copy_bytes": 6400000,
+    "ui_pack_ns": 0,
+    "matrix_stage_clone_ns": 392500,
+    "matrix_snapshot_clone_ns": 0,
+    "upload_pack_ns": 0,
+    "upload_map_ns": 0,
+    "upload_memcpy_ns": 0
+  },
+  "localized_replace_rect": {
+    "copy_count": 0,
+    "copy_bytes": 0,
+    "ui_pack_ns": 0,
+    "matrix_stage_clone_ns": 0,
+    "matrix_snapshot_clone_ns": 0,
+    "upload_pack_ns": 0,
+    "upload_map_ns": 0,
+    "upload_memcpy_ns": 0
+  },
+  "delta": {
+    "copy_count": -1,
+    "copy_bytes": -6400000,
+    "matrix_stage_clone_ns": -392500
+  }
+}
