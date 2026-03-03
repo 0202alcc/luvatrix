@@ -4,6 +4,10 @@ This provides a standardized, safe mutation path for planning data using:
 
 `METHOD /resource[/id]`
 
+Quick operator reference:
+
+- `ops/planning/api/CHEATSHEET.md`
+
 ## Milestone Thread Rule
 
 1. At the beginning of each milestone thread, create/switch to a dedicated milestone branch.

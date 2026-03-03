@@ -51,6 +51,20 @@ Before planning or editing code, read:
    - `A` app projects, `R` rendering backend, `F` first-party protocols/systems, `U` UI/UX tools, `P` project management, `X` other.
    - Combined IDs are allowed (up to 3 letters) and primary letter goes first.
 9. Milestone lifecycle must be tracked via `lifecycle_events` in `milestone_schedule.json` (close/reopen + framework notes).
+10. Use the operator command reference for standard actions:
+   - `ops/planning/api/CHEATSHEET.md`
+
+## Planning API Usage (Required Flow)
+1. Always run API calls in dry-run first (no `--apply`).
+2. Re-run with `--apply` only after dry-run output is correct.
+3. Use API endpoints for planning changes:
+   - `/milestones` for milestone create/update/delete
+   - `/tasks` for task create/update/archive
+   - `/boards` and `/frameworks` for Agile framework/board controls
+   - `/backlog` for leftover/unattached tickets
+4. Do not manually edit planning JSON files unless API cannot express the needed operation.
+5. After planning changes, run:
+   - `uv run python ops/planning/agile/validate_milestone_task_links.py`
 
 ## GateFlow Workflow (Default)
 1. Default columns:

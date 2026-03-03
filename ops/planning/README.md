@@ -26,6 +26,7 @@ not Discord-specific.
 3. `api/`
 - `planning_api.py` (standardized endpoint-style CRUD for milestones/tasks with safety checks)
 - `README.md` (endpoint contract + examples)
+- `CHEATSHEET.md` (operator command quick-reference)
 
 ## Operating Workflow
 
