@@ -24,20 +24,20 @@ This posts:
 1. A pseudo-Gantt markdown block (Discord-native).
 2. A generated PNG Gantt chart.
 
-## Generate Full Detailed ASCII Gantt (Includes Completed Milestones)
+## Generate Consolidated Markdown Gantt (Includes Completed Milestones)
 
 ```bash
 cd /Users/aleccandidato/Projects/luvatrix
-python ops/discord/scripts/generate_gantt_ascii_detailed.py
-cat ops/planning/gantt/milestones_gantt_detailed.md
+python ops/discord/scripts/generate_gantt_markdown.py
+cat ops/planning/gantt/milestones_gantt.md
 ```
 
 Custom output path:
 
 ```bash
-python ops/discord/scripts/generate_gantt_ascii_detailed.py \
+python ops/discord/scripts/generate_gantt_markdown.py \
   --schedule ops/planning/gantt/milestone_schedule.json \
-  --out ops/planning/gantt/milestones_gantt_detailed.md
+  --out ops/planning/gantt/milestones_gantt.md
 ```
 
 ## Mention-Driven PNG Generation

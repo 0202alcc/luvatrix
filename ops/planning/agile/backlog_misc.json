@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Miscellaneous backlog ledger for carryover, unscoped, and unattached work items.",
+  "status_values": [
+    "Open",
+    "Triaged",
+    "Assigned",
+    "Closed"
+  ],
+  "bucket_values": [
+    "Carryover",
+    "Unscoped",
+    "ParkingLot",
+    "Backfill"
+  ],
+  "items": []
+}

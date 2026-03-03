@@ -37,6 +37,7 @@ Before planning or editing code, read:
 1. Task system source files:
    - `ops/planning/agile/tasks_master.json` (active tasks)
    - `ops/planning/agile/tasks_archived.json` (archived tasks)
+   - `ops/planning/agile/backlog_misc.json` (misc backlog: carryover/unscoped/unattached)
    - `ops/planning/agile/boards_registry.json` (board definitions and formatting config)
    - `ops/planning/gantt/milestone_schedule.json` (milestones + `task_ids`)
 2. Use `ops/planning/api/planning_api.py` for milestone/task CRUD instead of manual JSON edits whenever possible.
@@ -45,10 +46,37 @@ Before planning or editing code, read:
 5. Validate links with:
    - `uv run python ops/planning/agile/validate_milestone_task_links.py`
 6. On successful `planning_api.py --apply`, Gantt markdown and PNG are regenerated automatically.
+7. Agile framework default is `Luvatrix GateFlow (gateflow_v1)` defined in `ops/planning/agile/boards_registry.json`.
+8. Milestone IDs use lettered schema: `<1-3 letters>-<3 digits>` where letters map to:
+   - `A` app projects, `R` rendering backend, `F` first-party protocols/systems, `U` UI/UX tools, `P` project management, `X` other.
+   - Combined IDs are allowed (up to 3 letters) and primary letter goes first.
+9. Milestone lifecycle must be tracked via `lifecycle_events` in `milestone_schedule.json` (close/reopen + framework notes).
+
+## GateFlow Workflow (Default)
+1. Default columns:
+   - `Intake`
+   - `Success Criteria Spec`
+   - `Safety Tests Spec`
+   - `Implementation Tests Spec`
+   - `Edge Case Tests Spec`
+   - `Prototype Stage 1`
+   - `Prototype Stage 2+`
+   - `Verification Review`
+   - `Integration Ready`
+   - `Done`
+   - `Blocked`
+2. A single ticket moves across these columns; do not create one ticket per column by default.
+3. Gate rules:
+   - ticket cannot enter `Prototype Stage 1` until spec/test columns are complete,
+   - ticket cannot enter `Done` until merged to `main` with required checks passing on `main`.
+4. Use the planning API for framework/board edits:
+   - `GET /frameworks`
+   - `PATCH /frameworks` (set default framework)
+   - `GET|POST|PATCH|DELETE /boards[/id]`
 
 ## Agile Board Update Policy
 1. Each milestone must have a live execution board file: `ops/planning/agile/m<milestone>_execution_board.md`.
-2. Board columns: `Backlog`, `Ready`, `In Progress`, `Review`, `Done`.
+2. Board columns default to GateFlow (`Intake` -> `...` -> `Integration Ready` -> `Done`, plus `Blocked`) unless a board explicitly sets another framework template.
 3. Move task cards as status changes during work.
 4. Keep board status changes in the same commit where task state changes.
 5. Do not mark `Done` without linked test evidence.

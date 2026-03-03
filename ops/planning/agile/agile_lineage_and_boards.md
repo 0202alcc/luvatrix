@@ -10,29 +10,29 @@ Baseline week start is 2026-02-23.
 Week:   W01          W02          W03          W04          W05          W06          W07          W08          W09          W10
 Date:   02/23-03/01  03/02-03/08  03/09-03/15  03/16-03/22  03/23-03/29  03/30-04/05  04/06-04/12  04/13-04/19  04/20-04/26  04/27-05/03
 
-H-001 🧬 Core Package Transition                       |██████████                                                                                              | Status=Complete (2026-02-23)
-H-002 🖥️ macOS Visual Runtime Foundation               |██████████                                                                                              | Status=Complete (2026-02-23)
-H-003 ⚡ Runtime Safety + Audit Hardening              |██████████                                                                                              | Status=Complete (2026-02-24)
-H-004 🧭 Variant Routing + HDI Standardization         |██████████                                                                                              | Status=Complete (2026-02-26)
-H-005 🎯 Rendering Fallback + GPU Blit                 |██████████                                                                                              | Status=Complete (2026-02-26)
-H-006 📈 Plot Module + UI IR Integration               |██████████                                                                                              | Status=Complete (2026-02-26)
-H-007 🔌 Plot Stabilization + Stream Simulation        |██████████                                                                                              | Status=Complete (2026-02-27)
-H-008 🗂️ Discord Ops Consolidation                     |██████████                                                                                              | Status=Complete (2026-02-26)
-H-009 📦 Packaging + Vulkan Preflight Guidance         |██████████                                                                                              | Status=Complete (2026-02-27)
-M-001 🧱 Discord Governance + Onboarding               |████████████████████                                                                                    | Status=In Progress
-M-002 📜 App Protocol Docs Finalized                   |          ████████████████████                                                                            | Status=Complete
-M-003 🎮 Vulkan Stabilization                          |                    ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                                                | Status=Planned
-M-004 🧪 CI Hardening + Flaky Governance               |                              ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                                                    | Status=Planned
-M-005 🛡️ Audit Retention Lifecycle                     |                                        ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                                          | Status=Planned
-M-006 🚀 Production-Hardening Go/No-Go                 |                                                                      ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒            | Status=Planned
-M-007 🌐 Cross-Platform Interactive Generalization     |██████████▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                                                                    | Status=In Progress
+F-001 🧬 Core Package Transition                       |██████████                                                                                              | Status=Complete (2026-02-23)
+R-002 🖥️ macOS Visual Runtime Foundation               |██████████                                                                                              | Status=Complete (2026-02-23)
+F-003 ⚡ Runtime Safety + Audit Hardening              |██████████                                                                                              | Status=Complete (2026-02-24)
+FR-004 🧭 Variant Routing + HDI Standardization         |██████████                                                                                              | Status=Complete (2026-02-26)
+R-005 🎯 Rendering Fallback + GPU Blit                 |██████████                                                                                              | Status=Complete (2026-02-26)
+UF-006 📈 Plot Module + UI IR Integration               |██████████                                                                                              | Status=Complete (2026-02-26)
+U-007 🔌 Plot Stabilization + Stream Simulation        |██████████                                                                                              | Status=Complete (2026-02-27)
+P-008 🗂️ Discord Ops Consolidation                     |██████████                                                                                              | Status=Complete (2026-02-26)
+RF-009 📦 Packaging + Vulkan Preflight Guidance         |██████████                                                                                              | Status=Complete (2026-02-27)
+P-010 🧱 Discord Governance + Onboarding               |████████████████████                                                                                    | Status=In Progress
+F-011 📜 App Protocol Docs Finalized                   |          ████████████████████                                                                            | Status=Complete
+R-012 🎮 Vulkan Stabilization                          |                    ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                                                | Status=Planned
+P-013 🧪 CI Hardening + Flaky Governance               |                              ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                                                    | Status=Planned
+F-014 🛡️ Audit Retention Lifecycle                     |                                        ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                                          | Status=Planned
+P-015 🚀 Production-Hardening Go/No-Go                 |                                                                      ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒            | Status=Planned
+ARU-016 🌐 Cross-Platform Interactive Generalization     |██████████▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒                                                                    | Status=In Progress
 
 Legend: █ completed/active occupancy, ▒ planned occupancy.
 ```
 
 Accuracy checks:
-1. Historical milestones `H-001..H-009` are grouped directly from commit history and marked complete with explicit dates.
-2. `M-007` is currently active and begins in W01.
+1. Historical milestones `F-001..RF-009` are grouped directly from commit history and marked complete with explicit dates.
+2. `ARU-016` is currently active and begins in W01.
 3. Planned milestones remain W02+ while active streams overlap as expected in hybrid execution.
 
 ## 2) Exact Branch Integration Provenance (Commit Topology)
@@ -146,7 +146,7 @@ Handler pools:
 10. `REL`: `{CEO, AI-ReleaseReviewer}`
 11. `DOC`: `{AI-PM, AI-Docs}`
 
-### H-001 Core Package Transition and Repository Cleanup (Historical Replay)
+### F-001 Core Package Transition and Repository Cleanup (Historical Replay)
 ```text
 [LOCKED] [READY] [IN-PROGRESS] [REVIEW] [DONE]
                                               H1-S01 [PM] Define rename/sunset success criteria
@@ -171,12 +171,12 @@ Handler pools:
                                                 - U: H1-S09
 ```
 
-H-001 execution evidence:
+F-001 execution evidence:
 1. Commit `da0affc` -> implements H1-S01..H1-S07 (rename, structure, docs, baseline artifacts).
 2. Commit `b9cbb24` -> implements H1-S08..H1-S10 closeout cleanup (redundant symlink removal + final docs touch).
 3. Branch provenance: `main` direct integration (no side branch merge).
 
-### H-002 macOS Visual Runtime Foundation (Historical Replay)
+### R-002 macOS Visual Runtime Foundation (Historical Replay)
 ```text
 [LOCKED] [READY] [IN-PROGRESS] [REVIEW] [DONE]
                                               H2-S01 [PM] Define visual runtime baseline criteria (windowing, Vulkan compatibility, testability)
@@ -200,12 +200,12 @@ H-001 execution evidence:
                                                 - U: H2-S09
 ```
 
-H-002 execution evidence:
+R-002 execution evidence:
 1. Commit `aa10c8d` -> implements H2-S01..H2-S09 (runtime foundation, platform split, examples, tests).
 2. Commit `de07329` -> implements H2-S10 (merge integration from `codex/3b16aa...` into `main`).
 3. Branch provenance: `codex/3b16aa823553-on-the-web-interface-i-want-to-simplify-` -> `main`.
 
-### H-003 Runtime Safety Controller and Audit Pipeline Hardening (Historical Replay)
+### F-003 Runtime Safety Controller and Audit Pipeline Hardening (Historical Replay)
 ```text
 [LOCKED] [READY] [IN-PROGRESS] [REVIEW] [DONE]
                                               H3-S01 [PM] Define runtime safety/governance success criteria and audit obligations
@@ -229,12 +229,12 @@ H-002 execution evidence:
                                                 - U: H3-S09
 ```
 
-H-003 execution evidence:
+F-003 execution evidence:
 1. Commit `31eebbf` -> implements H3-S01..H3-S05,H3-S07,H3-S08 (runtime/governance/audit/sensors + docs/examples/tests/CI).
 2. Commit `9c4d0a1` -> implements H3-S06,H3-S09,H3-S10 (energy safety integration + final validation path).
 3. Branch provenance: `main` direct integration.
 
-### H-004 Platform Variant Routing and HDI Phase Standardization (Historical Replay)
+### FR-004 Platform Variant Routing and HDI Phase Standardization (Historical Replay)
 ```text
 [LOCKED] [READY] [IN-PROGRESS] [REVIEW] [DONE]
                                               H4-S01 [PM] Define cross-platform variant-routing criteria and HDI phase consistency goals
@@ -256,12 +256,12 @@ H-003 execution evidence:
                                                 - U: H4-S08
 ```
 
-H-004 execution evidence:
+FR-004 execution evidence:
 1. Commit `4fecdf2` -> implements H4-S01..H4-S04 (variant routing + plan/docs/test updates).
 2. Commit `a5ae8d1` -> implements H4-S05..H4-S09 (HDI phase standardization + coordinates + full-suite examples + test expansion).
 3. Branch provenance: `main` direct integration.
 
-### H-005 Rendering Fallback, Smoke Docs, and GPU Blit Path (Historical Replay)
+### R-005 Rendering Fallback, Smoke Docs, and GPU Blit Path (Historical Replay)
 ```text
 [LOCKED] [READY] [IN-PROGRESS] [REVIEW] [DONE]
                                               H5-S01 [PM] Define rendering resiliency/performance acceptance criteria for macOS fallback path
@@ -281,13 +281,13 @@ H-004 execution evidence:
                                                 - U: H5-S07
 ```
 
-H-005 execution evidence:
+R-005 execution evidence:
 1. Commit `87cf09c` -> implements H5-S04 (fallback restore).
 2. Commit `4a805e7` -> implements H5-S05 (fallback smoke doc + cleanup refinement).
 3. Commit `fc9099a` -> implements H5-S06..H5-S08 (GPU blit path + tests + completion).
 4. Branch provenance: `main` direct integration.
 
-### H-006 Interactive Plot Module and UI IR Integration (Historical Replay)
+### UF-006 Interactive Plot Module and UI IR Integration (Historical Replay)
 ```text
 [LOCKED] [READY] [IN-PROGRESS] [REVIEW] [DONE]
                                               H6-S01 [PM] Define interactive plotting + UI-IR integration success criteria
@@ -315,7 +315,7 @@ H-005 execution evidence:
                                                 - U: H6-S11
 ```
 
-H-006 execution evidence:
+UF-006 execution evidence:
 1. Commit `8d966f5` -> implements H6-S02..H6-S05 baseline plot stack.
 2. Commit `0f8d9f3` -> implements H6-S06.
 3. Commit `3ef4e14` -> implements H6-S07.
@@ -324,7 +324,7 @@ H-006 execution evidence:
 6. Commit `9e1aa60` -> implements H6-S10,H6-S11,H6-S12 completion.
 7. Branch provenance: `main` direct integration.
 
-### H-007 Plot Stabilization and Stream Simulation Integration (Historical Replay)
+### U-007 Plot Stabilization and Stream Simulation Integration (Historical Replay)
 ```text
 [LOCKED] [READY] [IN-PROGRESS] [REVIEW] [DONE]
                                               H7-S01 [PM] Define dynamic rolling and stream ingestion stability criteria
@@ -344,13 +344,13 @@ H-006 execution evidence:
                                                 - U: H7-S07
 ```
 
-H-007 execution evidence:
+U-007 execution evidence:
 1. Commit `8556c91` -> implements H7-S04 on `codex/plot-module-v0`.
 2. Commit `a3fc9ea` -> implements H7-S05,H7-S06 on `codex/plot-module-v0`.
 3. Commits `aca4a07`, `50675ea` -> implement H7-S07,H7-S08 merge integration into `main`.
 4. Branch provenance: `codex/plot-module-v0` -> `main`.
 
-### H-008 Discord Ops Consolidation under /discord (Historical Replay)
+### P-008 Discord Ops Consolidation under /discord (Historical Replay)
 ```text
 [LOCKED] [READY] [IN-PROGRESS] [REVIEW] [DONE]
                                               H8-S01 [PM] Define Discord operations consolidation scope and success criteria
@@ -370,11 +370,11 @@ H-007 execution evidence:
                                                 - U: H8-S07
 ```
 
-H-008 execution evidence:
+P-008 execution evidence:
 1. Commit `48c3c02` -> implements H8-S01..H8-S08 (full migration + scripts/docs/assets refresh).
 2. Branch provenance: `main` direct integration.
 
-### H-009 Packaging Metadata and Vulkan Preflight Guidance (Historical Replay)
+### RF-009 Packaging Metadata and Vulkan Preflight Guidance (Historical Replay)
 ```text
 [LOCKED] [READY] [IN-PROGRESS] [REVIEW] [DONE]
                                               H9-S01 [PM] Define package-release readiness and runtime setup guidance criteria
@@ -394,13 +394,13 @@ H-008 execution evidence:
                                                 - U: H9-S07
 ```
 
-H-009 execution evidence:
+RF-009 execution evidence:
 1. Commit `f255da9` -> implements H9-S04 (publish metadata + extras).
 2. Commit `5fdcad6` -> implements H9-S05 (dependency correction + version bump).
 3. Commit `f943653` -> implements H9-S06..H9-S08 (preflight guidance + runtime docs/main wiring + closeout).
 4. Branch provenance: `main` direct integration.
 
-### M-001 Discord Operating Baseline
+### P-010 Discord Operating Baseline
 ```text
 [LOCKED]                     [READY]                        [IN-PROGRESS]                  [REVIEW]                 [DONE]
                                                                  T1 Define success criteria
@@ -415,7 +415,7 @@ H-009 execution evidence:
                                                                                                                             H: DEV-PLATFORM  U: T1
 ```
 
-### M-002 App Protocol Documentation Finalization
+### F-011 App Protocol Documentation Finalization
 ```text
 [LOCKED]                                [READY]                      [IN-PROGRESS] [REVIEW] [DONE]
 T2.4 Operator run examples
@@ -427,7 +427,7 @@ T2.4 Operator run examples
                                          H: PM,ARCH,SAFE  U: T2.2
 ```
 
-### M-003 Vulkan Stabilization
+### R-012 Vulkan Stabilization
 ```text
 [LOCKED]                                 [READY]                          [IN-PROGRESS] [REVIEW] [DONE]
 T3.4 Fallback parity validation
@@ -439,7 +439,7 @@ T3.4 Fallback parity validation
                                           H: DEV-RENDER  U: T3.2
 ```
 
-### M-004 CI Hardening and Flaky Governance
+### P-013 CI Hardening and Flaky Governance
 ```text
 [LOCKED]                               [READY]                           [IN-PROGRESS] [REVIEW] [DONE]
 T4.4 Release-readiness summary
@@ -451,7 +451,7 @@ T4.4 Release-readiness summary
                                          H: DEV-PLATFORM,OBS  U: T4.1
 ```
 
-### M-005 Audit Retention Lifecycle
+### F-014 Audit Retention Lifecycle
 ```text
 [LOCKED]                               [READY]                            [IN-PROGRESS] [REVIEW] [DONE]
 T5.4 Operator playbook
@@ -463,7 +463,7 @@ T5.4 Operator playbook
                                          H: TEST,QA  U: T5.2
 ```
 
-### M-006 Production-Hardening Go/No-Go
+### P-015 Production-Hardening Go/No-Go
 ```text
 [LOCKED]                                           [READY] [IN-PROGRESS] [REVIEW] [DONE]
 T6.1 Evidence packet assembly
@@ -474,7 +474,7 @@ T6.3 Go/No-Go decision record
   H: REL,PM,ARCH  U: T6.2
 ```
 
-### M-007 Cross-Platform Full-Suite Interactive Generalization
+### ARU-016 Cross-Platform Full-Suite Interactive Generalization
 ```text
 [LOCKED]                                [READY]                       [IN-PROGRESS]                               [REVIEW] [DONE]
 T7.5 Docs + runbook updates
@@ -488,12 +488,12 @@ T7.5 Docs + runbook updates
                                          H: TEST,INTG  U: T7.2,T7.3
 ```
 
-### M-008 Plot + Data UX Foundations (Labels, Bars, Subplots, Scrolling, Table UI)
+### U-017 Plot + Data UX Foundations (Labels, Bars, Subplots, Scrolling, Table UI)
 ```text
 [LOCKED]                                 [READY]                         [IN-PROGRESS] [REVIEW] [DONE]
 T8.6 UX/playbook docs + operator examples
   H: DOC,PM  U: T8.5                     T8.1 Sideways x-axis rule labels for long names
-                                          H: DEV-RENDER,ARCH,TEST  U: M-007 baseline
+                                          H: DEV-RENDER,ARCH,TEST  U: ARU-016 baseline
                                           T8.2 Bar chart rendering support
                                           H: DEV-RENDER,TEST  U: T8.1
                                           T8.3 Multi-plot (subplot-like) layout support
@@ -504,7 +504,7 @@ T8.6 UX/playbook docs + operator examples
                                           H: DEV-RUNTIME,ARCH,TEST  U: T8.4
 ```
 
-### M-009 Data Workspace UI (Calendar App)
+### AU-018 Data Workspace UI (Calendar App)
 ```text
 [LOCKED]                              [READY]                           [IN-PROGRESS] [REVIEW] [DONE]
 T9.4 Integration docs and acceptance summary
@@ -516,7 +516,7 @@ T9.4 Integration docs and acceptance summary
                                         H: QA,INTG,SAFE  U: T9.2
 ```
 
-### M-010 Custom Marketbook Dynamic Plotting System
+### AU-019 Custom Marketbook Dynamic Plotting System
 ```text
 [LOCKED]                                [READY]                             [IN-PROGRESS] [REVIEW] [DONE]
 T10.5 Production-readiness packet
@@ -530,7 +530,7 @@ T10.5 Production-readiness packet
                                           H: SAFE,TEST,DOC  U: T10.3
 ```
 
-### M-011 Native Gantt + Agile Visualization in Luvatrix
+### APU-020 Native Gantt + Agile Visualization in Luvatrix
 ```text
 [LOCKED]                                  [READY]                                [IN-PROGRESS] [REVIEW] [DONE]
 T11.7 Launch checklist + docs handoff
@@ -547,7 +547,7 @@ T11.7 Launch checklist + docs handoff
                                             T11.6 Regression + dependency integrity test suite
                                             H: TEST,SAFE,INTG  U: T11.5
 ```
-M-011 mandatory success criteria:
+APU-020 mandatory success criteria:
 1. All milestone outputs must comply with first-party Luvatrix App Protocol contracts.
 2. Schema/renderer/interaction/export/validation paths must remain first-party module driven and deterministic.
 3. No `T11.x` task can move to `Done` without App Protocol compliance evidence and matching test/demo proof.

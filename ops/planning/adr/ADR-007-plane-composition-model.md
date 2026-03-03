@@ -2,13 +2,13 @@
 
 - Status: Accepted
 - Date: 2026-03-01
-- Milestone: M-008
+- Milestone: U-017
 - Task: T-812
 - Owner: Runtime/Protocol
 
 ## 1) Context
 
-M-008 continuation requires a formal composition model for multi-plane rendering, input routing, and scroll layering.
+U-017 continuation requires a formal composition model for multi-plane rendering, input routing, and scroll layering.
 
 Without an explicit model, runtime behavior can drift across schema, UI IR, and renderer implementations.
 
@@ -114,6 +114,6 @@ Trade-offs:
 
 ## 11) Links to Evidence
 
-1. M-008 board: `ops/planning/agile/m008_execution_board.md`
+1. U-017 board: `ops/planning/agile/m008_execution_board.md`
 2. Terminology prerequisite: `ops/planning/adr/ADR-006-matrixbuffer-cameraoverlay-terminology.md`
 3. Continuation chain: `T-812 -> T-825`

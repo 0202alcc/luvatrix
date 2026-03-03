@@ -1,9 +1,21 @@
 {
   "title": "Luvatrix Milestone Gantt (Historical + Active + Planned)",
   "baseline_start_date": "2026-02-23",
+  "milestone_id_schema": {
+    "format": "<PRIMARY_OR_COMBINED_LETTERS>-<3_DIGIT_SEQUENCE>",
+    "rules": [
+      "A = whole app projects",
+      "R = rendering backend milestones",
+      "F = first-party protocol/system milestones",
+      "U = UI/UX tool milestones",
+      "P = project management milestones",
+      "X = uncategorized/other",
+      "Combined IDs may use up to 3 letters; primary letter goes first."
+    ]
+  },
   "milestones": [
     {
-      "id": "H-001",
+      "id": "F-001",
       "emoji": "\ud83e\uddec",
       "name": "Core package transition and repository cleanup",
       "start_week": 1,
@@ -13,10 +25,19 @@
         "A-H001-01",
         "A-H001-02"
       ],
-      "completed_on": "2026-02-23"
+      "completed_on": "2026-02-23",
+      "legacy_id": "H-001",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-23",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
     },
     {
-      "id": "H-002",
+      "id": "R-002",
       "emoji": "\ud83d\udda5\ufe0f",
       "name": "macOS visual runtime foundation merged to main",
       "start_week": 1,
@@ -26,10 +47,19 @@
         "A-H002-01",
         "A-H002-02"
       ],
-      "completed_on": "2026-02-23"
+      "completed_on": "2026-02-23",
+      "legacy_id": "H-002",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-23",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
     },
     {
-      "id": "H-003",
+      "id": "F-003",
       "emoji": "\u26a1",
       "name": "Runtime safety controller and audit pipeline hardening",
       "start_week": 1,
@@ -39,10 +69,19 @@
         "A-H003-01",
         "A-H003-02"
       ],
-      "completed_on": "2026-02-24"
+      "completed_on": "2026-02-24",
+      "legacy_id": "H-003",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-24",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
     },
     {
-      "id": "H-004",
+      "id": "FR-004",
       "emoji": "\ud83e\udded",
       "name": "Platform variant routing and HDI phase standardization",
       "start_week": 1,
@@ -52,10 +91,19 @@
         "A-H004-01",
         "A-H004-02"
       ],
-      "completed_on": "2026-02-26"
+      "completed_on": "2026-02-26",
+      "legacy_id": "H-004",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-26",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
     },
     {
-      "id": "H-005",
+      "id": "R-005",
       "emoji": "\ud83c\udfaf",
       "name": "Rendering fallback, smoke docs, and GPU blit path",
       "start_week": 1,
@@ -65,10 +113,19 @@
         "A-H005-01",
         "A-H005-02"
       ],
-      "completed_on": "2026-02-26"
+      "completed_on": "2026-02-26",
+      "legacy_id": "H-005",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-26",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
     },
     {
-      "id": "H-006",
+      "id": "UF-006",
       "emoji": "\ud83d\udcc8",
       "name": "Interactive plot module and UI IR integration",
       "start_week": 1,
@@ -78,10 +135,19 @@
         "A-H006-01",
         "A-H006-02"
       ],
-      "completed_on": "2026-02-26"
+      "completed_on": "2026-02-26",
+      "legacy_id": "H-006",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-26",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
     },
     {
-      "id": "H-007",
+      "id": "U-007",
       "emoji": "\ud83d\udd0c",
       "name": "Plot stabilization and stream simulation integration",
       "start_week": 1,
@@ -91,10 +157,19 @@
         "A-H007-01",
         "A-H007-02"
       ],
-      "completed_on": "2026-02-27"
+      "completed_on": "2026-02-27",
+      "legacy_id": "H-007",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-27",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
     },
     {
-      "id": "H-008",
+      "id": "P-008",
       "emoji": "\ud83d\uddc2\ufe0f",
       "name": "Discord ops consolidation under /discord",
       "start_week": 1,
@@ -104,10 +179,19 @@
         "A-H008-01",
         "A-H008-02"
       ],
-      "completed_on": "2026-02-26"
+      "completed_on": "2026-02-26",
+      "legacy_id": "H-008",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-26",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
     },
     {
-      "id": "H-009",
+      "id": "RF-009",
       "emoji": "\ud83d\udce6",
       "name": "Packaging metadata and Vulkan runtime preflight guidance",
       "start_week": 1,
@@ -117,10 +201,19 @@
         "A-H009-01",
         "A-H009-02"
       ],
-      "completed_on": "2026-02-27"
+      "completed_on": "2026-02-27",
+      "legacy_id": "H-009",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-27",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ]
     },
     {
-      "id": "M-001",
+      "id": "P-010",
       "emoji": "\ud83e\uddf1",
       "name": "Discord governance artifacts and onboarding system",
       "start_week": 1,
@@ -130,10 +223,19 @@
         "T-101",
         "T-102",
         "T-103"
+      ],
+      "legacy_id": "M-001",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
       ]
     },
     {
-      "id": "M-002",
+      "id": "F-011",
       "emoji": "\ud83d\udcdc",
       "name": "App protocol docs finalized",
       "start_week": 2,
@@ -159,10 +261,25 @@
         "T-217",
         "T-218",
         "T-219"
+      ],
+      "legacy_id": "M-002",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "closed",
+          "framework": "kanban_v1",
+          "note": "documentation sprint closed"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "reopened for GateFlow-aligned continuation"
+        }
       ]
     },
     {
-      "id": "M-003",
+      "id": "R-012",
       "emoji": "\ud83c\udfae",
       "name": "Vulkan stabilization",
       "start_week": 3,
@@ -173,10 +290,19 @@
         "T-302",
         "T-303",
         "T-304"
+      ],
+      "legacy_id": "M-003",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
       ]
     },
     {
-      "id": "M-004",
+      "id": "P-013",
       "emoji": "\ud83e\uddea",
       "name": "CI hardening and flaky governance",
       "start_week": 4,
@@ -186,10 +312,19 @@
         "T-401",
         "T-402",
         "T-403"
+      ],
+      "legacy_id": "M-004",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
       ]
     },
     {
-      "id": "M-005",
+      "id": "F-014",
       "emoji": "\ud83d\udee1\ufe0f",
       "name": "Audit retention lifecycle",
       "start_week": 5,
@@ -199,10 +334,19 @@
         "T-501",
         "T-502",
         "T-503"
+      ],
+      "legacy_id": "M-005",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
       ]
     },
     {
-      "id": "M-006",
+      "id": "P-015",
       "emoji": "\ud83d\ude80",
       "name": "Production-hardening go/no-go review",
       "start_week": 8,
@@ -212,10 +356,19 @@
         "T-601",
         "T-602",
         "T-603"
+      ],
+      "legacy_id": "M-006",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
       ]
     },
     {
-      "id": "M-007",
+      "id": "ARU-016",
       "emoji": "\ud83c\udf10",
       "name": "Cross-platform full-suite interactive generalization",
       "start_week": 1,
@@ -226,10 +379,19 @@
         "T-702",
         "T-703",
         "T-704"
+      ],
+      "legacy_id": "M-007",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
       ]
     },
     {
-      "id": "M-008",
+      "id": "U-017",
       "emoji": "\ud83d\udcca",
       "name": "Plot + data UX foundations (labels, bars, subplots, scrolling, table UI)",
       "start_week": 4,
@@ -241,10 +403,31 @@
         "T-803",
         "T-804",
         "T-805"
+      ],
+      "legacy_id": "M-008",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-01",
+          "event": "closed",
+          "framework": "kanban_v1",
+          "note": "sprint closure"
+        },
+        {
+          "date": "2026-03-01",
+          "event": "reopened",
+          "framework": "kanban_v1",
+          "note": "follow-up tasks added"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "framework migration cycle"
+        }
       ]
     },
     {
-      "id": "M-009",
+      "id": "AU-018",
       "emoji": "\ud83d\uddd3\ufe0f",
       "name": "Data workspace UI (calendar app)",
       "start_week": 8,
@@ -253,10 +436,19 @@
       "task_ids": [
         "T-901",
         "T-902"
+      ],
+      "legacy_id": "M-009",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
       ]
     },
     {
-      "id": "M-010",
+      "id": "AU-019",
       "emoji": "\ud83d\udcc8",
       "name": "Custom marketbook dynamic plotting system",
       "start_week": 9,
@@ -267,10 +459,19 @@
         "T-1002",
         "T-1003",
         "T-1004"
+      ],
+      "legacy_id": "M-010",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
       ]
     },
     {
-      "id": "M-011",
+      "id": "APU-020",
       "emoji": "\ud83e\udded",
       "name": "Native Gantt + Agile visualization in Luvatrix",
       "start_week": 10,
@@ -303,7 +504,28 @@
         "T-1104": "Filtering/zoom/scroll/click-through interactions are deterministic, clamped, and compatible with first-party planning state types.",
         "T-1105": "Export adapters produce ASCII/Markdown/PNG artifacts and Discord payload manifests from first-party planning models.",
         "T-1106": "Validation suite enforces dependency integrity and render consistency; App Protocol compliance evidence is required to clear completion."
-      }
+      },
+      "legacy_id": "M-011",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-28",
+          "event": "closed",
+          "framework": "kanban_v1",
+          "note": "initial sprint closure"
+        },
+        {
+          "date": "2026-03-01",
+          "event": "reopened",
+          "framework": "kanban_v1",
+          "note": "reopened for additional compliance work"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "framework migration cycle"
+        }
+      ]
     }
   ]
 }

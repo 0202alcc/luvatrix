@@ -2,6 +2,8 @@
 
 This directory defines the canonical agile planning model for Luvatrix.
 
+Default framework: `Luvatrix GateFlow (gateflow_v1)`.
+
 ## Core files
 
 1. `tasks_master.json`
@@ -13,10 +15,15 @@ This directory defines the canonical agile planning model for Luvatrix.
 - Single source of truth for all board definitions and display rules.
 - Defines how boards are filtered from `tasks_master.json`.
 - Stores formatting defaults (columns, sort order, card fields, WIP limits).
+- Stores agile framework templates (`framework_templates`) and default template (`default_framework_template`).
 
 3. `tasks_archived.json`
 - Archived historical task ledger.
 - Used when a milestone references tasks that are no longer active.
+
+4. `backlog_misc.json`
+- Misc backlog ledger for carryover, unscoped, or unattached tickets.
+- Use this instead of assigning tickets to placeholder milestones.
 
 ## Contract
 
@@ -26,6 +33,22 @@ This directory defines the canonical agile planning model for Luvatrix.
 4. Renderers/bots should not create new task data outside `tasks_master.json`.
 5. Every milestone in `ops/planning/gantt/milestone_schedule.json` must include non-empty `task_ids`.
 6. Every `task_id` in a milestone must exist in either `tasks_master.json` or `tasks_archived.json`.
+7. Default board template is `gateflow_v1` unless a board overrides `framework_template`.
+8. Misc backlog items must live in `backlog_misc.json` and use `B-###` IDs.
+
+## GateFlow Columns (Default)
+
+1. `Intake`
+2. `Success Criteria Spec`
+3. `Safety Tests Spec`
+4. `Implementation Tests Spec`
+5. `Edge Case Tests Spec`
+6. `Prototype Stage 1`
+7. `Prototype Stage 2+`
+8. `Verification Review`
+9. `Integration Ready`
+10. `Done`
+11. `Blocked`
 
 ## Update workflow
 
@@ -35,6 +58,8 @@ This directory defines the canonical agile planning model for Luvatrix.
 3. Add/update board definition or formatting in `boards_registry.json`.
 4. Ensure each milestone in `milestone_schedule.json` has correct `task_ids`.
 5. Regenerate derived Gantt assets (automatic on API `--apply`).
+6. Edit board/framework definitions via planning API endpoints instead of manual JSON edits.
+7. Use planning API backlog endpoints (`/backlog`) for misc ticket triage.
 
 ## Validation
 

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-03-01
-- Milestone: M-008
+- Milestone: U-017
 - Task: T-811
 - Owner: Runtime/Protocol
 
@@ -14,7 +14,7 @@ The current Planes and runtime conversations use the term "camera" in two differ
 
 Using one word for both concepts causes implementation ambiguity in schema fields, UI IR contracts, runtime code, and documentation.
 
-M-008 expansion work (`T-811 -> T-825`) requires strict naming stability before schema and IR evolution.
+U-017 expansion work (`T-811 -> T-825`) requires strict naming stability before schema and IR evolution.
 
 ## 2) Decision
 
@@ -82,6 +82,6 @@ Trade-offs:
 
 ## 8) Links to Evidence
 
-1. M-008 board: `ops/planning/agile/m008_execution_board.md`
+1. U-017 board: `ops/planning/agile/m008_execution_board.md`
 2. Working scrolling baseline commit: `83d1a2f`
 3. Approved strict chain: `T-811 -> T-825`

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,14 @@ STATUS_EMOJI = {
     "At Risk": "🟠",
     "Blocked": "🔴",
     "Complete": "🟢",
+}
+
+STATUS_CHAR = {
+    "Complete": "=",
+    "In Progress": "#",
+    "Planned": "~",
+    "At Risk": "!",
+    "Blocked": "x",
 }
 
 
@@ -32,10 +41,48 @@ def milestone_status_text(ms: dict) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Generate Discord-friendly pseudo-Gantt markdown.")
+    p = argparse.ArgumentParser(description="Generate detailed ASCII Gantt markdown with emoji milestone labels.")
     p.add_argument("--schedule", default="ops/planning/gantt/milestone_schedule.json")
     p.add_argument("--out", default="ops/planning/gantt/milestones_gantt.md")
     return p.parse_args()
+
+
+def week_to_date(baseline_start: dt.date, week: int) -> dt.date:
+    return baseline_start + dt.timedelta(days=(week - 1) * 7)
+
+
+def build_headers(chart_start: dt.date, total_days: int) -> tuple[str, str]:
+    week_header = [" "] * total_days
+    date_header = [" "] * total_days
+
+    for i in range(total_days):
+        current = chart_start + dt.timedelta(days=i)
+        if i % 7 == 0:
+            week_num = (i // 7) + 1
+            label = f"W{week_num:02d}"
+            for j, ch in enumerate(label):
+                if i + j < total_days:
+                    week_header[i + j] = ch
+
+            date_label = current.strftime("%m/%d")
+            for j, ch in enumerate(date_label):
+                if i + j < total_days:
+                    date_header[i + j] = ch
+
+    return "".join(week_header), "".join(date_header)
+
+
+def build_row(chart_start: dt.date, total_days: int, start_week: int, end_week: int, fill_char: str) -> str:
+    row = [" "] * total_days
+    start_date = week_to_date(chart_start, start_week)
+    end_date = week_to_date(chart_start, end_week) + dt.timedelta(days=6)
+    start_idx = (start_date - chart_start).days
+    end_idx = (end_date - chart_start).days
+    start_idx = max(0, start_idx)
+    end_idx = min(total_days - 1, end_idx)
+    for i in range(start_idx, end_idx + 1):
+        row[i] = fill_char
+    return "".join(row)
 
 
 def render_milestone_details(milestones: list[dict[str, Any]]) -> list[str]:
@@ -51,6 +98,20 @@ def render_milestone_details(milestones: list[dict[str, Any]]) -> list[str]:
         if ms.get("task_ids"):
             task_ids = ", ".join(ms["task_ids"])
             lines.append(f"- Tasks: `{task_ids}`")
+        lifecycle = ms.get("lifecycle_events", [])
+        if lifecycle:
+            lines.append("- Lifecycle events:")
+            for ev in lifecycle:
+                when = ev.get("date", "unknown")
+                event = ev.get("event", "event")
+                framework = ev.get("framework")
+                note = ev.get("note")
+                parts = [f"{when} {event}"]
+                if framework:
+                    parts.append(f"(framework={framework})")
+                if note:
+                    parts.append(f"- {note}")
+                lines.append(f"  - {' '.join(parts)}")
         if ms.get("success_criteria"):
             lines.append("- Success criteria:")
             for criterion in ms["success_criteria"]:
@@ -66,28 +127,39 @@ def render_milestone_details(milestones: list[dict[str, Any]]) -> list[str]:
 def render_markdown(data: dict) -> str:
     milestones = data["milestones"]
     max_week = max(int(m["end_week"]) for m in milestones)
-    week_header = "Weeks: " + " ".join(f"W{w:02d}" for w in range(1, max_week + 1))
+    baseline_start = dt.date.fromisoformat(data["baseline_start_date"])
+    total_days = max_week * 7
+    week_line, date_line = build_headers(baseline_start, total_days)
     max_label = max(len(milestone_label(ms)) for ms in milestones)
+    label_width = max_label + 2
 
     lines: list[str] = []
-    lines.append(f"# {data.get('title', 'Milestone Gantt')}")
+    lines.append("# Detailed ASCII Gantt")
     lines.append("")
-    lines.append(week_header)
-    lines.append("")
-    lines.append("Legend: 🔵 In Progress | ⚪ Planned | 🟠 At Risk | 🔴 Blocked | 🟢 Complete")
+    lines.append(f"Canonical schedule source: `ops/planning/gantt/milestone_schedule.json`")
     lines.append("")
     lines.append("```text")
+    lines.append(f"{'':<{label_width}}|{week_line}|")
+    lines.append(f"{'':<{label_width}}|{date_line}|")
+    lines.append(f"{'-' * label_width}+{'-' * total_days}+")
     for ms in milestones:
-        start = int(ms["start_week"])
-        end = int(ms["end_week"])
-        bar = []
-        for w in range(1, max_week + 1):
-            bar.append("█" if start <= w <= end else "·")
-        label = milestone_label(ms).ljust(max_label)
-        lines.append(f"{label}  {''.join(bar)}  {milestone_status_text(ms)}")
-    lines.append("```")
+        status = ms.get("status", "Planned")
+        fill = STATUS_CHAR.get(status, "~")
+        bar = build_row(
+            baseline_start,
+            total_days,
+            int(ms["start_week"]),
+            int(ms["end_week"]),
+            fill,
+        )
+        label = milestone_label(ms)
+        suffix = status
+        if status == "Complete" and ms.get("completed_on"):
+            suffix = f"Complete ({ms['completed_on']})"
+        lines.append(f"{label:<{label_width}}|{bar}| {suffix}")
     lines.append("")
-    lines.append("Canonical schedule source: `ops/planning/gantt/milestone_schedule.json`")
+    lines.append("Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked")
+    lines.append("```")
     lines.append("")
     lines.extend(render_milestone_details(milestones))
     lines.append("## Branching and Merge Gate Policy")

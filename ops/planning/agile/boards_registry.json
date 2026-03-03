@@ -1,12 +1,56 @@
 {
   "schema_version": "1.0.0",
   "description": "Canonical board definitions and rendering rules. Tasks are selected from tasks_master.json via board type/id filters.",
+  "default_framework_template": "gateflow_v1",
+  "framework_templates": {
+    "kanban_v1": {
+      "description": "Simple Kanban lifecycle.",
+      "status_columns": [
+        "Backlog",
+        "Ready",
+        "In Progress",
+        "Review",
+        "Done",
+        "Blocked"
+      ],
+      "wip_limits": {
+        "In Progress": 3,
+        "Review": 2
+      }
+    },
+    "gateflow_v1": {
+      "description": "Luvatrix GateFlow stage-gated workflow (default).",
+      "status_columns": [
+        "Intake",
+        "Success Criteria Spec",
+        "Safety Tests Spec",
+        "Implementation Tests Spec",
+        "Edge Case Tests Spec",
+        "Prototype Stage 1",
+        "Prototype Stage 2+",
+        "Verification Review",
+        "Integration Ready",
+        "Done",
+        "Blocked"
+      ],
+      "wip_limits": {
+        "Prototype Stage 1": 3,
+        "Prototype Stage 2+": 3,
+        "Verification Review": 2
+      }
+    }
+  },
   "render_defaults": {
     "status_columns": [
-      "Backlog",
-      "Ready",
-      "In Progress",
-      "Review",
+      "Intake",
+      "Success Criteria Spec",
+      "Safety Tests Spec",
+      "Implementation Tests Spec",
+      "Edge Case Tests Spec",
+      "Prototype Stage 1",
+      "Prototype Stage 2+",
+      "Verification Review",
+      "Integration Ready",
       "Done",
       "Blocked"
     ],
@@ -22,8 +66,9 @@
       "depends_on"
     ],
     "wip_limits": {
-      "In Progress": 3,
-      "Review": 2
+      "Prototype Stage 1": 3,
+      "Prototype Stage 2+": 3,
+      "Verification Review": 2
     }
   },
   "board_types": {
@@ -38,15 +83,19 @@
     "specialist": {
       "description": "Cross-milestone board for specialist roles.",
       "default_swimlane": "milestone_id"
+    },
+    "backlog": {
+      "description": "Misc backlog ledger board for carryover/unscoped tickets.",
+      "default_swimlane": "bucket"
     }
   },
   "boards": [
     {
-      "id": "milestone:M-001",
-      "title": "M-001 Discord Infrastructure",
+      "id": "milestone:P-010",
+      "title": "P-010 Discord Infrastructure",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "M-001"
+        "milestone_id": "P-010"
       },
       "discord": {
         "channel": "#milestone-m-001-board",
@@ -54,11 +103,11 @@
       }
     },
     {
-      "id": "milestone:M-002",
-      "title": "M-002 Documentation Completion",
+      "id": "milestone:F-011",
+      "title": "F-011 Documentation Completion",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "M-002"
+        "milestone_id": "F-011"
       },
       "discord": {
         "channel": "#milestone-m-002-board",
@@ -66,11 +115,11 @@
       }
     },
     {
-      "id": "milestone:M-003",
-      "title": "M-003 Vulkan Stabilization",
+      "id": "milestone:R-012",
+      "title": "R-012 Vulkan Stabilization",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "M-003"
+        "milestone_id": "R-012"
       },
       "discord": {
         "channel": "#milestone-m-003-board",
@@ -78,11 +127,11 @@
       }
     },
     {
-      "id": "milestone:M-004",
-      "title": "M-004 CI Hardening",
+      "id": "milestone:P-013",
+      "title": "P-013 CI Hardening",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "M-004"
+        "milestone_id": "P-013"
       },
       "discord": {
         "channel": "#milestone-m-004-board",
@@ -90,11 +139,11 @@
       }
     },
     {
-      "id": "milestone:M-005",
-      "title": "M-005 Retention and Records",
+      "id": "milestone:F-014",
+      "title": "F-014 Retention and Records",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "M-005"
+        "milestone_id": "F-014"
       },
       "discord": {
         "channel": "#milestone-m-005-board",
@@ -102,11 +151,11 @@
       }
     },
     {
-      "id": "milestone:M-006",
-      "title": "M-006 Release Readiness",
+      "id": "milestone:P-015",
+      "title": "P-015 Release Readiness",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "M-006"
+        "milestone_id": "P-015"
       },
       "discord": {
         "channel": "#milestone-m-006-board",
@@ -114,11 +163,11 @@
       }
     },
     {
-      "id": "milestone:M-007",
-      "title": "M-007 Cross-Platform Full Suite",
+      "id": "milestone:ARU-016",
+      "title": "ARU-016 Cross-Platform Full Suite",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "M-007"
+        "milestone_id": "ARU-016"
       },
       "discord": {
         "channel": "#milestone-m-007-board",
@@ -126,11 +175,11 @@
       }
     },
     {
-      "id": "milestone:M-008",
-      "title": "M-008 Visualization UX Expansion",
+      "id": "milestone:U-017",
+      "title": "U-017 Visualization UX Expansion",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "M-008"
+        "milestone_id": "U-017"
       },
       "discord": {
         "channel": "#milestone-m-008-board",
@@ -138,11 +187,11 @@
       }
     },
     {
-      "id": "milestone:M-009",
-      "title": "M-009 Calendar App",
+      "id": "milestone:AU-018",
+      "title": "AU-018 Calendar App",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "M-009"
+        "milestone_id": "AU-018"
       },
       "discord": {
         "channel": "#milestone-m-009-board",
@@ -150,11 +199,11 @@
       }
     },
     {
-      "id": "milestone:M-010",
-      "title": "M-010 Marketbook Plotter",
+      "id": "milestone:AU-019",
+      "title": "AU-019 Marketbook Plotter",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "M-010"
+        "milestone_id": "AU-019"
       },
       "discord": {
         "channel": "#milestone-m-010-board",
@@ -162,11 +211,11 @@
       }
     },
     {
-      "id": "milestone:M-011",
-      "title": "M-011 Native Gantt and Agile Visualization",
+      "id": "milestone:APU-020",
+      "title": "APU-020 Native Gantt and Agile Visualization",
       "type": "milestone",
       "source_filter": {
-        "milestone_id": "M-011"
+        "milestone_id": "APU-020"
       },
       "discord": {
         "channel": "#milestone-m-011-board",
@@ -314,6 +363,19 @@
       },
       "discord": {
         "channel": "#specialist-release-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "backlog:misc",
+      "title": "Misc Backlog Board",
+      "type": "backlog",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "backlog_ledger": "ops/planning/agile/backlog_misc.json"
+      },
+      "discord": {
+        "channel": "#agile-backlog-misc",
         "threads_enabled": true
       }
     }

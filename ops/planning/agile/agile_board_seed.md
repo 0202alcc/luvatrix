@@ -3,11 +3,17 @@
 Use this to initialize all `02_TEAM_AGILE_BOARDS` channels with executable items.
 
 ## Board Workflow
-1. `Backlog`
-2. `Ready`
-3. `In Progress`
-4. `Review`
-5. `Done`
+1. `Intake`
+2. `Success Criteria Spec`
+3. `Safety Tests Spec`
+4. `Implementation Tests Spec`
+5. `Edge Case Tests Spec`
+6. `Prototype Stage 1`
+7. `Prototype Stage 2+`
+8. `Verification Review`
+9. `Integration Ready`
+10. `Done`
+11. `Blocked`
 
 Every card must include:
 1. `Epic ID` (`E-###`)
@@ -26,12 +32,12 @@ Every card must include:
 
 ## Epic and Task Seed
 
-### E-101 (M-001): Discord operations baseline completion
+### E-101 (P-010): Discord operations baseline completion
 1. `T-101` Post artifact pack to mapped channels and pin baselines where allowed.
 2. `T-102` Configure essential defaults for Carl-bot/sesh/MyRepoBot/Ticket Tool.
 3. `T-103` Run rollout checker and publish pass report in `#iteration-reviews`.
 
-### E-201 (M-002): App protocol docs finalization
+### E-201 (F-011): App protocol docs finalization
 1. `T-201` Add complete variant-routing examples to protocol docs.
 2. `T-202` Add compatibility/deprecation matrix and migration notes.
 3. `T-203` Add operator runbook examples and troubleshooting appendix.
@@ -52,34 +58,34 @@ Every card must include:
 18. `T-218` Refactor `planes_v2_poc` to tiny `load_plane_app(...)` pattern using framework-managed Planes pipeline.
 19. `T-219` Add Planes runtime tests/docs for handler dispatch, viewport semantics, and proof command coverage.
 
-### E-701 (M-007): Full-suite interactive cross-platform generalization
+### E-701 (ARU-016): Full-suite interactive cross-platform generalization
 1. `T-701` Add platform-aware runtime path: macOS windowed + non-macOS headless.
 2. `T-702` Keep animation/frame behavior identical across platform paths.
 3. `T-703` Add non-macOS system telemetry providers and unavailable fallbacks.
 4. `T-704` Update tests/docs and validate no regression in dashboard formatting.
 
-### E-301 (M-003): Vulkan stabilization
+### E-301 (R-012): Vulkan stabilization
 1. `T-301` Collect and classify top swapchain/surface/fence failure modes.
 2. `T-302` Add targeted regression tests for each failure class.
 3. `T-303` Implement resiliency fixes and fallback parity checks.
 4. `T-304` Run stability soak and publish defect burn-down.
 
-### E-401 (M-004): CI hardening
+### E-401 (P-013): CI hardening
 1. `T-401` Define deterministic gate ownership and required pass criteria.
 2. `T-402` Add flaky test quarantine + remediation workflow.
 3. `T-403` Improve smoke signal visibility and artifact links.
 
-### E-501 (M-005): Audit retention lifecycle
+### E-501 (F-014): Audit retention lifecycle
 1. `T-501` Define retention policy defaults and rationale.
 2. `T-502` Validate prune/report workflows under realistic load.
 3. `T-503` Publish operational playbook for retention management.
 
-### E-601 (M-006): Production-hardening review
+### E-601 (P-015): Production-hardening review
 1. `T-601` Assemble milestone completion evidence packet.
 2. `T-602` Review unresolved risks/defects and required mitigations.
 3. `T-603` Publish go/no-go recommendation with rationale and decision log links.
 
-### E-801 (M-008): Plot UX foundations
+### E-801 (U-017): Plot UX foundations
 1. `T-801` Sideways x-axis rule labels for long names with readable wrapping/fallbacks.
 2. `T-802` Bar chart renderer support (static + interactive parity).
 3. `T-803` Multiple plot support (subplot-like layout orchestration).
@@ -87,29 +93,29 @@ Every card must include:
 5. `T-805` Table UI component system (sortable columns, pagination/virtualization, keyboard access).
 6. Dependency order: `T-801 -> T-802 -> T-803 -> T-804 -> T-805`.
 
-### E-901 (M-009): Data workspace UI
+### E-901 (AU-018): Data workspace UI
 1. `T-901` Calendar app component (day/week/month views + event rendering contract).
 2. `T-902` Calendar workflow integration with data workspace navigation/state sync.
 3. Dependency order: `T-901 -> T-902`.
 
-### E-1001 (M-010): Marketbook plotting system
+### E-1001 (AU-019): Marketbook plotting system
 1. `T-1001` Marketbook schema + ingestion adapter contract.
 2. `T-1002` Dedicated dynamic marketbook renderer (depth ladder, spread, imbalance traces).
 3. `T-1003` Streaming update strategy + latency/perf budgets.
 4. `T-1004` Regression/safety tests and operator docs.
 5. Dependency order: `T-1001 -> T-1002 -> T-1003 -> T-1004`.
 
-### E-1101 (M-011): Native Gantt + Agile visualization
+### E-1101 (APU-020): Native Gantt + Agile visualization
 1. `T-1101` Define canonical timeline/task schema for Gantt + Agile cards (milestones, tasks, status, deps, owners).
 2. `T-1102` Build Luvatrix Gantt renderer (time axis, status colors, dependency lines, collapsed/expanded lanes).
-3. `T-1103` Build Luvatrix Agile board renderer (Backlog/Ready/In Progress/Review/Done, swimlanes, blockers).
+3. `T-1103` Build Luvatrix Agile board renderer (GateFlow columns, swimlanes, blockers).
 4. `T-1104` Add interaction layer (filtering, zoom/scroll, click-through from milestone -> task cards).
 5. `T-1105` Add export adapters (ASCII/Markdown/PNG) and Discord posting payload compatibility.
 6. `T-1106` Add validation suite (render correctness, dependency integrity, snapshot/regression tests).
 7. Dependency order: `T-1101 -> T-1102 -> T-1103 -> T-1104 -> T-1105 -> T-1106`.
-8. Mandatory success criteria: all `M-011` deliverables must follow first-party Luvatrix App Protocol contracts and remain first-party module driven (no external UI runtime coupling).
+8. Mandatory success criteria: all `APU-020` deliverables must follow first-party Luvatrix App Protocol contracts and remain first-party module driven (no external UI runtime coupling).
 9. Acceptance gate: do not move any `T-110#` to `Done` without evidence that schema/renderer/interaction/export/validation behavior is deterministic and App Protocol-compliant.
-10. Scope note: `M-011` does not require standalone data-table UX; it depends on timeline/board visualization primitives and shared viewport interactions.
+10. Scope note: `APU-020` does not require standalone data-table UX; it depends on timeline/board visualization primitives and shared viewport interactions.
 
 ## Master Ordered Execution Chain (As Requested)
 1. `T-801` Sideways x labels

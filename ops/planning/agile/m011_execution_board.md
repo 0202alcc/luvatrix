@@ -1,12 +1,12 @@
-# M-011 Execution Board
+# APU-020 Execution Board
 
-Milestone: `M-011` Native Gantt + Agile visualization in Luvatrix
+Milestone: `APU-020` Native Gantt + Agile visualization in Luvatrix
 Epic: `E-1101`
 Task chain: `T-1101 -> T-1102 -> T-1103 -> T-1104 -> T-1105 -> T-1106`
 Last updated: `2026-03-01` (reopened)
 
 ## Success Criteria (Mandatory)
-1. `M-011` implementations must follow the first-party Luvatrix App Protocol contract (no external UI framework coupling for runtime flows).
+1. `APU-020` implementations must follow the first-party Luvatrix App Protocol contract (no external UI framework coupling for runtime flows).
 2. Contracts must be represented as first-party `luvatrix_ui.planning` types and exported through `luvatrix_ui`.
 3. Visualization flows must remain runnable through first-party runtime-compatible outputs (ASCII/Markdown/PNG) with deterministic results.
 4. Completion requires explicit App Protocol compliance evidence (schema/renderer/interaction/export/validation behavior proven under first-party workflow commands).
@@ -40,7 +40,7 @@ Last updated: `2026-03-01` (reopened)
 1. None.
 
 ## Completion Gate
-1. Milestone `M-011` is **reopened** and not complete.
+1. Milestone `APU-020` is **reopened** and not complete.
 2. Completion is blocked pending App Protocol-compliant acceptance checks across `T-1101..T-1106`.
 
 ## Evidence Log
@@ -49,7 +49,7 @@ Last updated: `2026-03-01` (reopened)
 3. `2026-02-28`: Existing Discord scripts smoke check passed:
 - `uv run python ops/discord/scripts/generate_gantt_markdown.py --schedule ops/planning/gantt/milestone_schedule.json --out /tmp/m011_smoke_gantt.md`
 - `uv run python ops/discord/scripts/generate_gantt_ascii_detailed.py --schedule ops/planning/gantt/milestone_schedule.json --out /tmp/m011_smoke_gantt_detailed.txt`
-4. `2026-02-28`: `T-1103` moved to `In Progress` to continue M-011 implementation while M-008 progresses in a separate thread.
+4. `2026-02-28`: `T-1103` moved to `In Progress` to continue APU-020 implementation while U-017 progresses in a separate thread.
 5. `2026-02-28`: `T-1103` moved to `Review` after agile renderer tests passed.
 6. `2026-02-28`: `T-1104` moved to `In Progress`.
 7. `2026-02-28`: `T-1104` moved to `Review` after interaction-layer tests passed.
@@ -57,20 +57,20 @@ Last updated: `2026-03-01` (reopened)
 9. `2026-02-28`: `T-1105` moved to `Review` after exporter tests and demo artifacts passed.
 10. `2026-02-28`: `T-1106` moved to `In Progress`.
 11. `2026-02-28`: `T-1106` moved to `Review` after validation-suite tests passed.
-12. `2026-02-28`: Full M-011 demo rerun passed:
+12. `2026-02-28`: Full APU-020 demo rerun passed:
 - `uv run python examples/m011_native_gantt_demo.py` -> `ops/discord/ops/m011_native_gantt_demo.txt`, `ops/discord/ops/m011_native_exports/*`.
-13. `2026-02-28`: Existing Discord scripts smoke check passed after M-011 updates:
+13. `2026-02-28`: Existing Discord scripts smoke check passed after APU-020 updates:
 - `uv run python ops/discord/scripts/generate_gantt_markdown.py --schedule ops/planning/gantt/milestone_schedule.json --out /tmp/m011_postchange_gantt.md`
 - `uv run python ops/discord/scripts/generate_gantt_ascii_detailed.py --schedule ops/planning/gantt/milestone_schedule.json --out /tmp/m011_postchange_gantt_detailed.txt`
-14. `2026-02-28`: Full M-011 suite rerun passed (`20/20`) and demo export rerun passed.
-15. `2026-02-28`: `T-1101..T-1106` moved from `Review` to `Done` by request, with milestone completion gate held pending post-merge `M-008` integration validation.
+14. `2026-02-28`: Full APU-020 suite rerun passed (`20/20`) and demo export rerun passed.
+15. `2026-02-28`: `T-1101..T-1106` moved from `Review` to `Done` by request, with milestone completion gate held pending post-merge `U-017` integration validation.
 16. `2026-03-01`: Post-merge integration gate passed:
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py tests/test_luvatrix_ui_agile_renderer.py tests/test_luvatrix_ui_planning_interaction.py tests/test_luvatrix_ui_planning_exporters.py tests/test_luvatrix_ui_planning_validation.py tests/test_luvatrix_ui_planning_schema.py tests/test_luvatrix_ui_gantt_renderer.py` (`87 passed`)
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
 - `uv run python examples/m011_native_gantt_demo.py`
 - `uv run python ops/discord/scripts/generate_gantt_markdown.py --schedule ops/planning/gantt/milestone_schedule.json --out /tmp/m011_complete_gate_gantt.md`
 - `uv run python ops/discord/scripts/generate_gantt_ascii_detailed.py --schedule ops/planning/gantt/milestone_schedule.json --out /tmp/m011_complete_gate_gantt_detailed.txt`
-17. `2026-03-01`: Completion gate closed; milestone `M-011` marked complete.
+17. `2026-03-01`: Completion gate closed; milestone `APU-020` marked complete.
 18. `2026-03-01`: Milestone reopened by directive; `T-1101..T-1106` moved back to `In Progress`, completion gate re-enabled.
 19. `2026-03-01`: Success criteria updated: first-party App Protocol compliance is mandatory, with explicit acceptance checks added for `T-1101..T-1106`.
 20. `2026-03-01`: First-party App Protocol success criteria + `T-1101..T-1106` acceptance checks synchronized into `ops/planning/gantt/milestone_schedule.json` and `ops/planning/gantt/milestones_gantt.md`.

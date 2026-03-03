@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-03-01
-- Milestone: M-008
+- Milestone: U-017
 - Task: T-814
 - Owner: Runtime/Input
 
@@ -110,6 +110,6 @@ Trade-offs:
 
 ## 12) Links to Evidence
 
-1. M-008 board: `ops/planning/agile/m008_execution_board.md`
+1. U-017 board: `ops/planning/agile/m008_execution_board.md`
 2. Prerequisites: `ADR-006`, `ADR-007`, `ADR-008`
 3. Continuation chain: `T-814 -> T-825`

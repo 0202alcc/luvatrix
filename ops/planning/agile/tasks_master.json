@@ -8,23 +8,34 @@
     "specialist": "Specialist role boards (cross-milestone by function)."
   },
   "status_values": [
+    "Intake",
+    "Success Criteria Spec",
+    "Safety Tests Spec",
+    "Implementation Tests Spec",
+    "Edge Case Tests Spec",
+    "Prototype Stage 1",
+    "Prototype Stage 2+",
+    "Verification Review",
+    "Integration Ready",
+    "Done",
+    "Blocked"
+  ],
+  "legacy_status_values": [
     "Backlog",
     "Ready",
     "In Progress",
-    "Review",
-    "Done",
-    "Blocked"
+    "Review"
   ],
   "tasks": [
     {
       "id": "T-101",
       "title": "Post artifact pack to mapped channels and pin baselines where allowed.",
       "epic_id": "E-101",
-      "milestone_id": "M-001",
+      "milestone_id": "P-010",
       "status": "Backlog",
       "depends_on": [],
       "board_refs": [
-        "milestone:M-001",
+        "milestone:P-010",
         "team:platform-ci",
         "specialist:pm"
       ]
@@ -33,13 +44,13 @@
       "id": "T-102",
       "title": "Configure essential defaults for Carl-bot/sesh/MyRepoBot/Ticket Tool.",
       "epic_id": "E-101",
-      "milestone_id": "M-001",
+      "milestone_id": "P-010",
       "status": "Backlog",
       "depends_on": [
         "T-101"
       ],
       "board_refs": [
-        "milestone:M-001",
+        "milestone:P-010",
         "team:platform-ci",
         "specialist:development"
       ]
@@ -48,13 +59,13 @@
       "id": "T-103",
       "title": "Run rollout checker and publish pass report in #iteration-reviews.",
       "epic_id": "E-101",
-      "milestone_id": "M-001",
+      "milestone_id": "P-010",
       "status": "Backlog",
       "depends_on": [
         "T-102"
       ],
       "board_refs": [
-        "milestone:M-001",
+        "milestone:P-010",
         "team:platform-ci",
         "specialist:testing"
       ]
@@ -63,11 +74,11 @@
       "id": "T-201",
       "title": "Add complete variant-routing examples to protocol docs.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:protocol",
         "specialist:architecture"
       ]
@@ -76,13 +87,13 @@
       "id": "T-202",
       "title": "Add compatibility/deprecation matrix and migration notes.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-201"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:protocol",
         "specialist:pm"
       ]
@@ -91,13 +102,13 @@
       "id": "T-203",
       "title": "Add operator runbook examples and troubleshooting appendix.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-202"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:protocol",
         "specialist:testing"
       ]
@@ -106,11 +117,11 @@
       "id": "T-301",
       "title": "Collect and classify top swapchain/surface/fence failure modes.",
       "epic_id": "E-301",
-      "milestone_id": "M-003",
+      "milestone_id": "R-012",
       "status": "Backlog",
       "depends_on": [],
       "board_refs": [
-        "milestone:M-003",
+        "milestone:R-012",
         "team:rendering",
         "specialist:testing"
       ]
@@ -119,13 +130,13 @@
       "id": "T-302",
       "title": "Add targeted regression tests for each failure class.",
       "epic_id": "E-301",
-      "milestone_id": "M-003",
+      "milestone_id": "R-012",
       "status": "Backlog",
       "depends_on": [
         "T-301"
       ],
       "board_refs": [
-        "milestone:M-003",
+        "milestone:R-012",
         "team:rendering",
         "specialist:testing"
       ]
@@ -134,13 +145,13 @@
       "id": "T-303",
       "title": "Implement resiliency fixes and fallback parity checks.",
       "epic_id": "E-301",
-      "milestone_id": "M-003",
+      "milestone_id": "R-012",
       "status": "Backlog",
       "depends_on": [
         "T-302"
       ],
       "board_refs": [
-        "milestone:M-003",
+        "milestone:R-012",
         "team:rendering",
         "specialist:development"
       ]
@@ -149,13 +160,13 @@
       "id": "T-304",
       "title": "Run stability soak and publish defect burn-down.",
       "epic_id": "E-301",
-      "milestone_id": "M-003",
+      "milestone_id": "R-012",
       "status": "Backlog",
       "depends_on": [
         "T-303"
       ],
       "board_refs": [
-        "milestone:M-003",
+        "milestone:R-012",
         "team:runtime",
         "specialist:qa"
       ]
@@ -164,11 +175,11 @@
       "id": "T-401",
       "title": "Define deterministic gate ownership and required pass criteria.",
       "epic_id": "E-401",
-      "milestone_id": "M-004",
+      "milestone_id": "P-013",
       "status": "Backlog",
       "depends_on": [],
       "board_refs": [
-        "milestone:M-004",
+        "milestone:P-013",
         "team:platform-ci",
         "specialist:pm"
       ]
@@ -177,13 +188,13 @@
       "id": "T-402",
       "title": "Add flaky test quarantine + remediation workflow.",
       "epic_id": "E-401",
-      "milestone_id": "M-004",
+      "milestone_id": "P-013",
       "status": "Backlog",
       "depends_on": [
         "T-401"
       ],
       "board_refs": [
-        "milestone:M-004",
+        "milestone:P-013",
         "team:platform-ci",
         "specialist:qa"
       ]
@@ -192,13 +203,13 @@
       "id": "T-403",
       "title": "Improve smoke signal visibility and artifact links.",
       "epic_id": "E-401",
-      "milestone_id": "M-004",
+      "milestone_id": "P-013",
       "status": "Backlog",
       "depends_on": [
         "T-401"
       ],
       "board_refs": [
-        "milestone:M-004",
+        "milestone:P-013",
         "team:platform-ci",
         "specialist:development"
       ]
@@ -207,11 +218,11 @@
       "id": "T-501",
       "title": "Define retention policy defaults and rationale.",
       "epic_id": "E-501",
-      "milestone_id": "M-005",
+      "milestone_id": "F-014",
       "status": "Backlog",
       "depends_on": [],
       "board_refs": [
-        "milestone:M-005",
+        "milestone:F-014",
         "team:security-quality",
         "specialist:safety"
       ]
@@ -220,13 +231,13 @@
       "id": "T-502",
       "title": "Validate prune/report workflows under realistic load.",
       "epic_id": "E-501",
-      "milestone_id": "M-005",
+      "milestone_id": "F-014",
       "status": "Backlog",
       "depends_on": [
         "T-501"
       ],
       "board_refs": [
-        "milestone:M-005",
+        "milestone:F-014",
         "team:security-quality",
         "specialist:qa"
       ]
@@ -235,13 +246,13 @@
       "id": "T-503",
       "title": "Publish operational playbook for retention management.",
       "epic_id": "E-501",
-      "milestone_id": "M-005",
+      "milestone_id": "F-014",
       "status": "Backlog",
       "depends_on": [
         "T-502"
       ],
       "board_refs": [
-        "milestone:M-005",
+        "milestone:F-014",
         "team:security-quality",
         "specialist:pm"
       ]
@@ -250,11 +261,11 @@
       "id": "T-601",
       "title": "Assemble milestone completion evidence packet.",
       "epic_id": "E-601",
-      "milestone_id": "M-006",
+      "milestone_id": "P-015",
       "status": "Backlog",
       "depends_on": [],
       "board_refs": [
-        "milestone:M-006",
+        "milestone:P-015",
         "team:security-quality",
         "specialist:release"
       ]
@@ -263,13 +274,13 @@
       "id": "T-602",
       "title": "Review unresolved risks/defects and required mitigations.",
       "epic_id": "E-601",
-      "milestone_id": "M-006",
+      "milestone_id": "P-015",
       "status": "Backlog",
       "depends_on": [
         "T-601"
       ],
       "board_refs": [
-        "milestone:M-006",
+        "milestone:P-015",
         "team:security-quality",
         "specialist:safety"
       ]
@@ -278,13 +289,13 @@
       "id": "T-603",
       "title": "Publish go/no-go recommendation with rationale and decision log links.",
       "epic_id": "E-601",
-      "milestone_id": "M-006",
+      "milestone_id": "P-015",
       "status": "Backlog",
       "depends_on": [
         "T-602"
       ],
       "board_refs": [
-        "milestone:M-006",
+        "milestone:P-015",
         "team:security-quality",
         "specialist:release"
       ]
@@ -293,11 +304,11 @@
       "id": "T-701",
       "title": "Add platform-aware runtime path: macOS windowed + non-macOS headless.",
       "epic_id": "E-701",
-      "milestone_id": "M-007",
+      "milestone_id": "ARU-016",
       "status": "Backlog",
       "depends_on": [],
       "board_refs": [
-        "milestone:M-007",
+        "milestone:ARU-016",
         "team:runtime",
         "specialist:development"
       ]
@@ -306,13 +317,13 @@
       "id": "T-702",
       "title": "Keep animation/frame behavior identical across platform paths.",
       "epic_id": "E-701",
-      "milestone_id": "M-007",
+      "milestone_id": "ARU-016",
       "status": "Backlog",
       "depends_on": [
         "T-701"
       ],
       "board_refs": [
-        "milestone:M-007",
+        "milestone:ARU-016",
         "team:runtime",
         "specialist:qa"
       ]
@@ -321,13 +332,13 @@
       "id": "T-703",
       "title": "Add non-macOS system telemetry providers and unavailable fallbacks.",
       "epic_id": "E-701",
-      "milestone_id": "M-007",
+      "milestone_id": "ARU-016",
       "status": "Backlog",
       "depends_on": [
         "T-701"
       ],
       "board_refs": [
-        "milestone:M-007",
+        "milestone:ARU-016",
         "team:runtime",
         "specialist:safety"
       ]
@@ -336,14 +347,14 @@
       "id": "T-704",
       "title": "Update tests/docs and validate no regression in dashboard formatting.",
       "epic_id": "E-701",
-      "milestone_id": "M-007",
+      "milestone_id": "ARU-016",
       "status": "Backlog",
       "depends_on": [
         "T-702",
         "T-703"
       ],
       "board_refs": [
-        "milestone:M-007",
+        "milestone:ARU-016",
         "team:runtime",
         "specialist:testing"
       ]
@@ -352,11 +363,11 @@
       "id": "T-801",
       "title": "Sideways x-axis rule labels for long names with readable wrapping/fallbacks.",
       "epic_id": "E-801",
-      "milestone_id": "M-008",
+      "milestone_id": "U-017",
       "status": "Backlog",
       "depends_on": [],
       "board_refs": [
-        "milestone:M-008",
+        "milestone:U-017",
         "team:rendering",
         "specialist:development"
       ]
@@ -365,13 +376,13 @@
       "id": "T-802",
       "title": "Bar chart renderer support (static + interactive parity).",
       "epic_id": "E-801",
-      "milestone_id": "M-008",
+      "milestone_id": "U-017",
       "status": "Backlog",
       "depends_on": [
         "T-801"
       ],
       "board_refs": [
-        "milestone:M-008",
+        "milestone:U-017",
         "team:rendering",
         "specialist:development"
       ]
@@ -380,13 +391,13 @@
       "id": "T-803",
       "title": "Multiple plot support (subplot-like layout orchestration).",
       "epic_id": "E-801",
-      "milestone_id": "M-008",
+      "milestone_id": "U-017",
       "status": "Backlog",
       "depends_on": [
         "T-802"
       ],
       "board_refs": [
-        "milestone:M-008",
+        "milestone:U-017",
         "team:rendering",
         "specialist:architecture"
       ]
@@ -395,13 +406,13 @@
       "id": "T-804",
       "title": "Scrolling and viewport controls for dense plot surfaces.",
       "epic_id": "E-801",
-      "milestone_id": "M-008",
+      "milestone_id": "U-017",
       "status": "Backlog",
       "depends_on": [
         "T-803"
       ],
       "board_refs": [
-        "milestone:M-008",
+        "milestone:U-017",
         "team:runtime",
         "specialist:qa"
       ]
@@ -410,28 +421,58 @@
       "id": "T-805",
       "title": "Table UI component system (sortable columns, pagination/virtualization, keyboard access).",
       "epic_id": "E-801",
-      "milestone_id": "M-008",
+      "milestone_id": "U-017",
       "status": "Backlog",
       "depends_on": [
         "T-804"
       ],
       "board_refs": [
-        "milestone:M-008",
+        "milestone:U-017",
         "team:runtime",
         "specialist:development"
+      ]
+    },
+    {
+      "id": "T-834",
+      "title": "Define and implement native hot-path extraction plan for high-frequency camera/compose operations.",
+      "epic_id": "E-801",
+      "milestone_id": "U-017",
+      "status": "Backlog",
+      "depends_on": [
+        "T-833"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:runtime",
+        "specialist:architecture"
+      ]
+    },
+    {
+      "id": "T-835",
+      "title": "Implement CI performance gate pack for camera-scroll, compositor, and frame-budget thresholds.",
+      "epic_id": "E-801",
+      "milestone_id": "U-017",
+      "status": "Backlog",
+      "depends_on": [
+        "T-834"
+      ],
+      "board_refs": [
+        "milestone:U-017",
+        "team:platform-ci",
+        "specialist:testing"
       ]
     },
     {
       "id": "T-836",
       "title": "Implement shift-blit camera scroll compose path (translate previous frame + redraw exposed strips only).",
       "epic_id": "E-801",
-      "milestone_id": "M-008",
+      "milestone_id": "U-017",
       "status": "Backlog",
       "depends_on": [
         "T-835"
       ],
       "board_refs": [
-        "milestone:M-008",
+        "milestone:U-017",
         "team:runtime",
         "specialist:development"
       ]
@@ -440,13 +481,13 @@
       "id": "T-837",
       "title": "Add pre-rasterized bitmap cache path for stable SVG/text components during camera scrolling.",
       "epic_id": "E-801",
-      "milestone_id": "M-008",
+      "milestone_id": "U-017",
       "status": "Backlog",
       "depends_on": [
         "T-836"
       ],
       "board_refs": [
-        "milestone:M-008",
+        "milestone:U-017",
         "team:rendering",
         "specialist:development"
       ]
@@ -455,13 +496,13 @@
       "id": "T-838",
       "title": "Add frame-paced scroll scheduler (coalesced input -> one render cadence update).",
       "epic_id": "E-801",
-      "milestone_id": "M-008",
+      "milestone_id": "U-017",
       "status": "Backlog",
       "depends_on": [
         "T-837"
       ],
       "board_refs": [
-        "milestone:M-008",
+        "milestone:U-017",
         "team:runtime",
         "specialist:architecture"
       ]
@@ -470,13 +511,13 @@
       "id": "T-839",
       "title": "Decouple input ingestion from render thread using deterministic intent queue handoff.",
       "epic_id": "E-801",
-      "milestone_id": "M-008",
+      "milestone_id": "U-017",
       "status": "Backlog",
       "depends_on": [
         "T-838"
       ],
       "board_refs": [
-        "milestone:M-008",
+        "milestone:U-017",
         "team:runtime",
         "specialist:architecture"
       ]
@@ -485,13 +526,13 @@
       "id": "T-840",
       "title": "Finalize scroll performance validation pack (latency/jitter budgets + visual artifact regression gates).",
       "epic_id": "E-801",
-      "milestone_id": "M-008",
+      "milestone_id": "U-017",
       "status": "Backlog",
       "depends_on": [
         "T-839"
       ],
       "board_refs": [
-        "milestone:M-008",
+        "milestone:U-017",
         "team:platform-ci",
         "specialist:qa"
       ]
@@ -500,11 +541,11 @@
       "id": "T-901",
       "title": "Calendar app component (day/week/month views + event rendering contract).",
       "epic_id": "E-901",
-      "milestone_id": "M-009",
+      "milestone_id": "AU-018",
       "status": "Backlog",
       "depends_on": [],
       "board_refs": [
-        "milestone:M-009",
+        "milestone:AU-018",
         "team:runtime",
         "specialist:development"
       ]
@@ -513,13 +554,13 @@
       "id": "T-902",
       "title": "Calendar workflow integration with data workspace navigation/state sync.",
       "epic_id": "E-901",
-      "milestone_id": "M-009",
+      "milestone_id": "AU-018",
       "status": "Backlog",
       "depends_on": [
         "T-901"
       ],
       "board_refs": [
-        "milestone:M-009",
+        "milestone:AU-018",
         "team:runtime",
         "specialist:qa"
       ]
@@ -528,11 +569,11 @@
       "id": "T-1001",
       "title": "Marketbook schema + ingestion adapter contract.",
       "epic_id": "E-1001",
-      "milestone_id": "M-010",
+      "milestone_id": "AU-019",
       "status": "Backlog",
       "depends_on": [],
       "board_refs": [
-        "milestone:M-010",
+        "milestone:AU-019",
         "team:protocol",
         "specialist:architecture"
       ]
@@ -541,13 +582,13 @@
       "id": "T-1002",
       "title": "Dedicated dynamic marketbook renderer (depth ladder, spread, imbalance traces).",
       "epic_id": "E-1001",
-      "milestone_id": "M-010",
+      "milestone_id": "AU-019",
       "status": "Backlog",
       "depends_on": [
         "T-1001"
       ],
       "board_refs": [
-        "milestone:M-010",
+        "milestone:AU-019",
         "team:rendering",
         "specialist:development"
       ]
@@ -556,13 +597,13 @@
       "id": "T-1003",
       "title": "Streaming update strategy + latency/perf budgets.",
       "epic_id": "E-1001",
-      "milestone_id": "M-010",
+      "milestone_id": "AU-019",
       "status": "Backlog",
       "depends_on": [
         "T-1002"
       ],
       "board_refs": [
-        "milestone:M-010",
+        "milestone:AU-019",
         "team:runtime",
         "specialist:qa"
       ]
@@ -571,13 +612,13 @@
       "id": "T-1004",
       "title": "Regression/safety tests and operator docs.",
       "epic_id": "E-1001",
-      "milestone_id": "M-010",
+      "milestone_id": "AU-019",
       "status": "Backlog",
       "depends_on": [
         "T-1003"
       ],
       "board_refs": [
-        "milestone:M-010",
+        "milestone:AU-019",
         "team:security-quality",
         "specialist:testing"
       ]
@@ -586,11 +627,11 @@
       "id": "T-1101",
       "title": "Define canonical timeline/task schema for Gantt + Agile cards.",
       "epic_id": "E-1101",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Backlog",
       "depends_on": [],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:rendering",
         "specialist:architecture"
       ]
@@ -599,13 +640,13 @@
       "id": "T-1102",
       "title": "Build Luvatrix Gantt renderer (axis/status/dependency lanes).",
       "epic_id": "E-1101",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Backlog",
       "depends_on": [
         "T-1101"
       ],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:rendering",
         "specialist:development"
       ]
@@ -614,13 +655,13 @@
       "id": "T-1103",
       "title": "Build Luvatrix Agile board renderer (columns/swimlanes/blockers).",
       "epic_id": "E-1101",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Backlog",
       "depends_on": [
         "T-1102"
       ],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:rendering",
         "specialist:development"
       ]
@@ -629,13 +670,13 @@
       "id": "T-1104",
       "title": "Add interaction layer (filter/zoom/scroll/click-through).",
       "epic_id": "E-1101",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Backlog",
       "depends_on": [
         "T-1103"
       ],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:runtime",
         "specialist:qa"
       ]
@@ -644,13 +685,13 @@
       "id": "T-1105",
       "title": "Add export adapters (ASCII/Markdown/PNG) and Discord payload compatibility.",
       "epic_id": "E-1101",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Backlog",
       "depends_on": [
         "T-1104"
       ],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:runtime",
         "specialist:release"
       ]
@@ -659,13 +700,13 @@
       "id": "T-1106",
       "title": "Add validation suite (render correctness + dependency integrity).",
       "epic_id": "E-1101",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Backlog",
       "depends_on": [
         "T-1105"
       ],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:platform-ci",
         "specialist:testing"
       ]
@@ -674,13 +715,13 @@
       "id": "T-1107",
       "title": "Define Agile source-of-truth contract (tasks master + board registry + data workflow).",
       "epic_id": "E-1102",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Done",
       "depends_on": [
         "T-1101"
       ],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:protocol",
         "specialist:architecture"
       ]
@@ -689,13 +730,13 @@
       "id": "T-1108",
       "title": "Backfill milestone task indexes and create archived task ledger for historical milestones.",
       "epic_id": "E-1102",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Done",
       "depends_on": [
         "T-1107"
       ],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:platform-ci",
         "specialist:pm"
       ]
@@ -704,13 +745,13 @@
       "id": "T-1109",
       "title": "Implement milestone-task link validator enforcing active/archived resolution.",
       "epic_id": "E-1102",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Done",
       "depends_on": [
         "T-1108"
       ],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:platform-ci",
         "specialist:testing"
       ]
@@ -719,13 +760,13 @@
       "id": "T-1110",
       "title": "Build standardized endpoint-style planning API for safe milestone/task CRUD.",
       "epic_id": "E-1102",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Done",
       "depends_on": [
         "T-1109"
       ],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:runtime",
         "specialist:development"
       ]
@@ -734,13 +775,13 @@
       "id": "T-1111",
       "title": "Document planning API usage and verify data-integrity smoke tests.",
       "epic_id": "E-1102",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Done",
       "depends_on": [
         "T-1110"
       ],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:platform-ci",
         "specialist:release"
       ]
@@ -749,13 +790,13 @@
       "id": "T-1112",
       "title": "Consolidate Gantt markdown outputs into a single canonical milestones_gantt.md and retire legacy .txt/.md duplicates.",
       "epic_id": "E-1102",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Done",
       "depends_on": [
         "T-1110"
       ],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:protocol",
         "specialist:development"
       ]
@@ -764,13 +805,13 @@
       "id": "T-1113",
       "title": "Wire planning API apply path to auto-regenerate Gantt markdown/detailed markdown/PNG artifacts after successful writes.",
       "epic_id": "E-1102",
-      "milestone_id": "M-011",
+      "milestone_id": "APU-020",
       "status": "Done",
       "depends_on": [
         "T-1112"
       ],
       "board_refs": [
-        "milestone:M-011",
+        "milestone:APU-020",
         "team:platform-ci",
         "specialist:testing"
       ]
@@ -779,13 +820,13 @@
       "id": "T-204",
       "title": "Define App Protocol v2 superset wire spec with v1 backward-compatibility guarantees.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-203"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:protocol",
         "specialist:architecture"
       ]
@@ -794,13 +835,13 @@
       "id": "T-205",
       "title": "Implement runtime adapter layer (python in-process baseline + process runtime hooks) for protocol v2 execution.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-204"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:runtime",
         "specialist:development"
       ]
@@ -809,13 +850,13 @@
       "id": "T-206",
       "title": "Deliver Python-first protocol v2 process lane (stdio transport + reference worker SDK/client) while keeping v1 behavior unchanged.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-205"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:runtime",
         "team:protocol",
         "specialist:development"
@@ -825,13 +866,13 @@
       "id": "T-207",
       "title": "Extend app manifest/governance for v2 runtime fields with strict compatibility policy and v1-safe defaults.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-204"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:protocol",
         "specialist:architecture",
         "specialist:pm"
@@ -841,7 +882,7 @@
       "id": "T-208",
       "title": "Add protocol v1/v2 conformance matrix and CI gates for adapter/runtime compatibility and deterministic render outputs.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-205",
@@ -849,7 +890,7 @@
         "T-207"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:platform-ci",
         "team:protocol",
         "specialist:testing"
@@ -859,13 +900,13 @@
       "id": "T-209",
       "title": "Publish v1-to-v2 migration guide and runbook updates for first-party app teams (Python-first, multi-language ready).",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-208"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:protocol",
         "team:security-quality",
         "specialist:pm"
@@ -875,13 +916,13 @@
       "id": "T-210",
       "title": "Finalize Planes Protocol v0 core schema (app/plane/component contracts, metadata inheritance, unit normalization).",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-209"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:protocol",
         "specialist:architecture"
       ]
@@ -890,13 +931,13 @@
       "id": "T-211",
       "title": "Standardize Planes interaction hooks against HDI-normalized phases and event payload contracts.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-210"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:protocol",
         "team:runtime",
         "specialist:development"
@@ -906,13 +947,13 @@
       "id": "T-212",
       "title": "Define Planes script registry and deterministic function target resolution (<script_id>::<function_name>) with strict-mode failures.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-210"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:protocol",
         "team:security-quality",
         "specialist:safety"
@@ -922,13 +963,13 @@
       "id": "T-213",
       "title": "Specify Planes viewport clipping and scroll-window semantics (coordinate remap, bounds, deterministic pan behavior).",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-210"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:rendering",
         "team:runtime",
         "specialist:development"
@@ -938,14 +979,14 @@
       "id": "T-214",
       "title": "Define Planes Gantt+Agile feature profile and status-theming contract for first-party planning app templates.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-210",
         "T-213"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:protocol",
         "team:rendering",
         "specialist:pm"
@@ -955,7 +996,7 @@
       "id": "T-215",
       "title": "Implement deterministic compiler mapping from Planes JSON to shared UI IR (draw/hit-test ordering + frame transforms).",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-211",
@@ -964,7 +1005,7 @@
         "T-214"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:runtime",
         "team:protocol",
         "specialist:development"
@@ -974,13 +1015,13 @@
       "id": "T-216",
       "title": "Add Planes strict/permissive schema validation and conformance tests (including v1/v2 protocol integration gates).",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-215"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:platform-ci",
         "team:protocol",
         "specialist:testing"
@@ -990,13 +1031,13 @@
       "id": "T-217",
       "title": "Implement first-party Planes runtime loader API (load_plane_app) so apps can run from plane.json without custom compile/render boilerplate.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-216"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:runtime",
         "team:protocol",
         "specialist:development"
@@ -1006,13 +1047,13 @@
       "id": "T-218",
       "title": "Refactor planes_v2_poc example to tiny load_plane_app(...) pattern using framework-managed Planes compile/render pipeline.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-217"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:runtime",
         "team:protocol",
         "specialist:development"
@@ -1022,13 +1063,13 @@
       "id": "T-219",
       "title": "Add Planes runtime tests/docs for handler dispatch, viewport semantics, and proof command coverage.",
       "epic_id": "E-201",
-      "milestone_id": "M-002",
+      "milestone_id": "F-011",
       "status": "Done",
       "depends_on": [
         "T-218"
       ],
       "board_refs": [
-        "milestone:M-002",
+        "milestone:F-011",
         "team:platform-ci",
         "team:protocol",
         "specialist:testing"

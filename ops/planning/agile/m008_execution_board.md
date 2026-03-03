@@ -1,6 +1,6 @@
-# M-008 Execution Board
+# U-017 Execution Board
 
-Milestone: `M-008` Plot + data UX foundations
+Milestone: `U-017` Plot + data UX foundations
 Epic: `E-801`
 Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> T-807 -> T-808 -> T-809 -> T-810` (scrolling expansion) + `T-811 -> T-812 -> T-813 -> T-814 -> T-815 -> T-816 -> T-817 -> T-818 -> T-819 -> T-820 -> T-821 -> T-822 -> T-823 -> T-824 -> T-825` (architecture/spec extension) + `T-826 -> T-827 -> T-828 -> T-829 -> T-830 -> T-831 -> T-832 -> T-833 -> T-834 -> T-835` (scroll performance hardening) + `T-836 -> T-837 -> T-838 -> T-839 -> T-840` (scroll runtime acceleration follow-up)
 Last updated: `2026-03-02`
@@ -257,7 +257,7 @@ Last updated: `2026-03-02`
 - Demo: `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py` -> `ops/discord/ops/m008_demo_plot_default.png`, `ops/discord/ops/m008_demo_plot_panned.png`, `ops/discord/ops/m008_demo_table.txt`, `ops/discord/ops/m008_demo_positions.csv`, `ops/discord/ops/m008_demo_table.png`.
 
 ## Evidence Log
-1. `2026-02-28`: Board initialized for `M-008`; `T-801` started.
+1. `2026-02-28`: Board initialized for `U-017`; `T-801` started.
 2. `2026-02-28`: `T-801` moved to `Review` after deterministic x-label layout updates and plot test pass.
 3. `2026-02-28`: `T-802` started after `T-801` review handoff.
 4. `2026-02-28`: `T-802` moved to `Review` after deterministic bar-render tests passed.
@@ -267,7 +267,7 @@ Last updated: `2026-03-02`
 8. `2026-02-28`: `T-804` moved to `Review` after viewport clamp/alignment tests passed.
 9. `2026-02-28`: `T-805` started after `T-804` review handoff.
 10. `2026-02-28`: `T-805` moved to `Review` after table sort/pagination/virtualization/keyboard tests passed.
-11. `2026-02-28`: `M-008` runnable demo generated successfully via `examples/m008_plot_data_ux_demo.py`.
+11. `2026-02-28`: `U-017` runnable demo generated successfully via `examples/m008_plot_data_ux_demo.py`.
 12. `2026-02-28`: Existing Discord Gantt scripts smoke check passed:
 - `PYTHONPATH=. uv run python ops/discord/scripts/generate_gantt_markdown.py --schedule ops/planning/gantt/milestone_schedule.json --out /tmp/m008_smoke_gantt.md`
 - `PYTHONPATH=. uv run python ops/discord/scripts/generate_gantt_ascii_detailed.py --schedule ops/planning/gantt/milestone_schedule.json --out /tmp/m008_smoke_gantt_detailed.txt`
@@ -277,7 +277,7 @@ Last updated: `2026-03-02`
 16. `2026-02-28`: Additional review feedback received; `T-804` accepted and moved to `Done`.
 17. `2026-02-28`: `T-802` reopened after bar-edge spacing feedback; moved from `Done` back to active fix scope.
 18. `2026-02-28`: Implemented label-to-bar emphasized x ticks, bar edge padding, subplot preferred-aspect auto sizing, and Luvatrix-rendered table PNG demo.
-19. `2026-02-28`: `T-802` returned to `Review`; refreshed demo artifacts and reran full M-008 regression test set.
+19. `2026-02-28`: `T-802` returned to `Review`; refreshed demo artifacts and reran full U-017 regression test set.
 20. `2026-02-28`: Applied follow-up review refinements:
 - rotated-label anchor behavior updated so angled labels align to the tick endpoint,
 - bar charts now retain tick alignment at each bar by default while label thinning remains deterministic,
@@ -302,7 +302,7 @@ Last updated: `2026-03-02`
 - per-bar solid x-grid/tick density enforcement,
 - x=0 reference-line gating based on displayed x-rule values only,
 - table row-selector positioning refinements.
-31. `2026-03-01`: Added strict preferred plot-area aspect control and updated the `M-008` demo to an `AB / C` mosaic with horizontal bar support (`Axes.barh(...)`).
+31. `2026-03-01`: Added strict preferred plot-area aspect control and updated the `U-017` demo to an `AB / C` mosaic with horizontal bar support (`Axes.barh(...)`).
 32. `2026-03-01`: Verification rerun passed:
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
@@ -338,8 +338,8 @@ Last updated: `2026-03-02`
 - `PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_luvatrix_ui_table.py tests/test_plot_app_protocol_example.py`
 - `PYTHONPATH=. uv run python examples/m008_plot_data_ux_demo.py`
 52. `2026-03-01`: Final acceptance received for `T-801`, `T-802`, and `T-805`; moved from `Review` to `Done`.
-53. `2026-03-01`: `M-008` marked complete. Dependency note: `M-011` depends on `M-008` only; dependency is now satisfied.
-54. `2026-03-01`: `M-008` reopened for full arbitrary page/canvas scrolling scope expansion.
+53. `2026-03-01`: `U-017` marked complete. Dependency note: `APU-020` depends on `U-017` only; dependency is now satisfied.
+54. `2026-03-01`: `U-017` reopened for full arbitrary page/canvas scrolling scope expansion.
 55. `2026-03-01`: Added scrolling expansion task breakdown `T-806..T-810`.
 56. `2026-03-01`: Aligned implementation model to Planes "camera over canvas" semantics with mobile-ready touch swipe/fling input in task scope (`T-808`).
 57. `2026-03-01`: `T-806` moved from `Backlog` to `In Progress`; implementation started on Planes viewport scroll-state/camera offset core.

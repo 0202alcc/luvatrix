@@ -2,13 +2,13 @@
 
 - Status: Accepted
 - Date: 2026-03-01
-- Milestone: M-008
+- Milestone: U-017
 - Task: T-813
 - Owner: Runtime/Rendering
 
 ## 1) Context
 
-M-008 continuation introduces component-level compositing modes where a component can either:
+U-017 continuation introduces component-level compositing modes where a component can either:
 1. write explicit RGBA values, or
 2. apply RGBA deltas over already-composited pixels.
 
@@ -120,6 +120,6 @@ Trade-offs:
 
 ## 11) Links to Evidence
 
-1. M-008 board: `ops/planning/agile/m008_execution_board.md`
+1. U-017 board: `ops/planning/agile/m008_execution_board.md`
 2. Prerequisites: `ADR-006`, `ADR-007`
 3. Continuation chain: `T-813 -> T-825`
