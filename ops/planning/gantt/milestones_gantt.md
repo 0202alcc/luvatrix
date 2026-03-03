@@ -6,7 +6,7 @@ Canonical schedule source: `ops/planning/gantt/milestone_schedule.json`
                                                                                                    |W01    W02    W03    W04    W05    W06    W07    W08    W09    W10    W11    W12    W13    W14    W15    W16    W17    |
                                                                                                    |02/23  03/02  03/09  03/16  03/23  03/30  04/06  04/13  04/20  04/27  05/04  05/11  05/18  05/25  06/01  06/08  06/15  |
 ---------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-APU-020 🧭 Native Gantt + Agile visualization in Luvatrix                                           |                                                               ############################                            | In Progress
+APU-020 🧭 Native Gantt + Agile visualization in Luvatrix                                           |                                                               ============================                            | Complete
 ARU-016 🌐 Cross-platform full-suite interactive generalization                                     |############################                                                                                           | In Progress
 AU-018 🗓️ Data workspace UI (calendar app)                                                         |                                                 ~~~~~~~~~~~~~~                                                        | Planned
 AU-019 📈 Custom marketbook dynamic plotting system (integrated with U-021 plots module)            |                                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                   | Planned
@@ -39,7 +39,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 ## Milestone Details
 
 ### APU-020 🧭 Native Gantt + Agile visualization in Luvatrix
-- Status: In Progress
+- Status: Complete
 - Target window: Week 10-13
 - Tasks: `T-1101, T-1102, T-1103, T-1104, T-1105, T-1106, T-1107, T-1108, T-1109, T-1110, T-1111, T-1112, T-1113`
 - Lifecycle events:

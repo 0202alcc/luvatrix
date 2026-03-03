@@ -20,7 +20,7 @@
       "name": "Native Gantt + Agile visualization in Luvatrix",
       "start_week": 10,
       "end_week": 13,
-      "status": "In Progress",
+      "status": "Complete",
       "task_ids": [
         "T-1101",
         "T-1102",
