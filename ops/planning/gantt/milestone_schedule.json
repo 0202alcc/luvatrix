@@ -534,7 +534,7 @@
       "name": "Event loop and input scheduling tightening",
       "start_week": 13,
       "end_week": 16,
-      "status": "Planned",
+      "status": "Complete",
       "task_ids": [
         "T-2601",
         "T-2602",

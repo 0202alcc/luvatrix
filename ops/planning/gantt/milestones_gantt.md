@@ -26,7 +26,7 @@ R-005 🎯 Rendering fallback, smoke docs, and GPU blit path                    
 R-012 🎮 Vulkan stabilization                                                                       |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
 R-022 🧬 Render copy elimination                                                                    |                                                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~       | Planned
 R-023 🚚 Vulkan transfer path efficiency                                                            |                                                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Planned
-R-025 🎛️ Event loop and input scheduling tightening                                                |                                                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~       | Planned
+R-025 🎛️ Event loop and input scheduling tightening                                                |                                                                                    ============================       | Complete
 RF-009 📦 Packaging metadata and Vulkan runtime preflight guidance                                  |=======                                                                                                                | Complete (2026-02-27)
 U-007 🔌 Plot stabilization and stream simulation integration                                       |=======                                                                                                                | Complete (2026-02-27)
 U-017 📊 UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)                      |                     ##########################################                                                        | In Progress
@@ -201,7 +201,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - 2026-03-03 active (framework=gateflow_v1) - planned from architect performance directives
 
 ### R-025 🎛️ Event loop and input scheduling tightening
-- Status: Planned
+- Status: Complete
 - Target window: Week 13-16
 - Tasks: `T-2601, T-2602, T-2603, T-2604`
 - Lifecycle events:
