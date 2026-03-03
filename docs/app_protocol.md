@@ -56,7 +56,8 @@ Security rules:
 1. Missing HDI capability returns event with `status=DENIED` and `payload=None`.
 2. Missing sensor capability returns `SensorSample(status="DENIED")`.
 3. Sensor reads are rate-limited (`sensor_read_min_interval_s`).
-4. Sensor values are quantized unless `sensor.high_precision` capability is granted.
+4. Sensor reads are non-blocking cached reads from `SensorManagerThread` (no provider I/O in app loop).
+5. Sensor values are quantized unless `sensor.high_precision` capability is granted.
 
 ## 4. Capability Naming
 
@@ -91,6 +92,26 @@ macOS backend (current):
 4. `camera.device`
 5. `microphone.device`
 6. `speaker.device`
+
+Deterministic read path:
+
+1. `AppContext.read_sensor(sensor_type)` checks capability first.
+2. If capability is missing, return `DENIED` immediately.
+3. If capability is present but read interval is below `sensor_read_min_interval_s`, return `DENIED` immediately.
+4. If checks pass, return current cached sample from `SensorManagerThread.read_sensor(sensor_type)`.
+
+Fast-path and cached-path behavior:
+
+1. Fast-path: app reads return current in-memory sample and do not call providers synchronously.
+2. Cached-path: background sensor manager thread polls enabled providers at `poll_interval_s` and refreshes sample cache.
+3. Default poll interval is implementation-dependent by launcher (`SensorManagerThread` default is `0.5s`; `main.py run-app` currently uses this default).
+
+TTL/freshness behavior (current implementation):
+
+1. No hard sample-expiry TTL is enforced in protocol runtime today.
+2. Effective freshness window is the manager polling cadence (`poll_interval_s`) plus provider latency.
+3. Before first successful poll, reads return `UNAVAILABLE` (or `DISABLED`/`DENIED` based on gate state).
+4. Consumers must handle stale-but-valid cached values and rely on `ts_ns` + `sample_id` for freshness decisions.
 
 ## 6. HDI Semantics
 
@@ -172,11 +193,57 @@ Notes:
 2. `content_width_px` / `content_height_px` should represent the displayable content area
    (excluding letterbox/black bars in preserve-aspect mode).
 3. Text sizing ratios use displayable area dimensions.
-4. `finalize_ui_frame()` requires `window.write` capability and submits a full-frame write.
-5. SVG components are compiled through batched SVG render commands with explicit target
+4. `finalize_ui_frame()` requires `window.write` capability.
+5. Runtime may submit full-frame or partial-dirty write batches (`FullRewrite`, `ShiftFrame + ReplaceRect`, or `ReplaceRect` set) based on incremental-present policy.
+6. SVG components are compiled through batched SVG render commands with explicit target
    width/height; runtime renderers should rasterize directly at that target size.
 
-## 13. JSON Page Compiler Expansion (Draft)
+## 13. Incremental-Present and Invalidation Policy (U-017/R-022/R-023/R-025 follow-up)
+
+Planes runtime (`luvatrix_ui/planes_runtime.py`) applies deterministic present-mode selection:
+
+1. `idle_skip`: no dirty regions and no required invalidation; no present submitted.
+2. `partial_dirty`: localized dirty regions are emitted and patched (optionally with integer `scroll_shift`).
+3. `full_frame`: full-frame compose path is used when incremental safety conditions are not met.
+
+Incremental-present control:
+
+1. `state["incremental_present_enabled"]` toggles incremental path at runtime.
+2. Default comes from `LUVATRIX_INCREMENTAL_PRESENT_ENABLED` (default enabled).
+3. When disabled, dirty updates are promoted to full-frame compose deterministically.
+
+Invalidation escape hatch (one-shot):
+
+1. Set `state["force_full_invalidation"] = true` to force next frame to `full_frame`.
+2. Optional `state["force_full_invalidation_reason"]` is recorded in telemetry.
+3. Escape hatch is consumed once per frame and auto-cleared:
+   `force_full_invalidation -> false`, `force_full_invalidation_reason -> None`.
+
+Full-frame fallback boundaries (current behavior):
+
+1. First frame after init.
+2. Theme or hover-signature changes.
+3. Subpixel plane scroll deltas (cannot map to integer shift safely).
+4. Bi-axial integer plane scroll in one frame (seam-avoidance fallback).
+5. Active camera-overlay components during scroll-sensitive updates.
+6. Explicit incremental disable or one-shot invalidation escape hatch.
+
+Determinism and parity guarantees:
+
+1. Dirty-rect normalization is sorted and deduplicated before submit.
+2. Quantized scroll shift uses deterministic integer rounding (`-round(dx/dy)`).
+3. Incremental vs forced-full scroll parity is validated in tests (`tests/test_planes_runtime.py`).
+4. Revision alignment between `CallBlitEvent.revision` and presented frame is preserved by display-runtime event coalescing (`tests/test_display_runtime.py`).
+
+Telemetry fields expected for this policy:
+
+1. `compose_mode`: `idle_skip | partial_dirty | full_frame`
+2. `dirty_rect_count`, `dirty_rect_area_px`, `dirty_rect_area_ratio`
+3. `incremental_present_enabled`
+4. `invalidation_escape_hatch_used`, `invalidation_escape_hatch_reason`
+5. `copy_count`, `copy_bytes`, `copy_timing_ms.*`
+
+## 14. JSON Page Compiler Expansion (Draft)
 
 For JSON-driven app construction and future Figma/Lottie import support, use a compiler
 pipeline that produces first-party component IR for `mount_component(...)`.
@@ -193,7 +260,7 @@ Detailed schema and examples:
 
 - `docs/json_ui_compiler.md`
 
-## 14. Component Ordering and Frame Rules
+## 15. Component Ordering and Frame Rules
 
 For compiler-produced components:
 
@@ -203,7 +270,7 @@ For compiler-produced components:
 4. hit-testing order should be reverse draw order
 5. `interaction_bounds` defaults to visual bounds and does not affect paint geometry
 
-## 15. Backend Function Binding Contract
+## 16. Backend Function Binding Contract
 
 JSON components may define a `functions` object that maps interaction hooks to backend
 function names (for example: `on_press`, `on_press_hold`, `on_hover_start`).
@@ -215,7 +282,7 @@ Recommended runtime behavior:
 3. strict mode fails when a declared function is missing or non-callable
 4. permissive mode warns and uses no-op handler
 
-## 16. UI Generation Through MatrixUIFrameRenderer
+## 17. UI Generation Through MatrixUIFrameRenderer
 
 `MatrixUIFrameRenderer` is app-protocol-side component-to-matrix compilation.
 
@@ -225,11 +292,11 @@ Per frame:
 2. app mounts first-party components
 3. `finalize_ui_frame()` converts components into text/SVG batch commands
 4. renderer executes batch draws onto one RGBA frame tensor
-5. runtime submits `WriteBatch([FullRewrite(frame)])`
+5. runtime submits deterministic `WriteBatch` ops via full-frame or incremental dirty paths
 
 This separation keeps display backend concerns out of component logic.
 
-## 17. Recommended Documentation Set
+## 18. Recommended Documentation Set
 
 For protocol/UI work, keep these documents aligned:
 
@@ -244,7 +311,7 @@ For protocol/UI work, keep these documents aligned:
 9. `docs/app_protocol_v2_conformance_matrix.md` (required test and CI matrix)
 10. `docs/app_protocol_v2_migration.md` (v1 to v2 migration guide)
 
-## 18. First-Party App Standardization Checklist
+## 19. First-Party App Standardization Checklist
 
 A first-party app is considered protocol-standardized only when all items below are true:
 
