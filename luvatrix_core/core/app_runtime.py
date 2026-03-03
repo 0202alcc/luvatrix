@@ -129,6 +129,21 @@ class AppContext:
         gated = [self._gate_hdi_event(event) for event in events]
         return [self._transform_hdi_event(event, frame=frame) for event in gated]
 
+    def consume_hdi_telemetry(self) -> dict[str, int]:
+        consumer = getattr(self.hdi, "consume_telemetry", None)
+        if consumer is None or not callable(consumer):
+            return {}
+        payload = consumer()
+        if not isinstance(payload, dict):
+            return {}
+        out: dict[str, int] = {}
+        for key, value in payload.items():
+            try:
+                out[str(key)] = int(value)
+            except (TypeError, ValueError):
+                continue
+        return out
+
     def read_sensor(self, sensor_type: str) -> SensorSample:
         if not self._has_sensor_capability(sensor_type):
             self._audit_security("sensor_denied_capability", sensor_type=sensor_type)

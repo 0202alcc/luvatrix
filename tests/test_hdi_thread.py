@@ -385,6 +385,46 @@ class HDIThreadTests(unittest.TestCase):
         self.assertEqual(payload.get("phase"), "down")
         self.assertEqual(sorted(payload.get("active_keys", [])), ["a", "b"])
 
+    def test_scroll_events_are_coalesced_deterministically_for_mouse(self) -> None:
+        thread = HDIThread(source=_ScriptedHDISource([]), max_queue_size=4, poll_interval_s=0.001)
+        thread._enqueue(  # type: ignore[attr-defined]
+            HDIEvent(1, 1, "w", "mouse", "scroll", "OK", {"delta_x": 1.0, "delta_y": -2.0})
+        )
+        thread._enqueue(  # type: ignore[attr-defined]
+            HDIEvent(2, 2, "w", "mouse", "scroll", "OK", {"delta_x": 2.0, "delta_y": -3.0})
+        )
+        events = thread.poll_events(max_events=10)
+        self.assertEqual(len(events), 1)
+        payload = events[0].payload
+        assert isinstance(payload, dict)
+        self.assertAlmostEqual(float(payload.get("delta_x", 0.0)), 3.0, places=6)
+        self.assertAlmostEqual(float(payload.get("delta_y", 0.0)), -5.0, places=6)
+        self.assertEqual(int(payload.get("coalesced_count", 0)), 2)
+        self.assertEqual(str(payload.get("coalesce_mode", "")), "sum")
+        telemetry = thread.consume_telemetry()
+        self.assertEqual(int(telemetry.get("events_coalesced", 0)), 1)
+        self.assertEqual(int(telemetry.get("events_dequeued", 0)), 1)
+
+    def test_queue_latency_telemetry_reports_non_negative_values(self) -> None:
+        thread = HDIThread(source=_ScriptedHDISource([]), max_queue_size=8, poll_interval_s=0.001)
+        now_ns = time.time_ns()
+        thread._enqueue(  # type: ignore[attr-defined]
+            HDIEvent(1, now_ns - 2_000_000, "w", "mouse", "pointer_move", "OK", {"x": 10.0, "y": 10.0})
+        )
+        thread._enqueue(  # type: ignore[attr-defined]
+            HDIEvent(2, now_ns - 1_000_000, "w", "keyboard", "key_down", "OK", {"key": "a"})
+        )
+        _ = thread.poll_events(max_events=10)
+        telemetry = thread.consume_telemetry()
+        self.assertGreaterEqual(int(telemetry.get("events_enqueued", -1)), 2)
+        self.assertGreaterEqual(int(telemetry.get("events_dequeued", -1)), 1)
+        self.assertGreaterEqual(int(telemetry.get("queue_latency_ns_p95", -1)), 0)
+        self.assertGreaterEqual(int(telemetry.get("queue_latency_ns_max", -1)), 0)
+        self.assertGreaterEqual(
+            int(telemetry.get("queue_latency_ns_max", -1)),
+            int(telemetry.get("queue_latency_ns_p95", -1)),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
