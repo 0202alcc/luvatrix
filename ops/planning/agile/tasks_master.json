@@ -1364,7 +1364,7 @@
       "title": "Refactor WindowMatrix commit path to avoid full-frame clone for localized writes.",
       "epic_id": "E-2201",
       "milestone_id": "R-022",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2102"
       ],
@@ -1383,14 +1383,29 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "XL",
       "effort_bucket": "L",
-      "confidence": 0.75
+      "confidence": 0.75,
+      "actuals": {
+        "input_tokens": 4200,
+        "output_tokens": 2200,
+        "wall_time_sec": 1800,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2202",
       "title": "Introduce safe revisioned or double-buffer snapshot strategy to reduce DisplayRuntime clone overhead.",
       "epic_id": "E-2201",
       "milestone_id": "R-022",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2201"
       ],
@@ -1409,14 +1424,29 @@
       "rollback_strategy": "Feature flag + dual-path execution and fast rollback to previous stable implementation on regression detection.",
       "impact_bucket": "XXL",
       "effort_bucket": "XL",
-      "confidence": 0.62
+      "confidence": 0.62,
+      "actuals": {
+        "input_tokens": 3100,
+        "output_tokens": 1700,
+        "wall_time_sec": 1400,
+        "tool_calls": 14,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2203",
       "title": "Refactor Vulkan upload prep to minimize Python-level pack/copy overhead with contiguous memory views.",
       "epic_id": "E-2201",
       "milestone_id": "R-022",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2102"
       ],
@@ -1435,14 +1465,29 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "XL",
       "effort_bucket": "L",
-      "confidence": 0.7
+      "confidence": 0.7,
+      "actuals": {
+        "input_tokens": 2600,
+        "output_tokens": 1300,
+        "wall_time_sec": 1200,
+        "tool_calls": 10,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2204",
       "title": "Add frame correctness + revision ordering parity tests for copy-elimination path.",
       "epic_id": "E-2201",
       "milestone_id": "R-022",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2201",
         "T-2202",
@@ -1463,7 +1508,22 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
       "effort_bucket": "M",
-      "confidence": 0.78
+      "confidence": 0.78,
+      "actuals": {
+        "input_tokens": 1800,
+        "output_tokens": 1100,
+        "wall_time_sec": 900,
+        "tool_calls": 8,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2301",

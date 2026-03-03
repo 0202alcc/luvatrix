@@ -496,7 +496,7 @@
       "name": "Render copy elimination",
       "start_week": 13,
       "end_week": 16,
-      "status": "Planned",
+      "status": "Complete",
       "task_ids": [
         "T-2201",
         "T-2202",
@@ -510,7 +510,8 @@
           "framework": "gateflow_v1",
           "note": "planned from architect performance directives"
         }
-      ]
+      ],
+      "completed_on": "2026-03-03"
     },
     {
       "id": "R-023",

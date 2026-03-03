@@ -24,7 +24,7 @@ P-021 📏 Performance baseline and telemetry gates                             
 R-002 🖥️ macOS visual runtime foundation merged to main                                            |=======                                                                                                                | Complete (2026-02-23)
 R-005 🎯 Rendering fallback, smoke docs, and GPU blit path                                          |=======                                                                                                                | Complete (2026-02-26)
 R-012 🎮 Vulkan stabilization                                                                       |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
-R-022 🧬 Render copy elimination                                                                    |                                                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~       | Planned
+R-022 🧬 Render copy elimination                                                                    |                                                                                    ============================       | Complete (2026-03-03)
 R-023 🚚 Vulkan transfer path efficiency                                                            |                                                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Planned
 R-025 🎛️ Event loop and input scheduling tightening                                                |                                                                                    ============================       | Complete
 RF-009 📦 Packaging metadata and Vulkan runtime preflight guidance                                  |=======                                                                                                                | Complete (2026-02-27)
@@ -188,8 +188,9 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
 
 ### R-022 🧬 Render copy elimination
-- Status: Planned
+- Status: Complete
 - Target window: Week 13-16
+- Completed on: 2026-03-03
 - Tasks: `T-2201, T-2202, T-2203, T-2204`
 - Lifecycle events:
   - 2026-03-03 active (framework=gateflow_v1) - planned from architect performance directives
