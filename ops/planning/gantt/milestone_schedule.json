@@ -269,7 +269,7 @@
       "name": "Sensor backend performance modernization",
       "start_week": 14,
       "end_week": 17,
-      "status": "Planned",
+      "status": "Complete",
       "task_ids": [
         "T-2501",
         "T-2502",
@@ -282,6 +282,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "planned from architect performance directives"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "completed and verified on main with required checks"
         }
       ]
     },

@@ -3639,7 +3639,7 @@
       "title": "Profile sensor provider cost/jitter and classify fast-path vs cached metadata providers.",
       "epic_id": "E-2501",
       "milestone_id": "F-024",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-2102"
       ],
@@ -3668,18 +3668,33 @@
         "iteration_risk": 35
       },
       "cost_confidence": 0.35,
-      "cost_score": 25.26,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.6,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 6200,
+        "output_tokens": 2200,
+        "wall_time_sec": 1800,
+        "tool_calls": 34,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2502",
       "title": "Introduce TTL caching for slow-changing metadata providers.",
       "epic_id": "E-2501",
       "milestone_id": "F-024",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-2501"
       ],
@@ -3708,18 +3723,33 @@
         "iteration_risk": 35
       },
       "cost_confidence": 0.35,
-      "cost_score": 25.11,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.6,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 4900,
+        "output_tokens": 1600,
+        "wall_time_sec": 1300,
+        "tool_calls": 24,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2503",
       "title": "Replace high-cost subprocess sensor reads with direct/native API access where feasible.",
       "epic_id": "E-2501",
       "milestone_id": "F-024",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-2501"
       ],
@@ -3748,18 +3778,33 @@
         "iteration_risk": 35
       },
       "cost_confidence": 0.35,
-      "cost_score": 25.26,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.6,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 5700,
+        "output_tokens": 1900,
+        "wall_time_sec": 1500,
+        "tool_calls": 28,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2504",
       "title": "Enforce capability/consent/audit parity tests for sensor modernization.",
       "epic_id": "E-2501",
       "milestone_id": "F-024",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-2502",
         "T-2503"
@@ -3789,11 +3834,26 @@
         "iteration_risk": 35
       },
       "cost_confidence": 0.35,
-      "cost_score": 26.67,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.6,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 4300,
+        "output_tokens": 1400,
+        "wall_time_sec": 1100,
+        "tool_calls": 20,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2601",
