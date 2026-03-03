@@ -44,3 +44,7 @@ not Discord-specific.
    - `uv run python ops/planning/agile/validate_milestone_task_links.py`
 11. Milestone completion is only recognized after all milestone thread changes are merged to `main` and required tests pass on `main`.
 12. Task `Done` transitions must include GateFlow completion telemetry (`actuals` + `done_gate`) via planning API payload.
+13. Detect planning drift on milestone branches:
+   - `uv run python ops/planning/api/check_planning_drift.py --fetch`
+14. If drift exists and no local planning edits should be preserved:
+   - `bash ops/planning/api/sync_planning_from_main.sh`

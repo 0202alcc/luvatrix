@@ -82,6 +82,18 @@ Quick operator reference:
 1. Run planning API in dry-run mode on milestone branches when needed.
 2. Execute all planning writes (`--apply`) on `main`.
 3. After applying planning updates on `main`, sync milestone branches from `main`.
+4. Detect branch planning drift:
+```bash
+uv run python ops/planning/api/check_planning_drift.py --fetch
+```
+5. Auto-sync planning from `origin/main` on milestone branch (conflict-safe flow):
+```bash
+bash ops/planning/api/sync_planning_from_main.sh
+```
+6. Sync script behavior:
+- exits on `main`
+- exits if local `ops/planning` edits exist
+- restores `ops/planning` from `origin/main` and commits sync delta
 
 ## Usage
 

@@ -149,7 +149,21 @@ uv run python ops/planning/api/planning_api.py PATCH /backlog/B-001 \
 uv run python ops/planning/agile/validate_milestone_task_links.py
 ```
 
-## 9) Completion rule
+## 9) Branch planning drift check/sync
+
+Check drift vs `origin/main`:
+
+```bash
+uv run python ops/planning/api/check_planning_drift.py --fetch
+```
+
+Auto-sync `ops/planning` on milestone branch:
+
+```bash
+bash ops/planning/api/sync_planning_from_main.sh
+```
+
+## 10) Completion rule
 
 Milestone is considered complete only when:
 

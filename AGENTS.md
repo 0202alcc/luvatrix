@@ -78,6 +78,14 @@ Before planning or editing code, read:
    - switch to `main` and apply planning state updates via API,
    - switch back and rebase/pull `main` into milestone branch.
 5. Do not keep long-lived planning deltas on milestone branches.
+6. Before milestone branch merge/review, run drift check:
+   - `uv run python ops/planning/api/check_planning_drift.py --fetch`
+7. If drift is reported and there are no local planning edits to keep, auto-sync:
+   - `bash ops/planning/api/sync_planning_from_main.sh`
+8. Sync script safety rules:
+   - refuses to run on `main`,
+   - refuses if `ops/planning` has local edits,
+   - commits a planning-only sync when changes are applied.
 
 ## GateFlow Workflow (Default)
 1. Default columns:
