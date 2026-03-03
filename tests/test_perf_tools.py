@@ -63,6 +63,23 @@ class PerfToolsTests(unittest.TestCase):
         self.assertIsInstance(result.get("event_order_digest_trace", []), list)
         self.assertIsInstance(result.get("event_poll_trace", []), list)
 
+    def test_run_suite_sensor_polling_exports_provider_class_latency(self) -> None:
+        summary = run_suite(
+            scenario="sensor_polling",
+            samples=8,
+            width=640,
+            height=360,
+        )
+        payload = summary.get("scenarios", {}).get("sensor_polling", {})
+        self.assertTrue(bool(payload.get("deterministic", False)))
+        result = payload.get("result", {})
+        self.assertGreaterEqual(float(result.get("polling_cpu_cost_ms", -1.0)), 0.0)
+        self.assertGreaterEqual(float(result.get("jitter_ms", -1.0)), 0.0)
+        classes = result.get("provider_latency_by_class", {})
+        self.assertIsInstance(classes, dict)
+        self.assertIn("fast_path", classes)
+        self.assertIn("cached_path", classes)
+
 
 if __name__ == "__main__":
     unittest.main()

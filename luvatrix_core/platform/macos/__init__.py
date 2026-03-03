@@ -6,6 +6,7 @@ from .sensors import (
     MacOSPowerVoltageCurrentProvider,
     MacOSSpeakerDeviceProvider,
     MacOSThermalTemperatureProvider,
+    make_default_macos_sensor_providers,
 )
 from .hdi_source import MacOSWindowHDISource
 from .vulkan_presenter import (
@@ -30,6 +31,7 @@ __all__ = [
     "MacOSCameraDeviceProvider",
     "MacOSMicrophoneDeviceProvider",
     "MacOSSpeakerDeviceProvider",
+    "make_default_macos_sensor_providers",
     "MacOSWindowHDISource",
     "PresenterState",
     "StubMacOSVulkanBackend",

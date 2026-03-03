@@ -58,6 +58,56 @@ class FallbackSensorProvider:
         raise SensorReadUnavailableError("all fallback providers failed")
 
 
+class TTLCachedSensorProvider:
+    """Caches successful provider reads for ttl_s to reduce repeated expensive polls."""
+
+    path_class: Literal["cached_path"] = "cached_path"
+
+    def __init__(
+        self,
+        provider: SensorProvider,
+        *,
+        ttl_s: float,
+        monotonic_ns: Callable[[], int] | None = None,
+    ) -> None:
+        if ttl_s <= 0:
+            raise ValueError("ttl_s must be > 0")
+        self._provider = provider
+        self._ttl_ns = int(ttl_s * 1_000_000_000)
+        self._monotonic_ns = monotonic_ns or time.monotonic_ns
+        self._lock = threading.Lock()
+        self._cache: tuple[int, tuple[object, str]] | None = None
+
+    def read(self) -> tuple[object, str]:
+        now = self._monotonic_ns()
+        with self._lock:
+            cached = self._cache
+            if cached is not None:
+                expires_at_ns, value = cached
+                if now < expires_at_ns:
+                    return value
+        value = self._provider.read()
+        with self._lock:
+            self._cache = (now + self._ttl_ns, value)
+        return value
+
+
+@dataclass
+class _LatencyStats:
+    count: int = 0
+    total_ns: int = 0
+    min_ns: int = 0
+    max_ns: int = 0
+
+    def observe(self, latency_ns: int) -> None:
+        self.count += 1
+        self.total_ns += latency_ns
+        if self.min_ns == 0 or latency_ns < self.min_ns:
+            self.min_ns = latency_ns
+        if latency_ns > self.max_ns:
+            self.max_ns = latency_ns
+
+
 class SensorManagerThread:
     """Sensor manager thread with per-sensor polling and policy enforcement."""
 
@@ -86,6 +136,11 @@ class SensorManagerThread:
             for sensor_type in self._providers
         }
         self._samples: dict[str, SensorSample] = {}
+        self._provider_latency_by_class: dict[str, _LatencyStats] = {}
+        self._provider_latency_by_sensor: dict[str, _LatencyStats] = {}
+        self._poll_cycle_cost_ns: list[int] = []
+        self._poll_cycle_interval_ns: list[int] = []
+        self._last_cycle_start_ns: int | None = None
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -143,10 +198,19 @@ class SensorManagerThread:
 
     def _run(self) -> None:
         while self._running.is_set():
+            cycle_start_ns = time.perf_counter_ns()
             with self._lock:
+                if self._last_cycle_start_ns is not None:
+                    self._poll_cycle_interval_ns.append(cycle_start_ns - self._last_cycle_start_ns)
+                    self._poll_cycle_interval_ns = self._poll_cycle_interval_ns[-512:]
+                self._last_cycle_start_ns = cycle_start_ns
                 enabled_sensors = [s for s, is_enabled in self._enabled.items() if is_enabled]
             for sensor_type in enabled_sensors:
                 self._poll_sensor(sensor_type)
+            cycle_end_ns = time.perf_counter_ns()
+            with self._lock:
+                self._poll_cycle_cost_ns.append(cycle_end_ns - cycle_start_ns)
+                self._poll_cycle_cost_ns = self._poll_cycle_cost_ns[-512:]
             time.sleep(self._poll_interval_s)
 
     def _poll_sensor(self, sensor_type: str) -> None:
@@ -155,6 +219,7 @@ class SensorManagerThread:
             with self._lock:
                 self._samples[sensor_type] = self._sample(sensor_type, "UNAVAILABLE", None, None)
             return
+        read_start_ns = time.perf_counter_ns()
         try:
             value, unit = provider.read()
             status: SensorStatus = "OK"
@@ -167,8 +232,14 @@ class SensorManagerThread:
         except Exception:  # noqa: BLE001
             value, unit = None, None
             status = "UNAVAILABLE"
+        read_latency_ns = time.perf_counter_ns() - read_start_ns
+        path_class = getattr(provider, "path_class", "fast_path")
         with self._lock:
             self._samples[sensor_type] = self._sample(sensor_type, status, value, unit)
+            class_stats = self._provider_latency_by_class.setdefault(str(path_class), _LatencyStats())
+            class_stats.observe(read_latency_ns)
+            sensor_stats = self._provider_latency_by_sensor.setdefault(sensor_type, _LatencyStats())
+            sensor_stats.observe(read_latency_ns)
 
     def _sample(
         self,
@@ -197,3 +268,26 @@ class SensorManagerThread:
                 "actor": actor,
             }
         )
+
+    def diagnostics_snapshot(self) -> dict[str, object]:
+        with self._lock:
+            def _serialize(stats: _LatencyStats) -> dict[str, float | int]:
+                avg_ns = float(stats.total_ns) / float(stats.count) if stats.count > 0 else 0.0
+                return {
+                    "count": int(stats.count),
+                    "avg_ms": float(avg_ns / 1_000_000.0),
+                    "min_ms": float(stats.min_ns / 1_000_000.0),
+                    "max_ms": float(stats.max_ns / 1_000_000.0),
+                }
+
+            return {
+                "poll_interval_s": float(self._poll_interval_s),
+                "provider_latency_by_class": {
+                    key: _serialize(value) for key, value in sorted(self._provider_latency_by_class.items())
+                },
+                "provider_latency_by_sensor": {
+                    key: _serialize(value) for key, value in sorted(self._provider_latency_by_sensor.items())
+                },
+                "poll_cycle_cost_ms": [float(v) / 1_000_000.0 for v in list(self._poll_cycle_cost_ns)],
+                "poll_cycle_interval_ms": [float(v) / 1_000_000.0 for v in list(self._poll_cycle_interval_ns)],
+            }

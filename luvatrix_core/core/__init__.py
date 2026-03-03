@@ -38,6 +38,7 @@ from .sensor_manager import (
     SensorManagerThread,
     SensorProvider,
     SensorSample,
+    TTLCachedSensorProvider,
 )
 from .unified_runtime import UnifiedRunResult, UnifiedRuntime
 from .window_matrix import (
@@ -103,6 +104,7 @@ __all__ = [
     "SensorManagerThread",
     "SensorProvider",
     "SensorSample",
+    "TTLCachedSensorProvider",
     "SQLiteAuditSink",
     "UnifiedRunResult",
     "UnifiedRuntime",

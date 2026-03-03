@@ -5,9 +5,11 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
+import time
 from typing import Any
 
 from luvatrix_core.core.hdi_thread import HDIEvent
+from luvatrix_core.core.sensor_manager import SensorManagerThread, SensorProvider, TTLCachedSensorProvider
 from luvatrix_ui.planes_runtime import load_plane_app
 
 
@@ -52,6 +54,30 @@ class _PerfCtx:
 
     def pending_hdi_events(self) -> int:
         return len(self._events)
+
+
+class _FastPathProvider(SensorProvider):
+    path_class = "fast_path"
+
+    def __init__(self, value: object, unit: str) -> None:
+        self._value = value
+        self._unit = unit
+
+    def read(self) -> tuple[object, str]:
+        return (self._value, self._unit)
+
+
+class _SlowMetadataProvider(SensorProvider):
+    path_class = "cached_path"
+
+    def __init__(self, value: object, unit: str, delay_s: float) -> None:
+        self._value = value
+        self._unit = unit
+        self._delay_s = delay_s
+
+    def read(self) -> tuple[object, str]:
+        time.sleep(self._delay_s)
+        return (self._value, self._unit)
 
 
 def _percentile(values: list[float], q: float) -> float:
@@ -255,6 +281,72 @@ def _run_scenario(scenario: str, samples: int, width: int, height: int) -> dict[
     return {"deterministic": bool(deterministic), "result": first}
 
 
+def _run_sensor_polling_trial(samples: int) -> dict[str, Any]:
+    poll_interval_s = 0.01
+    providers: dict[str, SensorProvider] = {
+        "thermal.temperature": _FastPathProvider(71.5, "C"),
+        "power.voltage_current": _FastPathProvider({"voltage_v": 12.1, "current_a": 0.8}, "mixed"),
+        "sensor.motion": _FastPathProvider({"x": 0.0, "y": 1.0, "z": 0.0}, "raw"),
+        "camera.device": TTLCachedSensorProvider(
+            _SlowMetadataProvider({"available": True, "device_count": 1}, "metadata", delay_s=0.0025),
+            ttl_s=0.2,
+        ),
+        "microphone.device": TTLCachedSensorProvider(
+            _SlowMetadataProvider({"available": True, "device_count": 1, "default_present": True}, "metadata", delay_s=0.002),
+            ttl_s=0.2,
+        ),
+        "speaker.device": TTLCachedSensorProvider(
+            _SlowMetadataProvider({"available": True, "device_count": 1, "default_present": True}, "metadata", delay_s=0.002),
+            ttl_s=0.2,
+        ),
+    }
+    mgr = SensorManagerThread(providers=providers, poll_interval_s=poll_interval_s)
+    mgr.set_sensor_enabled("sensor.motion", True, actor="perf")
+    mgr.set_sensor_enabled("camera.device", True, actor="perf")
+    mgr.set_sensor_enabled("microphone.device", True, actor="perf")
+    mgr.set_sensor_enabled("speaker.device", True, actor="perf")
+    mgr.start()
+    try:
+        # Warm-up so the manager has at least one sample and stable cadence.
+        time.sleep(poll_interval_s * 2.5)
+        for _ in range(samples):
+            _ = mgr.read_sensor("thermal.temperature")
+            _ = mgr.read_sensor("power.voltage_current")
+            _ = mgr.read_sensor("sensor.motion")
+            _ = mgr.read_sensor("camera.device")
+            _ = mgr.read_sensor("microphone.device")
+            _ = mgr.read_sensor("speaker.device")
+            time.sleep(poll_interval_s)
+    finally:
+        mgr.stop()
+    diag = mgr.diagnostics_snapshot()
+    cycle_cost_ms = [float(v) for v in diag.get("poll_cycle_cost_ms", [])]
+    cycle_interval_ms = [float(v) for v in diag.get("poll_cycle_interval_ms", [])]
+    class_latency = diag.get("provider_latency_by_class", {})
+    assert isinstance(class_latency, dict)
+    return {
+        "samples": int(samples),
+        "polling_cpu_cost_ms": float(sum(cycle_cost_ms) / len(cycle_cost_ms)) if cycle_cost_ms else 0.0,
+        "jitter_ms": float(_percentile(cycle_interval_ms, 95.0) - _percentile(cycle_interval_ms, 50.0))
+        if cycle_interval_ms
+        else 0.0,
+        "cycle_cost_p95_ms": float(_percentile(cycle_cost_ms, 95.0)),
+        "cycle_interval_p95_ms": float(_percentile(cycle_interval_ms, 95.0)),
+        "provider_latency_by_class": class_latency,
+        "provider_latency_by_sensor": diag.get("provider_latency_by_sensor", {}),
+        "path_classes": sorted(class_latency.keys()),
+    }
+
+
+def _run_sensor_polling(samples: int) -> dict[str, Any]:
+    first = _run_sensor_polling_trial(samples)
+    second = _run_sensor_polling_trial(samples)
+    deterministic = first.get("path_classes", []) == second.get("path_classes", []) and first.get(
+        "provider_latency_by_class", {}
+    ).keys() == second.get("provider_latency_by_class", {}).keys()
+    return {"deterministic": bool(deterministic), "result": first}
+
+
 def _copy_chain_map(width: int, height: int) -> list[dict[str, Any]]:
     frame_bytes = int(width * height * 4)
     return [
@@ -286,7 +378,16 @@ def _copy_chain_map(width: int, height: int) -> list[dict[str, Any]]:
 
 
 def run_suite(scenario: str, samples: int, width: int, height: int) -> dict[str, Any]:
-    valid = {"render_copy_chain", "idle", "scroll", "drag", "resize_stress", "input_burst", "all_interactive"}
+    valid = {
+        "render_copy_chain",
+        "idle",
+        "scroll",
+        "drag",
+        "resize_stress",
+        "input_burst",
+        "sensor_polling",
+        "all_interactive",
+    }
     if scenario not in valid:
         raise ValueError(f"unsupported scenario: {scenario}")
     scenario_list = ["idle", "scroll", "drag", "resize_stress"] if scenario == "all_interactive" else [scenario]
@@ -298,7 +399,10 @@ def run_suite(scenario: str, samples: int, width: int, height: int) -> dict[str,
         "scenarios": {},
     }
     for name in scenario_list:
-        out["scenarios"][name] = _run_scenario(name, samples, width, height)
+        if name == "sensor_polling":
+            out["scenarios"][name] = _run_sensor_polling(samples)
+        else:
+            out["scenarios"][name] = _run_scenario(name, samples, width, height)
     return out
 
 

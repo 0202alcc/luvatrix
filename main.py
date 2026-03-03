@@ -22,12 +22,7 @@ from luvatrix_core.core import (
 from luvatrix_core.platform.macos import MacOSVulkanPresenter
 from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource
 from luvatrix_core.platform.macos.sensors import (
-    MacOSCameraDeviceProvider,
-    MacOSMicrophoneDeviceProvider,
-    MacOSMotionProvider,
-    MacOSPowerVoltageCurrentProvider,
-    MacOSSpeakerDeviceProvider,
-    MacOSThermalTemperatureProvider,
+    make_default_macos_sensor_providers,
 )
 from luvatrix_core.platform.vulkan_setup import detect_vulkan_preflight_issue
 from luvatrix_core.targets.base import DisplayFrame, RenderTarget
@@ -155,14 +150,7 @@ def main() -> None:
         if args.sensor_backend == "macos":
             if platform.system() != "Darwin":
                 raise RuntimeError("sensor-backend=macos is only supported on macOS")
-            providers = {
-                "thermal.temperature": MacOSThermalTemperatureProvider(),
-                "power.voltage_current": MacOSPowerVoltageCurrentProvider(),
-                "sensor.motion": MacOSMotionProvider(),
-                "camera.device": MacOSCameraDeviceProvider(),
-                "microphone.device": MacOSMicrophoneDeviceProvider(),
-                "speaker.device": MacOSSpeakerDeviceProvider(),
-            }
+            providers = make_default_macos_sensor_providers()
         audit_sink = _build_audit_sink(args.audit_sqlite, args.audit_jsonl)
         try:
             audit_logger = audit_sink.log if audit_sink is not None else None
