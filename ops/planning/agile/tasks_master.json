@@ -1781,7 +1781,7 @@
       "title": "Profile HDIThread/event queue behavior under idle and burst input.",
       "epic_id": "E-2601",
       "milestone_id": "R-025",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2102"
       ],
@@ -1807,7 +1807,7 @@
       "title": "Tune coalescing and max-event processing policy for pointer/scroll bursts.",
       "epic_id": "E-2601",
       "milestone_id": "R-025",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2601"
       ],
@@ -1833,7 +1833,7 @@
       "title": "Skip unnecessary render-loop work when no frame state changes are pending.",
       "epic_id": "E-2601",
       "milestone_id": "R-025",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2601"
       ],
@@ -1859,7 +1859,7 @@
       "title": "Add deterministic event normalization/ordering regression tests and latency telemetry.",
       "epic_id": "E-2601",
       "milestone_id": "R-025",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2602",
         "T-2603"
