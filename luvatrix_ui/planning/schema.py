@@ -224,11 +224,44 @@ def load_timeline_model(
     return timeline_from_dict(payload, tasks=tasks)
 
 
-def build_m011_task_cards() -> tuple[AgileTaskCard, ...]:
+def load_task_cards_from_ledger(
+    tasks_path: str | Path,
+    *,
+    milestone_id: str,
+) -> tuple[AgileTaskCard, ...]:
+    payload = json.loads(Path(tasks_path).read_text(encoding="utf-8"))
+    if not isinstance(payload, Mapping):
+        raise TypeError("Task ledger payload must be a JSON object")
+    raw_tasks = payload.get("tasks")
+    if not isinstance(raw_tasks, list):
+        raise TypeError("Task ledger must include a `tasks` list")
+
+    cards: list[AgileTaskCard] = []
+    for raw in raw_tasks:
+        if not isinstance(raw, Mapping):
+            continue
+        if str(raw.get("milestone_id", "")).strip() != milestone_id:
+            continue
+        cards.append(
+            AgileTaskCard(
+                task_id=str(raw["id"]),
+                milestone_id=milestone_id,
+                title=str(raw["title"]),
+                status=str(raw.get("status", "Backlog")),
+                epic_id=_coerce_optional_str(raw.get("epic_id")),
+                dependencies=_coerce_string_tuple(raw.get("depends_on") or raw.get("dependencies") or raw.get("deps")),
+                owners=_coerce_string_tuple(raw.get("owners") or raw.get("owner")),
+                blockers=_coerce_string_tuple(raw.get("blockers") or raw.get("blocked_by")),
+            )
+        )
+    return tuple(sorted(cards, key=lambda card: card.task_id))
+
+
+def build_m011_task_cards(*, milestone_id: str = "APU-020") -> tuple[AgileTaskCard, ...]:
     return (
         AgileTaskCard(
             task_id="T-1101",
-            milestone_id="M-011",
+            milestone_id=milestone_id,
             epic_id="E-1101",
             title="Define canonical timeline/task schema for Gantt + Agile cards.",
             status="In Progress",
@@ -236,7 +269,7 @@ def build_m011_task_cards() -> tuple[AgileTaskCard, ...]:
         ),
         AgileTaskCard(
             task_id="T-1102",
-            milestone_id="M-011",
+            milestone_id=milestone_id,
             epic_id="E-1101",
             title="Build native Luvatrix Gantt renderer.",
             status="In Progress",
@@ -245,7 +278,7 @@ def build_m011_task_cards() -> tuple[AgileTaskCard, ...]:
         ),
         AgileTaskCard(
             task_id="T-1103",
-            milestone_id="M-011",
+            milestone_id=milestone_id,
             epic_id="E-1101",
             title="Build native Luvatrix Agile board renderer.",
             status="In Progress",
@@ -253,7 +286,7 @@ def build_m011_task_cards() -> tuple[AgileTaskCard, ...]:
         ),
         AgileTaskCard(
             task_id="T-1104",
-            milestone_id="M-011",
+            milestone_id=milestone_id,
             epic_id="E-1101",
             title="Add interaction layer (filtering, zoom/scroll, click-through).",
             status="In Progress",
@@ -261,7 +294,7 @@ def build_m011_task_cards() -> tuple[AgileTaskCard, ...]:
         ),
         AgileTaskCard(
             task_id="T-1105",
-            milestone_id="M-011",
+            milestone_id=milestone_id,
             epic_id="E-1101",
             title="Add export adapters (ASCII/Markdown/PNG) and Discord payload compatibility.",
             status="In Progress",
@@ -269,7 +302,7 @@ def build_m011_task_cards() -> tuple[AgileTaskCard, ...]:
         ),
         AgileTaskCard(
             task_id="T-1106",
-            milestone_id="M-011",
+            milestone_id=milestone_id,
             epic_id="E-1101",
             title="Add validation suite for render correctness and dependency integrity.",
             status="In Progress",
