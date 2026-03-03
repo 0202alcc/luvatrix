@@ -1784,7 +1784,7 @@
       "title": "Add pre-rasterized bitmap cache path for stable SVG/text components during camera scrolling.",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-836"
       ],
@@ -1807,18 +1807,33 @@
         "iteration_risk": 35
       },
       "cost_confidence": 0.35,
-      "cost_score": 24.66,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.6,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-838",
       "title": "Add frame-paced scroll scheduler (coalesced input -> one render cadence update).",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-837"
       ],
@@ -1841,18 +1856,33 @@
         "iteration_risk": 35
       },
       "cost_confidence": 0.35,
-      "cost_score": 24.66,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.6,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-839",
       "title": "Decouple input ingestion from render thread using deterministic intent queue handoff.",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-838"
       ],
@@ -1875,18 +1905,33 @@
         "iteration_risk": 35
       },
       "cost_confidence": 0.35,
-      "cost_score": 24.66,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.6,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-840",
       "title": "Finalize scroll performance validation pack (latency/jitter budgets + visual artifact regression gates).",
       "epic_id": "E-801",
       "milestone_id": "U-017",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-839"
       ],
@@ -1910,11 +1955,26 @@
         "iteration_risk": 35
       },
       "cost_confidence": 0.35,
-      "cost_score": 24.66,
-      "cost_bucket": "M",
-      "stage_multiplier_applied": 0.6,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-901",

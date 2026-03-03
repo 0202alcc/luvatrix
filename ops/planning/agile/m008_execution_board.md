@@ -6,10 +6,7 @@ Task chain: `T-801 -> T-802 -> T-803 -> T-804 -> T-805` (completed) + `T-806 -> 
 Last updated: `2026-03-03`
 
 ## Backlog
-1. `T-837` Pre-rasterized bitmap cache path for stable SVG/text during camera scrolling.
-2. `T-838` Frame-paced scroll scheduler (coalesced input to fixed render cadence updates).
-3. `T-839` Input ingestion/render decoupling via deterministic intent queue handoff.
-4. `T-840` Scroll performance validation pack (latency/jitter budgets + visual artifact regression gates).
+1. None.
 
 ## Ready
 1. None.
@@ -281,6 +278,20 @@ Last updated: `2026-03-03`
 - `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/scroll_drag_candidate.json` (pass).
 8. `T-2305` Add viewport/scroll visual artifact regression suite.
 - Evidence:
+- `PYTHONPATH=. uv run pytest tests -k "scroll or viewport or dirty_rect" -q` (pass).
+9. `T-837` Pre-rasterized bitmap cache path for stable SVG/text during camera scrolling.
+- Evidence:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "cache or svg" -q` (pass).
+- `PYTHONPATH=. uv run pytest tests/test_ui_frame_renderer.py -q` (pass).
+10. `T-838` Frame-paced scroll scheduler (coalesced input to fixed render cadence updates).
+- Evidence:
+- `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "coalesced or scroll" -q` (pass).
+11. `T-839` Input ingestion/render decoupling via deterministic intent queue handoff.
+- Evidence:
+- `PYTHONPATH=. uv run pytest tests/test_hdi_thread.py tests/test_planes_runtime.py -k "input or queue or intent" -q` (pass).
+12. `T-840` Scroll performance validation pack (latency/jitter budgets + visual artifact regression gates).
+- Evidence:
+- `PYTHONPATH=. uv run python ops/ci/m008_perf_gate.py --samples 60 --budget-p95-ms 40 --budget-jitter-ms 25 --min-incremental-pct 1 --max-visual-mismatch-frames 0` (pass).
 - `PYTHONPATH=. uv run pytest tests -k "scroll or viewport or dirty_rect" -q` (pass).
 
 ## Evidence Log
