@@ -78,7 +78,20 @@
         "milestone:P-010",
         "team:platform-ci",
         "specialist:pm"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 39,
+        "code_edit_surface": 47,
+        "validation_scope": 38,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 41.25,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-102",
@@ -93,7 +106,20 @@
         "milestone:P-010",
         "team:platform-ci",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-103",
@@ -108,7 +134,20 @@
         "milestone:P-010",
         "team:platform-ci",
         "specialist:testing"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-201",
@@ -121,7 +160,36 @@
         "milestone:F-011",
         "team:protocol",
         "specialist:architecture"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 66,
+        "reasoning_depth": 61,
+        "code_edit_surface": 69,
+        "validation_scope": 60,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-202",
@@ -136,7 +204,36 @@
         "milestone:F-011",
         "team:protocol",
         "specialist:pm"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 65,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-203",
@@ -151,7 +248,36 @@
         "milestone:F-011",
         "team:protocol",
         "specialist:testing"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 65,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-204",
@@ -166,7 +292,36 @@
         "milestone:F-011",
         "team:protocol",
         "specialist:architecture"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-205",
@@ -181,7 +336,36 @@
         "milestone:F-011",
         "team:runtime",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-206",
@@ -197,7 +381,36 @@
         "team:runtime",
         "team:protocol",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 71,
+        "reasoning_depth": 67,
+        "code_edit_surface": 74,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-207",
@@ -213,7 +426,36 @@
         "team:protocol",
         "specialist:architecture",
         "specialist:pm"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 71,
+        "reasoning_depth": 66,
+        "code_edit_surface": 74,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-208",
@@ -231,7 +473,36 @@
         "team:platform-ci",
         "team:protocol",
         "specialist:testing"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 77,
+        "reasoning_depth": 74,
+        "code_edit_surface": 78,
+        "validation_scope": 69,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-209",
@@ -247,7 +518,36 @@
         "team:protocol",
         "team:security-quality",
         "specialist:pm"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 71,
+        "reasoning_depth": 66,
+        "code_edit_surface": 74,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-210",
@@ -262,7 +562,36 @@
         "milestone:F-011",
         "team:protocol",
         "specialist:architecture"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-211",
@@ -278,7 +607,36 @@
         "team:protocol",
         "team:runtime",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 71,
+        "reasoning_depth": 66,
+        "code_edit_surface": 74,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-212",
@@ -294,7 +652,36 @@
         "team:protocol",
         "team:security-quality",
         "specialist:safety"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 71,
+        "reasoning_depth": 67,
+        "code_edit_surface": 74,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-213",
@@ -310,7 +697,36 @@
         "team:rendering",
         "team:runtime",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 71,
+        "reasoning_depth": 66,
+        "code_edit_surface": 74,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-214",
@@ -327,7 +743,36 @@
         "team:protocol",
         "team:rendering",
         "specialist:pm"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 74,
+        "reasoning_depth": 70,
+        "code_edit_surface": 76,
+        "validation_scope": 66,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-215",
@@ -346,7 +791,36 @@
         "team:runtime",
         "team:protocol",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 80,
+        "reasoning_depth": 78,
+        "code_edit_surface": 80,
+        "validation_scope": 72,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-216",
@@ -362,7 +836,36 @@
         "team:platform-ci",
         "team:protocol",
         "specialist:testing"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 71,
+        "reasoning_depth": 66,
+        "code_edit_surface": 74,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-217",
@@ -378,7 +881,36 @@
         "team:runtime",
         "team:protocol",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 71,
+        "reasoning_depth": 67,
+        "code_edit_surface": 74,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-218",
@@ -394,7 +926,36 @@
         "team:runtime",
         "team:protocol",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 71,
+        "reasoning_depth": 67,
+        "code_edit_surface": 74,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-219",
@@ -410,7 +971,36 @@
         "team:platform-ci",
         "team:protocol",
         "specialist:testing"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 71,
+        "reasoning_depth": 66,
+        "code_edit_surface": 74,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-301",
@@ -423,7 +1013,20 @@
         "milestone:R-012",
         "team:rendering",
         "specialist:testing"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 39,
+        "code_edit_surface": 47,
+        "validation_scope": 38,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 41.25,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-302",
@@ -438,7 +1041,20 @@
         "milestone:R-012",
         "team:rendering",
         "specialist:testing"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-303",
@@ -453,7 +1069,20 @@
         "milestone:R-012",
         "team:rendering",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-304",
@@ -468,7 +1097,20 @@
         "milestone:R-012",
         "team:runtime",
         "specialist:qa"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-401",
@@ -481,7 +1123,20 @@
         "milestone:P-013",
         "team:platform-ci",
         "specialist:pm"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 39,
+        "code_edit_surface": 47,
+        "validation_scope": 38,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 41.25,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-402",
@@ -496,7 +1151,20 @@
         "milestone:P-013",
         "team:platform-ci",
         "specialist:qa"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-403",
@@ -511,7 +1179,20 @@
         "milestone:P-013",
         "team:platform-ci",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-501",
@@ -524,7 +1205,20 @@
         "milestone:F-014",
         "team:security-quality",
         "specialist:safety"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 39,
+        "code_edit_surface": 47,
+        "validation_scope": 38,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 41.25,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-502",
@@ -539,7 +1233,20 @@
         "milestone:F-014",
         "team:security-quality",
         "specialist:qa"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-503",
@@ -554,7 +1261,20 @@
         "milestone:F-014",
         "team:security-quality",
         "specialist:pm"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-601",
@@ -567,7 +1287,20 @@
         "milestone:P-015",
         "team:security-quality",
         "specialist:release"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 39,
+        "code_edit_surface": 47,
+        "validation_scope": 38,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 41.25,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-602",
@@ -582,7 +1315,20 @@
         "milestone:P-015",
         "team:security-quality",
         "specialist:safety"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-603",
@@ -597,7 +1343,20 @@
         "milestone:P-015",
         "team:security-quality",
         "specialist:release"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-701",
@@ -610,7 +1369,20 @@
         "milestone:ARU-016",
         "team:runtime",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 39,
+        "code_edit_surface": 47,
+        "validation_scope": 38,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 41.25,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-702",
@@ -625,7 +1397,20 @@
         "milestone:ARU-016",
         "team:runtime",
         "specialist:qa"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-703",
@@ -640,7 +1425,20 @@
         "milestone:ARU-016",
         "team:runtime",
         "specialist:safety"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-704",
@@ -656,7 +1454,20 @@
         "milestone:ARU-016",
         "team:runtime",
         "specialist:testing"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 50,
+        "reasoning_depth": 47,
+        "code_edit_surface": 51,
+        "validation_scope": 44,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 46.45,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-801",
@@ -669,7 +1480,20 @@
         "milestone:U-021",
         "team:rendering",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 39,
+        "code_edit_surface": 47,
+        "validation_scope": 38,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 41.25,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-802",
@@ -684,7 +1508,20 @@
         "milestone:U-021",
         "team:rendering",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-803",
@@ -699,7 +1536,20 @@
         "milestone:U-021",
         "team:rendering",
         "specialist:architecture"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-804",
@@ -720,7 +1570,20 @@
       ],
       "evidence_commands": [
         "PYTHONPATH=. uv run pytest tests/test_luvatrix_plot.py tests/test_planes_runtime.py -k \"scroll or viewport\" -q"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 63,
+        "reasoning_depth": 59,
+        "code_edit_surface": 65,
+        "validation_scope": 57,
+        "iteration_risk": 54
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 50.87,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 0.85,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-805",
@@ -741,7 +1604,20 @@
       ],
       "evidence_commands": [
         "PYTHONPATH=. uv run pytest tests/test_luvatrix_ui_table.py -q"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 63,
+        "reasoning_depth": 60,
+        "code_edit_surface": 65,
+        "validation_scope": 57,
+        "iteration_risk": 54
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 51.09,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 0.85,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-821",
@@ -757,7 +1633,20 @@
         "team:rendering",
         "team:runtime",
         "specialist:architecture"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 49,
+        "reasoning_depth": 44,
+        "code_edit_surface": 52,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 45.1,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-822",
@@ -772,7 +1661,20 @@
         "milestone:U-021",
         "team:rendering",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 44,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 44.1,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-834",
@@ -793,7 +1695,20 @@
       ],
       "evidence_commands": [
         "PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py -q"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 63,
+        "reasoning_depth": 60,
+        "code_edit_surface": 65,
+        "validation_scope": 57,
+        "iteration_risk": 54
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 51.09,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 0.85,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-835",
@@ -815,7 +1730,20 @@
       "evidence_commands": [
         "PYTHONPATH=. uv run pytest tests/test_m008_perf_gate.py -q",
         "PYTHONPATH=. uv run python ops/ci/m008_perf_gate.py --samples 60 --budget-p95-ms 40 --budget-jitter-ms 25"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 63,
+        "reasoning_depth": 60,
+        "code_edit_surface": 65,
+        "validation_scope": 57,
+        "iteration_risk": 54
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 51.09,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 0.85,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-836",
@@ -836,7 +1764,20 @@
       ],
       "evidence_commands": [
         "PYTHONPATH=. uv run pytest tests/test_window_matrix_protocol.py tests/test_app_runtime.py tests/test_planes_runtime.py -q"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 63,
+        "reasoning_depth": 60,
+        "code_edit_surface": 65,
+        "validation_scope": 57,
+        "iteration_risk": 54
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 51.09,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 0.85,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-837",
@@ -857,7 +1798,20 @@
       ],
       "evidence_commands": [
         "PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k \"cache or svg\" -q"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 41,
+        "code_edit_surface": 46,
+        "validation_scope": 38,
+        "iteration_risk": 35
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 24.66,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.6,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-838",
@@ -878,7 +1832,20 @@
       ],
       "evidence_commands": [
         "PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k \"coalesced or scroll\" -q"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 41,
+        "code_edit_surface": 46,
+        "validation_scope": 38,
+        "iteration_risk": 35
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 24.66,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.6,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-839",
@@ -899,7 +1866,20 @@
       ],
       "evidence_commands": [
         "PYTHONPATH=. uv run pytest tests/test_hdi_thread.py tests/test_planes_runtime.py -k \"input or queue or intent\" -q"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 41,
+        "code_edit_surface": 46,
+        "validation_scope": 38,
+        "iteration_risk": 35
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 24.66,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.6,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-840",
@@ -921,7 +1901,20 @@
       "evidence_commands": [
         "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/scroll_drag_candidate.json",
         "PYTHONPATH=. uv run pytest tests -k \"scroll or viewport or dirty_rect\" -q"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 41,
+        "code_edit_surface": 46,
+        "validation_scope": 38,
+        "iteration_risk": 35
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 24.66,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.6,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-901",
@@ -934,7 +1927,20 @@
         "milestone:AU-018",
         "team:runtime",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 39,
+        "code_edit_surface": 47,
+        "validation_scope": 38,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 41.25,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-902",
@@ -949,7 +1955,20 @@
         "milestone:AU-018",
         "team:runtime",
         "specialist:qa"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-1001",
@@ -962,7 +1981,20 @@
         "milestone:AU-019",
         "team:protocol",
         "specialist:architecture"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 39,
+        "code_edit_surface": 47,
+        "validation_scope": 38,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 41.25,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-1002",
@@ -978,7 +2010,20 @@
         "milestone:AU-019",
         "team:rendering",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 50,
+        "reasoning_depth": 47,
+        "code_edit_surface": 51,
+        "validation_scope": 44,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 46.45,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-1003",
@@ -993,7 +2038,20 @@
         "milestone:AU-019",
         "team:runtime",
         "specialist:qa"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-1004",
@@ -1008,7 +2066,20 @@
         "milestone:AU-019",
         "team:security-quality",
         "specialist:testing"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-1101",
@@ -1021,7 +2092,20 @@
         "milestone:APU-020",
         "team:rendering",
         "specialist:architecture"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 44,
+        "reasoning_depth": 39,
+        "code_edit_surface": 47,
+        "validation_scope": 38,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 41.25,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-1102",
@@ -1036,7 +2120,20 @@
         "milestone:APU-020",
         "team:rendering",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-1103",
@@ -1051,7 +2148,20 @@
         "milestone:APU-020",
         "team:rendering",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-1104",
@@ -1066,7 +2176,20 @@
         "milestone:APU-020",
         "team:runtime",
         "specialist:qa"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-1105",
@@ -1081,7 +2204,20 @@
         "milestone:APU-020",
         "team:runtime",
         "specialist:release"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-1106",
@@ -1096,7 +2232,20 @@
         "milestone:APU-020",
         "team:platform-ci",
         "specialist:testing"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-1107",
@@ -1111,7 +2260,36 @@
         "milestone:APU-020",
         "team:protocol",
         "specialist:architecture"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-1108",
@@ -1126,7 +2304,36 @@
         "milestone:APU-020",
         "team:platform-ci",
         "specialist:pm"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-1109",
@@ -1141,7 +2348,36 @@
         "milestone:APU-020",
         "team:platform-ci",
         "specialist:testing"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 65,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-1110",
@@ -1156,7 +2392,36 @@
         "milestone:APU-020",
         "team:runtime",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 65,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-1111",
@@ -1171,7 +2436,36 @@
         "milestone:APU-020",
         "team:platform-ci",
         "specialist:release"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 65,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-1112",
@@ -1186,7 +2480,36 @@
         "milestone:APU-020",
         "team:protocol",
         "specialist:development"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-1113",
@@ -1201,7 +2524,36 @@
         "milestone:APU-020",
         "team:platform-ci",
         "specialist:testing"
-      ]
+      ],
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      },
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2101",
@@ -1239,7 +2591,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 68,
+        "reasoning_depth": 62,
+        "code_edit_surface": 72,
+        "validation_scope": 60,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2102",
@@ -1279,7 +2645,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 71,
+        "reasoning_depth": 66,
+        "code_edit_surface": 74,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2103",
@@ -1318,7 +2698,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2104",
@@ -1357,7 +2751,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 65,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2201",
@@ -1398,7 +2806,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2202",
@@ -1439,7 +2861,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2203",
@@ -1480,7 +2916,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2204",
@@ -1523,7 +2973,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 75,
+        "reasoning_depth": 74,
+        "code_edit_surface": 75,
+        "validation_scope": 69,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2301",
@@ -1565,7 +3029,20 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 59,
+        "reasoning_depth": 53,
+        "code_edit_surface": 62,
+        "validation_scope": 51,
+        "iteration_risk": 48
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 38.4,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.7,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2302",
@@ -1607,7 +3084,20 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 59,
+        "reasoning_depth": 53,
+        "code_edit_surface": 62,
+        "validation_scope": 51,
+        "iteration_risk": 48
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 38.4,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.7,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2303",
@@ -1649,7 +3139,20 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 59,
+        "reasoning_depth": 54,
+        "code_edit_surface": 62,
+        "validation_scope": 51,
+        "iteration_risk": 48
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 38.57,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.7,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2304",
@@ -1691,7 +3194,20 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 59,
+        "reasoning_depth": 54,
+        "code_edit_surface": 62,
+        "validation_scope": 51,
+        "iteration_risk": 48
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 38.57,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.7,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2305",
@@ -1733,7 +3249,20 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 59,
+        "reasoning_depth": 53,
+        "code_edit_surface": 62,
+        "validation_scope": 51,
+        "iteration_risk": 48
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 38.4,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.7,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2401",
@@ -1760,7 +3289,20 @@
       "rollback_strategy": "Feature flag + dual-path execution and fast rollback to previous stable implementation on regression detection.",
       "impact_bucket": "XL",
       "effort_bucket": "L",
-      "confidence": 0.7
+      "confidence": 0.7,
+      "cost_components": {
+        "context_load": 79,
+        "reasoning_depth": 73,
+        "code_edit_surface": 82,
+        "validation_scope": 71,
+        "iteration_risk": 73
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 83.16,
+      "cost_bucket": "XXL",
+      "stage_multiplier_applied": 1.1,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2402",
@@ -1787,7 +3329,20 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
       "effort_bucket": "M",
-      "confidence": 0.78
+      "confidence": 0.78,
+      "cost_components": {
+        "context_load": 79,
+        "reasoning_depth": 73,
+        "code_edit_surface": 82,
+        "validation_scope": 71,
+        "iteration_risk": 73
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 83.16,
+      "cost_bucket": "XXL",
+      "stage_multiplier_applied": 1.1,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2403",
@@ -1814,7 +3369,20 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
       "effort_bucket": "M",
-      "confidence": 0.72
+      "confidence": 0.72,
+      "cost_components": {
+        "context_load": 79,
+        "reasoning_depth": 73,
+        "code_edit_surface": 82,
+        "validation_scope": 71,
+        "iteration_risk": 73
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 83.16,
+      "cost_bucket": "XXL",
+      "stage_multiplier_applied": 1.1,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2404",
@@ -1841,7 +3409,20 @@
       "rollback_strategy": "Feature flag + dual-path execution and fast rollback to previous stable implementation on regression detection.",
       "impact_bucket": "M",
       "effort_bucket": "L",
-      "confidence": 0.68
+      "confidence": 0.68,
+      "cost_components": {
+        "context_load": 79,
+        "reasoning_depth": 73,
+        "code_edit_surface": 82,
+        "validation_scope": 71,
+        "iteration_risk": 73
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 83.16,
+      "cost_bucket": "XXL",
+      "stage_multiplier_applied": 1.1,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2501",
@@ -1868,7 +3449,20 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
       "effort_bucket": "M",
-      "confidence": 0.8
+      "confidence": 0.8,
+      "cost_components": {
+        "context_load": 46,
+        "reasoning_depth": 41,
+        "code_edit_surface": 49,
+        "validation_scope": 38,
+        "iteration_risk": 35
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 25.26,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.6,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2502",
@@ -1895,7 +3489,20 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
       "effort_bucket": "S",
-      "confidence": 0.82
+      "confidence": 0.82,
+      "cost_components": {
+        "context_load": 46,
+        "reasoning_depth": 40,
+        "code_edit_surface": 49,
+        "validation_scope": 38,
+        "iteration_risk": 35
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 25.11,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.6,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2503",
@@ -1922,7 +3529,20 @@
       "rollback_strategy": "Feature flag + dual-path execution and fast rollback to previous stable implementation on regression detection.",
       "impact_bucket": "XL",
       "effort_bucket": "XL",
-      "confidence": 0.58
+      "confidence": 0.58,
+      "cost_components": {
+        "context_load": 46,
+        "reasoning_depth": 41,
+        "code_edit_surface": 49,
+        "validation_scope": 38,
+        "iteration_risk": 35
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 25.26,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.6,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2504",
@@ -1950,7 +3570,20 @@
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
       "impact_bucket": "L",
       "effort_bucket": "M",
-      "confidence": 0.74
+      "confidence": 0.74,
+      "cost_components": {
+        "context_load": 49,
+        "reasoning_depth": 44,
+        "code_edit_surface": 51,
+        "validation_scope": 41,
+        "iteration_risk": 35
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 26.67,
+      "cost_bucket": "M",
+      "stage_multiplier_applied": 0.6,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true
     },
     {
       "id": "T-2601",
@@ -1991,7 +3624,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 65,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2602",
@@ -2032,7 +3679,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 65,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2603",
@@ -2073,7 +3734,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 65,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2604",
@@ -2115,7 +3790,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 72,
+        "reasoning_depth": 70,
+        "code_edit_surface": 73,
+        "validation_scope": 66,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2701",
@@ -2155,7 +3844,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2702",
@@ -2195,7 +3898,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 69,
+        "reasoning_depth": 66,
+        "code_edit_surface": 71,
+        "validation_scope": 63,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     },
     {
       "id": "T-2703",
@@ -2238,7 +3955,21 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "cost_components": {
+        "context_load": 78,
+        "reasoning_depth": 78,
+        "code_edit_surface": 77,
+        "validation_scope": 72,
+        "iteration_risk": 60
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 0.0,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "done_telemetry_backfill_estimated": true
     }
   ]
 }

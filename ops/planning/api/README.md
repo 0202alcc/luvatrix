@@ -96,6 +96,18 @@ bash ops/planning/api/sync_planning_from_main.sh
 - exits if local `ops/planning` edits exist
 - restores `ops/planning` from `origin/main` and commits sync delta
 
+## Telemetry Backfill
+
+If historical tasks are missing `cost_*` and `Done` telemetry fields:
+
+```bash
+python ops/planning/api/backfill_task_telemetry.py --include-done-telemetry --apply
+```
+
+Notes:
+1. Run on `main` only.
+2. Cost fields are marked estimated for later replacement with measured values.
+
 ## Usage
 
 1. List milestones:

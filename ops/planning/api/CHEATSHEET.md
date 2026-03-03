@@ -170,7 +170,17 @@ Auto-sync `ops/planning` on milestone branch:
 bash ops/planning/api/sync_planning_from_main.sh
 ```
 
-## 10) Completion rule
+## 10) Backfill token telemetry
+
+Backfill all task cost fields + done telemetry defaults:
+
+```bash
+uv run python ops/planning/api/backfill_task_telemetry.py --include-done-telemetry --apply
+```
+
+Use this only on `main`.
+
+## 11) Completion rule
 
 Milestone is considered complete only when:
 
