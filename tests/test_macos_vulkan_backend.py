@@ -10,6 +10,7 @@ from luvatrix_core.platform.macos.vulkan_backend import MoltenVKMacOSBackend
 from luvatrix_core.platform.macos.vulkan_presenter import VulkanContext
 from luvatrix_core.platform.macos.window_system import MacOSWindowHandle
 from luvatrix_core.platform.vulkan_compat import VulkanKHRCompatMixin, decode_vk_string
+from luvatrix_core.perf.copy_telemetry import begin_copy_telemetry_frame, snapshot_copy_telemetry
 
 
 class _FakeWindowSystem:
@@ -1007,12 +1008,225 @@ class MacOSVulkanBackendTests(unittest.TestCase):
         backend._vulkan_available = True
         backend._logical_device = "device"
         backend._physical_device = "gpu"
+        backend._persistent_staging_enabled = False
         rgba = torch.tensor([[[1, 2, 3, 4]]], dtype=torch.uint8)
 
         backend._upload_rgba_to_staging(rgba)
 
         self.assertEqual(bytes(fake_vk.mapped), bytes([1, 2, 3, 4]))
         self.assertTrue(fake_vk.unmapped)
+
+    def test_upload_rgba_to_staging_persistent_map_reuses_mapping(self) -> None:
+        class _FakeFFI:
+            @staticmethod
+            def from_buffer(buf):
+                return buf
+
+            @staticmethod
+            def memmove(dst, src, n):
+                dst[:n] = src[:n]
+
+        class _FakeVk:
+            def __init__(self) -> None:
+                self.ffi = _FakeFFI()
+                self.map_calls = 0
+                self.unmap_calls = 0
+                self._mapped = bytearray()
+
+            def vkMapMemory(self, device, memory, offset, size, flags):
+                self.map_calls += 1
+                self._mapped = bytearray(size)
+                return self._mapped
+
+            def vkUnmapMemory(self, device, memory):
+                self.unmap_calls += 1
+
+        class _UploadBackend(MoltenVKMacOSBackend):
+            def _ensure_staging_buffer(self, required_size: int) -> None:
+                self._staging_size = max(self._staging_size, required_size)
+                self._staging_memory = "staging-memory"
+
+            def _ensure_upload_image(self, width: int, height: int) -> None:
+                self._upload_image = "upload-image"
+                self._upload_image_extent = (width, height)
+
+        backend = _UploadBackend(window_system=_FakeWindowSystem())
+        fake_vk = _FakeVk()
+        backend._vk = fake_vk
+        backend._vulkan_available = True
+        backend._logical_device = "device"
+        backend._physical_device = "gpu"
+        backend._persistent_staging_enabled = True
+        rgba = torch.zeros((1, 1, 4), dtype=torch.uint8)
+
+        begin_copy_telemetry_frame()
+        backend._upload_rgba_to_staging(rgba)
+        backend._upload_rgba_to_staging(rgba)
+        telemetry = snapshot_copy_telemetry()
+
+        self.assertEqual(fake_vk.map_calls, 1)
+        self.assertEqual(fake_vk.unmap_calls, 0)
+        self.assertEqual(int(telemetry.get("staging_map_count", -1)), 1)
+
+    def test_upload_rgba_to_staging_transient_mode_maps_each_frame(self) -> None:
+        class _FakeFFI:
+            @staticmethod
+            def from_buffer(buf):
+                return buf
+
+            @staticmethod
+            def memmove(dst, src, n):
+                dst[:n] = src[:n]
+
+        class _FakeVk:
+            def __init__(self) -> None:
+                self.ffi = _FakeFFI()
+                self.map_calls = 0
+                self.unmap_calls = 0
+                self._mapped = bytearray()
+
+            def vkMapMemory(self, device, memory, offset, size, flags):
+                self.map_calls += 1
+                self._mapped = bytearray(size)
+                return self._mapped
+
+            def vkUnmapMemory(self, device, memory):
+                self.unmap_calls += 1
+
+        class _UploadBackend(MoltenVKMacOSBackend):
+            def _ensure_staging_buffer(self, required_size: int) -> None:
+                self._staging_size = max(self._staging_size, required_size)
+                self._staging_memory = "staging-memory"
+
+            def _ensure_upload_image(self, width: int, height: int) -> None:
+                self._upload_image = "upload-image"
+                self._upload_image_extent = (width, height)
+
+        backend = _UploadBackend(window_system=_FakeWindowSystem())
+        fake_vk = _FakeVk()
+        backend._vk = fake_vk
+        backend._vulkan_available = True
+        backend._logical_device = "device"
+        backend._physical_device = "gpu"
+        backend._persistent_staging_enabled = False
+        rgba = torch.zeros((1, 1, 4), dtype=torch.uint8)
+
+        begin_copy_telemetry_frame()
+        backend._upload_rgba_to_staging(rgba)
+        backend._upload_rgba_to_staging(rgba)
+        telemetry = snapshot_copy_telemetry()
+
+        self.assertEqual(fake_vk.map_calls, 2)
+        self.assertEqual(fake_vk.unmap_calls, 2)
+        self.assertEqual(int(telemetry.get("staging_map_count", -1)), 2)
+
+    def test_upload_image_reuse_avoids_recreate_for_smaller_extent(self) -> None:
+        class _MemType:
+            propertyFlags = 0
+
+        class _MemProps:
+            memoryTypeCount = 1
+            memoryTypes = [_MemType()]
+
+        class _Req:
+            memoryTypeBits = 1
+            size = 1024
+
+        class _FakeVk:
+            VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO = 1
+            VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO = 2
+
+            def __init__(self) -> None:
+                self.create_image_calls = 0
+                self.destroy_image_calls = 0
+
+            @staticmethod
+            def VkImageCreateInfo(**kwargs):
+                return kwargs
+
+            @staticmethod
+            def VkMemoryAllocateInfo(**kwargs):
+                return kwargs
+
+            def vkCreateImage(self, device, ci, allocator):
+                self.create_image_calls += 1
+                return f"image-{self.create_image_calls}"
+
+            @staticmethod
+            def vkGetImageMemoryRequirements(device, image):
+                return _Req()
+
+            @staticmethod
+            def vkAllocateMemory(device, alloc_info, allocator):
+                return "mem"
+
+            @staticmethod
+            def vkBindImageMemory(device, image, memory, offset):
+                return None
+
+            def vkDestroyImage(self, device, image, allocator):
+                self.destroy_image_calls += 1
+
+            @staticmethod
+            def vkFreeMemory(device, memory, allocator):
+                return None
+
+            @staticmethod
+            def vkGetPhysicalDeviceMemoryProperties(device):
+                return _MemProps()
+
+        backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+        fake_vk = _FakeVk()
+        backend._vk = fake_vk
+        backend._vulkan_available = True
+        backend._logical_device = "device"
+        backend._physical_device = "gpu"
+        backend._swapchain_image_format = 44
+        backend._upload_image_reuse_enabled = True
+        backend._transfer_growth_enabled = False
+
+        backend._ensure_upload_image(320, 180)
+        backend._ensure_upload_image(300, 170)
+
+        self.assertEqual(fake_vk.create_image_calls, 1)
+        self.assertEqual(fake_vk.destroy_image_calls, 0)
+
+    def test_swapchain_invalidation_debounce_skips_recreate(self) -> None:
+        class _Backend(MoltenVKMacOSBackend):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.recreate_calls = 0
+
+            def _recreate_swapchain(self, width: int, height: int) -> None:
+                self.recreate_calls += 1
+
+        backend = _Backend(window_system=_FakeWindowSystem())
+        backend._vulkan_available = True
+        backend._logical_device = "device"
+        backend._debounced_swapchain_recreate_enabled = True
+        backend._swapchain_recreate_min_interval_ns = 10_000_000
+        backend._last_swapchain_recreate_ns = 1_000_000_000
+        with patch("time.perf_counter_ns", return_value=backend._last_swapchain_recreate_ns + 1):
+            backend._handle_swapchain_invalidation()
+
+        self.assertEqual(backend.recreate_calls, 0)
+        self.assertEqual(backend._swapchain_recreate_debounced, 1)
+
+    def test_swapchain_invalidation_falls_back_after_repeated_failures(self) -> None:
+        class _Backend(MoltenVKMacOSBackend):
+            def _recreate_swapchain(self, width: int, height: int) -> None:
+                raise RuntimeError("boom")
+
+        backend = _Backend(window_system=_FakeWindowSystem())
+        backend._vulkan_available = True
+        backend._logical_device = "device"
+        backend._debounced_swapchain_recreate_enabled = False
+        backend._swapchain_max_failures_before_fallback = 2
+
+        backend._handle_swapchain_invalidation()
+        self.assertTrue(backend._vulkan_available)
+        backend._handle_swapchain_invalidation()
+        self.assertFalse(backend._vulkan_available)
 
     def test_upload_frame_stretches_to_swapchain_extent_when_enabled(self) -> None:
         backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem(), preserve_aspect_ratio=False)
@@ -1101,7 +1315,9 @@ class MacOSVulkanBackendTests(unittest.TestCase):
             self.assertFalse(backend._vulkan_available)
             note = str(backend._vulkan_note)
             self.assertTrue(
-                ("missing macOS surface symbols" in note) or ("instance initialization failed" in note)
+                ("missing macOS surface symbols" in note)
+                or ("missing required KHR surface/swapchain call path" in note)
+                or ("instance initialization failed" in note)
             )
         finally:
             if old is None:

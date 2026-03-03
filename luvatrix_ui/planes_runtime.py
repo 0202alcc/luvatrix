@@ -213,6 +213,8 @@ class PlaneApp:
                 "invalidation_escape_hatch_reason": invalidation_escape_hatch_reason,
                 "copy_count": 0,
                 "copy_bytes": 0,
+                "upload_bytes": 0,
+                "swapchain_recreate_count": 0,
                 "timing_ms": {
                     "input": self._ns_to_ms(self._frame_perf.get("input_ns", 0.0)),
                     "hit_test": self._ns_to_ms(self._frame_perf.get("hit_test_ns", 0.0)),
@@ -230,6 +232,8 @@ class PlaneApp:
                     "upload_pack": 0.0,
                     "upload_map": 0.0,
                     "upload_memcpy": 0.0,
+                    "queue_submit": 0.0,
+                    "queue_present": 0.0,
                 },
             }
             return
@@ -335,6 +339,8 @@ class PlaneApp:
             "invalidation_escape_hatch_reason": invalidation_escape_hatch_reason,
             "copy_count": int(estimated_copy.get("copy_count", 0)),
             "copy_bytes": int(estimated_copy.get("copy_bytes", 0)),
+            "upload_bytes": int(estimated_copy.get("upload_bytes", 0)),
+            "swapchain_recreate_count": int(estimated_copy.get("swapchain_recreate_count", 0)),
             "timing_ms": {
                 "input": self._ns_to_ms(self._frame_perf.get("input_ns", 0.0)),
                 "hit_test": self._ns_to_ms(self._frame_perf.get("hit_test_ns", 0.0)),
@@ -352,6 +358,8 @@ class PlaneApp:
                 "upload_pack": self._ns_to_ms(float(estimated_copy.get("upload_pack_ns", 0))),
                 "upload_map": self._ns_to_ms(float(estimated_copy.get("upload_map_ns", 0))),
                 "upload_memcpy": self._ns_to_ms(float(estimated_copy.get("upload_memcpy_ns", 0))),
+                "queue_submit": self._ns_to_ms(float(estimated_copy.get("queue_submit_ns", 0))),
+                "queue_present": self._ns_to_ms(float(estimated_copy.get("queue_present_ns", 0))),
             },
         }
         ctx.finalize_ui_frame()
@@ -1396,6 +1404,10 @@ class PlaneApp:
             return
         perf["copy_count"] = int(payload.get("copy_count", perf.get("copy_count", 0)))
         perf["copy_bytes"] = int(payload.get("copy_bytes", perf.get("copy_bytes", 0)))
+        perf["upload_bytes"] = int(payload.get("upload_bytes", perf.get("upload_bytes", 0)))
+        perf["swapchain_recreate_count"] = int(
+            payload.get("swapchain_recreate_count", perf.get("swapchain_recreate_count", 0))
+        )
         copy_timing = perf.get("copy_timing_ms")
         if not isinstance(copy_timing, dict):
             return
@@ -1405,6 +1417,8 @@ class PlaneApp:
         copy_timing["upload_pack"] = self._ns_to_ms(float(payload.get("upload_pack_ns", 0)))
         copy_timing["upload_map"] = self._ns_to_ms(float(payload.get("upload_map_ns", 0)))
         copy_timing["upload_memcpy"] = self._ns_to_ms(float(payload.get("upload_memcpy_ns", 0)))
+        copy_timing["queue_submit"] = self._ns_to_ms(float(payload.get("queue_submit_ns", 0)))
+        copy_timing["queue_present"] = self._ns_to_ms(float(payload.get("queue_present_ns", 0)))
 
     def _incremental_present_enabled(self) -> bool:
         raw = self.state.get("incremental_present_enabled")
