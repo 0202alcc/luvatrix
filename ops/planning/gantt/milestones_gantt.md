@@ -20,7 +20,7 @@ P-008 🗂️ Discord ops consolidation under /discord                          
 P-010 🧱 Discord governance artifacts and onboarding system                                         |##############                                                                                                         | In Progress
 P-013 🧪 CI hardening and flaky governance                                                          |                     ~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
 P-015 🚀 Production-hardening go/no-go review                                                       |                                                 ~~~~~~~~~~~~~~~~~~~~~                                                 | Planned
-P-021 📏 Performance baseline and telemetry gates                                                   |                                                                                    ##############                     | In Progress
+P-021 📏 Performance baseline and telemetry gates                                                   |                                                                                    ==============                     | Complete
 R-002 🖥️ macOS visual runtime foundation merged to main                                            |=======                                                                                                                | Complete (2026-02-23)
 R-005 🎯 Rendering fallback, smoke docs, and GPU blit path                                          |=======                                                                                                                | Complete (2026-02-26)
 R-012 🎮 Vulkan stabilization                                                                       |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
@@ -157,11 +157,12 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
 
 ### P-021 📏 Performance baseline and telemetry gates
-- Status: In Progress
+- Status: Complete
 - Target window: Week 13-14
 - Tasks: `T-2101, T-2102, T-2103, T-2104`
 - Lifecycle events:
   - 2026-03-03 active (framework=gateflow_v1) - performance modernization baseline kickoff
+  - 2026-03-03 closed (framework=gateflow_v1) - gateflow compliance audit complete; all P-021 tasks verified done on main
 
 ### R-002 🖥️ macOS visual runtime foundation merged to main
 - Status: Complete

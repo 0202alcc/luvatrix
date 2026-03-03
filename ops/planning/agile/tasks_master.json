@@ -1152,7 +1152,7 @@
       "title": "Map exact per-frame copy chain across WindowMatrix, DisplayRuntime snapshot, and Vulkan upload stages.",
       "epic_id": "E-2101",
       "milestone_id": "P-021",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:P-021",
@@ -1164,18 +1164,33 @@
         "Copy chain documented with stage-by-stage byte movement and ownership boundaries."
       ],
       "evidence_commands": [
-        "uv run pytest tests/runtime -k copy_chain -q"
+        "uv run pytest tests/test_app_runtime.py tests/test_display_runtime.py tests/test_planes_runtime.py -q"
       ],
       "impact_bucket": "XL",
       "effort_bucket": "M",
-      "confidence": 0.9
+      "confidence": 0.9,
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 1600,
+        "wall_time_sec": 600,
+        "tool_calls": 8,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2102",
       "title": "Add baseline instrumentation counters/timers for copy bytes/count and CPU pack/map/memcpy timings.",
       "epic_id": "E-2101",
       "milestone_id": "P-021",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-2101"
       ],
@@ -1193,14 +1208,29 @@
       ],
       "impact_bucket": "XL",
       "effort_bucket": "M",
-      "confidence": 0.9
+      "confidence": 0.9,
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 1600,
+        "wall_time_sec": 600,
+        "tool_calls": 8,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2103",
       "title": "Add scenario harness coverage: idle, scroll-heavy, drag-heavy, and resize-stress.",
       "epic_id": "E-2101",
       "milestone_id": "P-021",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-2102"
       ],
@@ -1217,14 +1247,29 @@
       ],
       "impact_bucket": "L",
       "effort_bucket": "M",
-      "confidence": 0.84
+      "confidence": 0.84,
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 1600,
+        "wall_time_sec": 600,
+        "tool_calls": 8,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2104",
       "title": "Define baseline perf-gate thresholds and CI guard contracts.",
       "epic_id": "E-2101",
       "milestone_id": "P-021",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-2103"
       ],
@@ -1241,7 +1286,22 @@
       ],
       "impact_bucket": "L",
       "effort_bucket": "S",
-      "confidence": 0.85
+      "confidence": 0.85,
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 1600,
+        "wall_time_sec": 600,
+        "tool_calls": 8,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2201",

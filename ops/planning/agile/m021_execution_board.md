@@ -37,10 +37,13 @@ Last updated: `2026-03-03`
 - `PYTHONPATH=. uv run python tools/perf/assert_thresholds.py --suite baseline_contract --baseline artifacts/perf/interactive_baseline.json`
 
 ## Integration Ready
-1. Pending verification on milestone branch.
+1. None.
 
 ## Done
-1. None.
+1. `T-2101` copy-chain map completed and documented.
+2. `T-2102` copy telemetry counters/timers implemented and verified.
+3. `T-2103` deterministic scenario harness and artifact exports completed.
+4. `T-2104` baseline threshold contract and CI perf gate completed.
 
 ## Blocked
 1. None.

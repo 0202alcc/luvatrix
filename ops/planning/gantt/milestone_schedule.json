@@ -401,7 +401,7 @@
       "name": "Performance baseline and telemetry gates",
       "start_week": 13,
       "end_week": 14,
-      "status": "In Progress",
+      "status": "Complete",
       "task_ids": [
         "T-2101",
         "T-2102",
@@ -414,6 +414,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "performance modernization baseline kickoff"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "gateflow compliance audit complete; all P-021 tasks verified done on main"
         }
       ]
     },
