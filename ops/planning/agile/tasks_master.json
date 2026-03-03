@@ -1740,7 +1740,7 @@
       "title": "Implement/verify persistent mapped staging memory lifecycle.",
       "epic_id": "E-2401",
       "milestone_id": "R-023",
-      "status": "Intake",
+      "status": "Prototype Stage 2+",
       "depends_on": [
         "T-2203"
       ],
@@ -1767,7 +1767,7 @@
       "title": "Reduce repeated allocation/reallocation churn for transfer resources.",
       "epic_id": "E-2401",
       "milestone_id": "R-023",
-      "status": "Intake",
+      "status": "Prototype Stage 2+",
       "depends_on": [
         "T-2401"
       ],
@@ -1794,7 +1794,7 @@
       "title": "Minimize per-frame format conversion and clipping overhead where safe.",
       "epic_id": "E-2401",
       "milestone_id": "R-023",
-      "status": "Intake",
+      "status": "Prototype Stage 2+",
       "depends_on": [
         "T-2402"
       ],
@@ -1821,7 +1821,7 @@
       "title": "Harden swapchain recreation paths to avoid avoidable fallback/latency spikes.",
       "epic_id": "E-2401",
       "milestone_id": "R-023",
-      "status": "Intake",
+      "status": "Prototype Stage 2+",
       "depends_on": [
         "T-2403"
       ],
