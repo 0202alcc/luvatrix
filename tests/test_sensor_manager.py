@@ -7,6 +7,7 @@ from luvatrix_core.core.sensor_manager import (
     DEFAULT_ENABLED_SENSORS,
     SensorManagerThread,
     SensorProvider,
+    TTLCachedSensorProvider,
 )
 
 
@@ -81,6 +82,32 @@ class SensorManagerThreadTests(unittest.TestCase):
         mgr = SensorManagerThread(providers={}, poll_interval_s=0.001)
         sample = mgr.read_sensor("sensor.unknown")
         self.assertEqual(sample.status, "UNAVAILABLE")
+
+    def test_ttl_cached_provider_reduces_reads(self) -> None:
+        inner = _FixedProvider({"available": True}, "metadata")
+        cached = TTLCachedSensorProvider(inner, ttl_s=0.2)
+        mgr = SensorManagerThread(providers={"camera.device": cached}, poll_interval_s=0.001)
+        mgr.set_sensor_enabled("camera.device", True, actor="test")
+        mgr.start()
+        time.sleep(0.02)
+        mgr.stop()
+        self.assertLessEqual(inner.reads, 2)
+
+    def test_diagnostics_exports_fast_and_cached_latency_classes(self) -> None:
+        providers = {
+            "thermal.temperature": _FixedProvider(72.5, "C"),
+            "camera.device": TTLCachedSensorProvider(_FixedProvider({"available": True}, "metadata"), ttl_s=0.2),
+        }
+        mgr = SensorManagerThread(providers=providers, poll_interval_s=0.001)
+        mgr.set_sensor_enabled("camera.device", True, actor="test")
+        mgr.start()
+        time.sleep(0.01)
+        mgr.stop()
+        diag = mgr.diagnostics_snapshot()
+        classes = diag.get("provider_latency_by_class", {})
+        assert isinstance(classes, dict)
+        self.assertIn("fast_path", classes)
+        self.assertIn("cached_path", classes)
 
 
 if __name__ == "__main__":

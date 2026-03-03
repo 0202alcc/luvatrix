@@ -10,6 +10,7 @@ from luvatrix_core.platform.macos.sensors import (
     MacOSPowerVoltageCurrentProvider,
     MacOSSpeakerDeviceProvider,
     MacOSThermalTemperatureProvider,
+    make_default_macos_sensor_providers,
 )
 
 
@@ -48,8 +49,7 @@ class MacOSSensorProviderTests(unittest.TestCase):
 
     def test_camera_provider_reports_device_count(self) -> None:
         provider = MacOSCameraDeviceProvider()
-        fake_rows = [{"_items": [{"_name": "FaceTime HD Camera"}, {"_name": "External USB Camera"}]}]
-        with patch("luvatrix_core.platform.macos.sensors._read_system_profiler_rows", return_value=fake_rows):
+        with patch("luvatrix_core.platform.macos.sensors._count_camera_devices_ioreg", return_value=2):
             value, unit = provider.read()
         self.assertEqual(unit, "metadata")
         assert isinstance(value, dict)
@@ -66,7 +66,10 @@ class MacOSSensorProviderTests(unittest.TestCase):
                 ]
             }
         ]
-        with patch("luvatrix_core.platform.macos.sensors._read_system_profiler_rows", return_value=fake_rows):
+        with (
+            patch("luvatrix_core.platform.macos.sensors._probe_audio_devices_ioreg", side_effect=RuntimeError("x")),
+            patch("luvatrix_core.platform.macos.sensors._read_system_profiler_rows", return_value=fake_rows),
+        ):
             value, unit = provider.read()
         self.assertEqual(unit, "metadata")
         assert isinstance(value, dict)
@@ -84,7 +87,10 @@ class MacOSSensorProviderTests(unittest.TestCase):
                 ]
             }
         ]
-        with patch("luvatrix_core.platform.macos.sensors._read_system_profiler_rows", return_value=fake_rows):
+        with (
+            patch("luvatrix_core.platform.macos.sensors._probe_audio_devices_ioreg", side_effect=RuntimeError("x")),
+            patch("luvatrix_core.platform.macos.sensors._read_system_profiler_rows", return_value=fake_rows),
+        ):
             value, unit = provider.read()
         self.assertEqual(unit, "metadata")
         assert isinstance(value, dict)
@@ -102,7 +108,10 @@ class MacOSSensorProviderTests(unittest.TestCase):
                 ]
             }
         ]
-        with patch("luvatrix_core.platform.macos.sensors._read_system_profiler_rows", return_value=fake_rows):
+        with (
+            patch("luvatrix_core.platform.macos.sensors._probe_audio_devices_ioreg", side_effect=RuntimeError("x")),
+            patch("luvatrix_core.platform.macos.sensors._read_system_profiler_rows", return_value=fake_rows),
+        ):
             value, unit = provider.read()
         self.assertEqual(unit, "metadata")
         assert isinstance(value, dict)
@@ -120,12 +129,22 @@ class MacOSSensorProviderTests(unittest.TestCase):
                 ]
             }
         ]
-        with patch("luvatrix_core.platform.macos.sensors._read_system_profiler_rows", return_value=fake_rows):
+        with (
+            patch("luvatrix_core.platform.macos.sensors._probe_audio_devices_ioreg", side_effect=RuntimeError("x")),
+            patch("luvatrix_core.platform.macos.sensors._read_system_profiler_rows", return_value=fake_rows),
+        ):
             value, unit = provider.read()
         self.assertEqual(unit, "metadata")
         assert isinstance(value, dict)
         self.assertTrue(value["available"])
         self.assertEqual(value["device_count"], 2)
+
+    def test_factory_wraps_metadata_providers_with_cache(self) -> None:
+        providers = make_default_macos_sensor_providers(metadata_ttl_s=1.0)
+        self.assertIn("camera.device", providers)
+        self.assertEqual(getattr(providers["camera.device"], "path_class", None), "cached_path")
+        self.assertEqual(getattr(providers["microphone.device"], "path_class", None), "cached_path")
+        self.assertEqual(getattr(providers["speaker.device"], "path_class", None), "cached_path")
 
 
 if __name__ == "__main__":
