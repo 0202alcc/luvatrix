@@ -1354,7 +1354,7 @@
       "title": "Audit and reduce frequent FullRewrite submissions in interactive paths.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2102"
       ],
@@ -1381,7 +1381,7 @@
       "title": "Strengthen ShiftFrame + ReplaceRect strategy for scroll-heavy workflows.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2301"
       ],
@@ -1408,7 +1408,7 @@
       "title": "Enforce incremental-present policy gate with explicit invalidation escape hatch.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2302"
       ],
@@ -1435,7 +1435,7 @@
       "title": "Add dirty-rect telemetry (count, dirty-area ratio, incremental/full percentage).",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2303"
       ],
@@ -1462,7 +1462,7 @@
       "title": "Add viewport/scroll visual artifact regression suite.",
       "epic_id": "E-2301",
       "milestone_id": "U-017",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2304"
       ],
