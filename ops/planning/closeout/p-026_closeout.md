@@ -20,11 +20,11 @@
   "artifacts": [
     {
       "path": "artifacts/perf/closeout/raw_closeout_required.json",
-      "sha256": "e640e85bd92c9db01271cef6dd45fdba5c5a896dadfe1e232ebac5c18c9740a3"
+      "sha256": "01bb8b0f6aa5470a545e4ca552248d6f152fb77176f62b9ddafc91c0434c381d"
     },
     {
       "path": "artifacts/perf/closeout/measured_summary.json",
-      "sha256": "e7989471a71aaed2978c34a32da6fa89ace9c46b68d6117cb36eed06154c4914"
+      "sha256": "e394695f6331944caf5b02cbe149d942a391e3bdd8ffb5106fef24a35a2addcb"
     },
     {
       "path": "artifacts/perf/closeout/determinism_replay_matrix.json",

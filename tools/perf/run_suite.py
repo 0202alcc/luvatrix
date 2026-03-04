@@ -15,6 +15,10 @@ from luvatrix_core.core.hdi_thread import HDIEvent
 from luvatrix_core.core.sensor_manager import SensorManagerThread, SensorProvider, TTLCachedSensorProvider
 from luvatrix_ui.planes_runtime import load_plane_app
 
+RESIZE_STRESS_FULLFRAME_ALLOWED = "resize_stress_fullframe_allowed"
+RESIZE_OVERLAP_INCREMENTAL_REQUIRED = "resize_overlap_incremental_required"
+RESIZE_STRESS_ALIAS = "resize_stress"
+
 
 @dataclass
 class _Matrix:
@@ -160,24 +164,59 @@ def _scenario_event(scenario: str, i: int) -> HDIEvent | None:
             status="OK",
             payload={"x": 90.0 + float((i * 3) % 17), "y": 110.0 + float((i * 2) % 13), "phase": phase},
         )
+    if scenario == RESIZE_OVERLAP_INCREMENTAL_REQUIRED:
+        if i % 4 in {0, 1}:
+            return HDIEvent(
+                event_id=i + 1,
+                ts_ns=i + 1,
+                window_id="perf",
+                device="trackpad",
+                event_type="scroll",
+                status="OK",
+                payload={"x": 180.0, "y": 200.0, "delta_x": -6.0, "delta_y": -2.0, "phase": "changed"},
+            )
+        return HDIEvent(
+            event_id=i + 1,
+            ts_ns=i + 1,
+            window_id="perf",
+            device="mouse",
+            event_type=("press" if i % 12 == 0 else "pointer_move"),
+            status="OK",
+            payload={"x": 110.0 + float((i * 2) % 17), "y": 125.0 + float((i * 3) % 13), "phase": "drag"},
+        )
     return None
 
 
 def _scenario_matrix_dims(scenario: str, i: int, base_w: int, base_h: int) -> tuple[int, int]:
-    if scenario != "resize_stress":
+    if scenario not in {RESIZE_STRESS_FULLFRAME_ALLOWED, RESIZE_OVERLAP_INCREMENTAL_REQUIRED}:
         return (base_w, base_h)
-    # Deterministic resize cadence around base extent.
-    offsets = ((0, 0), (160, 90), (-120, -60), (220, 120), (-80, -40))
+    # Deterministic resize cadence around base extent; overlap scenario uses smaller deltas.
+    if scenario == RESIZE_OVERLAP_INCREMENTAL_REQUIRED:
+        offsets = ((0, 0), (48, 28), (-36, -20), (64, 36), (-28, -16))
+    else:
+        offsets = ((0, 0), (160, 90), (-120, -60), (220, 120), (-80, -40))
     dx, dy = offsets[i % len(offsets)]
     return (max(200, base_w + dx), max(120, base_h + dy))
 
 
+def _normalize_scenario_name(scenario: str) -> str:
+    if scenario == RESIZE_STRESS_ALIAS:
+        return RESIZE_STRESS_FULLFRAME_ALLOWED
+    return scenario
+
+
+def _should_reinit_on_resize(scenario: str) -> bool:
+    return scenario == RESIZE_STRESS_FULLFRAME_ALLOWED
+
+
 def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) -> dict[str, Any]:
+    scenario = _normalize_scenario_name(scenario)
     repo_root = Path(__file__).resolve().parents[2]
     plane_path = repo_root / "examples" / "app_protocol" / "planes_v2_poc" / "plane.json"
     app = load_plane_app(plane_path, handlers={})
     ctx = _PerfCtx(width=width, height=height)
     app.init(ctx)
+    app_reinit_count = 0
 
     frame_total_ms: list[float] = []
     copy_counts: list[int] = []
@@ -298,8 +337,10 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
             resize_change_indices.append(i)
             ctx.matrix.width = w
             ctx.matrix.height = h
-            app = load_plane_app(plane_path, handlers={})
-            app.init(ctx)
+            if _should_reinit_on_resize(scenario):
+                app = load_plane_app(plane_path, handlers={})
+                app.init(ctx)
+                app_reinit_count += 1
         app.loop(ctx, 1.0 / 60.0)
         perf = app.state.get("perf", {}) if isinstance(app.state, dict) else {}
         timing = perf.get("timing_ms", {}) if isinstance(perf, dict) else {}
@@ -331,7 +372,7 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
     dropped_ratio = float(dropped_frames) / float(samples) if samples > 0 else 0.0
 
     resize_recovery_samples_ms: list[float] = []
-    if scenario == "resize_stress":
+    if scenario == RESIZE_STRESS_FULLFRAME_ALLOWED:
         for change_idx in resize_change_indices:
             # Direct recovery measurement: first frame index after resize where 3-frame moving average
             # is below 16.7ms budget.
@@ -384,6 +425,7 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
         "p95_input_to_present_ms": float(_percentile(ctx.input_to_present_ms, 95.0)),
         "p99_input_to_present_ms": float(_percentile(ctx.input_to_present_ms, 99.0)),
         "input_to_present_ms_trace": [float(v) for v in ctx.input_to_present_ms],
+        "app_reinit_count": int(app_reinit_count),
         "resize_recovery_samples_ms": [float(v) for v in resize_recovery_samples_ms],
         "resize_recovery_sec": (
             float(_percentile(resize_recovery_samples_ms, 95.0)) / 1000.0 if resize_recovery_samples_ms else None
@@ -505,6 +547,7 @@ def _copy_chain_map(width: int, height: int) -> list[dict[str, Any]]:
 
 
 def run_suite(scenario: str, samples: int, width: int, height: int) -> dict[str, Any]:
+    normalized = _normalize_scenario_name(scenario)
     valid = {
         "render_copy_chain",
         "idle",
@@ -514,7 +557,9 @@ def run_suite(scenario: str, samples: int, width: int, height: int) -> dict[str,
         "drag_heavy",
         "mixed_burst",
         "sensor_overlay",
-        "resize_stress",
+        RESIZE_STRESS_ALIAS,
+        RESIZE_STRESS_FULLFRAME_ALLOWED,
+        RESIZE_OVERLAP_INCREMENTAL_REQUIRED,
         "input_burst",
         "sensor_polling",
         "all_interactive",
@@ -523,7 +568,7 @@ def run_suite(scenario: str, samples: int, width: int, height: int) -> dict[str,
     if scenario not in valid:
         raise ValueError(f"unsupported scenario: {scenario}")
     if scenario == "all_interactive":
-        scenario_list = ["idle", "scroll", "drag", "resize_stress"]
+        scenario_list = ["idle", "scroll", "drag", RESIZE_STRESS_FULLFRAME_ALLOWED]
     elif scenario == "closeout_required":
         scenario_list = [
             "scroll",
@@ -531,12 +576,13 @@ def run_suite(scenario: str, samples: int, width: int, height: int) -> dict[str,
             "drag_heavy",
             "mixed_burst",
             "sensor_overlay",
-            "resize_stress",
+            RESIZE_STRESS_FULLFRAME_ALLOWED,
+            RESIZE_OVERLAP_INCREMENTAL_REQUIRED,
             "input_burst",
             "sensor_polling",
         ]
     else:
-        scenario_list = [scenario]
+        scenario_list = [normalized]
     out: dict[str, Any] = {
         "suite": scenario,
         "samples": int(samples),

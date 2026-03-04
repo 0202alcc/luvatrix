@@ -28,7 +28,7 @@
       "p95_copy_map_ms": 2.0,
       "p95_copy_memcpy_ms": 2.0
     },
-    "resize_stress": {
+    "resize_stress_fullframe_allowed": {
       "p95_frame_total_ms": 60.0,
       "jitter_ms": 25.0,
       "p95_copy_bytes": 12000000,
