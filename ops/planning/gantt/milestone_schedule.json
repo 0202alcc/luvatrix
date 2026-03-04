@@ -723,13 +723,17 @@
       "name": "Runtime Performance Hardening Closeout Signoff",
       "start_week": 11,
       "end_week": 14,
-      "status": "Complete",
+      "status": "In Progress",
       "task_ids": [
         "T-2801",
         "T-2802",
         "T-2803",
         "T-2804",
-        "T-2805"
+        "T-2805",
+        "T-2806",
+        "T-2807",
+        "T-2808",
+        "T-2809"
       ],
       "success_criteria": [
         "All closeout tasks complete with consolidated evidence package.",
@@ -749,6 +753,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "architect decision package imported: Vulkan deferred with guardrails; thresholds/invariants/exit gates finalized"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "strict evidence validator failed; remediation set opened for p99/resize/determinism/incremental coverage gaps"
         }
       ],
       "acceptance_checks": {

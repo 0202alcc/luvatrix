@@ -1,0 +1,122 @@
+{
+  "invariants": {
+    "no_torn_reads": true,
+    "revision_stability": true,
+    "snapshot_immutability": true
+  },
+  "milestone_id": "P-026",
+  "mismatch_count": 0,
+  "required_digests": [
+    "event_ordering",
+    "revision_sequence"
+  ],
+  "runs_per_seed_observed": 10,
+  "runs_per_seed_required": 10,
+  "seed_count_observed": 8,
+  "seed_count_required": 8,
+  "seed_matrix": [
+    {
+      "event_ordering_digest": "d2274ffaeec6136e",
+      "invariants": {
+        "no_torn_reads": true,
+        "revision_stability": true,
+        "snapshot_immutability": true
+      },
+      "mismatch_count": 0,
+      "revision_sequence_digest": "b6eaab669b527397",
+      "runs_observed": 10,
+      "seed": 1337
+    },
+    {
+      "event_ordering_digest": "9a1dd75b609543f1",
+      "invariants": {
+        "no_torn_reads": true,
+        "revision_stability": true,
+        "snapshot_immutability": true
+      },
+      "mismatch_count": 0,
+      "revision_sequence_digest": "c478d77fe536a63b",
+      "runs_observed": 10,
+      "seed": 2024
+    },
+    {
+      "event_ordering_digest": "28d96652937f8a4f",
+      "invariants": {
+        "no_torn_reads": true,
+        "revision_stability": true,
+        "snapshot_immutability": true
+      },
+      "mismatch_count": 0,
+      "revision_sequence_digest": "abdbd8bb5e3223c5",
+      "runs_observed": 10,
+      "seed": 7
+    },
+    {
+      "event_ordering_digest": "3100173f14845f7a",
+      "invariants": {
+        "no_torn_reads": true,
+        "revision_stability": true,
+        "snapshot_immutability": true
+      },
+      "mismatch_count": 0,
+      "revision_sequence_digest": "ac7ee5828eacac61",
+      "runs_observed": 10,
+      "seed": 11
+    },
+    {
+      "event_ordering_digest": "13f1941aca63108f",
+      "invariants": {
+        "no_torn_reads": true,
+        "revision_stability": true,
+        "snapshot_immutability": true
+      },
+      "mismatch_count": 0,
+      "revision_sequence_digest": "6e57508a0c5ec180",
+      "runs_observed": 10,
+      "seed": 42
+    },
+    {
+      "event_ordering_digest": "c8f332c7cbac976b",
+      "invariants": {
+        "no_torn_reads": true,
+        "revision_stability": true,
+        "snapshot_immutability": true
+      },
+      "mismatch_count": 0,
+      "revision_sequence_digest": "6e0c8a1715893e77",
+      "runs_observed": 10,
+      "seed": 314
+    },
+    {
+      "event_ordering_digest": "7f2d4463ccf28643",
+      "invariants": {
+        "no_torn_reads": true,
+        "revision_stability": true,
+        "snapshot_immutability": true
+      },
+      "mismatch_count": 0,
+      "revision_sequence_digest": "62ca95505d1eccc1",
+      "runs_observed": 10,
+      "seed": 9001
+    },
+    {
+      "event_ordering_digest": "3d3755fd1f3b5a23",
+      "invariants": {
+        "no_torn_reads": true,
+        "revision_stability": true,
+        "snapshot_immutability": true
+      },
+      "mismatch_count": 0,
+      "revision_sequence_digest": "a7dabdabb7caa6c1",
+      "runs_observed": 10,
+      "seed": 2718
+    }
+  ],
+  "source_files": [
+    "artifacts/perf/r023_final_interactive_main.json",
+    "artifacts/perf/r023_final_resize_main.json",
+    "artifacts/perf/input_burst_main_postmerge.json",
+    "artifacts/perf/r025_hdi_burst_post.json"
+  ],
+  "status": "complete_evidence"
+}

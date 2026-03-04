@@ -5,6 +5,27 @@ Epic: `E-2801`
 Task chain: `T-2801 -> (T-2802, T-2803, T-2804) -> T-2805`  
 Last updated: `2026-03-03`
 
+## Focused Remediation Set (Strict Evidence Validator)
+1. `T-2806` must clear summary blockers:
+   - `frame_p99_present`
+   - `input_p99_present`
+   - `resize_recovery_present`
+2. `T-2807` must clear determinism replay blockers:
+   - seed coverage `>= 8`
+   - runs/seed `>= 10`
+   - mismatch count `== 0`
+3. `T-2808` must clear incremental matrix blockers:
+   - required scenarios include `horizontal_pan`, `mixed_burst`, `sensor_overlay` and full required scenario set
+   - drag target passes (`drag_interaction observed >= target`)
+4. `T-2809` is final validator gate:
+   - rebuild packet/hash manifest
+   - `validate_closeout_evidence.py` returns `PASS`
+
+## Execution Order
+1. `T-2806`
+2. `T-2807` and `T-2808` in parallel after `T-2806`
+3. `T-2809` after both `T-2807` and `T-2808`
+
 ## Intake
 1. None.
 
@@ -27,7 +48,10 @@ Last updated: `2026-03-03`
 1. None.
 
 ## Verification Review
-1. None.
+1. `T-2806` Summary regenerated with `p99` and resize recovery evidence present.
+2. `T-2807` Determinism replay matrix regenerated with `8` seeds x `10` runs and zero mismatches.
+3. `T-2808` Incremental matrix regenerated with full required scenarios and drag target compliance.
+4. `T-2809` Closeout packet/hash manifest rebuilt; strict evidence validator returns PASS.
 1. Unified benchmark threshold gates (task `T-2801` canonical baseline):
 - Frame time latency: `p50 <= 16.7ms`, `p95 <= 25.0ms`, `p99 <= 33.3ms` (interactive mixed-load scenarios).
 - Input-to-present latency: `p95 <= 33.3ms`, `p99 <= 50.0ms` (burst input scenarios).
@@ -96,7 +120,10 @@ Last updated: `2026-03-03`
 - Missing or non-reproducible required evidence.
 
 ## Integration Ready
-1. None.
+1. `T-2806` Ready for `Done` transition after merge-to-main gate.
+2. `T-2807` Ready for `Done` transition after merge-to-main gate.
+3. `T-2808` Ready for `Done` transition after merge-to-main gate.
+4. `T-2809` Ready for `Done` transition after merge-to-main gate.
 
 ## Done
 1. `T-2801` Done with benchmark closeout telemetry (`input_tokens=12800`, `output_tokens=2600`, `wall_time_sec=1540`, `tool_calls=24`).
