@@ -13,7 +13,7 @@ Fast command reference for milestone/task/board/backlog operations.
 5. GateFlow guardrails:
 - no stage skipping
 - backward stage moves require `--force-with-reason`
-- WIP limits enforced (`Prototype* <=2`, `Verification Review <=1` per milestone)
+- WIP limits enforced from `ops/planning/agile/boards_registry.json` (`wip_limits`)
 
 ## 1) Milestone IDs
 

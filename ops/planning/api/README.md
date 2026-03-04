@@ -81,8 +81,13 @@ Quick operator reference:
 - no stage skipping
 - backward stage moves require `--force-with-reason`
 10. WIP limits are enforced per milestone:
-- `Prototype Stage 1` + `Prototype Stage 2+` combined <= 2
-- `Verification Review` <= 1
+- limits are read from `ops/planning/agile/boards_registry.json` in this order:
+  - milestone board `wip_limits` (if defined)
+  - framework template `wip_limits`
+  - `render_defaults.wip_limits`
+  - API fallback defaults
+- prototype enforcement is combined across `Prototype Stage 1` + `Prototype Stage 2+`
+- verification enforcement uses `Verification Review` limit
 11. Milestone cannot be set to `Complete` without closeout packet:
 - `ops/planning/closeout/<milestone-id-lower>_closeout.md`
 - required sections validated by `validate_closeout_packet.py`

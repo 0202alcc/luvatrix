@@ -716,6 +716,49 @@
           "note": "historical completion"
         }
       ]
+    },
+    {
+      "id": "P-026",
+      "emoji": "\u2705",
+      "name": "Runtime Performance Hardening Closeout Signoff",
+      "start_week": 11,
+      "end_week": 14,
+      "status": "Complete",
+      "task_ids": [
+        "T-2801",
+        "T-2802",
+        "T-2803",
+        "T-2804",
+        "T-2805"
+      ],
+      "success_criteria": [
+        "All closeout tasks complete with consolidated evidence package.",
+        "Boundary contracts are re-validated: RenderTarget, SensorProvider, HDIThread/SensorManagerThread separation, and protocol/AppContext compatibility.",
+        "Determinism and compatibility checks pass under a unified reproducible benchmark protocol.",
+        "Final architecture closeout can issue Go confidence >= 0.85."
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "closeout signoff milestone created from architecture/system no-go review"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "architect decision package imported: Vulkan deferred with guardrails; thresholds/invariants/exit gates finalized"
+        }
+      ],
+      "acceptance_checks": {
+        "T-2801": "Unified benchmark matrix with deterministic seeds and adjusted thresholds (input p95<=33.3ms, p99<=50ms, incremental>=90%, resize recovery<=1.0s) emits per-scenario verdicts.",
+        "T-2802": "Vulkan decision is DEFERRED_WITH_GUARDRAILS with normative text, disallowed wording controls, fallback parity evidence, and boundary integrity proof.",
+        "T-2803": "Snapshot immutability and revisioned-read invariants are specified and validated with zero-mismatch determinism replay requirements.",
+        "T-2804": "Incremental-present scenario targets/caps are met, or approved exceptions are documented within hard caps and artifact checks pass.",
+        "T-2805": "Final evidence packet reconciles board/task/artifact state and passes architecture Go/No-Go checklist without unresolved blockers."
+      },
+      "completed_on": "2026-03-03"
     }
   ]
 }

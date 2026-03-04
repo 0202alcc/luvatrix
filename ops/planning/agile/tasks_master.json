@@ -4240,6 +4240,299 @@
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
       "done_telemetry_backfill_estimated": true
+    },
+    {
+      "id": "T-2801",
+      "title": "Unified closeout benchmark protocol",
+      "epic_id": "E-2801",
+      "milestone_id": "P-026",
+      "status": "Done",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:P-026",
+        "team:platform-ci",
+        "specialist:testing"
+      ],
+      "description": "Produce one canonical reproducible benchmark suite for render/input/sensor with deterministic seeds, fixed thresholds, and consolidated artifact index.",
+      "acceptance_criteria": [
+        "Unified benchmark suite runs on demand with deterministic seeds and emits per-scenario pass/fail verdicts.",
+        "Frame time thresholds: p50 <= 16.7ms, p95 <= 25.0ms, p99 <= 33.3ms for required interactive scenarios.",
+        "Input-to-present thresholds: p95 <= 33.3ms and p99 <= 50.0ms for burst input scenarios.",
+        "Incremental-present ratio >= 90% across required interactive scenarios unless approved T-2804 exceptions apply.",
+        "Dropped-frame budget <= 1.0% per scenario run (<= 2.0% for resize stress only).",
+        "Resize burst recovery <= 1.0s with no crash/hang.",
+        "Determinism replay protocol: 8 fixed seeds x 10 runs per seed per scenario; required digest/invariant mismatch count = 0."
+      ],
+      "priority": "P0",
+      "benchmark_thresholds": {
+        "frame_time_ms": {
+          "p50_max": 16.7,
+          "p95_max": 25.0,
+          "p99_max": 33.3
+        },
+        "input_to_present_ms": {
+          "p95_max": 33.3,
+          "p99_max": 50.0
+        },
+        "incremental_present_ratio_min": 0.9,
+        "dropped_frame_ratio_max": 0.01,
+        "resize_stress_dropped_frame_ratio_max": 0.02,
+        "resize_recovery_sec_max": 1.0,
+        "determinism": {
+          "seeds": 8,
+          "runs_per_seed": 10,
+          "required_mismatch_count": 0,
+          "required_digests": [
+            "event_ordering",
+            "revision_sequence"
+          ],
+          "invariants_must_pass": true
+        }
+      },
+      "actuals": {
+        "input_tokens": 12800,
+        "output_tokens": 2600,
+        "wall_time_sec": 1540,
+        "tool_calls": 24,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
+    },
+    {
+      "id": "T-2802",
+      "title": "Vulkan readiness decision gate (in-scope vs deferred)",
+      "epic_id": "E-2801",
+      "milestone_id": "P-026",
+      "status": "Done",
+      "depends_on": [
+        "T-2801"
+      ],
+      "board_refs": [
+        "milestone:P-026",
+        "team:rendering",
+        "specialist:architecture"
+      ],
+      "description": "Issue a single explicit Vulkan status for objective signoff and remove ambiguity across docs/evidence.",
+      "acceptance_criteria": [
+        "Single clear Vulkan status for this objective is DEFERRED_WITH_GUARDRAILS and is consistent across docs/evidence.",
+        "Vulkan certified-scenario evidence meets T-2801 frame/input/drop thresholds.",
+        "Resize burst suite shows no crash/hang and recovery to stable present loop <= 1.0s.",
+        "Automatic fallback engages on Vulkan instability while protocol semantics/AppContext behavior remain identical.",
+        "RenderTarget contract remains unchanged and no app-layer backend-internal branching is introduced.",
+        "Determinism replay evidence aligns with T-2803 replay requirements."
+      ],
+      "priority": "P0",
+      "decision": "DEFERRED_WITH_GUARDRAILS",
+      "decision_text": "For P-026 runtime performance hardening closeout, Vulkan is treated as a performance-validated but non-primary execution path. Objective signoff does not require Vulkan universal production readiness across all hardware/driver combinations. Objective signoff requires: (1) no architecture boundary violations, (2) deterministic behavior on required seeded suites, (3) stable fallback-blit parity, and (4) explicit runtime guardrails that prevent Vulkan-path instability from impacting app protocol compatibility or responsiveness guarantees.",
+      "disallowed_wording": [
+        "Vulkan is fully production-ready on all devices.",
+        "Vulkan correctness is guaranteed universally.",
+        "Objective closeout proves backend-independent identical performance.",
+        "No fallback needed."
+      ],
+      "safety_test_checklist": [
+        "Verify Vulkan deferred-with-guardrails decision text is the only normative Vulkan statement across closeout artifacts.",
+        "Assert fallback activation path preserves AppContext/protocol semantics under Vulkan instability.",
+        "Verify no app-layer branching on backend internals and RenderTarget contract remains unchanged.",
+        "Run resize-burst safety checks with crash/hang detection and <=1.0s recovery gate."
+      ],
+      "actuals": {
+        "input_tokens": 7400,
+        "output_tokens": 1700,
+        "wall_time_sec": 980,
+        "tool_calls": 16,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
+    },
+    {
+      "id": "T-2803",
+      "title": "Snapshot immutability and copy-elimination safety validation",
+      "epic_id": "E-2801",
+      "milestone_id": "P-026",
+      "status": "Done",
+      "depends_on": [
+        "T-2801"
+      ],
+      "board_refs": [
+        "milestone:P-026",
+        "team:runtime",
+        "specialist:safety"
+      ],
+      "description": "Prove copy-elimination refactors preserve ownership invariants and determinism without aliasing/mutation regressions.",
+      "acceptance_criteria": [
+        "Invariant spec defines MUST/MUST NOT snapshot ownership and mutability rules.",
+        "Published revisioned snapshots are immutable after publication and consumers cannot mutate snapshot memory.",
+        "Producer publishes new revision before any write that could affect previously published state; mutable backing storage for published revisions is isolated via copy-on-write/equivalent.",
+        "Revisioned reads are bound to exactly one monotonic revision id with no torn-frame reads and read-after-publish visibility for frame + dirty rect metadata.",
+        "Repeated reads of same revision id are byte-identical and dirty rects correspond only to that revision content.",
+        "Regression tests cover immutability, torn-read concurrency, revision stability, dirty-rect consistency, and fallback parity.",
+        "Determinism replay protocol passes with 8 seeds x 10 runs and zero digest/invariant mismatches per required scenario."
+      ],
+      "priority": "P0",
+      "determinism_replay_policy": {
+        "seeds": 8,
+        "runs_per_seed": 10,
+        "required_exact_match": [
+          "event_ordering_digest",
+          "revision_sequence_digest"
+        ],
+        "invariants_pass_rate_required": 1.0,
+        "allowed_mismatch_count": 0
+      },
+      "safety_test_checklist": [
+        "Immutability guard test: attempted snapshot mutation must fail or have no effect.",
+        "Concurrent publish/read torn-frame tests must show no mixed-revision output.",
+        "Revision stability checks: repeated reads for same revision are byte-identical.",
+        "Dirty-rect consistency checks validate rect metadata maps to the same revision content.",
+        "Determinism replay safety gate: 8 seeds x 10 runs with zero digest/invariant mismatches."
+      ],
+      "actuals": {
+        "input_tokens": 8100,
+        "output_tokens": 1900,
+        "wall_time_sec": 1120,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
+    },
+    {
+      "id": "T-2804",
+      "title": "Incremental-present coverage closure",
+      "epic_id": "E-2801",
+      "milestone_id": "P-026",
+      "status": "Done",
+      "depends_on": [
+        "T-2801"
+      ],
+      "board_refs": [
+        "milestone:P-026",
+        "team:rendering",
+        "specialist:qa"
+      ],
+      "description": "Close interactive scenario gaps where full-frame presents still occur by optimization or explicit bounded exception policy.",
+      "acceptance_criteria": [
+        "Scenario matrix includes: vertical scroll (slow+fling), horizontal pan, drag interaction, mixed burst input, sensor overlay interaction, resize+interaction overlap, idle-to-burst transition, and full-screen invalidation control case.",
+        "Target incremental ratios are met: vertical >=95%, horizontal >=92%, drag >=85%, mixed burst >=88%, sensor overlay >=90%, resize overlap >=75%, idle-to-burst >=85%.",
+        "Full-screen invalidation control case is allowed full-frame baseline with no incremental ratio requirement.",
+        "Exceptions only for explicit full-surface effects, full-canvas transforms, swapchain-recreate windows, or protocol-declared full invalidation.",
+        "Exception full-frame share in required non-control scenarios <=15% and consecutive full-frame bursts outside exception windows <=8 frames.",
+        "No visual regression artifacts: golden frame digest checks, dirty-rect continuity, tearing/ghosting edge scans, z-order correctness, and clamp correctness for absolute/delta RGBA paths."
+      ],
+      "priority": "P1",
+      "incremental_policy": {
+        "targets": {
+          "vertical_scroll": 0.95,
+          "horizontal_pan": 0.92,
+          "drag_interaction": 0.85,
+          "mixed_burst": 0.88,
+          "sensor_overlay": 0.9,
+          "resize_overlap": 0.75,
+          "idle_to_burst": 0.85
+        },
+        "exceptions": {
+          "allowed_conditions": [
+            "full_surface_effect",
+            "full_canvas_transform",
+            "swapchain_recreate_window",
+            "protocol_declared_full_invalidation"
+          ],
+          "full_frame_share_cap_non_control": 0.15,
+          "max_consecutive_full_frame_outside_exception": 8
+        }
+      },
+      "safety_test_checklist": [
+        "Run artifact scan for tearing/ghosting at dirty-rect boundaries in required scenarios.",
+        "Validate golden-frame digests and frame continuity under scroll/drag/burst paths.",
+        "Verify z-order correctness and clamp correctness (absolute/delta RGBA paths).",
+        "Enforce exception policy caps: <=15% non-control full-frame share and <=8 consecutive frames outside exception windows.",
+        "Fail any scenario below target ratio without approved exception rationale."
+      ],
+      "actuals": {
+        "input_tokens": 8600,
+        "output_tokens": 2100,
+        "wall_time_sec": 1180,
+        "tool_calls": 19,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
+    },
+    {
+      "id": "T-2805",
+      "title": "Evidence reconciliation and final signoff packet",
+      "epic_id": "E-2801",
+      "milestone_id": "P-026",
+      "status": "Done",
+      "depends_on": [
+        "T-2801",
+        "T-2802",
+        "T-2803",
+        "T-2804"
+      ],
+      "board_refs": [
+        "milestone:P-026",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "description": "Publish one audit-grade closeout packet with reconciled task/board/evidence status and final go/no-go checklist.",
+      "acceptance_criteria": [
+        "Single source closeout packet maps each claim to artifacts/tests/docs with no unresolved contradictions.",
+        "Go/No-Go checklist validates: boundary contracts, determinism, incremental-present policy, Vulkan decision consistency, and risk closure.",
+        "Minimum evidence bundle includes unified benchmark report, determinism replay report, snapshot invariant report, incremental-present report, Vulkan gate packet, protocol compatibility note, and consolidated reconciliation map.",
+        "Any blocker condition forces No-Go: boundary contract violation, required digest/invariant mismatch, conflicting Vulkan wording, scenario target miss without approved exception, unresolved high-severity risk, or non-reproducible evidence."
+      ],
+      "priority": "P1",
+      "go_no_go_blockers": [
+        "boundary_contract_violation",
+        "required_determinism_mismatch",
+        "vulkan_decision_inconsistency",
+        "incremental_target_miss_without_approved_exception",
+        "unresolved_high_severity_risk",
+        "missing_or_non_reproducible_evidence"
+      ],
+      "actuals": {
+        "input_tokens": 5200,
+        "output_tokens": 1400,
+        "wall_time_sec": 760,
+        "tool_calls": 12,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     }
   ]
 }

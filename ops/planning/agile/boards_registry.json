@@ -453,6 +453,19 @@
         "channel": "#team-security-quality-board",
         "threads_enabled": true
       }
+    },
+    {
+      "id": "milestone:P-026",
+      "title": "P-026 Runtime Performance Hardening Closeout Signoff",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "P-026"
+      },
+      "discord": {
+        "channel": "#milestones-gantt",
+        "threads_enabled": true
+      }
     }
   ]
 }

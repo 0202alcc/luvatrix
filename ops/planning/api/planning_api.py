@@ -91,8 +91,10 @@ GATEFLOW_SEQUENCE = [
     "Integration Ready",
     "Done",
 ]
-PROTOTYPE_WIP_LIMIT = 2
-VERIFICATION_WIP_LIMIT = 1
+DEFAULT_PROTOTYPE_WIP_LIMIT = 2
+DEFAULT_VERIFICATION_WIP_LIMIT = 1
+MAX_PROTOTYPE_WIP_LIMIT = 10
+MAX_VERIFICATION_WIP_LIMIT = 10
 REQUIRED_CLOSEOUT_SECTIONS = [
     "Objective Summary",
     "Task Final States",
@@ -389,6 +391,7 @@ def enforce_gateflow_status_transition(
 
 def enforce_wip_limits(
     tasks_master: dict[str, Any],
+    boards: dict[str, Any],
     milestone_id: str,
     *,
     task_id: str,
@@ -406,16 +409,96 @@ def enforce_wip_limits(
     )
     verification_count = sum(1 for t in scoped if t.get("status") == "Verification Review")
 
-    if new_status in {"Prototype Stage 1", "Prototype Stage 2+"} and prototype_count > PROTOTYPE_WIP_LIMIT:
+    prototype_wip_limit, verification_wip_limit = resolve_wip_limits(boards, milestone_id)
+
+    if new_status in {"Prototype Stage 1", "Prototype Stage 2+"} and prototype_count > prototype_wip_limit:
         raise ApiError(
             f"milestone {milestone_id} exceeds prototype WIP limit "
-            f"({prototype_count}/{PROTOTYPE_WIP_LIMIT}) when moving {task_id} -> {new_status}"
+            f"({prototype_count}/{prototype_wip_limit}) when moving {task_id} -> {new_status}"
         )
-    if new_status == "Verification Review" and verification_count > VERIFICATION_WIP_LIMIT:
+    if new_status == "Verification Review" and verification_count > verification_wip_limit:
         raise ApiError(
             f"milestone {milestone_id} exceeds verification WIP limit "
-            f"({verification_count}/{VERIFICATION_WIP_LIMIT}) when moving {task_id} -> {new_status}"
+            f"({verification_count}/{verification_wip_limit}) when moving {task_id} -> {new_status}"
         )
+
+
+def _safe_wip_int(value: Any, *, default: int, max_allowed: int) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        parsed = int(value)
+        if parsed < 1:
+            return default
+        return min(parsed, max_allowed)
+    return default
+
+
+def _prototype_limit_from_wip_map(wip_map: dict[str, Any], default: int) -> int:
+    # Allow either an explicit combined key or stage-specific keys.
+    combined = wip_map.get("Prototype Combined")
+    if combined is not None:
+        return _safe_wip_int(
+            combined,
+            default=default,
+            max_allowed=MAX_PROTOTYPE_WIP_LIMIT,
+        )
+
+    stage_1 = _safe_wip_int(
+        wip_map.get("Prototype Stage 1"),
+        default=default,
+        max_allowed=MAX_PROTOTYPE_WIP_LIMIT,
+    )
+    stage_2 = _safe_wip_int(
+        wip_map.get("Prototype Stage 2+"),
+        default=default,
+        max_allowed=MAX_PROTOTYPE_WIP_LIMIT,
+    )
+    return max(stage_1, stage_2)
+
+
+def resolve_wip_limits(boards: dict[str, Any], milestone_id: str) -> tuple[int, int]:
+    prototype_limit = DEFAULT_PROTOTYPE_WIP_LIMIT
+    verification_limit = DEFAULT_VERIFICATION_WIP_LIMIT
+
+    render_defaults = boards.get("render_defaults", {})
+    rd_wip = render_defaults.get("wip_limits", {})
+    if isinstance(rd_wip, dict):
+        prototype_limit = _prototype_limit_from_wip_map(rd_wip, prototype_limit)
+        verification_limit = _safe_wip_int(
+            rd_wip.get("Verification Review"),
+            default=verification_limit,
+            max_allowed=MAX_VERIFICATION_WIP_LIMIT,
+        )
+
+    default_template = boards.get("default_framework_template")
+    template_name = default_template
+
+    for board in boards.get("boards", []):
+        if board.get("id") == f"milestone:{milestone_id}":
+            template_name = board.get("framework_template", default_template)
+            board_wip = board.get("wip_limits")
+            if isinstance(board_wip, dict):
+                prototype_limit = _prototype_limit_from_wip_map(board_wip, prototype_limit)
+                verification_limit = _safe_wip_int(
+                    board_wip.get("Verification Review"),
+                    default=verification_limit,
+                    max_allowed=MAX_VERIFICATION_WIP_LIMIT,
+                )
+            break
+
+    templates = boards.get("framework_templates", {})
+    template = templates.get(template_name, {})
+    template_wip = template.get("wip_limits", {})
+    if isinstance(template_wip, dict):
+        prototype_limit = _prototype_limit_from_wip_map(template_wip, prototype_limit)
+        verification_limit = _safe_wip_int(
+            template_wip.get("Verification Review"),
+            default=verification_limit,
+            max_allowed=MAX_VERIFICATION_WIP_LIMIT,
+        )
+
+    return prototype_limit, verification_limit
 
 
 def compute_weighted_cost_score(components: dict[str, Any]) -> float:
@@ -656,6 +739,16 @@ def create_task(
     normalize_task_cost(body, reestimate=reestimate_cost)
     validate_done_gate_requirements(body, require=body.get("status") == "Done")
 
+    if body.get("status") in {"Prototype Stage 1", "Prototype Stage 2+", "Verification Review"}:
+        preview_master = {"tasks": list(tasks_master.get("tasks", [])) + [body]}
+        enforce_wip_limits(
+            preview_master,
+            boards,
+            body["milestone_id"],
+            task_id=tid,
+            new_status=body.get("status", ""),
+        )
+
     tasks_master.setdefault("tasks", []).append(body)
     # Maintain milestone task index contract.
     milestone = next(m for m in schedule["milestones"] if m["id"] == body["milestone_id"])
@@ -707,6 +800,7 @@ def patch_task(
         )
         enforce_wip_limits(
             tasks_master,
+            boards,
             row.get("milestone_id", ""),
             task_id=task_id,
             new_status=row.get("status", ""),

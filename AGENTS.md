@@ -71,7 +71,7 @@ Before planning or editing code, read:
 7. GateFlow transition rules are API-enforced:
    - no stage skipping,
    - backward moves require `--force-with-reason`,
-   - WIP limits enforced per milestone (`Prototype Stage 1/2+ <= 2`, `Verification Review <= 1`).
+   - WIP limits enforced per milestone from `ops/planning/agile/boards_registry.json` (`wip_limits`), with API-safe defaults/fallbacks if config is missing.
 
 ## Planning Sync SOP (Across Branches)
 1. `main:/ops/planning/*` is the only canonical planning source of truth.
