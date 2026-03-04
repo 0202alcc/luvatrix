@@ -32,7 +32,7 @@ U-007 🔌 Plot stabilization and stream simulation integration                 
 U-017 📊 UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)                      |                     ##########################################                                                        | In Progress
 U-021 📉 Plots module foundations (labels, bars, subplots, dynamic data, financial visualizations)  |                     ########################################################                                          | In Progress
 UF-006 📈 Interactive plot module and UI IR integration                                             |=======                                                                                                                | Complete (2026-02-26)
-P-026 ✅ Runtime Performance Hardening Closeout Signoff                                             |                                                                      ============================                     | Complete (2026-03-04)
+P-026 ✅ Runtime Performance Hardening Closeout Signoff                                             |                                                                      ############################                     | In Progress
 
 Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 ```
@@ -257,10 +257,9 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - 2026-02-26 closed (framework=legacy-kanban) - historical completion
 
 ### P-026 ✅ Runtime Performance Hardening Closeout Signoff
-- Status: Complete
+- Status: In Progress
 - Target window: Week 11-14
-- Completed on: 2026-03-04
-- Tasks: `T-2801, T-2802, T-2803, T-2804, T-2805, T-2806, T-2807, T-2808, T-2809, T-2810, T-2811, T-2812, T-2813`
+- Tasks: `T-2801, T-2802, T-2803, T-2804, T-2805, T-2806, T-2807, T-2808, T-2809, T-2810, T-2811, T-2812, T-2813, T-2814, T-2815, T-2816, T-2817, T-2818`
 - Lifecycle events:
   - 2026-03-03 active (framework=gateflow_v1) - closeout signoff milestone created from architecture/system no-go review
   - 2026-03-03 active (framework=gateflow_v1) - architect decision package imported: Vulkan deferred with guardrails; thresholds/invariants/exit gates finalized
@@ -268,10 +267,13 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - 2026-03-03 closed (framework=gateflow_v1) - strict evidence remediation complete; tasks T-2806..T-2809 done; validators pass
   - 2026-03-03 reopened (framework=gateflow_v1) - evidence integrity remediation cycle opened: provenance-only evidence required (T-2810..T-2813)
   - 2026-03-04 closed (framework=gateflow_v1) - provenance-backed evidence remediation complete; T-2810..T-2813 done; validators pass
+  - 2026-03-04 reopened (framework=gateflow_v1) - incremental-present remediation cycle opened; provenance pass alone is insufficient for Go
 - Success criteria:
   - All closeout tasks complete with consolidated evidence package.
   - Boundary contracts are re-validated: RenderTarget, SensorProvider, HDIThread/SensorManagerThread separation, and protocol/AppContext compatibility.
   - Determinism and compatibility checks pass under a unified reproducible benchmark protocol.
+  - Incremental-present required scenario targets are met in measured raw artifacts: scroll>=95%, horizontal_pan>=92%, drag_heavy>=85%, mixed_burst>=88%, sensor_overlay>=90%, resize_overlap_incremental_required>=75% (or formally excepted under cap policy).
+  - Evidence validator enforces scenario-level target hard-gates and exception-cap policy; closeout cannot pass via aggregate-only summaries.
   - Final architecture closeout can issue Go confidence >= 0.85.
 - Acceptance checks:
   - `T-2801`: Unified benchmark matrix with deterministic seeds and adjusted thresholds (input p95<=33.3ms, p99<=50ms, incremental>=90%, resize recovery<=1.0s) emits per-scenario verdicts.
@@ -279,6 +281,11 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - `T-2803`: Snapshot immutability and revisioned-read invariants are specified and validated with zero-mismatch determinism replay requirements.
   - `T-2804`: Incremental-present scenario targets/caps are met, or approved exceptions are documented within hard caps and artifact checks pass.
   - `T-2805`: Final evidence packet reconciles board/task/artifact state and passes architecture Go/No-Go checklist without unresolved blockers.
+  - `T-2814`: Dirty-region invalidation refinement removes blanket full-frame fallback on hover/theme/no-delta paths while preserving visual integrity and hit-test/z-order correctness.
+  - `T-2815`: Subpixel and bi-axial compose support eliminates unconditional full-frame fallback where safe and achieves horizontal_pan>=92% and drag_heavy>=85% measured incremental rates.
+  - `T-2816`: Resize policies split into stability-focused fullframe-allowed stress scenario and overlap incremental-required scenario with >=75% target and measured recovery retained.
+  - `T-2817`: Strict evidence validator hard-fails scenario-level misses without approved exceptions and enforces non-control full-frame <=15% plus consecutive full-frame <=8 outside exception windows.
+  - `T-2818`: Determinism replay matrix uses seed-fidelity inputs with per-seed trace provenance, distinct cross-seed fingerprints, and zero per-seed mismatch regressions.
 
 ## Branching and Merge Gate Policy
 1. Each milestone is implemented first on its own milestone branch.

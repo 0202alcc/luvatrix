@@ -4866,6 +4866,131 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       }
+    },
+    {
+      "id": "T-2814",
+      "title": "Dirty-region invalidation refinement for pointer/hover/theme paths",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P0",
+      "board_refs": [
+        "milestone:P-026",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "depends_on": [],
+      "acceptance_criteria": [
+        "hover transition invalidates only old/new component bounds plus minimal safety margin",
+        "theme-change invalidation supports scoped dirtying for affected components; full-frame only when scoped diff impossible",
+        "non-scroll frame with no visual delta yields idle/no-op path rather than forced full-frame",
+        "no regressions in hit testing, z-order, or visual integrity"
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k 'hover or drag or theme or dirty_rect' -q",
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario mixed_burst --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_mixed_burst.json"
+      ]
+    },
+    {
+      "id": "T-2815",
+      "title": "Subpixel and bi-axial incremental compose support",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P0",
+      "board_refs": [
+        "milestone:P-026",
+        "team:rendering",
+        "specialist:qa"
+      ],
+      "depends_on": [],
+      "acceptance_criteria": [
+        "fractional scroll accumulator and quantized dirty-strip compose behavior implemented",
+        "bounded bi-axial dirty update path (rect decomposition plus corner patch) replaces unconditional full-frame when safe",
+        "horizontal_pan incremental-present reaches >= 92%",
+        "drag_heavy incremental-present reaches >= 85%"
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k 'scroll or fractional or diagonal or dirty_rect' -q",
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario horizontal_pan --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_horizontal_pan.json",
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario drag_heavy --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_drag_heavy.json"
+      ]
+    },
+    {
+      "id": "T-2816",
+      "title": "Resize scenario split and policy clarification",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P0",
+      "board_refs": [
+        "milestone:P-026",
+        "team:runtime",
+        "specialist:testing"
+      ],
+      "depends_on": [],
+      "acceptance_criteria": [
+        "explicit scenarios defined: resize_stress_fullframe_allowed and resize_overlap_incremental_required",
+        "resize stress scenario retains measured resize recovery metric",
+        "resize_overlap_incremental_required enforces incremental target >= 75%",
+        "overlap measurement avoids app re-init artifacts unless explicitly justified"
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario resize_stress --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_resize_stress_fullframe_allowed.json",
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario closeout_required --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_closeout_required.json"
+      ]
+    },
+    {
+      "id": "T-2817",
+      "title": "Validator hard-gates for incremental targets and exception caps",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P0",
+      "board_refs": [
+        "milestone:P-026",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-2814",
+        "T-2815",
+        "T-2816"
+      ],
+      "acceptance_criteria": [
+        "validator fails when required scenario incremental targets are below threshold without approved exception metadata",
+        "validator enforces exception caps: non-control full-frame share <= 15% and consecutive full-frame outside exception <= 8",
+        "validator output identifies exact failing scenarios and measured values",
+        "closeout cannot pass when target misses are hidden by summary aggregation"
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run pytest tests/test_closeout_evidence_validator.py -q",
+        "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026"
+      ]
+    },
+    {
+      "id": "T-2818",
+      "title": "Determinism seed-fidelity hardening",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P1",
+      "board_refs": [
+        "milestone:P-026",
+        "team:runtime",
+        "specialist:safety"
+      ],
+      "depends_on": [],
+      "acceptance_criteria": [
+        "seed is propagated into scenario event generation in perf suite",
+        "replay matrix logs include per-seed provenance and seed-specific traces",
+        "at least two different seeds produce different trace fingerprints",
+        "same seed repeated remains stable with zero mismatches"
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run python tools/perf/build_p026_replay_matrix.py --runs-per-seed 10 --samples 80 --width 1280 --height 720 --out-dir artifacts/perf/closeout",
+        "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026"
+      ]
     }
   ]
 }

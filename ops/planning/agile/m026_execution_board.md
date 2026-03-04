@@ -19,6 +19,12 @@ Last updated: `2026-03-03`
 ## GateFlow Dependency Chain
 1. `T-2810` + `T-2811` -> `T-2812` -> `T-2813`
 
+## Incremental-Present Remediation Chain (Current)
+1. `T-2814` + `T-2815` + `T-2816` in parallel.
+2. `T-2817` after `T-2814`, `T-2815`, and `T-2816` are complete.
+3. `T-2818` in parallel track; must complete before final determinism signoff.
+4. Final architecture re-review only after `T-2814..T-2818` are `Done` and strict validator passes with scenario-level target enforcement.
+
 ## Focused Remediation Set (Strict Evidence Validator)
 1. `T-2806` must clear summary blockers:
    - `frame_p99_present`
@@ -41,7 +47,11 @@ Last updated: `2026-03-03`
 3. `T-2809` after both `T-2807` and `T-2808`
 
 ## Intake
-1. None.
+1. `T-2814` Dirty-region invalidation refinement for pointer/hover/theme paths.
+2. `T-2815` Subpixel + bi-axial incremental compose support.
+3. `T-2816` Resize scenario split + policy clarification.
+4. `T-2817` Validator hard-gates for incremental targets + exception caps.
+5. `T-2818` Determinism seed-fidelity hardening.
 
 ## Success Criteria Spec
 1. None.
