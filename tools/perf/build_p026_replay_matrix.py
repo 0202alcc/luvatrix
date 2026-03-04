@@ -23,6 +23,7 @@ def _scenario_digest(result: dict[str, Any]) -> str:
         "copy_bytes": result.get("copy_bytes", []),
         "event_order_digest_trace": result.get("event_order_digest_trace", []),
         "event_poll_trace": result.get("event_poll_trace", []),
+        "event_payload_digest_trace": result.get("event_payload_digest_trace", []),
         "events_processed": result.get("events_processed", []),
     }
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -40,6 +41,17 @@ def _revision_digest(result: dict[str, Any]) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def _trace_fingerprint(result: dict[str, Any]) -> str:
+    payload = {
+        "event_order_digest_trace": result.get("event_order_digest_trace", []),
+        "event_poll_trace": result.get("event_poll_trace", []),
+        "event_payload_digest_trace": result.get("event_payload_digest_trace", []),
+        "events_processed": result.get("events_processed", []),
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
 def build_matrix(*, seeds: list[int], runs_per_seed: int, samples: int, width: int, height: int, out_dir: Path) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
     logs_dir = out_dir / "replay_logs"
@@ -52,17 +64,19 @@ def build_matrix(*, seeds: list[int], runs_per_seed: int, samples: int, width: i
 
     rows: list[dict[str, Any]] = []
     mismatch_count = 0
+    seed_baseline_trace_fingerprints: dict[str, str] = {}
 
     for seed in seeds:
         baseline_event_digest: str | None = None
         baseline_revision_digest: str | None = None
         for run_idx in range(1, runs_per_seed + 1):
-            suite = run_suite("all_interactive", samples=samples, width=width, height=height)
+            suite = run_suite("all_interactive", samples=samples, width=width, height=height, seed=seed)
             scenarios = suite.get("scenarios", {})
             if not isinstance(scenarios, dict):
                 raise ValueError("run_suite output missing scenarios map")
 
             digest_material: dict[str, dict[str, str]] = {}
+            seed_trace_payload: dict[str, dict[str, Any]] = {}
             for scenario_name in ("idle", "scroll", "drag", "resize_stress_fullframe_allowed"):
                 scenario_payload = scenarios.get(scenario_name, {})
                 if not isinstance(scenario_payload, dict):
@@ -74,6 +88,13 @@ def build_matrix(*, seeds: list[int], runs_per_seed: int, samples: int, width: i
                     "event_order_digest": _scenario_digest(result),
                     "revision_sequence_digest": _revision_digest(result),
                 }
+                seed_trace_payload[scenario_name] = {
+                    "seed": seed,
+                    "event_order_digest_trace": result.get("event_order_digest_trace", []),
+                    "event_poll_trace": result.get("event_poll_trace", []),
+                    "event_payload_digest_trace": result.get("event_payload_digest_trace", []),
+                    "trace_fingerprint": _trace_fingerprint(result),
+                }
 
             event_digest = hashlib.sha256(
                 "".join(v["event_order_digest"] for _, v in sorted(digest_material.items())).encode("utf-8")
@@ -81,10 +102,14 @@ def build_matrix(*, seeds: list[int], runs_per_seed: int, samples: int, width: i
             revision_digest = hashlib.sha256(
                 "".join(v["revision_sequence_digest"] for _, v in sorted(digest_material.items())).encode("utf-8")
             ).hexdigest()
+            trace_fingerprint = hashlib.sha256(
+                "".join(v["trace_fingerprint"] for _, v in sorted(seed_trace_payload.items())).encode("utf-8")
+            ).hexdigest()
 
             if baseline_event_digest is None:
                 baseline_event_digest = event_digest
                 baseline_revision_digest = revision_digest
+                seed_baseline_trace_fingerprints[str(seed)] = trace_fingerprint
             mismatch = bool(event_digest != baseline_event_digest or revision_digest != baseline_revision_digest)
             if mismatch:
                 mismatch_count += 1
@@ -95,8 +120,10 @@ def build_matrix(*, seeds: list[int], runs_per_seed: int, samples: int, width: i
                 "samples": samples,
                 "matrix": {"width": width, "height": height},
                 "digest_material": digest_material,
+                "seed_trace_payload": seed_trace_payload,
                 "event_order_digest": event_digest,
                 "revision_sequence_digest": revision_digest,
+                "seed_trace_fingerprint": trace_fingerprint,
                 "mismatch_against_seed_baseline": mismatch,
                 "provenance": {
                     "command": "tools/perf/build_p026_replay_matrix.py",
@@ -104,6 +131,7 @@ def build_matrix(*, seeds: list[int], runs_per_seed: int, samples: int, width: i
                     "timestamp_utc": datetime.now(timezone.utc).isoformat(),
                     "seed_list": [seed],
                     "run_counts": {"per_seed": runs_per_seed},
+                    "seed": seed,
                 },
             }
             log_path = logs_dir / f"seed_{seed}_run_{run_idx:02d}.json"
@@ -114,10 +142,13 @@ def build_matrix(*, seeds: list[int], runs_per_seed: int, samples: int, width: i
                     "run_index": run_idx,
                     "event_order_digest": event_digest,
                     "revision_sequence_digest": revision_digest,
+                    "seed_trace_fingerprint": trace_fingerprint,
                     "log_path": str(log_path),
                     "mismatch": mismatch,
                 }
             )
+
+    distinct_cross_seed_trace_fingerprints = len(set(seed_baseline_trace_fingerprints.values()))
 
     matrix = {
         "milestone_id": "P-026",
@@ -126,6 +157,9 @@ def build_matrix(*, seeds: list[int], runs_per_seed: int, samples: int, width: i
         "runs_per_seed_required": 10,
         "runs_per_seed_observed": runs_per_seed,
         "mismatch_count": mismatch_count,
+        "cross_seed_trace_fingerprint_count": distinct_cross_seed_trace_fingerprints,
+        "cross_seed_trace_fingerprints_distinct": distinct_cross_seed_trace_fingerprints >= 2,
+        "seed_trace_fingerprints": seed_baseline_trace_fingerprints,
         "rows": rows,
         "provenance": {
             "command": "tools/perf/build_p026_replay_matrix.py",

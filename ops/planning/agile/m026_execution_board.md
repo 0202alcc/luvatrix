@@ -195,10 +195,11 @@ Last updated: `2026-03-04` (T-2814 done)
 12. `T-2812` Done with provenance-enforcing validator telemetry (`input_tokens=4800`, `output_tokens=1400`, `wall_time_sec=1140`, `tool_calls=14`).
 13. `T-2813` Done with packet reconciliation telemetry (`input_tokens=3600`, `output_tokens=1000`, `wall_time_sec=840`, `tool_calls=11`).
 14. `T-2815` Done with subpixel + bi-axial compose remediation telemetry (`input_tokens=9800`, `output_tokens=2100`, `wall_time_sec=3240`, `tool_calls=27`).
-15. `T-2816` Done with resize scenario split + policy clarification telemetry (`input_tokens=6200`, `output_tokens=1500`, `wall_time_sec=2100`, `tool_calls=22`, `reopen_count=0`).
-16. `T-2816` merged to `main` via PR #9; required checks on `main` validated before Done transition.
-17. `T-2814` Done with dirty-region invalidation remediation telemetry (`input_tokens=7400`, `output_tokens=1800`, `wall_time_sec=2100`, `tool_calls=26`, `reopen_count=0`).
-18. `T-2814` merged to `main`; required checks on `main` validated before Done transition.
+15. `T-2815` merged to `main`; required checks on `main` validated before Done transition.
+16. `T-2816` Done with resize scenario split + policy clarification telemetry (`input_tokens=6200`, `output_tokens=1500`, `wall_time_sec=2100`, `tool_calls=22`, `reopen_count=0`).
+17. `T-2816` merged to `main` via PR #9; required checks on `main` validated before Done transition.
+18. `T-2814` Done with dirty-region invalidation remediation telemetry (`input_tokens=7400`, `output_tokens=1800`, `wall_time_sec=2100`, `tool_calls=26`, `reopen_count=0`).
+19. `T-2814` merged to `main`; required checks on `main` validated before Done transition.
 
 ## Blocked
 1. None.
