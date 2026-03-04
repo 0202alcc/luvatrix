@@ -723,7 +723,7 @@
       "name": "Runtime Performance Hardening Closeout Signoff",
       "start_week": 11,
       "end_week": 14,
-      "status": "In Progress",
+      "status": "Complete",
       "task_ids": [
         "T-2801",
         "T-2802",
@@ -775,6 +775,12 @@
           "event": "reopened",
           "framework": "gateflow_v1",
           "note": "evidence integrity remediation cycle opened: provenance-only evidence required (T-2810..T-2813)"
+        },
+        {
+          "date": "2026-03-04",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "provenance-backed evidence remediation complete; T-2810..T-2813 done; validators pass"
         }
       ],
       "acceptance_checks": {
@@ -784,7 +790,7 @@
         "T-2804": "Incremental-present scenario targets/caps are met, or approved exceptions are documented within hard caps and artifact checks pass.",
         "T-2805": "Final evidence packet reconciles board/task/artifact state and passes architecture Go/No-Go checklist without unresolved blockers."
       },
-      "completed_on": null
+      "completed_on": "2026-03-04"
     }
   ]
 }

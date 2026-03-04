@@ -4705,7 +4705,7 @@
       "title": "Raw perf evidence regeneration (measured-only)",
       "milestone_id": "P-026",
       "epic_id": "E-2801",
-      "status": "Intake",
+      "status": "Done",
       "priority": "P0",
       "board_refs": [
         "milestone:P-026",
@@ -4725,14 +4725,29 @@
         "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_all_interactive.json",
         "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario input_burst --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_input_burst.json",
         "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario sensor_polling --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_sensor_polling.json"
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 5400,
+        "output_tokens": 1300,
+        "wall_time_sec": 1260,
+        "tool_calls": 15,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2811",
       "title": "Real determinism replay matrix from replay logs",
       "milestone_id": "P-026",
       "epic_id": "E-2801",
-      "status": "Intake",
+      "status": "Done",
       "priority": "P0",
       "board_refs": [
         "milestone:P-026",
@@ -4749,14 +4764,29 @@
       "evidence_commands": [
         "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/replay_seed1337_run01.json",
         "PYTHONPATH=. uv run python tools/perf/build_p026_closeout_evidence.py --strict --out artifacts/perf/closeout"
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 6900,
+        "output_tokens": 1600,
+        "wall_time_sec": 1680,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2812",
       "title": "Provenance-enforcing closeout evidence validator upgrade",
       "milestone_id": "P-026",
       "epic_id": "E-2801",
-      "status": "Intake",
+      "status": "Done",
       "priority": "P0",
       "board_refs": [
         "milestone:P-026",
@@ -4776,14 +4806,29 @@
       ],
       "evidence_commands": [
         "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026"
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 4800,
+        "output_tokens": 1400,
+        "wall_time_sec": 1140,
+        "tool_calls": 14,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2813",
       "title": "Packet reconciliation and provenance-backed re-validation",
       "milestone_id": "P-026",
       "epic_id": "E-2801",
-      "status": "Intake",
+      "status": "Done",
       "priority": "P0",
       "board_refs": [
         "milestone:P-026",
@@ -4805,7 +4850,22 @@
         "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-026",
         "PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py",
         "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026"
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 3600,
+        "output_tokens": 1000,
+        "wall_time_sec": 840,
+        "tool_calls": 11,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     }
   ]
 }

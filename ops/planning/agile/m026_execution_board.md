@@ -41,10 +41,7 @@ Last updated: `2026-03-03`
 3. `T-2809` after both `T-2807` and `T-2808`
 
 ## Intake
-1. `T-2810` Raw Perf Evidence Regeneration (measured-only; no synthetic/derived/normalized metrics).
-2. `T-2811` Real Determinism Replay Matrix (`8` seeds x `10` runs, traceable digests).
-3. `T-2812` Provenance-Enforcing Validator Upgrade.
-4. `T-2813` Packet Reconciliation + Re-Validation.
+1. None.
 
 ## Success Criteria Spec
 1. None.
@@ -149,6 +146,10 @@ Last updated: `2026-03-03`
 7. `T-2807` Done with determinism replay remediation telemetry (`input_tokens=4100`, `output_tokens=1100`, `wall_time_sec=920`, `tool_calls=13`).
 8. `T-2808` Done with incremental matrix remediation telemetry (`input_tokens=3600`, `output_tokens=1000`, `wall_time_sec=840`, `tool_calls=12`).
 9. `T-2809` Done with strict evidence validator closeout telemetry (`input_tokens=2800`, `output_tokens=800`, `wall_time_sec=640`, `tool_calls=9`).
+10. `T-2810` Done with raw measured evidence regeneration telemetry (`input_tokens=5400`, `output_tokens=1300`, `wall_time_sec=1260`, `tool_calls=15`).
+11. `T-2811` Done with replay matrix telemetry (`input_tokens=6900`, `output_tokens=1600`, `wall_time_sec=1680`, `tool_calls=18`).
+12. `T-2812` Done with provenance-enforcing validator telemetry (`input_tokens=4800`, `output_tokens=1400`, `wall_time_sec=1140`, `tool_calls=14`).
+13. `T-2813` Done with packet reconciliation telemetry (`input_tokens=3600`, `output_tokens=1000`, `wall_time_sec=840`, `tool_calls=11`).
 
 ## Blocked
 1. None.
