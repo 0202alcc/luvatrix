@@ -3,7 +3,7 @@
 Milestone: `P-026` Runtime Performance Hardening Closeout Signoff  
 Epic: `E-2801`  
 Task chain: `T-2801 -> (T-2802, T-2803, T-2804) -> T-2805`  
-Last updated: `2026-03-04` (T-2816 integration-ready)
+Last updated: `2026-03-04` (T-2816 done)
 
 ## Evidence Integrity Remediation (No-Go Until Provenance PASS)
 1. Scope: reopen closeout execution due to evidence integrity gaps.
@@ -180,7 +180,6 @@ Last updated: `2026-03-04` (T-2816 integration-ready)
 ## Integration Ready
 1. `T-2814` Implementation and task evidence complete on milestone branch; waiting on merge-to-`main` and required checks for `Done`.
 2. `T-2815` Implementation/evidence completed; moved to Integration Ready pending merge/check gate.
-3. `T-2816` Scenario split/policy implementation and evidence complete on milestone branch; waiting on merge-to-`main` and required checks for `Done`.
 
 ## Done
 1. `T-2801` Done with benchmark closeout telemetry (`input_tokens=12800`, `output_tokens=2600`, `wall_time_sec=1540`, `tool_calls=24`).
@@ -197,6 +196,7 @@ Last updated: `2026-03-04` (T-2816 integration-ready)
 12. `T-2812` Done with provenance-enforcing validator telemetry (`input_tokens=4800`, `output_tokens=1400`, `wall_time_sec=1140`, `tool_calls=14`).
 13. `T-2813` Done with packet reconciliation telemetry (`input_tokens=3600`, `output_tokens=1000`, `wall_time_sec=840`, `tool_calls=11`).
 14. `T-2815` Done with subpixel + bi-axial compose remediation telemetry (`input_tokens=9800`, `output_tokens=2100`, `wall_time_sec=3240`, `tool_calls=27`).
+15. `T-2816` Done with resize scenario split + policy clarification telemetry (`input_tokens=6200`, `output_tokens=1500`, `wall_time_sec=2100`, `tool_calls=22`, `reopen_count=0`).
 
 ## Blocked
 1. None.
