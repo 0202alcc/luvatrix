@@ -4936,7 +4936,7 @@
       "title": "Resize scenario split and policy clarification",
       "milestone_id": "P-026",
       "epic_id": "E-2801",
-      "status": "Intake",
+      "status": "Integration Ready",
       "priority": "P0",
       "board_refs": [
         "milestone:P-026",
