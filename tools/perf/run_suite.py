@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 import math
+import random
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -31,6 +33,7 @@ class _PerfCtx:
         self.matrix = _Matrix(width=width, height=height)
         self._events: list[HDIEvent] = []
         self.polled_event_ids: list[list[int]] = []
+        self.polled_event_payload_digest_trace: list[str] = []
         self._queued_frame_idx: dict[int, int] = {}
         self.current_frame_idx: int = 0
         self.input_to_present_ms: list[float] = []
@@ -58,6 +61,20 @@ class _PerfCtx:
         out = list(self._events[: max(0, int(max_events))])
         self._events = self._events[max(0, int(max_events)) :]
         self.polled_event_ids.append([int(event.event_id) for event in out])
+        digest_payload = [
+            {
+                "event_id": int(event.event_id),
+                "ts_ns": int(event.ts_ns),
+                "window_id": str(event.window_id),
+                "device": str(event.device),
+                "event_type": str(event.event_type),
+                "status": str(event.status),
+                "payload": event.payload,
+            }
+            for event in out
+        ]
+        digest_blob = json.dumps(digest_payload, sort_keys=True, separators=(",", ":"))
+        self.polled_event_payload_digest_trace.append(hashlib.sha256(digest_blob.encode("utf-8")).hexdigest())
         return out
 
     def queue(self, event: HDIEvent) -> None:
@@ -121,8 +138,15 @@ def _percentile(values: list[float], q: float) -> float:
     return float(ordered[lo] * (1.0 - blend) + ordered[hi] * blend)
 
 
-def _scenario_event(scenario: str, i: int) -> HDIEvent | None:
+def _derive_seed(scenario: str, seed: int) -> int:
+    payload = f"{scenario}:{int(seed)}".encode("utf-8")
+    return int.from_bytes(hashlib.sha256(payload).digest()[:8], "big")
+
+
+def _scenario_event(scenario: str, i: int, *, rng: random.Random) -> HDIEvent | None:
     if scenario in {"scroll", "render_copy_chain"}:
+        delta_x = -8.0 - float(rng.randint(0, 12))
+        delta_y = -4.0 - float(rng.randint(0, 8))
         return HDIEvent(
             event_id=i + 1,
             ts_ns=i + 1,
@@ -130,7 +154,13 @@ def _scenario_event(scenario: str, i: int) -> HDIEvent | None:
             device="trackpad",
             event_type="scroll",
             status="OK",
-            payload={"x": 180.0, "y": 200.0, "delta_x": -18.0, "delta_y": -9.0, "phase": "changed"},
+            payload={
+                "x": 160.0 + float(rng.randint(0, 40)),
+                "y": 180.0 + float(rng.randint(0, 40)),
+                "delta_x": delta_x,
+                "delta_y": delta_y,
+                "phase": "changed",
+            },
         )
     if scenario == "horizontal_pan":
         return HDIEvent(
@@ -140,10 +170,16 @@ def _scenario_event(scenario: str, i: int) -> HDIEvent | None:
             device="trackpad",
             event_type="scroll",
             status="OK",
-            payload={"x": 180.0, "y": 200.0, "delta_x": -14.0, "delta_y": 0.0, "phase": "changed"},
+            payload={
+                "x": 160.0 + float(rng.randint(0, 40)),
+                "y": 180.0 + float(rng.randint(0, 40)),
+                "delta_x": -10.0 - float(rng.randint(0, 8)),
+                "delta_y": 0.0,
+                "phase": "changed",
+            },
         )
     if scenario == "drag":
-        phase = "single" if i % 6 == 0 else "drag"
+        phase = "single" if i % 6 == 0 else ("drag" if rng.random() < 0.85 else "single")
         return HDIEvent(
             event_id=i + 1,
             ts_ns=i + 1,
@@ -151,10 +187,10 @@ def _scenario_event(scenario: str, i: int) -> HDIEvent | None:
             device="mouse",
             event_type=("press" if i % 6 == 0 else "pointer_move"),
             status="OK",
-            payload={"x": 120.0 + (i % 11), "y": 140.0 + (i % 7), "phase": phase},
+            payload={"x": 100.0 + float((i % 11) + rng.randint(0, 10)), "y": 120.0 + float((i % 7) + rng.randint(0, 10)), "phase": phase},
         )
     if scenario == "drag_heavy":
-        phase = "single" if i % 10 == 0 else "drag"
+        phase = "single" if i % 10 == 0 else ("drag" if rng.random() < 0.9 else "single")
         return HDIEvent(
             event_id=i + 1,
             ts_ns=i + 1,
@@ -162,7 +198,7 @@ def _scenario_event(scenario: str, i: int) -> HDIEvent | None:
             device="mouse",
             event_type=("press" if i % 10 == 0 else "pointer_move"),
             status="OK",
-            payload={"x": 90.0 + float((i * 3) % 17), "y": 110.0 + float((i * 2) % 13), "phase": phase},
+            payload={"x": 80.0 + float((i * 3) % 17) + float(rng.randint(0, 8)), "y": 100.0 + float((i * 2) % 13) + float(rng.randint(0, 8)), "phase": phase},
         )
     if scenario == RESIZE_OVERLAP_INCREMENTAL_REQUIRED:
         if i % 4 in {0, 1}:
@@ -173,7 +209,13 @@ def _scenario_event(scenario: str, i: int) -> HDIEvent | None:
                 device="trackpad",
                 event_type="scroll",
                 status="OK",
-                payload={"x": 180.0, "y": 200.0, "delta_x": -6.0, "delta_y": -2.0, "phase": "changed"},
+                payload={
+                    "x": 150.0 + float(rng.randint(0, 50)),
+                    "y": 170.0 + float(rng.randint(0, 50)),
+                    "delta_x": -3.0 - float(rng.randint(0, 6)),
+                    "delta_y": -1.0 - float(rng.randint(0, 4)),
+                    "phase": "changed",
+                },
             )
         return HDIEvent(
             event_id=i + 1,
@@ -182,12 +224,16 @@ def _scenario_event(scenario: str, i: int) -> HDIEvent | None:
             device="mouse",
             event_type=("press" if i % 12 == 0 else "pointer_move"),
             status="OK",
-            payload={"x": 110.0 + float((i * 2) % 17), "y": 125.0 + float((i * 3) % 13), "phase": "drag"},
+            payload={
+                "x": 100.0 + float((i * 2) % 17) + float(rng.randint(0, 6)),
+                "y": 115.0 + float((i * 3) % 13) + float(rng.randint(0, 6)),
+                "phase": "drag",
+            },
         )
     return None
 
 
-def _scenario_matrix_dims(scenario: str, i: int, base_w: int, base_h: int) -> tuple[int, int]:
+def _scenario_matrix_dims(scenario: str, i: int, base_w: int, base_h: int, *, rng: random.Random) -> tuple[int, int]:
     if scenario not in {RESIZE_STRESS_FULLFRAME_ALLOWED, RESIZE_OVERLAP_INCREMENTAL_REQUIRED}:
         return (base_w, base_h)
     # Deterministic resize cadence around base extent; overlap scenario uses smaller deltas.
@@ -195,7 +241,7 @@ def _scenario_matrix_dims(scenario: str, i: int, base_w: int, base_h: int) -> tu
         offsets = ((0, 0), (48, 28), (-36, -20), (64, 36), (-28, -16))
     else:
         offsets = ((0, 0), (160, 90), (-120, -60), (220, 120), (-80, -40))
-    dx, dy = offsets[i % len(offsets)]
+    dx, dy = offsets[(i + rng.randint(0, len(offsets) - 1)) % len(offsets)]
     return (max(200, base_w + dx), max(120, base_h + dy))
 
 
@@ -209,8 +255,9 @@ def _should_reinit_on_resize(scenario: str) -> bool:
     return scenario == RESIZE_STRESS_FULLFRAME_ALLOWED
 
 
-def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) -> dict[str, Any]:
+def _run_scenario_trial(scenario: str, samples: int, width: int, height: int, seed: int) -> dict[str, Any]:
     scenario = _normalize_scenario_name(scenario)
+    rng = random.Random(_derive_seed(scenario, seed))
     repo_root = Path(__file__).resolve().parents[2]
     plane_path = repo_root / "examples" / "app_protocol" / "planes_v2_poc" / "plane.json"
     app = load_plane_app(plane_path, handlers={})
@@ -251,10 +298,10 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
                             event_type="scroll",
                             status="OK",
                             payload={
-                                "x": 180.0 + float(j % 7),
-                                "y": 200.0 + float(j % 5),
-                                "delta_x": -3.0,
-                                "delta_y": -1.0,
+                                "x": 170.0 + float((j % 7) + rng.randint(0, 4)),
+                                "y": 190.0 + float((j % 5) + rng.randint(0, 4)),
+                                "delta_x": -1.0 - float(rng.randint(0, 3)),
+                                "delta_y": -1.0 - float(rng.randint(0, 2)),
                                 "phase": "changed",
                             },
                         )
@@ -284,7 +331,13 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
                         device="trackpad",
                         event_type="scroll",
                         status="OK",
-                        payload={"x": 170.0, "y": 210.0, "delta_x": -4.0, "delta_y": -2.0, "phase": "changed"},
+                        payload={
+                            "x": 150.0 + float(rng.randint(0, 30)),
+                            "y": 190.0 + float(rng.randint(0, 30)),
+                            "delta_x": -2.0 - float(rng.randint(0, 4)),
+                            "delta_y": -1.0 - float(rng.randint(0, 3)),
+                            "phase": "changed",
+                        },
                     )
                 )
                 event_id_counter += 1
@@ -297,7 +350,11 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
                         device="mouse",
                         event_type=("press" if i % 18 == 0 else "pointer_move"),
                         status="OK",
-                        payload={"x": 110.0 + float(i % 19), "y": 130.0 + float(i % 15), "phase": "drag"},
+                        payload={
+                            "x": 100.0 + float(i % 19) + float(rng.randint(0, 8)),
+                            "y": 120.0 + float(i % 15) + float(rng.randint(0, 8)),
+                            "phase": "drag",
+                        },
                     )
                 )
                 event_id_counter += 1
@@ -311,7 +368,13 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
                         device="trackpad",
                         event_type="scroll",
                         status="OK",
-                        payload={"x": 150.0, "y": 190.0, "delta_x": -2.0, "delta_y": -3.0, "phase": "changed"},
+                        payload={
+                            "x": 130.0 + float(rng.randint(0, 40)),
+                            "y": 170.0 + float(rng.randint(0, 40)),
+                            "delta_x": -1.0 - float(rng.randint(0, 3)),
+                            "delta_y": -2.0 - float(rng.randint(0, 3)),
+                            "phase": "changed",
+                        },
                     )
                 )
                 event_id_counter += 1
@@ -324,15 +387,19 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
                         device="mouse",
                         event_type="pointer_move",
                         status="OK",
-                        payload={"x": 100.0 + float(i % 23), "y": 120.0 + float(i % 21), "phase": "single"},
+                        payload={
+                            "x": 90.0 + float(i % 23) + float(rng.randint(0, 10)),
+                            "y": 110.0 + float(i % 21) + float(rng.randint(0, 10)),
+                            "phase": "single",
+                        },
                     )
                 )
                 event_id_counter += 1
         else:
-            event = _scenario_event(scenario, i)
+            event = _scenario_event(scenario, i, rng=rng)
             if event is not None:
                 ctx.queue(event)
-        w, h = _scenario_matrix_dims(scenario, i, width, height)
+        w, h = _scenario_matrix_dims(scenario, i, width, height, rng=rng)
         if (w, h) != (ctx.matrix.width, ctx.matrix.height):
             resize_change_indices.append(i)
             ctx.matrix.width = w
@@ -422,6 +489,7 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
         "p95_pending_after": float(_percentile([float(v) for v in pending_after_frame], 95.0)),
         "event_order_digest_trace": event_order_digest_trace,
         "event_poll_trace": ctx.polled_event_ids,
+        "event_payload_digest_trace": ctx.polled_event_payload_digest_trace,
         "p95_input_to_present_ms": float(_percentile(ctx.input_to_present_ms, 95.0)),
         "p99_input_to_present_ms": float(_percentile(ctx.input_to_present_ms, 99.0)),
         "input_to_present_ms_trace": [float(v) for v in ctx.input_to_present_ms],
@@ -430,12 +498,13 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
         "resize_recovery_sec": (
             float(_percentile(resize_recovery_samples_ms, 95.0)) / 1000.0 if resize_recovery_samples_ms else None
         ),
+        "seed": int(seed),
     }
 
 
-def _run_scenario(scenario: str, samples: int, width: int, height: int) -> dict[str, Any]:
-    first = _run_scenario_trial(scenario, samples, width, height)
-    second = _run_scenario_trial(scenario, samples, width, height)
+def _run_scenario(scenario: str, samples: int, width: int, height: int, seed: int) -> dict[str, Any]:
+    first = _run_scenario_trial(scenario, samples, width, height, seed)
+    second = _run_scenario_trial(scenario, samples, width, height, seed)
     deterministic = (
         first["compose_modes"] == second["compose_modes"]
         and first["dirty_counts"] == second["dirty_counts"]
@@ -446,6 +515,7 @@ def _run_scenario(scenario: str, samples: int, width: int, height: int) -> dict[
         and first["pending_after_trace"] == second["pending_after_trace"]
         and first["event_order_digest_trace"] == second["event_order_digest_trace"]
         and first["event_poll_trace"] == second["event_poll_trace"]
+        and first["event_payload_digest_trace"] == second["event_payload_digest_trace"]
     )
     return {"deterministic": bool(deterministic), "result": first}
 
@@ -546,7 +616,7 @@ def _copy_chain_map(width: int, height: int) -> list[dict[str, Any]]:
     ]
 
 
-def run_suite(scenario: str, samples: int, width: int, height: int) -> dict[str, Any]:
+def run_suite(scenario: str, samples: int, width: int, height: int, seed: int = 1337) -> dict[str, Any]:
     normalized = _normalize_scenario_name(scenario)
     valid = {
         "render_copy_chain",
@@ -592,7 +662,7 @@ def run_suite(scenario: str, samples: int, width: int, height: int) -> dict[str,
         "provenance": {
             "command": " ".join(sys.argv),
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-            "seed_list": [],
+            "seed_list": [int(seed)],
             "run_count": 2,
         },
     }
@@ -606,7 +676,7 @@ def run_suite(scenario: str, samples: int, width: int, height: int) -> dict[str,
         if name == "sensor_polling":
             out["scenarios"][name] = _run_sensor_polling(samples)
         else:
-            out["scenarios"][name] = _run_scenario(name, samples, width, height)
+            out["scenarios"][name] = _run_scenario(name, samples, width, height, int(seed))
     return out
 
 
@@ -616,6 +686,7 @@ def main() -> int:
     parser.add_argument("--samples", type=int, default=60)
     parser.add_argument("--width", type=int, default=1600)
     parser.add_argument("--height", type=int, default=1000)
+    parser.add_argument("--seed", type=int, default=1337)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
@@ -624,6 +695,7 @@ def main() -> int:
         samples=max(1, int(args.samples)),
         width=max(64, int(args.width)),
         height=max(64, int(args.height)),
+        seed=int(args.seed),
     )
     out_path = Path(args.out).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)

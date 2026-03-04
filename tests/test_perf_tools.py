@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import unittest
 
 from tools.perf.assert_thresholds import assert_thresholds
@@ -7,6 +9,20 @@ from tools.perf.run_suite import run_suite
 
 
 class PerfToolsTests(unittest.TestCase):
+    @staticmethod
+    def _trace_fingerprint(summary: dict) -> str:
+        scenarios = summary.get("scenarios", {})
+        payload = {}
+        for name in ("idle", "scroll", "drag", "resize_stress_fullframe_allowed"):
+            result = scenarios.get(name, {}).get("result", {})
+            payload[name] = {
+                "event_order_digest_trace": result.get("event_order_digest_trace", []),
+                "event_poll_trace": result.get("event_poll_trace", []),
+                "event_payload_digest_trace": result.get("event_payload_digest_trace", []),
+            }
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
     def test_run_suite_exports_deterministic_shape(self) -> None:
         summary = run_suite(
             scenario="all_interactive",
@@ -84,6 +100,32 @@ class PerfToolsTests(unittest.TestCase):
         self.assertIsInstance(classes, dict)
         self.assertIn("fast_path", classes)
         self.assertIn("cached_path", classes)
+
+    def test_run_suite_seed_fidelity_distinguishes_cross_seed_and_keeps_same_seed_stable(self) -> None:
+        run_a = run_suite(
+            scenario="all_interactive",
+            samples=24,
+            width=640,
+            height=360,
+            seed=1337,
+        )
+        run_b = run_suite(
+            scenario="all_interactive",
+            samples=24,
+            width=640,
+            height=360,
+            seed=1337,
+        )
+        run_c = run_suite(
+            scenario="all_interactive",
+            samples=24,
+            width=640,
+            height=360,
+            seed=2024,
+        )
+        self.assertEqual(self._trace_fingerprint(run_a), self._trace_fingerprint(run_b))
+        self.assertNotEqual(self._trace_fingerprint(run_a), self._trace_fingerprint(run_c))
+        self.assertEqual(run_a.get("provenance", {}).get("seed_list", []), [1337])
 
 
 if __name__ == "__main__":
