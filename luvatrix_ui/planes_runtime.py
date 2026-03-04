@@ -115,6 +115,9 @@ class PlaneApp:
         self._hit_index_signature: tuple[tuple[float, float], tuple[tuple[str, float, float], ...], tuple[str, ...]] | None = None
         self._last_dirty_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]] | None = None
         self._last_plane_scroll: tuple[float, float] | None = None
+        self._scroll_shift_residual: tuple[float, float] = (0.0, 0.0)
+        self._frame_scroll_shift: tuple[int, int] | None = None
+        self._event_pointer_dirty_rects: list[tuple[int, int, int, int]] = []
         self._intent_queue: deque[Any] = deque()
         self._event_batch_base = _env_int("LUVATRIX_EVENT_BATCH_BASE", default=128, min_value=1, max_value=4096)
         self._event_batch_max = _env_int("LUVATRIX_EVENT_BATCH_MAX", default=512, min_value=1, max_value=4096)
@@ -132,6 +135,7 @@ class PlaneApp:
     def loop(self, ctx, dt: float) -> None:
         frame_start_ns = time.perf_counter_ns()
         self._begin_perf_frame()
+        self._frame_scroll_shift = None
         self._ensure_compiled(ctx)
         assert self._ui_page is not None
         pre_plane_scroll = self._plane_scroll_position()
@@ -159,9 +163,11 @@ class PlaneApp:
         self._last_dirty_signature = post_signature
         invalidation_escape_hatch_used, invalidation_escape_hatch_reason = self._consume_invalidation_escape_hatch()
         if invalidation_escape_hatch_used and self._ui_page is not None:
+            self._reset_scroll_shift_residual()
             dirty_rects = [(0, 0, int(self._ui_page.matrix.width), int(self._ui_page.matrix.height))]
             scroll_shift = None
         elif dirty_rects and not self._incremental_present_enabled():
+            self._reset_scroll_shift_residual()
             dirty_rects = [(0, 0, int(self._ui_page.matrix.width), int(self._ui_page.matrix.height))]
             scroll_shift = None
         dirty_count = int(len(dirty_rects))
@@ -271,6 +277,8 @@ class PlaneApp:
             }
             self._merge_renderer_bitmap_cache_stats()
             return
+        if compose_mode == "full_frame":
+            self._reset_scroll_shift_residual()
 
         raster_start_ns = time.perf_counter_ns()
         set_bitmap_cache_enabled = getattr(self._renderer, "set_bitmap_cache_enabled", None)
@@ -520,12 +528,19 @@ class PlaneApp:
             if event.event_type == "pointer_move":
                 self._frame_counts["pointer_move_events"] = int(self._frame_counts.get("pointer_move_events", 0)) + 1
                 self._dispatch_hover(payload, dt)
+                if str(payload.get("phase", "")).lower() == "drag":
+                    rect = self._event_pointer_dirty_rect(payload, margin_px=18)
+                    if rect is not None:
+                        self._event_pointer_dirty_rects.append(rect)
                 continue
             self._frame_counts["non_scroll_non_pointer_events"] = int(
                 self._frame_counts.get("non_scroll_non_pointer_events", 0)
             ) + 1
             hook = _hook_for_event(event.event_type, payload)
             target_component = self._pick_component_for_event(payload)
+            rect = self._event_pointer_dirty_rect(payload, margin_px=18)
+            if rect is not None:
+                self._event_pointer_dirty_rects.append(rect)
             if hook is None:
                 continue
             if target_component is None:
@@ -738,6 +753,17 @@ class PlaneApp:
             return (float(payload["x"]), float(payload["y"]))
         except (TypeError, ValueError):
             return None
+
+    def _event_pointer_dirty_rect(self, payload: dict[str, Any], *, margin_px: int) -> tuple[int, int, int, int] | None:
+        xy = self._extract_event_xy(payload)
+        if xy is None:
+            return None
+        x, y = xy
+        margin = max(1, int(margin_px))
+        left = int(math.floor(float(x))) - margin
+        top = int(math.floor(float(y))) - margin
+        size = int((margin * 2) + 1)
+        return (left, top, size, size)
 
     def _resolve_handler(self, target: str) -> EventHandler | None:
         if target in self._handlers:
@@ -1156,6 +1182,7 @@ class PlaneApp:
 
     def _begin_perf_frame(self) -> None:
         self._frame_perf = {}
+        self._event_pointer_dirty_rects = []
         self._frame_counts = {
             "events_polled": 0,
             "events_processed": 0,
@@ -1286,10 +1313,12 @@ class PlaneApp:
     ) -> list[tuple[int, int, int, int]]:
         if self._ui_page is None:
             return []
+        self._frame_scroll_shift = None
         view_w = int(self._ui_page.matrix.width)
         view_h = int(self._ui_page.matrix.height)
         full = [(0, 0, view_w, view_h)]
         if self._last_dirty_signature is None or self._last_plane_scroll is None:
+            self._reset_scroll_shift_residual()
             return full
         if (
             pre_signature == post_signature
@@ -1333,48 +1362,42 @@ class PlaneApp:
                     post_viewport_scroll=post_signature[2],
                 )
             )
+        if self._event_pointer_dirty_rects:
+            dirty_rects.extend(self._event_pointer_dirty_rects)
         if not plane_changed:
             normalized = self._normalize_local_dirty_rects(dirty_rects, view_w=view_w, view_h=view_h)
             if normalized:
                 return normalized
-            if int(self._frame_counts.get("non_scroll_non_pointer_events", 0)) > 0:
-                return full
             if events_processed <= 0:
                 return []
             if int(self._frame_counts.get("pointer_move_events", 0)) > 0:
+                return []
+            if int(self._frame_counts.get("scroll_events", 0)) > 0:
+                return []
+            if int(self._frame_counts.get("non_scroll_non_pointer_events", 0)) > 0:
                 return []
             if theme_or_hover_changed or viewport_scroll_changed:
                 return []
             return full
         if dirty_rects and self._has_camera_overlay_activity():
             # Preserve visual parity when camera overlays are active.
+            self._reset_scroll_shift_residual()
             return full
         if not dirty_rects and self._has_camera_overlay_activity():
+            self._reset_scroll_shift_residual()
             return full
         shift_x, shift_y = self._quantized_scroll_shift(dx, dy)
         adx = abs(int(shift_x))
         ady = abs(int(shift_y))
-        if adx == 0 and ady == 0:
-            # Subpixel scroll deltas cannot be safely represented via integer shift+strip compose.
-            return full
-        if adx > 0 and ady > 0:
-            # Bi-axial scroll updates are currently routed to full compose to avoid seam artifacts.
-            return full
         if adx >= view_w or ady >= view_h:
+            self._reset_scroll_shift_residual()
             return full
-        rects: list[tuple[int, int, int, int]] = []
-        # plane scroll delta > 0 moves content left/up in camera space.
-        if shift_x < 0:
-            dirty_rects.append((view_w - adx, 0, adx, view_h))
-        elif shift_x > 0:
-            dirty_rects.append((0, 0, adx, view_h))
-        if shift_y < 0:
-            dirty_rects.append((0, view_h - ady, view_w, ady))
-        elif shift_y > 0:
-            dirty_rects.append((0, 0, view_w, ady))
+        if shift_x != 0 or shift_y != 0:
+            self._frame_scroll_shift = (shift_x, shift_y)
+        dirty_rects.extend(self._plane_scroll_dirty_rects(view_w=view_w, view_h=view_h, shift_x=shift_x, shift_y=shift_y))
         dirty_rects.extend(self._plane_scrollbar_dirty_rects())
         normalized = self._normalize_local_dirty_rects(dirty_rects, view_w=view_w, view_h=view_h)
-        return normalized if normalized else full
+        return normalized
 
     def _hover_transition_dirty_rects(
         self,
@@ -1482,32 +1505,49 @@ class PlaneApp:
         pre_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]],
         post_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]],
     ) -> tuple[int, int] | None:
-        if self._ui_page is None:
-            return None
-        if self._last_dirty_signature is None or self._last_plane_scroll is None:
-            return None
-        if self._has_camera_overlay_activity():
-            return None
-        theme_or_hover_changed = pre_signature[0:2] != post_signature[0:2]
-        viewport_scroll_changed = pre_signature[2] != post_signature[2]
-        if theme_or_hover_changed or viewport_scroll_changed:
-            return None
-        dx = float(post_plane_scroll[0] - pre_plane_scroll[0])
-        dy = float(post_plane_scroll[1] - pre_plane_scroll[1])
-        if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
-            return None
-        shift_x, shift_y = self._quantized_scroll_shift(dx, dy)
-        if shift_x == 0 and shift_y == 0:
-            return None
-        if abs(int(shift_x)) > 0 and abs(int(shift_y)) > 0:
-            return None
+        _ = (pre_plane_scroll, post_plane_scroll, pre_signature, post_signature)
+        return self._frame_scroll_shift
+
+    def _quantized_scroll_shift(self, dx: float, dy: float) -> tuple[int, int]:
+        # Quantize to integer shifts while carrying fractional residuals forward.
+        # positive plane-scroll means content moves left/up in camera space.
+        rx, ry = self._scroll_shift_residual
+        effective_x = (-float(dx)) + float(rx)
+        effective_y = (-float(dy)) + float(ry)
+        shift_x = int(math.floor(effective_x)) if effective_x >= 0.0 else int(math.ceil(effective_x))
+        shift_y = int(math.floor(effective_y)) if effective_y >= 0.0 else int(math.ceil(effective_y))
+        self._scroll_shift_residual = (float(effective_x - shift_x), float(effective_y - shift_y))
         return (shift_x, shift_y)
 
     @staticmethod
-    def _quantized_scroll_shift(dx: float, dy: float) -> tuple[int, int]:
-        # Keep dirty-strip and shift compose aligned to the same integer translation.
-        # positive plane-scroll means content moves left/up in camera space.
-        return (-int(round(dx)), -int(round(dy)))
+    def _plane_scroll_dirty_rects(
+        *,
+        view_w: int,
+        view_h: int,
+        shift_x: int,
+        shift_y: int,
+    ) -> list[tuple[int, int, int, int]]:
+        adx = abs(int(shift_x))
+        ady = abs(int(shift_y))
+        rects: list[tuple[int, int, int, int]] = []
+        if adx > 0:
+            if shift_x < 0:
+                rects.append((view_w - adx, 0, adx, view_h - ady if ady > 0 else view_h))
+            else:
+                rects.append((0, 0, adx, view_h - ady if ady > 0 else view_h))
+        if ady > 0:
+            if shift_y < 0:
+                rects.append((0, view_h - ady, view_w - adx if adx > 0 else view_w, ady))
+            else:
+                rects.append((0, 0, view_w - adx if adx > 0 else view_w, ady))
+        if adx > 0 and ady > 0:
+            corner_x = view_w - adx if shift_x < 0 else 0
+            corner_y = view_h - ady if shift_y < 0 else 0
+            rects.append((corner_x, corner_y, adx, ady))
+        return rects
+
+    def _reset_scroll_shift_residual(self) -> None:
+        self._scroll_shift_residual = (0.0, 0.0)
 
     def _has_camera_overlay_activity(self) -> bool:
         if self._ui_page is None:
