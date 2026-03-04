@@ -4896,7 +4896,7 @@
       "title": "Subpixel and bi-axial incremental compose support",
       "milestone_id": "P-026",
       "epic_id": "E-2801",
-      "status": "Intake",
+      "status": "Done",
       "priority": "P0",
       "board_refs": [
         "milestone:P-026",
@@ -4914,7 +4914,22 @@
         "PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k 'scroll or fractional or diagonal or dirty_rect' -q",
         "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario horizontal_pan --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_horizontal_pan.json",
         "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario drag_heavy --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_drag_heavy.json"
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 9800,
+        "output_tokens": 2100,
+        "wall_time_sec": 3240,
+        "tool_calls": 27,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2816",
