@@ -3,7 +3,7 @@
 Milestone: `P-026` Runtime Performance Hardening Closeout Signoff  
 Epic: `E-2801`  
 Task chain: `T-2801 -> (T-2802, T-2803, T-2804) -> T-2805`  
-Last updated: `2026-03-04` (T-2815 complete)
+Last updated: `2026-03-04` (T-2816 integration-ready)
 
 ## Evidence Integrity Remediation (No-Go Until Provenance PASS)
 1. Scope: reopen closeout execution due to evidence integrity gaps.
@@ -47,7 +47,6 @@ Last updated: `2026-03-04` (T-2815 complete)
 3. `T-2809` after both `T-2807` and `T-2808`
 
 ## Intake
-1. `T-2816` Resize scenario split + policy clarification.
 2. `T-2817` Validator hard-gates for incremental targets + exception caps.
 3. `T-2818` Determinism seed-fidelity hardening.
 
@@ -57,30 +56,40 @@ Last updated: `2026-03-04` (T-2815 complete)
 3. `T-2814` Pointer-only non-delta frames take idle/no-op compose path.
 4. `T-2815` Fractional scroll accumulator + quantized dirty-strip compose behavior defined.
 5. `T-2815` Bounded bi-axial dirty decomposition (edge strips + corner patch) replaces unconditional full-frame fallback where safe.
+6. `T-2816` Explicit resize scenarios split into `resize_stress_fullframe_allowed` and `resize_overlap_incremental_required`.
+7. `T-2816` Resize stress retains measured resize recovery metric.
+8. `T-2816` Resize overlap scenario enforces measured `incremental_present_pct >= 75%`.
 
 ## Safety Tests Spec
 1. `T-2814` Preserve `RenderTarget`, App protocol/`AppContext`, and `SensorProvider` boundaries; no backend coupling into app logic.
 2. `T-2814` Preserve deterministic behavior and `HDIThread`/`SensorManagerThread` separation.
 3. `T-2815` Preserve same boundaries while removing only safe fallback paths (no interface/contract changes).
+4. `T-2816` Overlap resize measurement avoids app re-init artifacts; `app_reinit_count` remains zero for overlap scenario.
 
 ## Implementation Tests Spec
 1. `T-2814` `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "hover or drag or theme or dirty_rect" -q`
 2. `T-2815` `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "scroll or fractional or diagonal or dirty_rect" -q`
+3. `T-2816` `PYTHONPATH=. uv run pytest tests/test_perf_tools.py -q`
 
 ## Edge Case Tests Spec
 1. `T-2814` Theme background delta must force full-frame invalidation as full-surface effect fallback.
 2. `T-2814` Pointer-move with no hover transition must produce `idle_skip` with zero dirty rects.
 3. `T-2815` Subpixel deltas must remain deterministic via residual accumulation and bounded quantized updates.
 4. `T-2815` Bi-axial scroll must use bounded dirty decomposition + corner patch; no unconditional full-frame fallback.
+5. `T-2816` Resize overlap policy check fails if `incremental_present_pct < 75%`.
+6. `T-2816` Resize stress and overlap policy checks are tied to measured artifacts only (no synthetic fallbacks).
 
 ## Prototype Stage 1
 1. `T-2814` Dirty-signature diffing updated to compare against last presented frame state.
 2. `T-2815` Residual-based scroll quantization path added and wired through compose planning.
+3. `T-2816` Added explicit resize scenario constants and closeout-required suite inclusion for overlap policy measurement.
 
 ## Prototype Stage 2+
 1. `T-2814` Scoped hover dirty rects implemented for old/new component bounds with 1px safety margin.
 2. `T-2814` Scoped theme dirty rects implemented for theme-dependent text color diffs; background theme diffs route to full frame.
 3. `T-2815` Bi-axial strip decomposition with explicit corner patch implemented; drag/press pointer-local dirty patching added for bounded updates.
+4. `T-2816` Overlap scenario now runs resize cadence without app re-init while stress scenario preserves fullframe-allowed re-init path.
+5. `T-2816` Measured summary and strict validator updated for scenario split and overlap `>=75%` hard gate.
 
 ## Verification Review
 1. `T-2806` Summary regenerated with `p99` and resize recovery evidence present.
@@ -95,6 +104,12 @@ Last updated: `2026-03-04` (T-2815 complete)
    - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "scroll or fractional or diagonal or dirty_rect" -q` -> pass (`14 passed, 19 deselected`).
    - `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario horizontal_pan --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_horizontal_pan.json` -> `incremental_present_pct=98.59154929577464`.
    - `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario drag_heavy --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_drag_heavy.json` -> `incremental_present_pct=99.16666666666667`.
+7. `T-2816` Evidence:
+   - `PYTHONPATH=. uv run pytest tests/test_perf_tools.py -q` -> pass (`4 passed`).
+   - `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario resize_stress --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_resize_stress_fullframe_allowed.json` -> scenario key `resize_stress_fullframe_allowed` with measured `resize_recovery_sec=0.016666666666666666`.
+   - `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario closeout_required --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_closeout_required.json` -> includes `resize_overlap_incremental_required` with `incremental_present_pct=99.16666666666667` and `app_reinit_count=0`.
+   - `PYTHONPATH=. uv run python tools/perf/build_p026_measured_summary.py --raw artifacts/perf/closeout/raw_closeout_required.json --out artifacts/perf/closeout/measured_summary.json` -> overlap policy threshold pass (`>=75%`).
+   - `PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026` -> `validation: PASS (evidence)`.
 1. Unified benchmark threshold gates (task `T-2801` canonical baseline):
 - Frame time latency: `p50 <= 16.7ms`, `p95 <= 25.0ms`, `p99 <= 33.3ms` (interactive mixed-load scenarios).
 - Input-to-present latency: `p95 <= 33.3ms`, `p99 <= 50.0ms` (burst input scenarios).
@@ -165,6 +180,7 @@ Last updated: `2026-03-04` (T-2815 complete)
 ## Integration Ready
 1. `T-2814` Implementation and task evidence complete on milestone branch; waiting on merge-to-`main` and required checks for `Done`.
 2. `T-2815` Implementation/evidence completed; moved to Integration Ready pending merge/check gate.
+3. `T-2816` Scenario split/policy implementation and evidence complete on milestone branch; waiting on merge-to-`main` and required checks for `Done`.
 
 ## Done
 1. `T-2801` Done with benchmark closeout telemetry (`input_tokens=12800`, `output_tokens=2600`, `wall_time_sec=1540`, `tool_calls=24`).

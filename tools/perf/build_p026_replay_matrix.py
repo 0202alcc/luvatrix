@@ -63,7 +63,7 @@ def build_matrix(*, seeds: list[int], runs_per_seed: int, samples: int, width: i
                 raise ValueError("run_suite output missing scenarios map")
 
             digest_material: dict[str, dict[str, str]] = {}
-            for scenario_name in ("idle", "scroll", "drag", "resize_stress"):
+            for scenario_name in ("idle", "scroll", "drag", "resize_stress_fullframe_allowed"):
                 scenario_payload = scenarios.get(scenario_name, {})
                 if not isinstance(scenario_payload, dict):
                     raise ValueError(f"missing scenario payload: {scenario_name}")

@@ -17,7 +17,7 @@ class PerfToolsTests(unittest.TestCase):
         self.assertEqual(summary.get("suite"), "all_interactive")
         scenarios = summary.get("scenarios", {})
         self.assertIsInstance(scenarios, dict)
-        for name in ("idle", "scroll", "drag", "resize_stress"):
+        for name in ("idle", "scroll", "drag", "resize_stress_fullframe_allowed"):
             self.assertIn(name, scenarios)
             payload = scenarios[name]
             self.assertTrue(bool(payload.get("deterministic", False)))
@@ -40,7 +40,12 @@ class PerfToolsTests(unittest.TestCase):
                 "idle": {"p95_frame_total_ms": 1000.0, "jitter_ms": 1000.0, "p95_copy_bytes": 10000000, "p95_copy_count": 100},
                 "scroll": {"p95_frame_total_ms": 1000.0, "jitter_ms": 1000.0, "p95_copy_bytes": 10000000, "p95_copy_count": 100},
                 "drag": {"p95_frame_total_ms": 1000.0, "jitter_ms": 1000.0, "p95_copy_bytes": 10000000, "p95_copy_count": 100},
-                "resize_stress": {"p95_frame_total_ms": 1000.0, "jitter_ms": 1000.0, "p95_copy_bytes": 10000000, "p95_copy_count": 100},
+                "resize_stress_fullframe_allowed": {
+                    "p95_frame_total_ms": 1000.0,
+                    "jitter_ms": 1000.0,
+                    "p95_copy_bytes": 10000000,
+                    "p95_copy_count": 100,
+                },
             }
         }
         out = assert_thresholds("baseline_contract", baseline, contract)

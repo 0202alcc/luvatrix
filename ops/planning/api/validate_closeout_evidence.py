@@ -126,7 +126,16 @@ def validate(milestone_id: str) -> tuple[bool, list[str]]:
     if not isinstance(scenario_metrics, dict):
         errors.append("measured summary scenario_metrics must be an object")
     else:
-        for scenario in ("scroll", "horizontal_pan", "drag_heavy", "mixed_burst", "sensor_overlay", "resize_stress", "input_burst"):
+        for scenario in (
+            "scroll",
+            "horizontal_pan",
+            "drag_heavy",
+            "mixed_burst",
+            "sensor_overlay",
+            "resize_stress_fullframe_allowed",
+            "resize_overlap_incremental_required",
+            "input_burst",
+        ):
             node = scenario_metrics.get(scenario)
             if not isinstance(node, dict):
                 errors.append(f"required measured scenario missing: {scenario}")
@@ -137,9 +146,16 @@ def validate(milestone_id: str) -> tuple[bool, list[str]]:
             for key in ("p95_input_to_present_ms", "p99_input_to_present_ms"):
                 if not isinstance(node.get(key), (int, float)):
                     errors.append(f"{scenario} missing measured field: {key}")
-        resize_node = scenario_metrics.get("resize_stress")
+        resize_node = scenario_metrics.get("resize_stress_fullframe_allowed")
         if isinstance(resize_node, dict) and not isinstance(resize_node.get("resize_recovery_sec"), (int, float)):
-            errors.append("resize_stress missing measured field: resize_recovery_sec")
+            errors.append("resize_stress_fullframe_allowed missing measured field: resize_recovery_sec")
+        overlap_node = scenario_metrics.get("resize_overlap_incremental_required")
+        if isinstance(overlap_node, dict):
+            overlap_incremental = overlap_node.get("incremental_present_pct")
+            if not isinstance(overlap_incremental, (int, float)):
+                errors.append("resize_overlap_incremental_required missing measured field: incremental_present_pct")
+            elif float(overlap_incremental) < 75.0:
+                errors.append("resize_overlap_incremental_required incremental_present_pct below 75.0 policy floor")
 
     summary_provenance = summary.get("provenance", {})
     if not isinstance(summary_provenance, dict):

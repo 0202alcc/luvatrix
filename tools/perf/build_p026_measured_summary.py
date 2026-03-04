@@ -13,10 +13,12 @@ REQUIRED_SCENARIOS = (
     "drag_heavy",
     "mixed_burst",
     "sensor_overlay",
-    "resize_stress",
+    "resize_stress_fullframe_allowed",
+    "resize_overlap_incremental_required",
     "input_burst",
     "sensor_polling",
 )
+OVERLAP_INCREMENTAL_TARGET_PCT = 75.0
 
 REQUIRED_MEASURED_FIELDS = (
     "p50_frame_total_ms",
@@ -87,12 +89,20 @@ def build_measured_summary(raw: dict[str, Any]) -> dict[str, Any]:
         metrics["p95_input_to_present_ms"] = _require_number(result, "p95_input_to_present_ms")
         metrics["p99_input_to_present_ms"] = _require_number(result, "p99_input_to_present_ms")
         resize_recovery = result.get("resize_recovery_sec")
-        if name == "resize_stress":
+        if name == "resize_stress_fullframe_allowed":
             if not isinstance(resize_recovery, (int, float)):
-                raise ValueError("resize_stress missing measured resize_recovery_sec")
+                raise ValueError("resize_stress_fullframe_allowed missing measured resize_recovery_sec")
             metrics["resize_recovery_sec"] = float(resize_recovery)
         else:
             metrics["resize_recovery_sec"] = float(resize_recovery) if isinstance(resize_recovery, (int, float)) else None
+        if name == "resize_overlap_incremental_required":
+            incremental_pct = _require_number(result, "incremental_present_pct")
+            if incremental_pct < OVERLAP_INCREMENTAL_TARGET_PCT:
+                raise ValueError(
+                    "resize_overlap_incremental_required incremental_present_pct below policy threshold: "
+                    f"{incremental_pct:.3f} < {OVERLAP_INCREMENTAL_TARGET_PCT:.1f}"
+                )
+            metrics["incremental_present_pct"] = incremental_pct
         scenario_metrics[name] = metrics
 
     frame_scenarios = [s for s in REQUIRED_SCENARIOS if s != "sensor_polling"]
@@ -102,7 +112,7 @@ def build_measured_summary(raw: dict[str, Any]) -> dict[str, Any]:
     input_p95 = max(float(scenario_metrics[s]["p95_input_to_present_ms"]) for s in frame_scenarios)
     input_p99 = max(float(scenario_metrics[s]["p99_input_to_present_ms"]) for s in frame_scenarios)
     dropped_ratio = max(float(scenario_metrics[s]["dropped_frame_ratio"]) for s in frame_scenarios)
-    resize_recovery = float(scenario_metrics["resize_stress"]["resize_recovery_sec"])
+    resize_recovery = float(scenario_metrics["resize_stress_fullframe_allowed"]["resize_recovery_sec"])
 
     return {
         "milestone_id": "P-026",
@@ -120,6 +130,7 @@ def build_measured_summary(raw: dict[str, Any]) -> dict[str, Any]:
         "provenance": {
             "raw_artifact": "artifacts/perf/closeout/raw_closeout_required.json",
             "measurement_policy": "no synthetic, derived, estimated, or normalized fallbacks",
+            "resize_overlap_incremental_threshold_pct": OVERLAP_INCREMENTAL_TARGET_PCT,
             "raw_command": provenance.get("command"),
             "raw_commit_sha": provenance.get("commit_sha"),
             "raw_timestamp_utc": provenance.get("timestamp_utc"),

@@ -2,24 +2,25 @@
   "metrics": {
     "dropped_frame_ratio": 0.0,
     "frame_time_ms": {
-      "p50": 0.2110625,
-      "p95": 0.31611039999999946,
-      "p99": 1.697661929999986
+      "p50": 0.172437,
+      "p95": 0.25512739999999995,
+      "p99": 1.1178957700000003
     },
     "input_to_present_ms": {
       "p95": 16.666666666666668,
       "p99": 16.666666666666668
     },
     "resize_recovery_sec": 0.016666666666666666,
-    "sensor_cycle_p95_ms": 7.925183299999998
+    "sensor_cycle_p95_ms": 8.231266999999999
   },
   "milestone_id": "P-026",
   "provenance": {
     "measurement_policy": "no synthetic, derived, estimated, or normalized fallbacks",
     "raw_artifact": "artifacts/perf/closeout/raw_closeout_required.json",
-    "raw_command": "tools/perf/run_suite.py --scenario closeout_required --samples 80 --width 1280 --height 720 --out artifacts/perf/closeout/raw_closeout_required.json",
-    "raw_commit_sha": "706751f2a5e802e10d8572651f3d3650d4b80d49",
-    "raw_timestamp_utc": "2026-03-04T02:14:37.716542+00:00",
+    "raw_command": "tools/perf/run_suite.py --scenario closeout_required --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_closeout_required.json",
+    "raw_commit_sha": "c74a7fb83a7f91350e959aeac84273223f54f7bd",
+    "raw_timestamp_utc": "2026-03-04T06:01:08.790042+00:00",
+    "resize_overlap_incremental_threshold_pct": 75.0,
     "run_count": 2,
     "seed_list": []
   },
@@ -29,76 +30,87 @@
     "drag_heavy",
     "mixed_burst",
     "sensor_overlay",
-    "resize_stress",
+    "resize_stress_fullframe_allowed",
+    "resize_overlap_incremental_required",
     "input_burst",
     "sensor_polling"
   ],
   "scenario_metrics": {
     "drag_heavy": {
       "dropped_frame_ratio": 0.0,
-      "p50_frame_total_ms": 0.1347295,
-      "p95_frame_total_ms": 0.15882915,
+      "p50_frame_total_ms": 0.108667,
+      "p95_frame_total_ms": 0.14144194999999996,
       "p95_input_to_present_ms": 16.666666666666668,
-      "p99_frame_total_ms": 0.19227624999999948,
+      "p99_frame_total_ms": 0.17780652000000002,
       "p99_input_to_present_ms": 16.666666666666668,
       "resize_recovery_sec": null
     },
     "horizontal_pan": {
       "dropped_frame_ratio": 0.0,
-      "p50_frame_total_ms": 0.2032705,
-      "p95_frame_total_ms": 0.2345372,
+      "p50_frame_total_ms": 0.1644165,
+      "p95_frame_total_ms": 0.20172055,
       "p95_input_to_present_ms": 16.666666666666668,
-      "p99_frame_total_ms": 0.3226648899999997,
+      "p99_frame_total_ms": 0.23200377,
       "p99_input_to_present_ms": 16.666666666666668,
       "resize_recovery_sec": null
     },
     "input_burst": {
       "dropped_frame_ratio": 0.0,
-      "p50_frame_total_ms": 0.012313000000000001,
-      "p95_frame_total_ms": 0.31228814999999627,
+      "p50_frame_total_ms": 0.0067085,
+      "p95_frame_total_ms": 0.033799699999999495,
       "p95_input_to_present_ms": 16.666666666666668,
-      "p99_frame_total_ms": 1.59118057,
+      "p99_frame_total_ms": 1.1178957700000003,
       "p99_input_to_present_ms": 16.666666666666668,
       "resize_recovery_sec": null
     },
     "mixed_burst": {
       "dropped_frame_ratio": 0.0,
-      "p50_frame_total_ms": 0.131687,
-      "p95_frame_total_ms": 0.2116191,
+      "p50_frame_total_ms": 0.059812000000000004,
+      "p95_frame_total_ms": 0.19169579999999997,
       "p95_input_to_present_ms": 16.666666666666668,
-      "p99_frame_total_ms": 0.24915006999999995,
+      "p99_frame_total_ms": 0.23835148000000003,
       "p99_input_to_present_ms": 16.666666666666668,
       "resize_recovery_sec": null
     },
-    "resize_stress": {
+    "resize_overlap_incremental_required": {
       "dropped_frame_ratio": 0.0,
-      "p50_frame_total_ms": 0.17531249999999998,
-      "p95_frame_total_ms": 0.31611039999999946,
+      "incremental_present_pct": 99.16666666666667,
+      "p50_frame_total_ms": 0.1588955,
+      "p95_frame_total_ms": 0.18383685,
+      "p95_input_to_present_ms": 16.666666666666668,
+      "p99_frame_total_ms": 0.25423479,
+      "p99_input_to_present_ms": 16.666666666666668,
+      "resize_recovery_sec": null
+    },
+    "resize_stress_fullframe_allowed": {
+      "dropped_frame_ratio": 0.0,
+      "p50_frame_total_ms": 0.144104,
+      "p95_frame_total_ms": 0.17632114999999998,
       "p95_input_to_present_ms": 0.0,
-      "p99_frame_total_ms": 1.697661929999986,
+      "p99_frame_total_ms": 0.22527056000000004,
       "p99_input_to_present_ms": 0.0,
       "resize_recovery_sec": 0.016666666666666666
     },
     "scroll": {
       "dropped_frame_ratio": 0.0,
-      "p50_frame_total_ms": 0.2110625,
-      "p95_frame_total_ms": 0.2566857499999999,
+      "p50_frame_total_ms": 0.172437,
+      "p95_frame_total_ms": 0.25512739999999995,
       "p95_input_to_present_ms": 16.666666666666668,
-      "p99_frame_total_ms": 0.5443324299999961,
+      "p99_frame_total_ms": 0.7290747300000011,
       "p99_input_to_present_ms": 16.666666666666668,
       "resize_recovery_sec": null
     },
     "sensor_overlay": {
       "dropped_frame_ratio": 0.0,
-      "p50_frame_total_ms": 0.16949999999999998,
-      "p95_frame_total_ms": 0.21938539999999998,
+      "p50_frame_total_ms": 0.1558125,
+      "p95_frame_total_ms": 0.1857205,
       "p95_input_to_present_ms": 16.666666666666668,
-      "p99_frame_total_ms": 0.31412956999999997,
+      "p99_frame_total_ms": 0.19079973,
       "p99_input_to_present_ms": 16.666666666666668,
       "resize_recovery_sec": null
     },
     "sensor_polling": {
-      "cycle_cost_p95_ms": 7.925183299999998,
+      "cycle_cost_p95_ms": 8.231266999999999,
       "dropped_frame_ratio": null,
       "p50_frame_total_ms": null,
       "p95_frame_total_ms": null,
