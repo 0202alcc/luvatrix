@@ -12,26 +12,23 @@
 - `T-2805` Evidence reconciliation and final signoff packet: consolidated closeout mapping prepared.
 
 ## Evidence
-- Reconstructed closeout artifacts generated from current repository perf outputs:
-  - `artifacts/perf/closeout/summary.json`
-  - `artifacts/perf/closeout/determinism_replay_seed1337.json`
-  - `artifacts/perf/closeout/incremental_present_matrix_seed1337.json`
+- Provenance-backed closeout artifacts generated from measured benchmark and replay runs:
   - `artifacts/perf/closeout/manifest.json`
 - Evidence manifest (path + sha256):
 ```json
 {
   "artifacts": [
     {
-      "path": "artifacts/perf/closeout/summary.json",
-      "sha256": "fdb45aa3c1b7c79c42b5b255a79d7e514ac27e75ec39305027f1bd7819fa52c3"
+      "path": "artifacts/perf/closeout/raw_closeout_required.json",
+      "sha256": "e640e85bd92c9db01271cef6dd45fdba5c5a896dadfe1e232ebac5c18c9740a3"
     },
     {
-      "path": "artifacts/perf/closeout/determinism_replay_seed1337.json",
-      "sha256": "9570d2e60123d1742f13ce04035555aee70df513611dac0eb6e99147baf228d2"
+      "path": "artifacts/perf/closeout/measured_summary.json",
+      "sha256": "e7989471a71aaed2978c34a32da6fa89ace9c46b68d6117cb36eed06154c4914"
     },
     {
-      "path": "artifacts/perf/closeout/incremental_present_matrix_seed1337.json",
-      "sha256": "bbfb25c9f3f6b0821b854e141e085e37cf33ccf5d7af306ad9629b8fc0b8c009"
+      "path": "artifacts/perf/closeout/determinism_replay_matrix.json",
+      "sha256": "5e76c68890aaf97a2b1dba2dde4d62c50e6efc2032e447499d50bf0aed927d58"
     }
   ]
 }
@@ -61,6 +58,6 @@
 - Strict closeout evidence gates are currently satisfied for this packet revision.
 
 ## Validation Outputs
-- `2026-03-03` `uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-026` -> `validation: PASS (ops/planning/closeout/p-026_closeout.md)`
-- `2026-03-03` `uv run python ops/planning/agile/validate_milestone_task_links.py` -> `validation: PASS (checked 27 milestones against 105 active + 18 archived tasks)`
-- `2026-03-03` `uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026` -> `validation: PASS (evidence)`
+- `2026-03-04` `uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-026` -> `validation: PASS (ops/planning/closeout/p-026_closeout.md)`
+- `2026-03-04` `uv run python ops/planning/agile/validate_milestone_task_links.py` -> `validation: PASS (checked 27 milestones against 113 active + 18 archived tasks)`
+- `2026-03-04` `uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026` -> `validation: PASS (evidence)`

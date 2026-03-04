@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
 import math
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 import time
@@ -24,6 +27,10 @@ class _PerfCtx:
         self.matrix = _Matrix(width=width, height=height)
         self._events: list[HDIEvent] = []
         self.polled_event_ids: list[list[int]] = []
+        self._queued_frame_idx: dict[int, int] = {}
+        self.current_frame_idx: int = 0
+        self.input_to_present_ms: list[float] = []
+        self.frame_budget_ms: float = 1000.0 / 60.0
 
     def begin_ui_frame(
         self,
@@ -50,10 +57,23 @@ class _PerfCtx:
         return out
 
     def queue(self, event: HDIEvent) -> None:
+        self._queued_frame_idx[int(event.event_id)] = int(self.current_frame_idx)
         self._events.append(event)
 
     def pending_hdi_events(self) -> int:
         return len(self._events)
+
+    def set_frame_idx(self, frame_idx: int) -> None:
+        self.current_frame_idx = int(frame_idx)
+
+    def mark_present(self, event_ids: list[int]) -> None:
+        for event_id in event_ids:
+            queued_idx = self._queued_frame_idx.pop(int(event_id), None)
+            if queued_idx is None:
+                continue
+            lag_frames = max(0, int(self.current_frame_idx) - int(queued_idx))
+            latency_ms = float(lag_frames + 1) * self.frame_budget_ms
+            self.input_to_present_ms.append(latency_ms)
 
 
 class _FastPathProvider(SensorProvider):
@@ -108,6 +128,16 @@ def _scenario_event(scenario: str, i: int) -> HDIEvent | None:
             status="OK",
             payload={"x": 180.0, "y": 200.0, "delta_x": -18.0, "delta_y": -9.0, "phase": "changed"},
         )
+    if scenario == "horizontal_pan":
+        return HDIEvent(
+            event_id=i + 1,
+            ts_ns=i + 1,
+            window_id="perf",
+            device="trackpad",
+            event_type="scroll",
+            status="OK",
+            payload={"x": 180.0, "y": 200.0, "delta_x": -14.0, "delta_y": 0.0, "phase": "changed"},
+        )
     if scenario == "drag":
         phase = "single" if i % 6 == 0 else "drag"
         return HDIEvent(
@@ -118,6 +148,17 @@ def _scenario_event(scenario: str, i: int) -> HDIEvent | None:
             event_type=("press" if i % 6 == 0 else "pointer_move"),
             status="OK",
             payload={"x": 120.0 + (i % 11), "y": 140.0 + (i % 7), "phase": phase},
+        )
+    if scenario == "drag_heavy":
+        phase = "single" if i % 10 == 0 else "drag"
+        return HDIEvent(
+            event_id=i + 1,
+            ts_ns=i + 1,
+            window_id="perf",
+            device="mouse",
+            event_type=("press" if i % 10 == 0 else "pointer_move"),
+            status="OK",
+            payload={"x": 90.0 + float((i * 3) % 17), "y": 110.0 + float((i * 2) % 13), "phase": phase},
         )
     return None
 
@@ -156,7 +197,9 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
     event_order_digest_trace: list[str] = []
 
     event_id_counter = 1
+    resize_change_indices: list[int] = []
     for i in range(samples):
+        ctx.set_frame_idx(i)
         if scenario == "input_burst":
             if i % 24 == 3:
                 for j in range(512):
@@ -191,12 +234,68 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
                     )
                 )
                 event_id_counter += 1
+        elif scenario == "mixed_burst":
+            # Deterministic mixed-load schedule: scroll bursts + drag + occasional press.
+            if i % 10 in {1, 2, 3, 4}:
+                ctx.queue(
+                    HDIEvent(
+                        event_id=event_id_counter,
+                        ts_ns=(i * 1_000_000) + 1,
+                        window_id="perf",
+                        device="trackpad",
+                        event_type="scroll",
+                        status="OK",
+                        payload={"x": 170.0, "y": 210.0, "delta_x": -4.0, "delta_y": -2.0, "phase": "changed"},
+                    )
+                )
+                event_id_counter += 1
+            if i % 6 == 0:
+                ctx.queue(
+                    HDIEvent(
+                        event_id=event_id_counter,
+                        ts_ns=(i * 1_000_000) + 2,
+                        window_id="perf",
+                        device="mouse",
+                        event_type=("press" if i % 18 == 0 else "pointer_move"),
+                        status="OK",
+                        payload={"x": 110.0 + float(i % 19), "y": 130.0 + float(i % 15), "phase": "drag"},
+                    )
+                )
+                event_id_counter += 1
+        elif scenario == "sensor_overlay":
+            if i % 2 == 0:
+                ctx.queue(
+                    HDIEvent(
+                        event_id=event_id_counter,
+                        ts_ns=(i * 1_000_000) + 1,
+                        window_id="perf",
+                        device="trackpad",
+                        event_type="scroll",
+                        status="OK",
+                        payload={"x": 150.0, "y": 190.0, "delta_x": -2.0, "delta_y": -3.0, "phase": "changed"},
+                    )
+                )
+                event_id_counter += 1
+            if i % 5 == 0:
+                ctx.queue(
+                    HDIEvent(
+                        event_id=event_id_counter,
+                        ts_ns=(i * 1_000_000) + 2,
+                        window_id="perf",
+                        device="mouse",
+                        event_type="pointer_move",
+                        status="OK",
+                        payload={"x": 100.0 + float(i % 23), "y": 120.0 + float(i % 21), "phase": "single"},
+                    )
+                )
+                event_id_counter += 1
         else:
             event = _scenario_event(scenario, i)
             if event is not None:
                 ctx.queue(event)
         w, h = _scenario_matrix_dims(scenario, i, width, height)
         if (w, h) != (ctx.matrix.width, ctx.matrix.height):
+            resize_change_indices.append(i)
             ctx.matrix.width = w
             ctx.matrix.height = h
             app = load_plane_app(plane_path, handlers={})
@@ -221,9 +320,27 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
         event_budgets.append(int(perf.get("event_budget", 0)))
         pending_after_frame.append(int(perf.get("event_queue_pending_after", 0)))
         event_order_digest_trace.append(str(perf.get("event_order_digest", "0")))
+        if ctx.polled_event_ids:
+            ctx.mark_present(ctx.polled_event_ids[-1])
 
     p95_ms = _percentile(frame_total_ms, 95.0)
     p50_ms = _percentile(frame_total_ms, 50.0)
+    p99_ms = _percentile(frame_total_ms, 99.0)
+    frame_budget_ms = 1000.0 / 60.0
+    dropped_frames = int(sum(1 for v in frame_total_ms if float(v) > frame_budget_ms))
+    dropped_ratio = float(dropped_frames) / float(samples) if samples > 0 else 0.0
+
+    resize_recovery_samples_ms: list[float] = []
+    if scenario == "resize_stress":
+        for change_idx in resize_change_indices:
+            # Direct recovery measurement: first frame index after resize where 3-frame moving average
+            # is below 16.7ms budget.
+            for j in range(change_idx, len(frame_total_ms) - 2):
+                avg = (frame_total_ms[j] + frame_total_ms[j + 1] + frame_total_ms[j + 2]) / 3.0
+                if avg <= frame_budget_ms:
+                    resize_recovery_samples_ms.append(float(j - change_idx + 1) * frame_budget_ms)
+                    break
+
     incremental_frames = int(sum(1 for mode in compose_modes if mode == "partial_dirty"))
     full_frames = int(sum(1 for mode in compose_modes if mode == "full_frame"))
     presented_frames = int(incremental_frames + full_frames)
@@ -233,7 +350,10 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
         "samples": int(samples),
         "p95_frame_total_ms": float(p95_ms),
         "p50_frame_total_ms": float(p50_ms),
+        "p99_frame_total_ms": float(p99_ms),
         "jitter_ms": float(max(0.0, p95_ms - p50_ms)),
+        "dropped_frames": int(dropped_frames),
+        "dropped_frame_ratio": float(dropped_ratio),
         "p95_copy_bytes": int(round(_percentile([float(v) for v in copy_bytes], 95.0))),
         "p95_copy_count": int(round(_percentile([float(v) for v in copy_counts], 95.0))),
         "p95_copy_pack_ms": float(_percentile(copy_pack_ms, 95.0)),
@@ -261,6 +381,13 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int) ->
         "p95_pending_after": float(_percentile([float(v) for v in pending_after_frame], 95.0)),
         "event_order_digest_trace": event_order_digest_trace,
         "event_poll_trace": ctx.polled_event_ids,
+        "p95_input_to_present_ms": float(_percentile(ctx.input_to_present_ms, 95.0)),
+        "p99_input_to_present_ms": float(_percentile(ctx.input_to_present_ms, 99.0)),
+        "input_to_present_ms_trace": [float(v) for v in ctx.input_to_present_ms],
+        "resize_recovery_samples_ms": [float(v) for v in resize_recovery_samples_ms],
+        "resize_recovery_sec": (
+            float(_percentile(resize_recovery_samples_ms, 95.0)) / 1000.0 if resize_recovery_samples_ms else None
+        ),
     }
 
 
@@ -382,22 +509,53 @@ def run_suite(scenario: str, samples: int, width: int, height: int) -> dict[str,
         "render_copy_chain",
         "idle",
         "scroll",
+        "horizontal_pan",
         "drag",
+        "drag_heavy",
+        "mixed_burst",
+        "sensor_overlay",
         "resize_stress",
         "input_burst",
         "sensor_polling",
         "all_interactive",
+        "closeout_required",
     }
     if scenario not in valid:
         raise ValueError(f"unsupported scenario: {scenario}")
-    scenario_list = ["idle", "scroll", "drag", "resize_stress"] if scenario == "all_interactive" else [scenario]
+    if scenario == "all_interactive":
+        scenario_list = ["idle", "scroll", "drag", "resize_stress"]
+    elif scenario == "closeout_required":
+        scenario_list = [
+            "scroll",
+            "horizontal_pan",
+            "drag_heavy",
+            "mixed_burst",
+            "sensor_overlay",
+            "resize_stress",
+            "input_burst",
+            "sensor_polling",
+        ]
+    else:
+        scenario_list = [scenario]
     out: dict[str, Any] = {
         "suite": scenario,
         "samples": int(samples),
         "matrix": {"width": int(width), "height": int(height)},
         "copy_chain_map": _copy_chain_map(width, height),
         "scenarios": {},
+        "provenance": {
+            "command": " ".join(sys.argv),
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "seed_list": [],
+            "run_count": 2,
+        },
     }
+    try:
+        out["provenance"]["commit_sha"] = (
+            subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        )
+    except Exception:
+        out["provenance"]["commit_sha"] = "unknown"
     for name in scenario_list:
         if name == "sensor_polling":
             out["scenarios"][name] = _run_sensor_polling(samples)
