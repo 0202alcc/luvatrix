@@ -27,6 +27,7 @@ BOARDS_PATH = ROOT / "agile/boards_registry.json"
 BACKLOG_PATH = ROOT / "agile/backlog_misc.json"
 GANTT_MD_PATH = ROOT / "gantt/milestones_gantt.md"
 GANTT_PNG_PATH = ROOT / "gantt/milestones_gantt.png"
+CLOSEOUT_DIR = ROOT / "closeout"
 
 METHODS = {"GET", "POST", "PATCH", "DELETE"}
 ALLOWED_MILESTONE_STATUS = {"Planned", "In Progress", "Complete", "Blocked"}
@@ -78,6 +79,29 @@ DONE_REQUIRED_GATE_KEYS = {
     "merged_to_main",
     "required_checks_passed_on_main",
 }
+GATEFLOW_SEQUENCE = [
+    "Intake",
+    "Success Criteria Spec",
+    "Safety Tests Spec",
+    "Implementation Tests Spec",
+    "Edge Case Tests Spec",
+    "Prototype Stage 1",
+    "Prototype Stage 2+",
+    "Verification Review",
+    "Integration Ready",
+    "Done",
+]
+PROTOTYPE_WIP_LIMIT = 2
+VERIFICATION_WIP_LIMIT = 1
+REQUIRED_CLOSEOUT_SECTIONS = [
+    "Objective Summary",
+    "Task Final States",
+    "Evidence",
+    "Determinism",
+    "Protocol Compatibility",
+    "Modularity",
+    "Residual Risks",
+]
 
 
 class ApiError(RuntimeError):
@@ -92,6 +116,31 @@ def current_git_branch() -> str:
         text=True,
     )
     return result.stdout.strip()
+
+
+def normalize_heading(line: str) -> str:
+    return line.strip().lstrip("#").strip().lower()
+
+
+def validate_closeout_packet(milestone_id: str) -> None:
+    path = CLOSEOUT_DIR / f"{milestone_id.lower()}_closeout.md"
+    if not path.exists():
+        raise ApiError(
+            f"milestone {milestone_id} cannot be marked Complete without closeout packet: {path}"
+        )
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        raise ApiError(f"closeout packet is empty: {path}")
+    headings = {
+        normalize_heading(line)
+        for line in text.splitlines()
+        if line.strip().startswith("#")
+    }
+    missing = [s for s in REQUIRED_CLOSEOUT_SECTIONS if s.lower() not in headings]
+    if missing:
+        raise ApiError(
+            f"closeout packet {path} missing required sections: {', '.join(missing)}"
+        )
 
 
 def regenerate_gantt_artifacts() -> None:
@@ -297,6 +346,78 @@ def validate_done_gate_requirements(task: dict[str, Any], *, require: bool) -> N
         )
 
 
+def enforce_gateflow_status_transition(
+    task_id: str,
+    old_status: str,
+    new_status: str,
+    *,
+    force_with_reason: str | None,
+) -> None:
+    if old_status == new_status:
+        return
+
+    # Keep legacy statuses backward compatible.
+    if old_status not in GATEFLOW_SEQUENCE + ["Blocked"] or new_status not in GATEFLOW_SEQUENCE + ["Blocked"]:
+        return
+
+    if new_status == "Blocked":
+        return
+    if old_status == "Blocked":
+        if new_status == "Done":
+            raise ApiError(
+                f"task {task_id} cannot move Blocked -> Done directly; move to Integration Ready first"
+            )
+        return
+
+    old_idx = GATEFLOW_SEQUENCE.index(old_status)
+    new_idx = GATEFLOW_SEQUENCE.index(new_status)
+    delta = new_idx - old_idx
+    if delta == 1:
+        return
+    if delta < 0 and force_with_reason:
+        return
+    if delta > 1:
+        raise ApiError(
+            f"task {task_id} cannot skip GateFlow stages ({old_status} -> {new_status}); "
+            "use sequential moves"
+        )
+    if delta < 0:
+        raise ApiError(
+            f"task {task_id} backward stage move requires --force-with-reason ({old_status} -> {new_status})"
+        )
+
+
+def enforce_wip_limits(
+    tasks_master: dict[str, Any],
+    milestone_id: str,
+    *,
+    task_id: str,
+    new_status: str,
+) -> None:
+    if new_status not in {"Prototype Stage 1", "Prototype Stage 2+", "Verification Review"}:
+        return
+
+    scoped = [t for t in tasks_master.get("tasks", []) if t.get("milestone_id") == milestone_id]
+
+    prototype_count = sum(
+        1
+        for t in scoped
+        if t.get("status") in {"Prototype Stage 1", "Prototype Stage 2+"}
+    )
+    verification_count = sum(1 for t in scoped if t.get("status") == "Verification Review")
+
+    if new_status in {"Prototype Stage 1", "Prototype Stage 2+"} and prototype_count > PROTOTYPE_WIP_LIMIT:
+        raise ApiError(
+            f"milestone {milestone_id} exceeds prototype WIP limit "
+            f"({prototype_count}/{PROTOTYPE_WIP_LIMIT}) when moving {task_id} -> {new_status}"
+        )
+    if new_status == "Verification Review" and verification_count > VERIFICATION_WIP_LIMIT:
+        raise ApiError(
+            f"milestone {milestone_id} exceeds verification WIP limit "
+            f"({verification_count}/{VERIFICATION_WIP_LIMIT}) when moving {task_id} -> {new_status}"
+        )
+
+
 def compute_weighted_cost_score(components: dict[str, Any]) -> float:
     score = 0.0
     for key, weight in COST_COMPONENT_WEIGHTS.items():
@@ -456,6 +577,8 @@ def create_milestone(schedule: dict[str, Any], body: dict[str, Any], task_ids_al
     for tid in body.get("task_ids", []):
         if tid not in task_ids_all:
             raise ApiError(f"milestone task_id not found in task ledgers: {tid}")
+    if body.get("status") == "Complete":
+        validate_closeout_packet(mid)
     milestones.append(body)
     return f"created milestone {mid}"
 
@@ -467,6 +590,7 @@ def patch_milestone(schedule: dict[str, Any], milestone_id: str, body: dict[str,
     if "id" in body and body["id"] != milestone_id:
         raise ApiError("milestone id is immutable")
     row = milestones[milestone_id]
+    old_status = row.get("status")
     for k, v in body.items():
         row[k] = v
     if row.get("status") not in ALLOWED_MILESTONE_STATUS:
@@ -477,6 +601,8 @@ def patch_milestone(schedule: dict[str, Any], milestone_id: str, body: dict[str,
     for tid in row.get("task_ids", []):
         if tid not in task_ids_all:
             raise ApiError(f"milestone task_id not found in task ledgers: {tid}")
+    if old_status != "Complete" and row.get("status") == "Complete":
+        validate_closeout_packet(milestone_id)
     return f"updated milestone {milestone_id}"
 
 
@@ -547,6 +673,7 @@ def patch_task(
     all_task_ids: set[str],
     *,
     reestimate_cost: bool = False,
+    force_with_reason: str | None = None,
 ) -> str:
     rows = index_by_id(tasks_master.get("tasks", []))
     if task_id not in rows:
@@ -571,6 +698,19 @@ def patch_task(
         raise ApiError("depends_on must be a list")
     for dep in row.get("depends_on", []):
         validate_dep_id_format(task_id, dep)
+    if row.get("status") != old_status:
+        enforce_gateflow_status_transition(
+            task_id,
+            old_status or "",
+            row.get("status", ""),
+            force_with_reason=force_with_reason,
+        )
+        enforce_wip_limits(
+            tasks_master,
+            row.get("milestone_id", ""),
+            task_id=task_id,
+            new_status=row.get("status", ""),
+        )
     became_blocked = old_status != "Blocked" and row.get("status") == "Blocked"
     normalize_task_cost(row, reestimate=reestimate_cost, blocked_confidence_drop=became_blocked)
     became_done = old_status != "Done" and row.get("status") == "Done"
@@ -839,6 +979,10 @@ def main() -> int:
         action="store_true",
         help="Recompute task cost_score from cost_components and apply stage multiplier for task POST/PATCH.",
     )
+    parser.add_argument(
+        "--force-with-reason",
+        help="Explicit override reason for guarded operations (for example backward GateFlow moves).",
+    )
     args = parser.parse_args()
 
     method = args.method.upper()
@@ -893,6 +1037,7 @@ def main() -> int:
                 body,
                 all_task_ids,
                 reestimate_cost=args.reestimate_cost,
+                force_with_reason=args.force_with_reason,
             )
         elif method == "DELETE":
             if ident is None:

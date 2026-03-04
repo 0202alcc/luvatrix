@@ -10,6 +10,10 @@ Fast command reference for milestone/task/board/backlog operations.
 4. API `--apply` auto-regenerates:
 - `ops/planning/gantt/milestones_gantt.md`
 - `ops/planning/gantt/milestones_gantt.png`
+5. GateFlow guardrails:
+- no stage skipping
+- backward stage moves require `--force-with-reason`
+- WIP limits enforced (`Prototype* <=2`, `Verification Review <=1` per milestone)
 
 ## 1) Milestone IDs
 
@@ -180,7 +184,23 @@ uv run python ops/planning/api/backfill_task_telemetry.py --include-done-telemet
 
 Use this only on `main`.
 
-## 11) Completion rule
+## 11) Validate closeout packet (required before milestone Complete)
+
+```bash
+uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-023
+```
+
+## 12) Auto-reopen task on post-merge CI failure
+
+```bash
+uv run python ops/planning/api/reopen_on_ci_failure.py \
+  --task-id T-2404 \
+  --check-id ci-12345 \
+  --summary "p95 transfer latency regression over threshold" \
+  --apply
+```
+
+## 13) Completion rule
 
 Milestone is considered complete only when:
 

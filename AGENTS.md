@@ -68,6 +68,10 @@ Before planning or editing code, read:
 5. Do not manually edit planning JSON files unless API cannot express the needed operation.
 6. After planning changes, run:
    - `uv run python ops/planning/agile/validate_milestone_task_links.py`
+7. GateFlow transition rules are API-enforced:
+   - no stage skipping,
+   - backward moves require `--force-with-reason`,
+   - WIP limits enforced per milestone (`Prototype Stage 1/2+ <= 2`, `Verification Review <= 1`).
 
 ## Planning Sync SOP (Across Branches)
 1. `main:/ops/planning/*` is the only canonical planning source of truth.
@@ -86,6 +90,28 @@ Before planning or editing code, read:
    - refuses to run on `main`,
    - refuses if `ops/planning` has local edits,
    - commits a planning-only sync when changes are applied.
+
+## Milestone Closeout Packet (Required to Mark Complete)
+1. Milestone cannot transition to `Complete` without:
+   - `ops/planning/closeout/<milestone-id-lower>_closeout.md`
+2. Required section headings:
+   - `Objective Summary`
+   - `Task Final States`
+   - `Evidence`
+   - `Determinism`
+   - `Protocol Compatibility`
+   - `Modularity`
+   - `Residual Risks`
+3. Validate with:
+   - `uv run python ops/planning/api/validate_closeout_packet.py --milestone-id <ID>`
+
+## Post-Merge Failure Protocol
+1. If post-merge checks fail for a `Done` task:
+   - reopen task to `Verification Review`,
+   - increment `actuals.reopen_count`,
+   - create backlog incident record.
+2. Use:
+   - `uv run python ops/planning/api/reopen_on_ci_failure.py --task-id <T-ID> --check-id <CHECK-ID> --summary \"<short reason>\" --apply`
 
 ## GateFlow Workflow (Default)
 1. Default columns:

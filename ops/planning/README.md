@@ -29,6 +29,10 @@ not Discord-specific.
 - `README.md` (endpoint contract + examples)
 - `CHEATSHEET.md` (operator command quick-reference)
 
+4. `closeout/`
+- `<milestone-id-lower>_closeout.md` (required packet to mark milestone `Complete`)
+- `TEMPLATE.md` (required section structure)
+
 ## Operating Workflow
 
 1. Start milestone work in a dedicated milestone thread and dedicated milestone branch.
@@ -48,3 +52,4 @@ not Discord-specific.
    - `uv run python ops/planning/api/check_planning_drift.py --fetch`
 14. If drift exists and no local planning edits should be preserved:
    - `bash ops/planning/api/sync_planning_from_main.sh`
+15. Milestone cannot be marked `Complete` without passing closeout packet validation.

@@ -77,6 +77,15 @@ Quick operator reference:
 8. `Done` transition guard requires task payload to include:
 - `actuals` numeric fields: `input_tokens`, `output_tokens`, `wall_time_sec`, `tool_calls`, `reopen_count`
 - `done_gate` boolean fields all `true`: `success_criteria_met`, `safety_tests_passed`, `implementation_tests_passed`, `edge_case_tests_passed`, `merged_to_main`, `required_checks_passed_on_main`
+9. GateFlow transition guard:
+- no stage skipping
+- backward stage moves require `--force-with-reason`
+10. WIP limits are enforced per milestone:
+- `Prototype Stage 1` + `Prototype Stage 2+` combined <= 2
+- `Verification Review` <= 1
+11. Milestone cannot be set to `Complete` without closeout packet:
+- `ops/planning/closeout/<milestone-id-lower>_closeout.md`
+- required sections validated by `validate_closeout_packet.py`
 
 ## Planning Sync SOP
 
@@ -95,6 +104,24 @@ bash ops/planning/api/sync_planning_from_main.sh
 - exits on `main`
 - exits if local `ops/planning` edits exist
 - restores `ops/planning` from `origin/main` and commits sync delta
+
+## Failure Reopen Utility
+
+Use this to handle post-merge check failures on previously `Done` tasks:
+
+```bash
+python ops/planning/api/reopen_on_ci_failure.py \
+  --task-id T-2404 \
+  --check-id ci-12345 \
+  --summary "p95 transfer latency regression over threshold" \
+  --apply
+```
+
+Behavior:
+1. task moves `Done -> Verification Review`
+2. `actuals.reopen_count` increments
+3. incident entry is added to `backlog_misc.json`
+4. if milestone was `Complete`, it is auto-reopened to `In Progress`
 
 ## Telemetry Backfill
 
