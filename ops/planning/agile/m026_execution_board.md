@@ -5,6 +5,20 @@ Epic: `E-2801`
 Task chain: `T-2801 -> (T-2802, T-2803, T-2804) -> T-2805`  
 Last updated: `2026-03-03`
 
+## Evidence Integrity Remediation (No-Go Until Provenance PASS)
+1. Scope: reopen closeout execution due to evidence integrity gaps.
+2. Architecture status: `No-Go` until provenance-based evidence passes.
+3. Non-negotiable boundaries:
+   - `RenderTarget` interface boundary unchanged
+   - App protocol + `AppContext` compatibility preserved
+   - `SensorProvider` contract preserved
+   - `HDIThread` / `SensorManagerThread` separation preserved
+   - Deterministic behavior requirements preserved
+   - No backend-internal coupling into app logic
+
+## GateFlow Dependency Chain
+1. `T-2810` + `T-2811` -> `T-2812` -> `T-2813`
+
 ## Focused Remediation Set (Strict Evidence Validator)
 1. `T-2806` must clear summary blockers:
    - `frame_p99_present`
@@ -27,7 +41,10 @@ Last updated: `2026-03-03`
 3. `T-2809` after both `T-2807` and `T-2808`
 
 ## Intake
-1. None.
+1. `T-2810` Raw Perf Evidence Regeneration (measured-only; no synthetic/derived/normalized metrics).
+2. `T-2811` Real Determinism Replay Matrix (`8` seeds x `10` runs, traceable digests).
+3. `T-2812` Provenance-Enforcing Validator Upgrade.
+4. `T-2813` Packet Reconciliation + Re-Validation.
 
 ## Success Criteria Spec
 1. None.

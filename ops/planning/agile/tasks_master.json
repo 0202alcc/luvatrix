@@ -4699,6 +4699,113 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       }
+    },
+    {
+      "id": "T-2810",
+      "title": "Raw perf evidence regeneration (measured-only)",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P0",
+      "board_refs": [
+        "milestone:P-026",
+        "team:platform-ci",
+        "specialist:testing"
+      ],
+      "depends_on": [],
+      "acceptance_criteria": [
+        "frame p50/p95/p99 are directly measured in raw artifacts",
+        "input->present p95/p99 are directly measured in raw artifacts",
+        "resize recovery is directly measured in raw artifacts",
+        "dropped frame ratios are directly measured in raw artifacts",
+        "required scenarios (resize stress, mixed burst, drag-heavy, sensor-overlay) are present",
+        "no synthetic, derived, estimated, or policy-normalized metric values"
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_all_interactive.json",
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario input_burst --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_input_burst.json",
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario sensor_polling --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_sensor_polling.json"
+      ]
+    },
+    {
+      "id": "T-2811",
+      "title": "Real determinism replay matrix from replay logs",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P0",
+      "board_refs": [
+        "milestone:P-026",
+        "team:runtime",
+        "specialist:safety"
+      ],
+      "depends_on": [],
+      "acceptance_criteria": [
+        "8 seeds x 10 runs per seed completed",
+        "event-order and revision-sequence digests are emitted by replay logs",
+        "mismatch_count equals 0",
+        "every digest in matrix is traceable to raw replay log entries"
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/replay_seed1337_run01.json",
+        "PYTHONPATH=. uv run python tools/perf/build_p026_closeout_evidence.py --strict --out artifacts/perf/closeout"
+      ]
+    },
+    {
+      "id": "T-2812",
+      "title": "Provenance-enforcing closeout evidence validator upgrade",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P0",
+      "board_refs": [
+        "milestone:P-026",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "depends_on": [
+        "T-2810",
+        "T-2811"
+      ],
+      "acceptance_criteria": [
+        "validator fails if required metric is derived, synthetic, estimated, or normalized",
+        "validator fails if required raw files are missing",
+        "validator fails if provenance is incomplete or inconsistent",
+        "provenance fields required per artifact: command, commit_sha, timestamp, seed_list, run_counts, raw_file_refs",
+        "validator cross-checks summary claims against raw lineage"
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026"
+      ]
+    },
+    {
+      "id": "T-2813",
+      "title": "Packet reconciliation and provenance-backed re-validation",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P0",
+      "board_refs": [
+        "milestone:P-026",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-2812"
+      ],
+      "acceptance_criteria": [
+        "closeout packet references only raw artifacts, hashes, and provenance",
+        "validate_closeout_packet.py passes",
+        "validate_milestone_task_links.py passes",
+        "validate_closeout_evidence.py passes with provenance enforcement active",
+        "packet claims map 1:1 to measured raw artifacts",
+        "no unresolved high-severity evidence risk"
+      ],
+      "evidence_commands": [
+        "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-026",
+        "PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026"
+      ]
     }
   ]
 }
