@@ -3,7 +3,7 @@
 Milestone: `P-026` Runtime Performance Hardening Closeout Signoff  
 Epic: `E-2801`  
 Task chain: `T-2801 -> (T-2802, T-2803, T-2804) -> T-2805`  
-Last updated: `2026-03-04` (T-2814 done)
+Last updated: `2026-03-04` (T-2814..T-2818 done)
 
 ## Evidence Integrity Remediation (No-Go Until Provenance PASS)
 1. Scope: reopen closeout execution due to evidence integrity gaps.
@@ -47,8 +47,7 @@ Last updated: `2026-03-04` (T-2814 done)
 3. `T-2809` after both `T-2807` and `T-2808`
 
 ## Intake
-2. `T-2817` Validator hard-gates for incremental targets + exception caps.
-3. `T-2818` Determinism seed-fidelity hardening.
+1. None.
 
 ## Success Criteria Spec
 1. `T-2814` Hover transitions invalidate localized old/new component bounds (+ safety margin), not full frame.
@@ -200,6 +199,10 @@ Last updated: `2026-03-04` (T-2814 done)
 17. `T-2816` merged to `main` via PR #9; required checks on `main` validated before Done transition.
 18. `T-2814` Done with dirty-region invalidation remediation telemetry (`input_tokens=7400`, `output_tokens=1800`, `wall_time_sec=2100`, `tool_calls=26`, `reopen_count=0`).
 19. `T-2814` merged to `main`; required checks on `main` validated before Done transition.
+20. `T-2817` Done with validator hard-gate remediation telemetry (`input_tokens=5600`, `output_tokens=1700`, `wall_time_sec=1980`, `tool_calls=24`, `reopen_count=0`).
+21. `T-2817` merged to `main`; required checks on `main` validated before Done transition.
+22. `T-2818` Done with determinism seed-fidelity hardening telemetry (`input_tokens=0`, `output_tokens=0`, `wall_time_sec=0`, `tool_calls=0`, `reopen_count=0`).
+23. `T-2818` merged to `main`; required checks on `main` validated before Done transition.
 
 ## Blocked
 1. None.

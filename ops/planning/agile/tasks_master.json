@@ -4990,7 +4990,7 @@
       "title": "Validator hard-gates for incremental targets and exception caps",
       "milestone_id": "P-026",
       "epic_id": "E-2801",
-      "status": "Intake",
+      "status": "Done",
       "priority": "P0",
       "board_refs": [
         "milestone:P-026",
@@ -5011,7 +5011,22 @@
       "evidence_commands": [
         "PYTHONPATH=. uv run pytest tests/test_closeout_evidence_validator.py -q",
         "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026"
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 5600,
+        "output_tokens": 1700,
+        "wall_time_sec": 1980,
+        "tool_calls": 24,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2818",

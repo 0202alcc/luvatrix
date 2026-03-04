@@ -723,7 +723,7 @@
       "name": "Runtime Performance Hardening Closeout Signoff",
       "start_week": 11,
       "end_week": 14,
-      "status": "In Progress",
+      "status": "Complete",
       "task_ids": [
         "T-2801",
         "T-2802",
@@ -794,6 +794,12 @@
           "event": "reopened",
           "framework": "gateflow_v1",
           "note": "incremental-present remediation cycle opened; provenance pass alone is insufficient for Go"
+        },
+        {
+          "date": "2026-03-04",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "incremental target remediation complete; T-2814..T-2818 done; scenario-level gates satisfied"
         }
       ],
       "acceptance_checks": {
@@ -808,7 +814,7 @@
         "T-2817": "Strict evidence validator hard-fails scenario-level misses without approved exceptions and enforces non-control full-frame <=15% plus consecutive full-frame <=8 outside exception windows.",
         "T-2818": "Determinism replay matrix uses seed-fidelity inputs with per-seed trace provenance, distinct cross-seed fingerprints, and zero per-seed mismatch regressions."
       },
-      "completed_on": null
+      "completed_on": "2026-03-04"
     }
   ]
 }
