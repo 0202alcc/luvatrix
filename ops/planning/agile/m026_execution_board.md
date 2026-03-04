@@ -3,7 +3,7 @@
 Milestone: `P-026` Runtime Performance Hardening Closeout Signoff  
 Epic: `E-2801`  
 Task chain: `T-2801 -> (T-2802, T-2803, T-2804) -> T-2805`  
-Last updated: `2026-03-04`
+Last updated: `2026-03-04` (T-2815 complete)
 
 ## Evidence Integrity Remediation (No-Go Until Provenance PASS)
 1. Scope: reopen closeout execution due to evidence integrity gaps.
@@ -47,33 +47,40 @@ Last updated: `2026-03-04`
 3. `T-2809` after both `T-2807` and `T-2808`
 
 ## Intake
-1. `T-2815` Subpixel + bi-axial incremental compose support.
-2. `T-2816` Resize scenario split + policy clarification.
-3. `T-2817` Validator hard-gates for incremental targets + exception caps.
-4. `T-2818` Determinism seed-fidelity hardening.
+1. `T-2816` Resize scenario split + policy clarification.
+2. `T-2817` Validator hard-gates for incremental targets + exception caps.
+3. `T-2818` Determinism seed-fidelity hardening.
 
 ## Success Criteria Spec
 1. `T-2814` Hover transitions invalidate localized old/new component bounds (+ safety margin), not full frame.
 2. `T-2814` Theme transitions use scoped component invalidation when derivable; full-frame only for full-surface theme deltas.
 3. `T-2814` Pointer-only non-delta frames take idle/no-op compose path.
+4. `T-2815` Fractional scroll accumulator + quantized dirty-strip compose behavior defined.
+5. `T-2815` Bounded bi-axial dirty decomposition (edge strips + corner patch) replaces unconditional full-frame fallback where safe.
 
 ## Safety Tests Spec
 1. `T-2814` Preserve `RenderTarget`, App protocol/`AppContext`, and `SensorProvider` boundaries; no backend coupling into app logic.
 2. `T-2814` Preserve deterministic behavior and `HDIThread`/`SensorManagerThread` separation.
+3. `T-2815` Preserve same boundaries while removing only safe fallback paths (no interface/contract changes).
 
 ## Implementation Tests Spec
 1. `T-2814` `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "hover or drag or theme or dirty_rect" -q`
+2. `T-2815` `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "scroll or fractional or diagonal or dirty_rect" -q`
 
 ## Edge Case Tests Spec
 1. `T-2814` Theme background delta must force full-frame invalidation as full-surface effect fallback.
 2. `T-2814` Pointer-move with no hover transition must produce `idle_skip` with zero dirty rects.
+3. `T-2815` Subpixel deltas must remain deterministic via residual accumulation and bounded quantized updates.
+4. `T-2815` Bi-axial scroll must use bounded dirty decomposition + corner patch; no unconditional full-frame fallback.
 
 ## Prototype Stage 1
 1. `T-2814` Dirty-signature diffing updated to compare against last presented frame state.
+2. `T-2815` Residual-based scroll quantization path added and wired through compose planning.
 
 ## Prototype Stage 2+
 1. `T-2814` Scoped hover dirty rects implemented for old/new component bounds with 1px safety margin.
 2. `T-2814` Scoped theme dirty rects implemented for theme-dependent text color diffs; background theme diffs route to full frame.
+3. `T-2815` Bi-axial strip decomposition with explicit corner patch implemented; drag/press pointer-local dirty patching added for bounded updates.
 
 ## Verification Review
 1. `T-2806` Summary regenerated with `p99` and resize recovery evidence present.
@@ -84,6 +91,10 @@ Last updated: `2026-03-04`
    - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "hover or drag or theme or dirty_rect" -q` -> pass (`3 passed, 28 deselected`).
    - `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario mixed_burst --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_mixed_burst.json`
    - Mixed-burst raw artifact path: `artifacts/perf/closeout/raw_mixed_burst.json`
+6. `T-2815` Evidence:
+   - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "scroll or fractional or diagonal or dirty_rect" -q` -> pass (`14 passed, 19 deselected`).
+   - `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario horizontal_pan --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_horizontal_pan.json` -> `incremental_present_pct=98.59154929577464`.
+   - `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario drag_heavy --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_drag_heavy.json` -> `incremental_present_pct=99.16666666666667`.
 1. Unified benchmark threshold gates (task `T-2801` canonical baseline):
 - Frame time latency: `p50 <= 16.7ms`, `p95 <= 25.0ms`, `p99 <= 33.3ms` (interactive mixed-load scenarios).
 - Input-to-present latency: `p95 <= 33.3ms`, `p99 <= 50.0ms` (burst input scenarios).
@@ -153,6 +164,7 @@ Last updated: `2026-03-04`
 
 ## Integration Ready
 1. `T-2814` Implementation and task evidence complete on milestone branch; waiting on merge-to-`main` and required checks for `Done`.
+2. `T-2815` Implementation/evidence completed; moved to Integration Ready pending merge/check gate.
 
 ## Done
 1. `T-2801` Done with benchmark closeout telemetry (`input_tokens=12800`, `output_tokens=2600`, `wall_time_sec=1540`, `tool_calls=24`).
@@ -168,6 +180,7 @@ Last updated: `2026-03-04`
 11. `T-2811` Done with replay matrix telemetry (`input_tokens=6900`, `output_tokens=1600`, `wall_time_sec=1680`, `tool_calls=18`).
 12. `T-2812` Done with provenance-enforcing validator telemetry (`input_tokens=4800`, `output_tokens=1400`, `wall_time_sec=1140`, `tool_calls=14`).
 13. `T-2813` Done with packet reconciliation telemetry (`input_tokens=3600`, `output_tokens=1000`, `wall_time_sec=840`, `tool_calls=11`).
+14. `T-2815` Done with subpixel + bi-axial compose remediation telemetry (`input_tokens=9800`, `output_tokens=2100`, `wall_time_sec=3240`, `tool_calls=27`).
 
 ## Blocked
 1. None.

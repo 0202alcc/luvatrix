@@ -31,10 +31,10 @@
   },
   "provenance": {
     "command": "tools/perf/run_suite.py --scenario drag_heavy --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_drag_heavy.json",
-    "commit_sha": "1d1857e375afcbbca20ed381d8d51b1d86f0fe88",
+    "commit_sha": "1fc871f19e8f397207eb0aca39eb00edb4681304",
     "run_count": 2,
     "seed_list": [],
-    "timestamp_utc": "2026-03-04T05:45:43.115441+00:00"
+    "timestamp_utc": "2026-03-04T05:48:23.849574+00:00"
   },
   "samples": 120,
   "scenarios": {
@@ -1385,9 +1385,9 @@
           16.666666666666668,
           16.666666666666668
         ],
-        "jitter_ms": 0.08345769999999994,
+        "jitter_ms": 0.037449349999999965,
         "max_pending_after": 0,
-        "p50_frame_total_ms": 0.11622950000000001,
+        "p50_frame_total_ms": 0.11072950000000001,
         "p95_copy_bytes": 5476,
         "p95_copy_count": 1,
         "p95_copy_map_ms": 0.0,
@@ -1396,13 +1396,13 @@
         "p95_dirty_area_ratio": 0.0014854600694444444,
         "p95_event_budget": 128.0,
         "p95_events_processed": 1.0,
-        "p95_frame_total_ms": 0.19968719999999995,
+        "p95_frame_total_ms": 0.14817884999999997,
         "p95_input_to_present_ms": 16.666666666666668,
         "p95_pending_after": 0.0,
         "p95_queue_present_ms": 0.0,
         "p95_queue_submit_ms": 0.0,
         "p95_swapchain_recreate_count": 0,
-        "p99_frame_total_ms": 0.3467234800000001,
+        "p99_frame_total_ms": 0.22162250000000006,
         "p99_input_to_present_ms": 16.666666666666668,
         "pending_after_trace": [
           0,
