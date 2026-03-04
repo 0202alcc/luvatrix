@@ -518,8 +518,12 @@ class PlaneApp:
                         scroll_payload_for_hook["momentum_phase"] = payload["momentum_phase"]
                 continue
             if event.event_type == "pointer_move":
+                self._frame_counts["pointer_move_events"] = int(self._frame_counts.get("pointer_move_events", 0)) + 1
                 self._dispatch_hover(payload, dt)
                 continue
+            self._frame_counts["non_scroll_non_pointer_events"] = int(
+                self._frame_counts.get("non_scroll_non_pointer_events", 0)
+            ) + 1
             hook = _hook_for_event(event.event_type, payload)
             target_component = self._pick_component_for_event(payload)
             if hook is None:
@@ -794,6 +798,25 @@ class PlaneApp:
         hovered = self.state.get("hover_component_id")
         hover_hex = props.get("hover_color_hex")
         if hovered == component_id and isinstance(hover_hex, str) and hover_hex.strip():
+            color_hex = hover_hex
+        return color_hex
+
+    @staticmethod
+    def _resolve_text_color_for_state(
+        *,
+        component_id: str,
+        props: dict[str, Any],
+        theme_name: str,
+        hovered_component_id: str | None,
+    ) -> str:
+        color_hex = str(props.get("color_hex", "#f5fbff"))
+        theme_colors = props.get("theme_colors")
+        if isinstance(theme_colors, dict):
+            themed = theme_colors.get(theme_name)
+            if isinstance(themed, str) and themed.strip():
+                color_hex = themed
+        hover_hex = props.get("hover_color_hex")
+        if hovered_component_id == component_id and isinstance(hover_hex, str) and hover_hex.strip():
             color_hex = hover_hex
         return color_hex
 
@@ -1164,6 +1187,8 @@ class PlaneApp:
             "retained_components_reused": 0,
             "retained_components_new": 0,
             "camera_overlay_scrollbar_primitives": 0,
+            "pointer_move_events": 0,
+            "non_scroll_non_pointer_events": 0,
         }
 
     def _hit_index_active_planes(self) -> tuple[str, ...]:
@@ -1274,24 +1299,53 @@ class PlaneApp:
             and self._last_plane_scroll == post_plane_scroll
         ):
             return []
-        theme_or_hover_changed = pre_signature[0:2] != post_signature[0:2]
-        viewport_scroll_changed = pre_signature[2] != post_signature[2]
-        dx = float(post_plane_scroll[0] - pre_plane_scroll[0])
-        dy = float(post_plane_scroll[1] - pre_plane_scroll[1])
+        previous_signature = self._last_dirty_signature
+        previous_plane_scroll = self._last_plane_scroll
+        theme_or_hover_changed = previous_signature[0:2] != post_signature[0:2]
+        hover_changed = previous_signature[1] != post_signature[1]
+        theme_changed = previous_signature[0] != post_signature[0]
+        viewport_scroll_changed = previous_signature[2] != post_signature[2]
+        dx = float(post_plane_scroll[0] - previous_plane_scroll[0])
+        dy = float(post_plane_scroll[1] - previous_plane_scroll[1])
         plane_changed = abs(dx) > 1e-9 or abs(dy) > 1e-9
-        if theme_or_hover_changed:
-            return full
         dirty_rects: list[tuple[int, int, int, int]] = []
+        if hover_changed:
+            dirty_rects.extend(
+                self._hover_transition_dirty_rects(
+                    pre_hover_id=previous_signature[1],
+                    post_hover_id=post_signature[1],
+                )
+            )
+        if theme_changed:
+            theme_rects = self._theme_transition_dirty_rects(
+                pre_theme=previous_signature[0],
+                post_theme=post_signature[0],
+                pre_hover_id=previous_signature[1],
+                post_hover_id=post_signature[1],
+            )
+            if theme_rects is None:
+                return full
+            dirty_rects.extend(theme_rects)
         if viewport_scroll_changed:
             dirty_rects.extend(
                 self._viewport_scroll_dirty_rects(
-                    pre_viewport_scroll=pre_signature[2],
+                    pre_viewport_scroll=previous_signature[2],
                     post_viewport_scroll=post_signature[2],
                 )
             )
         if not plane_changed:
             normalized = self._normalize_local_dirty_rects(dirty_rects, view_w=view_w, view_h=view_h)
-            return normalized if normalized else full
+            if normalized:
+                return normalized
+            if int(self._frame_counts.get("non_scroll_non_pointer_events", 0)) > 0:
+                return full
+            if events_processed <= 0:
+                return []
+            if int(self._frame_counts.get("pointer_move_events", 0)) > 0:
+                return []
+            if theme_or_hover_changed or viewport_scroll_changed:
+                return []
+            return full
         if dirty_rects and self._has_camera_overlay_activity():
             # Preserve visual parity when camera overlays are active.
             return full
@@ -1321,6 +1375,104 @@ class PlaneApp:
         dirty_rects.extend(self._plane_scrollbar_dirty_rects())
         normalized = self._normalize_local_dirty_rects(dirty_rects, view_w=view_w, view_h=view_h)
         return normalized if normalized else full
+
+    def _hover_transition_dirty_rects(
+        self,
+        *,
+        pre_hover_id: str | None,
+        post_hover_id: str | None,
+    ) -> list[tuple[int, int, int, int]]:
+        if self._ui_page is None:
+            return []
+        candidate_ids: list[str] = []
+        if isinstance(pre_hover_id, str) and pre_hover_id:
+            candidate_ids.append(pre_hover_id)
+        if isinstance(post_hover_id, str) and post_hover_id and post_hover_id not in candidate_ids:
+            candidate_ids.append(post_hover_id)
+        rects: list[tuple[int, int, int, int]] = []
+        for component_id in candidate_ids:
+            component = self._component_index.get(component_id)
+            if component is None:
+                continue
+            rect = self._component_dirty_rect(component, margin_px=1)
+            if rect is not None:
+                rects.append(rect)
+        return rects
+
+    def _theme_transition_dirty_rects(
+        self,
+        *,
+        pre_theme: str,
+        post_theme: str,
+        pre_hover_id: str | None,
+        post_hover_id: str | None,
+    ) -> list[tuple[int, int, int, int]] | None:
+        if self._ui_page is None:
+            return []
+        pre_bg = self._resolve_background_for_theme(pre_theme)
+        post_bg = self._resolve_background_for_theme(post_theme)
+        if pre_bg != post_bg:
+            # Full-surface background changes require full-frame invalidation.
+            return None
+        hovered_before = pre_hover_id if isinstance(pre_hover_id, str) else None
+        hovered_after = post_hover_id if isinstance(post_hover_id, str) else None
+        rects: list[tuple[int, int, int, int]] = []
+        for component in self._ui_page.components:
+            if component.component_type != "text":
+                continue
+            if not component.visible or not self._component_is_active(component):
+                continue
+            props = component.style if isinstance(component.style, dict) else {}
+            if not isinstance(props.get("theme_colors"), dict):
+                continue
+            pre_color = self._resolve_text_color_for_state(
+                component_id=component.component_id,
+                props=props,
+                theme_name=pre_theme,
+                hovered_component_id=hovered_before,
+            )
+            post_color = self._resolve_text_color_for_state(
+                component_id=component.component_id,
+                props=props,
+                theme_name=post_theme,
+                hovered_component_id=hovered_after,
+            )
+            if pre_color == post_color:
+                continue
+            rect = self._component_dirty_rect(component, margin_px=1)
+            if rect is not None:
+                rects.append(rect)
+        return rects
+
+    def _component_dirty_rect(self, component, *, margin_px: int) -> tuple[int, int, int, int] | None:
+        x, y = self._resolved_position(component)
+        bounds = self._resolved_interaction_bounds(component)
+        width = max(0.0, float(bounds.width), float(component.width))
+        height = max(0.0, float(bounds.height), float(component.height))
+        if width <= 0.0 or height <= 0.0:
+            return None
+        margin = max(0, int(margin_px))
+        left = int(math.floor(x)) - margin
+        top = int(math.floor(y)) - margin
+        right = int(math.ceil(x + width)) + margin
+        bottom = int(math.ceil(y + height)) + margin
+        w = max(0, right - left)
+        h = max(0, bottom - top)
+        if w <= 0 or h <= 0:
+            return None
+        return (left, top, w, h)
+
+    def _resolve_background_for_theme(self, theme_name: str) -> tuple[int, int, int, int]:
+        if self._ui_page is None:
+            return self._bg_color
+        themes = self._planes.get("themes", {})
+        if isinstance(themes, dict):
+            entry = themes.get(str(theme_name))
+            if isinstance(entry, dict):
+                color = entry.get("background")
+                if isinstance(color, str):
+                    return _parse_hex_rgba(color)
+        return _parse_hex_rgba(self._ui_page.background)
 
     def _compute_scroll_shift(
         self,

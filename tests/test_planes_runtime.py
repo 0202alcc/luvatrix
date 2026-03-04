@@ -138,7 +138,13 @@ def _build_plane_file(root: Path) -> Path:
                 },
                 "z_index": 2,
                 "functions": {"on_press_single": "handlers::open"},
-                "props": {"text": "hello", "font_size_px": 16},
+                "props": {
+                    "text": "hello",
+                    "font_size_px": 16,
+                    "color_hex": "#f5fbff",
+                    "hover_color_hex": "#ffe082",
+                    "theme_colors": {"default": "#f5fbff", "alt": "#9bc9f8"},
+                },
             },
             {
                 "id": "logo",
@@ -154,6 +160,17 @@ def _build_plane_file(root: Path) -> Path:
         ],
     }
     plane_path = root / "plane.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
+def _build_theme_background_plane_file(root: Path) -> Path:
+    plane_path = _build_plane_file(root)
+    payload = json.loads(plane_path.read_text(encoding="utf-8"))
+    payload["themes"] = {
+        "default": {"background": "#112233"},
+        "alt": {"background": "#223344"},
+    }
     plane_path.write_text(json.dumps(payload), encoding="utf-8")
     return plane_path
 
@@ -768,6 +785,99 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertEqual(int(perf.get("dirty_rect_count", -1)), 0)
             self.assertEqual(ctx.begin_calls, begin_before)
             self.assertEqual(ctx.finalize_calls, finalize_before)
+
+    def test_plane_runtime_pointer_move_without_visual_delta_skips_compose(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={"handlers::open": lambda e, s: None})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            begin_before = ctx.begin_calls
+            finalize_before = ctx.finalize_calls
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload={"x": 300.0, "y": 170.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(str(perf.get("compose_mode", "")), "idle_skip")
+            self.assertEqual(int(perf.get("dirty_rect_count", -1)), 0)
+            self.assertEqual(ctx.begin_calls, begin_before)
+            self.assertEqual(ctx.finalize_calls, finalize_before)
+
+    def test_plane_runtime_hover_transition_invalidates_old_new_bounds_only(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={"handlers::open": lambda e, s: None})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload={"x": 20.0, "y": 20.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            self.assertEqual(str(app.state.get("hover_component_id", "")), "title")
+            self.assertEqual(str(app.state.get("perf", {}).get("compose_mode", "")), "partial_dirty")
+            self.assertEqual(ctx.last_dirty_rects, [(9, 9, 122, 32)])
+
+            ctx.queue(
+                HDIEvent(
+                    event_id=2,
+                    ts_ns=2,
+                    window_id="w",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload={"x": 20.0, "y": 60.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            self.assertEqual(str(app.state.get("hover_component_id", "")), "logo")
+            self.assertEqual(str(app.state.get("perf", {}).get("compose_mode", "")), "partial_dirty")
+            self.assertEqual(ctx.last_dirty_rects, [(9, 9, 122, 32), (11, 51, 34, 34)])
+
+    def test_plane_runtime_theme_change_uses_scoped_dirty_when_background_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={"handlers::open": lambda e, s: None})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            app.state["active_theme"] = "alt"
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(str(perf.get("compose_mode", "")), "partial_dirty")
+            self.assertEqual(ctx.last_dirty_rects, [(9, 9, 122, 32)])
+            self.assertLess(int(perf.get("dirty_rect_area_px", 0)), 320 * 180)
+
+    def test_plane_runtime_theme_change_uses_full_frame_when_background_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_theme_background_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={"handlers::open": lambda e, s: None})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            app.state["active_theme"] = "alt"
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(str(perf.get("compose_mode", "")), "full_frame")
+            self.assertEqual(ctx.last_dirty_rects, [(0, 0, 320, 180)])
 
     def test_plane_runtime_exposes_frame_timing_stages_and_event_counters(self) -> None:
         with tempfile.TemporaryDirectory() as td:
