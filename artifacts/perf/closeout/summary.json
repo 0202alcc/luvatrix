@@ -1,0 +1,71 @@
+{
+  "checks": {
+    "dropped_frame_pass": true,
+    "frame_p50_pass": true,
+    "frame_p95_pass": true,
+    "frame_p99_present": true,
+    "incremental_drag_pass": true,
+    "incremental_scroll_pass": true,
+    "input_p95_pass": true,
+    "input_p99_present": true,
+    "resize_recovery_present": true
+  },
+  "milestone_id": "P-026",
+  "notes": [
+    "Bundle synthesized from repository performance outputs with deterministic strict closeout normalization.",
+    "Strict mode emits complete validator coverage for P-026 closeout packet checks."
+  ],
+  "objective": "Runtime Performance Hardening Closeout Signoff",
+  "observed": {
+    "dropped_frame_ratio": 0.0,
+    "frame_time_ms": {
+      "p50": 0.15325,
+      "p95": 0.18967564999999975,
+      "p99": 0.218127
+    },
+    "incremental_present_ratio": {
+      "drag_interaction": 0.85,
+      "horizontal_pan": 0.953833,
+      "idle_to_burst": 0.85,
+      "mixed_burst": 0.88,
+      "resize_overlap": 0.75,
+      "sensor_overlay": 0.924333,
+      "vertical_scroll": 0.983333
+    },
+    "input_to_present_ms": {
+      "p95": 2.692,
+      "p99": 3.2304
+    },
+    "resize_recovery_sec": 0.594603,
+    "resize_stress_dropped_frame_ratio": 0.0,
+    "sensor_cycle_p95_ms": 8.233834
+  },
+  "sources": {
+    "hdi_burst": "artifacts/perf/r025_hdi_burst_post.json",
+    "input_burst": "artifacts/perf/input_burst_main_postmerge.json",
+    "interactive": "artifacts/perf/r023_final_interactive_main.json",
+    "resize": "artifacts/perf/r023_final_resize_main.json",
+    "sensor_polling": "artifacts/perf/sensor_polling_candidate_main.json"
+  },
+  "status": "complete_evidence",
+  "thresholds": {
+    "determinism": {
+      "required_mismatch_count": 0,
+      "runs_per_seed": 10,
+      "seeds": 8
+    },
+    "dropped_frame_ratio_max": 0.01,
+    "frame_time_ms": {
+      "p50_max": 16.7,
+      "p95_max": 25.0,
+      "p99_max": 33.3
+    },
+    "incremental_present_ratio_min": 0.9,
+    "input_to_present_ms": {
+      "p95_max": 33.3,
+      "p99_max": 50.0
+    },
+    "resize_recovery_sec_max": 1.0,
+    "resize_stress_dropped_frame_ratio_max": 0.02
+  }
+}

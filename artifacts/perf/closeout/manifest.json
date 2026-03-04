@@ -1,0 +1,16 @@
+{
+  "artifacts": [
+    {
+      "path": "artifacts/perf/closeout/summary.json",
+      "sha256": "fdb45aa3c1b7c79c42b5b255a79d7e514ac27e75ec39305027f1bd7819fa52c3"
+    },
+    {
+      "path": "artifacts/perf/closeout/determinism_replay_seed1337.json",
+      "sha256": "9570d2e60123d1742f13ce04035555aee70df513611dac0eb6e99147baf228d2"
+    },
+    {
+      "path": "artifacts/perf/closeout/incremental_present_matrix_seed1337.json",
+      "sha256": "bbfb25c9f3f6b0821b854e141e085e37cf33ccf5d7af306ad9629b8fc0b8c009"
+    }
+  ]
+}

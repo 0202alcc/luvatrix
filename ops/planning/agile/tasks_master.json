@@ -4533,6 +4533,112 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       }
+    },
+    {
+      "id": "T-2806",
+      "title": "Regenerate closeout summary with p99 and resize recovery coverage",
+      "epic_id": "E-2801",
+      "milestone_id": "P-026",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:P-026",
+        "team:platform-ci",
+        "specialist:testing"
+      ],
+      "description": "Rebuild closeout summary artifact so frame/input p99 and resize recovery evidence fields are present and validator-compliant.",
+      "acceptance_criteria": [
+        "summary.checks.frame_p99_present is true",
+        "summary.checks.input_p99_present is true",
+        "summary.checks.resize_recovery_present is true"
+      ],
+      "priority": "P0",
+      "evidence_commands": [
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario mixed_load --seed 1337 --out artifacts/perf/closeout/mixed_load_seed1337.json",
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario idle_burst_input --seed 1337 --out artifacts/perf/closeout/idle_burst_input_seed1337.json",
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario resize_stress --seed 1337 --out artifacts/perf/closeout/resize_stress_seed1337.json",
+        "PYTHONPATH=. uv run python tools/perf/summarize_suite.py --in artifacts/perf/closeout --out artifacts/perf/closeout/summary.json"
+      ]
+    },
+    {
+      "id": "T-2807",
+      "title": "Produce full determinism replay matrix (8 seeds x 10 runs)",
+      "epic_id": "E-2801",
+      "milestone_id": "P-026",
+      "status": "Intake",
+      "depends_on": [
+        "T-2806"
+      ],
+      "board_refs": [
+        "milestone:P-026",
+        "team:runtime",
+        "specialist:safety"
+      ],
+      "description": "Regenerate determinism replay artifact to satisfy required seed/run coverage and zero mismatch policy.",
+      "acceptance_criteria": [
+        "seed_count_observed >= seed_count_required",
+        "runs_per_seed_observed >= runs_per_seed_required",
+        "mismatch_count == 0"
+      ],
+      "priority": "P0",
+      "evidence_commands": [
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario determinism_replay --seeds 1337,2024,7,11,42,314,9001,2718 --runs-per-seed 10 --out artifacts/perf/closeout/determinism_replay_matrix.json",
+        "PYTHONPATH=. uv run python tools/perf/verify_determinism_matrix.py --in artifacts/perf/closeout/determinism_replay_matrix.json --min-seeds 8 --min-runs-per-seed 10 --require-zero-mismatch"
+      ]
+    },
+    {
+      "id": "T-2808",
+      "title": "Regenerate incremental matrix with required scenarios and drag target compliance",
+      "epic_id": "E-2801",
+      "milestone_id": "P-026",
+      "status": "Intake",
+      "depends_on": [
+        "T-2806"
+      ],
+      "board_refs": [
+        "milestone:P-026",
+        "team:rendering",
+        "specialist:qa"
+      ],
+      "description": "Regenerate incremental matrix artifact to include missing required scenarios and meet drag interaction target.",
+      "acceptance_criteria": [
+        "missing_required_scenarios is empty",
+        "all required observed scenario keys are present",
+        "drag_interaction observed >= target"
+      ],
+      "priority": "P0",
+      "evidence_commands": [
+        "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario incremental_present_matrix --seed 1337 --out artifacts/perf/closeout/incremental_present_matrix_seed1337.json",
+        "PYTHONPATH=. uv run python tools/perf/check_incremental_matrix.py --in artifacts/perf/closeout/incremental_present_matrix_seed1337.json --require-scenarios vertical_scroll,horizontal_pan,drag_interaction,mixed_burst,sensor_overlay,resize_overlap,idle_to_burst,full_invalidation_control --enforce-targets"
+      ]
+    },
+    {
+      "id": "T-2809",
+      "title": "Rebuild closeout packet hashes and pass strict evidence validator",
+      "epic_id": "E-2801",
+      "milestone_id": "P-026",
+      "status": "Intake",
+      "depends_on": [
+        "T-2807",
+        "T-2808"
+      ],
+      "board_refs": [
+        "milestone:P-026",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "description": "Refresh evidence hash manifest and validation outputs in closeout packet until strict evidence validator passes.",
+      "acceptance_criteria": [
+        "validate_closeout_evidence.py returns PASS",
+        "closeout packet hash manifest matches artifact digests",
+        "packet validation outputs include strict evidence pass"
+      ],
+      "priority": "P0",
+      "evidence_commands": [
+        "PYTHONPATH=. uv run python tools/perf/build_p026_closeout_evidence.py --strict --out artifacts/perf/closeout",
+        "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+        "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-026"
+      ]
     }
   ]
 }

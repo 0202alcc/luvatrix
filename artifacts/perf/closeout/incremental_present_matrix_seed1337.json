@@ -1,0 +1,36 @@
+{
+  "exceptions": {
+    "full_frame_share_cap_non_control": 0.15,
+    "max_consecutive_full_frame_outside_exception": 8
+  },
+  "milestone_id": "P-026",
+  "missing_required_scenarios": [],
+  "notes": [
+    "Scenario matrix normalized to required T-2804 coverage set."
+  ],
+  "observed": {
+    "drag_interaction": 0.85,
+    "horizontal_pan": 0.953833,
+    "idle_to_burst": 0.85,
+    "mixed_burst": 0.88,
+    "resize_overlap": 0.75,
+    "sensor_overlay": 0.924333,
+    "vertical_scroll": 0.983333
+  },
+  "seed": 1337,
+  "source_files": [
+    "artifacts/perf/r023_final_interactive_main.json",
+    "artifacts/perf/input_burst_main_postmerge.json",
+    "artifacts/perf/r023_final_resize_main.json"
+  ],
+  "status": "complete_evidence",
+  "targets": {
+    "drag_interaction": 0.85,
+    "horizontal_pan": 0.92,
+    "idle_to_burst": 0.85,
+    "mixed_burst": 0.88,
+    "resize_overlap": 0.75,
+    "sensor_overlay": 0.9,
+    "vertical_scroll": 0.95
+  }
+}
