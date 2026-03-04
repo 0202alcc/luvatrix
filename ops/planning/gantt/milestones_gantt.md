@@ -32,7 +32,7 @@ U-007 🔌 Plot stabilization and stream simulation integration                 
 U-017 📊 UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)                      |                     ##########################################                                                        | In Progress
 U-021 📉 Plots module foundations (labels, bars, subplots, dynamic data, financial visualizations)  |                     ########################################################                                          | In Progress
 UF-006 📈 Interactive plot module and UI IR integration                                             |=======                                                                                                                | Complete (2026-02-26)
-P-026 ✅ Runtime Performance Hardening Closeout Signoff                                             |                                                                      ############################                     | In Progress
+P-026 ✅ Runtime Performance Hardening Closeout Signoff                                             |                                                                      ============================                     | Complete (2026-03-03)
 
 Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 ```
@@ -257,7 +257,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - 2026-02-26 closed (framework=legacy-kanban) - historical completion
 
 ### P-026 ✅ Runtime Performance Hardening Closeout Signoff
-- Status: In Progress
+- Status: Complete
 - Target window: Week 11-14
 - Completed on: 2026-03-03
 - Tasks: `T-2801, T-2802, T-2803, T-2804, T-2805, T-2806, T-2807, T-2808, T-2809`
@@ -265,6 +265,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - 2026-03-03 active (framework=gateflow_v1) - closeout signoff milestone created from architecture/system no-go review
   - 2026-03-03 active (framework=gateflow_v1) - architect decision package imported: Vulkan deferred with guardrails; thresholds/invariants/exit gates finalized
   - 2026-03-03 reopened (framework=gateflow_v1) - strict evidence validator failed; remediation set opened for p99/resize/determinism/incremental coverage gaps
+  - 2026-03-03 closed (framework=gateflow_v1) - strict evidence remediation complete; tasks T-2806..T-2809 done; validators pass
 - Success criteria:
   - All closeout tasks complete with consolidated evidence package.
   - Boundary contracts are re-validated: RenderTarget, SensorProvider, HDIThread/SensorManagerThread separation, and protocol/AppContext compatibility.

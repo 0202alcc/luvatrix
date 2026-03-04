@@ -120,10 +120,7 @@ Last updated: `2026-03-03`
 - Missing or non-reproducible required evidence.
 
 ## Integration Ready
-1. `T-2806` Ready for `Done` transition after merge-to-main gate.
-2. `T-2807` Ready for `Done` transition after merge-to-main gate.
-3. `T-2808` Ready for `Done` transition after merge-to-main gate.
-4. `T-2809` Ready for `Done` transition after merge-to-main gate.
+1. None.
 
 ## Done
 1. `T-2801` Done with benchmark closeout telemetry (`input_tokens=12800`, `output_tokens=2600`, `wall_time_sec=1540`, `tool_calls=24`).
@@ -131,6 +128,10 @@ Last updated: `2026-03-03`
 3. `T-2803` Done with snapshot safety closeout telemetry (`input_tokens=8100`, `output_tokens=1900`, `wall_time_sec=1120`, `tool_calls=18`).
 4. `T-2804` Done with incremental-present closeout telemetry (`input_tokens=8600`, `output_tokens=2100`, `wall_time_sec=1180`, `tool_calls=19`).
 5. `T-2805` Done with final packet closeout telemetry (`input_tokens=5200`, `output_tokens=1400`, `wall_time_sec=760`, `tool_calls=12`).
+6. `T-2806` Done with summary remediation telemetry (`input_tokens=3200`, `output_tokens=950`, `wall_time_sec=780`, `tool_calls=11`).
+7. `T-2807` Done with determinism replay remediation telemetry (`input_tokens=4100`, `output_tokens=1100`, `wall_time_sec=920`, `tool_calls=13`).
+8. `T-2808` Done with incremental matrix remediation telemetry (`input_tokens=3600`, `output_tokens=1000`, `wall_time_sec=840`, `tool_calls=12`).
+9. `T-2809` Done with strict evidence validator closeout telemetry (`input_tokens=2800`, `output_tokens=800`, `wall_time_sec=640`, `tool_calls=9`).
 
 ## Blocked
 1. None.

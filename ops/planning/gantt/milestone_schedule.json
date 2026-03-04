@@ -723,7 +723,7 @@
       "name": "Runtime Performance Hardening Closeout Signoff",
       "start_week": 11,
       "end_week": 14,
-      "status": "In Progress",
+      "status": "Complete",
       "task_ids": [
         "T-2801",
         "T-2802",
@@ -759,6 +759,12 @@
           "event": "reopened",
           "framework": "gateflow_v1",
           "note": "strict evidence validator failed; remediation set opened for p99/resize/determinism/incremental coverage gaps"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "strict evidence remediation complete; tasks T-2806..T-2809 done; validators pass"
         }
       ],
       "acceptance_checks": {
