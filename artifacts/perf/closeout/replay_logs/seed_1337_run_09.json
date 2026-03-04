@@ -1,0 +1,41 @@
+{
+  "digest_material": {
+    "drag": {
+      "event_order_digest": "7a01c7a366ac8d20febc41d836d498aafe34b8f073e141d68316161e5ff3f773",
+      "revision_sequence_digest": "12ff59f35d3975f3c61c77fa1d08ef8b1b0996d7fa3e7545ad5482c7de2a0704"
+    },
+    "idle": {
+      "event_order_digest": "51afb65223aebc0963099061a2a9bab3352c805307ca21b7d223760dfa8b4c2e",
+      "revision_sequence_digest": "4af64a42e4afcb98f692d39f4feb0c3864229cdd55887ed871a8b6f3b17d281e"
+    },
+    "resize_stress": {
+      "event_order_digest": "feae3171b20710aab98a933265ee050afe8bf4a9d16c5a722571bf49444f205f",
+      "revision_sequence_digest": "fd8ba08eb08d0751c089639e477390c7492df5b2fa6ce193d28ef2fb293528db"
+    },
+    "scroll": {
+      "event_order_digest": "b449caa6b0ae39542eb8e5148bf4dd76a48a7a192b786d2dfdc4ced2b29884d4",
+      "revision_sequence_digest": "ee4b7f64bb65698c012248f744dd3f22c95c22e52afeac7b094643ecdce20c72"
+    }
+  },
+  "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+  "matrix": {
+    "height": 720,
+    "width": 1280
+  },
+  "mismatch_against_seed_baseline": false,
+  "provenance": {
+    "command": "tools/perf/build_p026_replay_matrix.py",
+    "commit_sha": "706751f2a5e802e10d8572651f3d3650d4b80d49",
+    "run_counts": {
+      "per_seed": 10
+    },
+    "seed_list": [
+      1337
+    ],
+    "timestamp_utc": "2026-03-04T02:16:31.487982+00:00"
+  },
+  "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+  "run_index": 9,
+  "samples": 40,
+  "seed": 1337
+}

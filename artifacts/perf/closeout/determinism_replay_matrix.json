@@ -1,0 +1,751 @@
+{
+  "milestone_id": "P-026",
+  "mismatch_count": 0,
+  "provenance": {
+    "command": "tools/perf/build_p026_replay_matrix.py",
+    "commit_sha": "706751f2a5e802e10d8572651f3d3650d4b80d49",
+    "raw_file_refs": [
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_01.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_02.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_03.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_04.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_05.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_06.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_07.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_08.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_09.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_10.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_01.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_02.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_03.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_04.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_05.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_06.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_07.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_08.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_09.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_10.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_01.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_02.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_03.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_04.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_05.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_06.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_07.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_08.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_09.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_10.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_01.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_02.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_03.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_04.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_05.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_06.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_07.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_08.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_09.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_10.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_01.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_02.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_03.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_04.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_05.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_06.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_07.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_08.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_09.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_10.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_01.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_02.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_03.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_04.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_05.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_06.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_07.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_08.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_09.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_10.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_01.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_02.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_03.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_04.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_05.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_06.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_07.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_08.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_09.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_10.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_01.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_02.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_03.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_04.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_05.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_06.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_07.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_08.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_09.json",
+      "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_10.json"
+    ],
+    "run_counts": {
+      "per_seed": 10,
+      "total_runs": 80
+    },
+    "seed_list": [
+      1337,
+      2024,
+      7,
+      11,
+      42,
+      314,
+      9001,
+      2718
+    ],
+    "timestamp_utc": "2026-03-04T02:16:36.264228+00:00"
+  },
+  "rows": [
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_01.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 1,
+      "seed": 1337
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_02.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 2,
+      "seed": 1337
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_03.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 3,
+      "seed": 1337
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_04.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 4,
+      "seed": 1337
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_05.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 5,
+      "seed": 1337
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_06.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 6,
+      "seed": 1337
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_07.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 7,
+      "seed": 1337
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_08.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 8,
+      "seed": 1337
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_09.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 9,
+      "seed": 1337
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_1337_run_10.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 10,
+      "seed": 1337
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_01.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 1,
+      "seed": 2024
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_02.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 2,
+      "seed": 2024
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_03.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 3,
+      "seed": 2024
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_04.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 4,
+      "seed": 2024
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_05.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 5,
+      "seed": 2024
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_06.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 6,
+      "seed": 2024
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_07.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 7,
+      "seed": 2024
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_08.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 8,
+      "seed": 2024
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_09.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 9,
+      "seed": 2024
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2024_run_10.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 10,
+      "seed": 2024
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_01.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 1,
+      "seed": 7
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_02.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 2,
+      "seed": 7
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_03.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 3,
+      "seed": 7
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_04.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 4,
+      "seed": 7
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_05.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 5,
+      "seed": 7
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_06.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 6,
+      "seed": 7
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_07.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 7,
+      "seed": 7
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_08.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 8,
+      "seed": 7
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_09.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 9,
+      "seed": 7
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_7_run_10.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 10,
+      "seed": 7
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_01.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 1,
+      "seed": 11
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_02.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 2,
+      "seed": 11
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_03.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 3,
+      "seed": 11
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_04.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 4,
+      "seed": 11
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_05.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 5,
+      "seed": 11
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_06.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 6,
+      "seed": 11
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_07.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 7,
+      "seed": 11
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_08.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 8,
+      "seed": 11
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_09.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 9,
+      "seed": 11
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_11_run_10.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 10,
+      "seed": 11
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_01.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 1,
+      "seed": 42
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_02.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 2,
+      "seed": 42
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_03.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 3,
+      "seed": 42
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_04.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 4,
+      "seed": 42
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_05.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 5,
+      "seed": 42
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_06.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 6,
+      "seed": 42
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_07.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 7,
+      "seed": 42
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_08.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 8,
+      "seed": 42
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_09.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 9,
+      "seed": 42
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_42_run_10.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 10,
+      "seed": 42
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_01.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 1,
+      "seed": 314
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_02.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 2,
+      "seed": 314
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_03.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 3,
+      "seed": 314
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_04.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 4,
+      "seed": 314
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_05.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 5,
+      "seed": 314
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_06.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 6,
+      "seed": 314
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_07.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 7,
+      "seed": 314
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_08.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 8,
+      "seed": 314
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_09.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 9,
+      "seed": 314
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_314_run_10.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 10,
+      "seed": 314
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_01.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 1,
+      "seed": 9001
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_02.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 2,
+      "seed": 9001
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_03.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 3,
+      "seed": 9001
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_04.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 4,
+      "seed": 9001
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_05.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 5,
+      "seed": 9001
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_06.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 6,
+      "seed": 9001
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_07.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 7,
+      "seed": 9001
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_08.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 8,
+      "seed": 9001
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_09.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 9,
+      "seed": 9001
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_9001_run_10.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 10,
+      "seed": 9001
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_01.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 1,
+      "seed": 2718
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_02.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 2,
+      "seed": 2718
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_03.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 3,
+      "seed": 2718
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_04.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 4,
+      "seed": 2718
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_05.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 5,
+      "seed": 2718
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_06.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 6,
+      "seed": 2718
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_07.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 7,
+      "seed": 2718
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_08.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 8,
+      "seed": 2718
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_09.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 9,
+      "seed": 2718
+    },
+    {
+      "event_order_digest": "1bba83154eb5415740c1ea4f523780a1a059caff06180ca930dbe94c76f39a41",
+      "log_path": "/Users/aleccandidato/Projects/luvatrix/artifacts/perf/closeout/replay_logs/seed_2718_run_10.json",
+      "mismatch": false,
+      "revision_sequence_digest": "91a600480d1e4dc7430bbf95fe345cbaf84ed8261620ca883caf597c8a3adc0c",
+      "run_index": 10,
+      "seed": 2718
+    }
+  ],
+  "runs_per_seed_observed": 10,
+  "runs_per_seed_required": 10,
+  "seed_count_observed": 8,
+  "seed_count_required": 8
+}
