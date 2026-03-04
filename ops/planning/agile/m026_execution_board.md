@@ -3,7 +3,7 @@
 Milestone: `P-026` Runtime Performance Hardening Closeout Signoff  
 Epic: `E-2801`  
 Task chain: `T-2801 -> (T-2802, T-2803, T-2804) -> T-2805`  
-Last updated: `2026-03-04` (T-2816 done)
+Last updated: `2026-03-04` (T-2814 done)
 
 ## Evidence Integrity Remediation (No-Go Until Provenance PASS)
 1. Scope: reopen closeout execution due to evidence integrity gaps.
@@ -178,8 +178,7 @@ Last updated: `2026-03-04` (T-2816 done)
 - Missing or non-reproducible required evidence.
 
 ## Integration Ready
-1. `T-2814` Implementation and task evidence complete on milestone branch; waiting on merge-to-`main` and required checks for `Done`.
-2. `T-2815` Implementation/evidence completed; moved to Integration Ready pending merge/check gate.
+1. None.
 
 ## Done
 1. `T-2801` Done with benchmark closeout telemetry (`input_tokens=12800`, `output_tokens=2600`, `wall_time_sec=1540`, `tool_calls=24`).
@@ -198,6 +197,8 @@ Last updated: `2026-03-04` (T-2816 done)
 14. `T-2815` Done with subpixel + bi-axial compose remediation telemetry (`input_tokens=9800`, `output_tokens=2100`, `wall_time_sec=3240`, `tool_calls=27`).
 15. `T-2816` Done with resize scenario split + policy clarification telemetry (`input_tokens=6200`, `output_tokens=1500`, `wall_time_sec=2100`, `tool_calls=22`, `reopen_count=0`).
 16. `T-2816` merged to `main` via PR #9; required checks on `main` validated before Done transition.
+17. `T-2814` Done with dirty-region invalidation remediation telemetry (`input_tokens=7400`, `output_tokens=1800`, `wall_time_sec=2100`, `tool_calls=26`, `reopen_count=0`).
+18. `T-2814` merged to `main`; required checks on `main` validated before Done transition.
 
 ## Blocked
 1. None.

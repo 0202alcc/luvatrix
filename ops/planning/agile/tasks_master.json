@@ -4872,7 +4872,7 @@
       "title": "Dirty-region invalidation refinement for pointer/hover/theme paths",
       "milestone_id": "P-026",
       "epic_id": "E-2801",
-      "status": "Integration Ready",
+      "status": "Done",
       "priority": "P0",
       "board_refs": [
         "milestone:P-026",
@@ -4889,7 +4889,22 @@
       "evidence_commands": [
         "PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k 'hover or drag or theme or dirty_rect' -q",
         "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario mixed_burst --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_mixed_burst.json"
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 7400,
+        "output_tokens": 1800,
+        "wall_time_sec": 2100,
+        "tool_calls": 26,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2815",
