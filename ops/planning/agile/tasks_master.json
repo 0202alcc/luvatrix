@@ -5364,7 +5364,7 @@
       "title": "Input burst incremental compose remediation",
       "milestone_id": "P-026",
       "epic_id": "E-2801",
-      "status": "Intake",
+      "status": "Done",
       "priority": "P0",
       "board_refs": [
         "milestone:P-026",
@@ -5388,14 +5388,29 @@
         "Handoff intent: complete T-2820 for milestone P-026 without breaking protocol or determinism constraints.",
         "Execution outline seed: Input burst incremental compose remediation"
       ],
-      "task_type": "standard"
+      "task_type": "standard",
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2821",
       "title": "Policy verdict embedding in summary artifacts",
       "milestone_id": "P-026",
       "epic_id": "E-2801",
-      "status": "Intake",
+      "status": "Done",
       "priority": "P1",
       "board_refs": [
         "milestone:P-026",
@@ -5420,14 +5435,29 @@
         "Handoff intent: complete T-2821 for milestone P-026 without breaking protocol or determinism constraints.",
         "Execution outline seed: Policy verdict embedding in summary artifacts"
       ],
-      "task_type": "standard"
+      "task_type": "standard",
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2822",
       "title": "Final revalidation and packet reconciliation",
       "milestone_id": "P-026",
       "epic_id": "E-2801",
-      "status": "Integration Ready",
+      "status": "Done",
       "priority": "P0",
       "board_refs": [
         "milestone:P-026",
@@ -5454,7 +5484,22 @@
         "Handoff intent: complete T-2822 for milestone P-026 without breaking protocol or determinism constraints.",
         "Execution outline seed: Final revalidation and packet reconciliation"
       ],
-      "task_type": "standard"
+      "task_type": "standard",
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     }
   ]
 }

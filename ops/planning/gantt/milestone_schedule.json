@@ -1503,7 +1503,7 @@
       "name": "Runtime Performance Hardening Closeout Signoff",
       "start_week": 11,
       "end_week": 14,
-      "status": "In Progress",
+      "status": "Complete",
       "task_ids": [
         "T-2801",
         "T-2802",
@@ -1611,7 +1611,7 @@
         "T-2821": "Measured summary embeds required per-scenario policy verdict fields and top-level policy_verdict; generation fails on missing verdict inputs.",
         "T-2822": "Final closeout packet/manifest/hash reconciliation completed with scenario verdict table and all validators passing."
       },
-      "completed_on": null,
+      "completed_on": "2026-03-05",
       "descriptions": [
         "All closeout tasks complete with consolidated evidence package."
       ],
