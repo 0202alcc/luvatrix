@@ -2236,7 +2236,7 @@
       "name": "Visual + Capture Tooling",
       "start_week": 28,
       "end_week": 31,
-      "status": "Planned",
+      "status": "Complete",
       "task_ids": [
         "T-2921",
         "T-2904",

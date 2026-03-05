@@ -41,7 +41,7 @@ F-031 🔁 Planes v2 Backward-Compat Adapter + Migration Tooling                
 P-032 🚦 Planes v2 rollout non-regression gates + Go/No-Go closeout                    |                                                                                                                                                   ~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
 R-033 📈 Planes v2 post-foundation performance optimization                            |                                                                                                                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                        | Planned
 F-034 🛡️ Cross-Platform Debug Menu Foundation                                         |                                                                                                                                                                                      =====================                                          | Complete
-U-035 🖼️ Visual + Capture Tooling                                                     |                                                                                                                                                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                            | Planned
+U-035 🖼️ Visual + Capture Tooling                                                     |                                                                                                                                                                                             ============================                            | Complete
 R-036 🎛️ Replay + Perf Observability                                                  |                                                                                                                                                                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~              | Planned
 A-037 🧩 App-Configurable Debug Policy + Compatibility                                 |                                                                                                                                                                                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Planned
 F-038 🔔 Cross-Platform Notification Protocol + Runtime Adapters                       |                                                                                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
@@ -393,7 +393,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - Milestone Go/No-Go is evaluated in macOS context only for this phase, with reopen intent for broader platform expansion.
 
 ### U-035 🖼️ Visual + Capture Tooling
-- Status: Planned
+- Status: Complete
 - Target window: Week 28-31
 - Tasks: `T-2921, T-2904, T-2905, T-2906`
 - Lifecycle events:
