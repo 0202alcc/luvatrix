@@ -16,6 +16,6 @@ jobs:
       - name: Perf baseline tests
         run: PYTHONPATH=. uv run --with pytest pytest tests/test_planes_runtime.py tests/test_app_runtime.py tests/test_display_runtime.py tests/test_perf_tools.py
       - name: Build interactive baseline artifact
-        run: PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/interactive_baseline.json
+        run: PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario all_interactive --out artifacts/perf/.generated/interactive_baseline.json
       - name: Enforce P-021 perf contract
-        run: PYTHONPATH=. uv run python tools/perf/assert_thresholds.py --suite baseline_contract --baseline artifacts/perf/interactive_baseline.json
+        run: PYTHONPATH=. uv run python tools/perf/assert_thresholds.py --suite baseline_contract --baseline artifacts/perf/.generated/interactive_baseline.json
