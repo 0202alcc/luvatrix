@@ -3,7 +3,7 @@
 Milestone: `P-026` Runtime Performance Hardening Closeout Signoff  
 Epic: `E-2801`  
 Task chain: `T-2801 -> (T-2802, T-2803, T-2804) -> T-2805`  
-Last updated: `2026-03-04` (T-2814..T-2818 done)
+Last updated: `2026-03-04` (T-2819..T-2822 planned)
 
 ## Evidence Integrity Remediation (No-Go Until Provenance PASS)
 1. Scope: reopen closeout execution due to evidence integrity gaps.
@@ -24,6 +24,17 @@ Last updated: `2026-03-04` (T-2814..T-2818 done)
 2. `T-2817` after `T-2814`, `T-2815`, and `T-2816` are complete.
 3. `T-2818` in parallel track; must complete before final determinism signoff.
 4. Final architecture re-review only after `T-2814..T-2818` are `Done` and strict validator passes with scenario-level target enforcement.
+
+## Final Policy-Gate Remediation Chain (Current)
+1. `T-2819` and `T-2820` in parallel.
+2. `T-2821` after raw/validator shape stabilizes from `T-2819` + `T-2820`.
+3. `T-2822` after `T-2819..T-2821` complete.
+4. Do not request final architecture Go/No-Go until:
+   - `input_burst incremental_present_pct >= 85`
+   - `input_burst full_present_pct <= 15`
+   - `max_consecutive_full_frame_outside_exception <= 8`
+   - strict validator PASS with full scenario+cap enforcement active
+   - closeout packet/manifest/hash outputs fully updated and consistent
 
 ## Focused Remediation Set (Strict Evidence Validator)
 1. `T-2806` must clear summary blockers:
@@ -48,6 +59,10 @@ Last updated: `2026-03-04` (T-2814..T-2818 done)
 
 ## Intake
 1. None.
+2. `T-2819` Validator Policy Hard-Gate Completion (P0).
+3. `T-2820` Input Burst Incremental Compose Remediation (P0).
+4. `T-2821` Policy Verdict Embedding in Summary Artifacts (P1).
+5. `T-2822` Final Revalidation and Packet Reconciliation (P0).
 
 ## Success Criteria Spec
 1. `T-2814` Hover transitions invalidate localized old/new component bounds (+ safety margin), not full frame.

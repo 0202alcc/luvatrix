@@ -5066,6 +5066,113 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       }
+    },
+    {
+      "id": "T-2819",
+      "title": "Validator policy hard-gate completion",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P0",
+      "board_refs": [
+        "milestone:P-026",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [],
+      "acceptance_criteria": [
+        "validate_closeout_evidence.py enforces incremental targets: scroll>=95, horizontal_pan>=92, drag_heavy>=85, mixed_burst>=88, sensor_overlay>=90, resize_overlap_incremental_required>=75, input_burst>=85",
+        "validator enforces cap rules for required non-control scenarios: full_present_pct<=15 and max_consecutive_full_frame_outside_exception<=8",
+        "validator supports exception metadata and fails if threshold miss lacks approved exception fields",
+        "validator output names failing scenario, observed value, target/cap, and exception status",
+        "automated validator tests exist and pass"
+      ],
+      "evidence_commands": [
+        "uv run pytest tests -k \"closeout and evidence and validator\" -q",
+        "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026"
+      ]
+    },
+    {
+      "id": "T-2820",
+      "title": "Input burst incremental compose remediation",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P0",
+      "board_refs": [
+        "milestone:P-026",
+        "team:rendering",
+        "specialist:qa"
+      ],
+      "depends_on": [],
+      "acceptance_criteria": [
+        "input_burst measured incremental_present_pct>=85",
+        "input_burst measured full_present_pct<=15",
+        "input_burst measured max_consecutive_full_frame_outside_exception<=8",
+        "no regressions in horizontal_pan>=92, drag_heavy>=85, mixed_burst>=88, sensor_overlay>=90",
+        "no visual artifacts at dirty boundaries under burst load"
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/run_suite.py --scenario input_burst --samples 120 --width 1280 --height 720 --seed 1337 --out artifacts/perf/closeout/raw_input_burst_fix.json",
+        "uv run python tools/perf/run_suite.py --scenario closeout_required --samples 120 --width 1280 --height 720 --seed 1337 --out artifacts/perf/closeout/raw_closeout_required.json",
+        "uv run pytest tests/test_planes_runtime.py -k \"burst or dirty_rect or compose\" -q"
+      ]
+    },
+    {
+      "id": "T-2821",
+      "title": "Policy verdict embedding in summary artifacts",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P1",
+      "board_refs": [
+        "milestone:P-026",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-2819",
+        "T-2820"
+      ],
+      "acceptance_criteria": [
+        "measured_summary.json includes per-scenario verdict fields: observed_incremental_pct, target_incremental_pct, observed_full_pct, full_pct_cap, max_consecutive_full_frame, consecutive_full_cap, exception_applied, pass",
+        "top-level policy_verdict is computed from all required scenarios and caps",
+        "summary generation fails if required scenario verdict data is missing",
+        "closeout packet references policy verdict table"
+      ],
+      "evidence_commands": [
+        "uv run python tools/perf/build_p026_measured_summary.py --raw artifacts/perf/closeout/raw_closeout_required.json --out artifacts/perf/closeout/measured_summary.json",
+        "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026"
+      ]
+    },
+    {
+      "id": "T-2822",
+      "title": "Final revalidation and packet reconciliation",
+      "milestone_id": "P-026",
+      "epic_id": "E-2801",
+      "status": "Intake",
+      "priority": "P0",
+      "board_refs": [
+        "milestone:P-026",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-2819",
+        "T-2820",
+        "T-2821"
+      ],
+      "acceptance_criteria": [
+        "artifacts regenerated with updated hash manifest: raw_closeout_required.json, measured_summary.json, determinism_replay_matrix.json, manifest.json",
+        "validation outputs are all PASS: validate_closeout_evidence.py, validate_closeout_packet.py, validate_milestone_task_links.py",
+        "closeout packet includes scenario policy verdict table, explicit statement of zero unresolved high-severity blockers, and updated command outputs and hashes",
+        "re-review handoff prepared with links to raw evidence and policy gates"
+      ],
+      "evidence_commands": [
+        "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-026",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ]
     }
   ]
 }

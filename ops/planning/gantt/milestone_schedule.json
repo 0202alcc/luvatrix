@@ -723,7 +723,7 @@
       "name": "Runtime Performance Hardening Closeout Signoff",
       "start_week": 11,
       "end_week": 14,
-      "status": "Complete",
+      "status": "In Progress",
       "task_ids": [
         "T-2801",
         "T-2802",
@@ -742,7 +742,11 @@
         "T-2815",
         "T-2816",
         "T-2817",
-        "T-2818"
+        "T-2818",
+        "T-2819",
+        "T-2820",
+        "T-2821",
+        "T-2822"
       ],
       "success_criteria": [
         "All closeout tasks complete with consolidated evidence package.",
@@ -750,7 +754,10 @@
         "Determinism and compatibility checks pass under a unified reproducible benchmark protocol.",
         "Incremental-present required scenario targets are met in measured raw artifacts: scroll>=95%, horizontal_pan>=92%, drag_heavy>=85%, mixed_burst>=88%, sensor_overlay>=90%, resize_overlap_incremental_required>=75% (or formally excepted under cap policy).",
         "Evidence validator enforces scenario-level target hard-gates and exception-cap policy; closeout cannot pass via aggregate-only summaries.",
-        "Final architecture closeout can issue Go confidence >= 0.85."
+        "Final architecture closeout can issue Go confidence >= 0.85.",
+        "input_burst incremental_present_pct must be >=85 with full_present_pct<=15 and max_consecutive_full_frame_outside_exception<=8.",
+        "strict evidence validator must hard-fail scenario-level target/cap misses unless approved exception metadata is present.",
+        "summary artifacts must embed per-scenario policy verdicts and top-level policy_verdict before closeout pass."
       ],
       "lifecycle_events": [
         {
@@ -800,6 +807,12 @@
           "event": "closed",
           "framework": "gateflow_v1",
           "note": "incremental target remediation complete; T-2814..T-2818 done; scenario-level gates satisfied"
+        },
+        {
+          "date": "2026-03-04",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "final policy-gate remediation opened: input_burst threshold/cap and validator hard-gate completion required for Go"
         }
       ],
       "acceptance_checks": {
@@ -812,9 +825,13 @@
         "T-2815": "Subpixel and bi-axial compose support eliminates unconditional full-frame fallback where safe and achieves horizontal_pan>=92% and drag_heavy>=85% measured incremental rates.",
         "T-2816": "Resize policies split into stability-focused fullframe-allowed stress scenario and overlap incremental-required scenario with >=75% target and measured recovery retained.",
         "T-2817": "Strict evidence validator hard-fails scenario-level misses without approved exceptions and enforces non-control full-frame <=15% plus consecutive full-frame <=8 outside exception windows.",
-        "T-2818": "Determinism replay matrix uses seed-fidelity inputs with per-seed trace provenance, distinct cross-seed fingerprints, and zero per-seed mismatch regressions."
+        "T-2818": "Determinism replay matrix uses seed-fidelity inputs with per-seed trace provenance, distinct cross-seed fingerprints, and zero per-seed mismatch regressions.",
+        "T-2819": "Validator enforces all required scenario thresholds/caps (including input_burst) with exception metadata requirements and explicit scenario-level failure output.",
+        "T-2820": "Input burst compose path remediation achieves incremental>=85, full<=15, max consecutive full-frame<=8 without regressions in other required scenarios.",
+        "T-2821": "Measured summary embeds required per-scenario policy verdict fields and top-level policy_verdict; generation fails on missing verdict inputs.",
+        "T-2822": "Final closeout packet/manifest/hash reconciliation completed with scenario verdict table and all validators passing."
       },
-      "completed_on": "2026-03-04"
+      "completed_on": null
     }
   ]
 }
