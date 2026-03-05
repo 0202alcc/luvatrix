@@ -95,7 +95,8 @@
       "notes": [
         "Handoff intent: complete T-101 for milestone P-010 without breaking protocol or determinism constraints.",
         "Execution outline seed: Post artifact pack to mapped channels and pin baselines where allowed."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-102",
@@ -127,7 +128,8 @@
       "notes": [
         "Handoff intent: complete T-102 for milestone P-010 without breaking protocol or determinism constraints.",
         "Execution outline seed: Configure essential defaults for Carl-bot/sesh/MyRepoBot/Ticket Tool."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-103",
@@ -159,7 +161,8 @@
       "notes": [
         "Handoff intent: complete T-103 for milestone P-010 without breaking protocol or determinism constraints.",
         "Execution outline seed: Run rollout checker and publish pass report in #iteration-reviews."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-201",
@@ -201,7 +204,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-202",
@@ -245,7 +249,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-203",
@@ -289,7 +294,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-204",
@@ -333,7 +339,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-205",
@@ -377,7 +384,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-206",
@@ -422,7 +430,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-207",
@@ -467,7 +476,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-208",
@@ -514,7 +524,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-209",
@@ -559,7 +570,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-210",
@@ -603,7 +615,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-211",
@@ -648,7 +661,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-212",
@@ -693,7 +707,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-213",
@@ -738,7 +753,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-214",
@@ -784,7 +800,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-215",
@@ -832,7 +849,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-216",
@@ -877,7 +895,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-217",
@@ -922,7 +941,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-218",
@@ -967,7 +987,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-219",
@@ -1012,7 +1033,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-301",
@@ -1042,7 +1064,8 @@
       "notes": [
         "Handoff intent: complete T-301 for milestone R-012 without breaking protocol or determinism constraints.",
         "Execution outline seed: Collect and classify top swapchain/surface/fence failure modes."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-302",
@@ -1074,7 +1097,8 @@
       "notes": [
         "Handoff intent: complete T-302 for milestone R-012 without breaking protocol or determinism constraints.",
         "Execution outline seed: Add targeted regression tests for each failure class."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-303",
@@ -1106,7 +1130,8 @@
       "notes": [
         "Handoff intent: complete T-303 for milestone R-012 without breaking protocol or determinism constraints.",
         "Execution outline seed: Implement resiliency fixes and fallback parity checks."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-304",
@@ -1138,7 +1163,8 @@
       "notes": [
         "Handoff intent: complete T-304 for milestone R-012 without breaking protocol or determinism constraints.",
         "Execution outline seed: Run stability soak and publish defect burn-down."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-401",
@@ -1168,7 +1194,8 @@
       "notes": [
         "Handoff intent: complete T-401 for milestone P-013 without breaking protocol or determinism constraints.",
         "Execution outline seed: Define deterministic gate ownership and required pass criteria."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-402",
@@ -1200,7 +1227,8 @@
       "notes": [
         "Handoff intent: complete T-402 for milestone P-013 without breaking protocol or determinism constraints.",
         "Execution outline seed: Add flaky test quarantine + remediation workflow."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-403",
@@ -1232,7 +1260,8 @@
       "notes": [
         "Handoff intent: complete T-403 for milestone P-013 without breaking protocol or determinism constraints.",
         "Execution outline seed: Improve smoke signal visibility and artifact links."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-501",
@@ -1262,7 +1291,8 @@
       "notes": [
         "Handoff intent: complete T-501 for milestone F-014 without breaking protocol or determinism constraints.",
         "Execution outline seed: Define retention policy defaults and rationale."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-502",
@@ -1294,7 +1324,8 @@
       "notes": [
         "Handoff intent: complete T-502 for milestone F-014 without breaking protocol or determinism constraints.",
         "Execution outline seed: Validate prune/report workflows under realistic load."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-503",
@@ -1326,7 +1357,8 @@
       "notes": [
         "Handoff intent: complete T-503 for milestone F-014 without breaking protocol or determinism constraints.",
         "Execution outline seed: Publish operational playbook for retention management."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-601",
@@ -1356,7 +1388,8 @@
       "notes": [
         "Handoff intent: complete T-601 for milestone P-015 without breaking protocol or determinism constraints.",
         "Execution outline seed: Assemble milestone completion evidence packet."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-602",
@@ -1388,7 +1421,8 @@
       "notes": [
         "Handoff intent: complete T-602 for milestone P-015 without breaking protocol or determinism constraints.",
         "Execution outline seed: Review unresolved risks/defects and required mitigations."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-603",
@@ -1420,7 +1454,8 @@
       "notes": [
         "Handoff intent: complete T-603 for milestone P-015 without breaking protocol or determinism constraints.",
         "Execution outline seed: Publish go/no-go recommendation with rationale and decision log links."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-701",
@@ -1450,7 +1485,8 @@
       "notes": [
         "Handoff intent: complete T-701 for milestone ARU-016 without breaking protocol or determinism constraints.",
         "Execution outline seed: Add platform-aware runtime path: macOS windowed + non-macOS headless."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-702",
@@ -1482,7 +1518,8 @@
       "notes": [
         "Handoff intent: complete T-702 for milestone ARU-016 without breaking protocol or determinism constraints.",
         "Execution outline seed: Keep animation/frame behavior identical across platform paths."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-703",
@@ -1514,7 +1551,8 @@
       "notes": [
         "Handoff intent: complete T-703 for milestone ARU-016 without breaking protocol or determinism constraints.",
         "Execution outline seed: Add non-macOS system telemetry providers and unavailable fallbacks."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-704",
@@ -1547,7 +1585,8 @@
       "notes": [
         "Handoff intent: complete T-704 for milestone ARU-016 without breaking protocol or determinism constraints.",
         "Execution outline seed: Update tests/docs and validate no regression in dashboard formatting."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-801",
@@ -1577,7 +1616,8 @@
       "notes": [
         "Handoff intent: complete T-801 for milestone U-021 without breaking protocol or determinism constraints.",
         "Execution outline seed: Sideways x-axis rule labels for long names with readable wrapping/fallbacks."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-802",
@@ -1609,7 +1649,8 @@
       "notes": [
         "Handoff intent: complete T-802 for milestone U-021 without breaking protocol or determinism constraints.",
         "Execution outline seed: Bar chart renderer support (static + interactive parity)."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-803",
@@ -1641,7 +1682,8 @@
       "notes": [
         "Handoff intent: complete T-803 for milestone U-021 without breaking protocol or determinism constraints.",
         "Execution outline seed: Multiple plot support (subplot-like layout orchestration)."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-804",
@@ -1679,7 +1721,8 @@
       "notes": [
         "Handoff intent: complete T-804 for milestone U-017 without breaking protocol or determinism constraints.",
         "Execution outline seed: Scrolling and viewport controls for dense plot surfaces."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-805",
@@ -1717,7 +1760,8 @@
       "notes": [
         "Handoff intent: complete T-805 for milestone U-017 without breaking protocol or determinism constraints.",
         "Execution outline seed: Table UI component system (sortable columns, pagination/virtualization, keyboard access)."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-821",
@@ -1750,7 +1794,8 @@
       "notes": [
         "Handoff intent: complete T-821 for milestone U-021 without breaking protocol or determinism constraints.",
         "Execution outline seed: Dynamic data plotting primitives (incremental redraw windows, axis rescale policy, stream cadence hooks)."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-822",
@@ -1782,7 +1827,8 @@
       "notes": [
         "Handoff intent: complete T-822 for milestone U-021 without breaking protocol or determinism constraints.",
         "Execution outline seed: Financial visualization profile pack (OHLC/candles/volume overlays) for downstream marketbook rendering."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-834",
@@ -1820,7 +1866,8 @@
       "notes": [
         "Handoff intent: complete T-834 for milestone U-017 without breaking protocol or determinism constraints.",
         "Execution outline seed: Define and implement native hot-path extraction plan for high-frequency camera/compose operations."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-835",
@@ -1859,7 +1906,8 @@
       "notes": [
         "Handoff intent: complete T-835 for milestone U-017 without breaking protocol or determinism constraints.",
         "Execution outline seed: Implement CI performance gate pack for camera-scroll, compositor, and frame-budget thresholds."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-836",
@@ -1897,7 +1945,8 @@
       "notes": [
         "Handoff intent: complete T-836 for milestone U-017 without breaking protocol or determinism constraints.",
         "Execution outline seed: Implement shift-blit camera scroll compose path (translate previous frame + redraw exposed strips only)."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-837",
@@ -1946,7 +1995,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-838",
@@ -1995,7 +2045,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-839",
@@ -2044,7 +2095,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-840",
@@ -2094,7 +2146,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-901",
@@ -2124,7 +2177,8 @@
       "notes": [
         "Handoff intent: complete T-901 for milestone AU-018 without breaking protocol or determinism constraints.",
         "Execution outline seed: Calendar app component (day/week/month views + event rendering contract)."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-902",
@@ -2156,7 +2210,8 @@
       "notes": [
         "Handoff intent: complete T-902 for milestone AU-018 without breaking protocol or determinism constraints.",
         "Execution outline seed: Calendar workflow integration with data workspace navigation/state sync."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-1001",
@@ -2186,7 +2241,8 @@
       "notes": [
         "Handoff intent: complete T-1001 for milestone AU-019 without breaking protocol or determinism constraints.",
         "Execution outline seed: Marketbook schema + ingestion adapter contract."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-1002",
@@ -2219,7 +2275,8 @@
       "notes": [
         "Handoff intent: complete T-1002 for milestone AU-019 without breaking protocol or determinism constraints.",
         "Execution outline seed: Dedicated dynamic marketbook renderer (depth ladder, spread, imbalance traces)."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-1003",
@@ -2251,7 +2308,8 @@
       "notes": [
         "Handoff intent: complete T-1003 for milestone AU-019 without breaking protocol or determinism constraints.",
         "Execution outline seed: Streaming update strategy + latency/perf budgets."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-1004",
@@ -2283,7 +2341,8 @@
       "notes": [
         "Handoff intent: complete T-1004 for milestone AU-019 without breaking protocol or determinism constraints.",
         "Execution outline seed: Regression/safety tests and operator docs."
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-1101",
@@ -2324,7 +2383,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-1102",
@@ -2367,7 +2427,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-1103",
@@ -2410,7 +2471,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-1104",
@@ -2453,7 +2515,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-1105",
@@ -2496,7 +2559,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-1106",
@@ -2539,7 +2603,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-1107",
@@ -2583,7 +2648,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-1108",
@@ -2627,7 +2693,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-1109",
@@ -2671,7 +2738,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-1110",
@@ -2715,7 +2783,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-1111",
@@ -2759,7 +2828,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-1112",
@@ -2803,7 +2873,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-1113",
@@ -2847,7 +2918,8 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       },
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2101",
@@ -2899,7 +2971,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2102",
@@ -2953,7 +3026,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2103",
@@ -3006,7 +3080,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2104",
@@ -3059,7 +3134,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2201",
@@ -3114,7 +3190,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2202",
@@ -3169,7 +3246,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2203",
@@ -3224,7 +3302,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2204",
@@ -3281,7 +3360,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2301",
@@ -3336,7 +3416,8 @@
       "cost_bucket": "S",
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2302",
@@ -3391,7 +3472,8 @@
       "cost_bucket": "S",
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2303",
@@ -3446,7 +3528,8 @@
       "cost_bucket": "S",
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2304",
@@ -3501,7 +3584,8 @@
       "cost_bucket": "S",
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2305",
@@ -3556,7 +3640,8 @@
       "cost_bucket": "S",
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2401",
@@ -3611,7 +3696,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2402",
@@ -3666,7 +3752,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2403",
@@ -3721,7 +3808,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2404",
@@ -3776,7 +3864,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2501",
@@ -3831,7 +3920,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2502",
@@ -3886,7 +3976,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2503",
@@ -3941,7 +4032,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2504",
@@ -3997,7 +4089,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2601",
@@ -4052,7 +4145,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2602",
@@ -4107,7 +4201,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2603",
@@ -4162,7 +4257,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2604",
@@ -4218,7 +4314,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2701",
@@ -4272,7 +4369,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2702",
@@ -4326,7 +4424,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2703",
@@ -4383,7 +4482,8 @@
       "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
-      "done_telemetry_backfill_estimated": true
+      "done_telemetry_backfill_estimated": true,
+      "task_type": "standard"
     },
     {
       "id": "T-2801",
@@ -4447,7 +4547,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2802",
@@ -4501,7 +4602,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2803",
@@ -4559,7 +4661,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2804",
@@ -4627,7 +4730,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2805",
@@ -4676,7 +4780,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2806",
@@ -4717,7 +4822,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2807",
@@ -4758,7 +4864,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2808",
@@ -4799,7 +4906,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2809",
@@ -4842,7 +4950,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2810",
@@ -4884,7 +4993,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2811",
@@ -4923,7 +5033,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2812",
@@ -4965,7 +5076,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2813",
@@ -5009,7 +5121,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2814",
@@ -5048,7 +5161,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2815",
@@ -5088,7 +5202,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2816",
@@ -5127,7 +5242,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2817",
@@ -5170,7 +5286,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2818",
@@ -5209,7 +5326,8 @@
         "edge_case_tests_passed": true,
         "merged_to_main": true,
         "required_checks_passed_on_main": true
-      }
+      },
+      "task_type": "standard"
     },
     {
       "id": "T-2819",
@@ -5238,7 +5356,8 @@
       "notes": [
         "Handoff intent: complete T-2819 for milestone P-026 without breaking protocol or determinism constraints.",
         "Execution outline seed: Validator policy hard-gate completion"
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-2820",
@@ -5268,7 +5387,8 @@
       "notes": [
         "Handoff intent: complete T-2820 for milestone P-026 without breaking protocol or determinism constraints.",
         "Execution outline seed: Input burst incremental compose remediation"
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-2821",
@@ -5299,14 +5419,15 @@
       "notes": [
         "Handoff intent: complete T-2821 for milestone P-026 without breaking protocol or determinism constraints.",
         "Execution outline seed: Policy verdict embedding in summary artifacts"
-      ]
+      ],
+      "task_type": "standard"
     },
     {
       "id": "T-2822",
       "title": "Final revalidation and packet reconciliation",
       "milestone_id": "P-026",
       "epic_id": "E-2801",
-      "status": "Intake",
+      "status": "Integration Ready",
       "priority": "P0",
       "board_refs": [
         "milestone:P-026",
@@ -5332,7 +5453,8 @@
       "notes": [
         "Handoff intent: complete T-2822 for milestone P-026 without breaking protocol or determinism constraints.",
         "Execution outline seed: Final revalidation and packet reconciliation"
-      ]
+      ],
+      "task_type": "standard"
     }
   ]
 }
