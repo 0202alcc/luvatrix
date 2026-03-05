@@ -59,9 +59,8 @@ Last updated: `2026-03-05` (T-2819 moved to Success Criteria Spec)
 
 ## Intake
 1. None.
-2. `T-2820` Input Burst Incremental Compose Remediation (P0).
-3. `T-2821` Policy Verdict Embedding in Summary Artifacts (P1).
-4. `T-2822` Final Revalidation and Packet Reconciliation (P0).
+2. `T-2821` Policy Verdict Embedding in Summary Artifacts (P1).
+3. `T-2822` Final Revalidation and Packet Reconciliation (P0).
 
 ## Success Criteria Spec
 1. `T-2814` Hover transitions invalidate localized old/new component bounds (+ safety margin), not full frame.
@@ -240,6 +239,10 @@ Last updated: `2026-03-05` (T-2819 moved to Success Criteria Spec)
 3. Current blocker snapshot:
    - environment import-path collection failures for broad pytest evidence command
    - policy failures in current `input_burst` measured evidence (`incremental_present_pct` and `full_present_pct` caps)
+4. `T-2820` Input Burst Incremental Compose Remediation moved to Integration Ready on branch `codex/m-p-026-t2820-input-burst` with measured evidence:
+   - `uv run python tools/perf/run_suite.py --scenario input_burst --samples 120 --width 1280 --height 720 --seed 1337 --out artifacts/perf/closeout/raw_input_burst_fix.json` -> `incremental_present_pct=100`, `full_present_pct=0`, `max_consecutive_full_frame_outside_exception=0`.
+   - `uv run python tools/perf/run_suite.py --scenario closeout_required --samples 120 --width 1280 --height 720 --seed 1337 --out artifacts/perf/closeout/raw_closeout_required.json` -> required no-regression scenarios meet thresholds (`horizontal_pan=100`, `drag_heavy=100`, `mixed_burst=100`, `sensor_overlay=100` incremental-present).
+   - `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "burst or dirty_rect or compose" -q` -> `8 passed, 26 deselected`.
 
 ## Done
 1. `T-2801` Done with benchmark closeout telemetry (`input_tokens=12800`, `output_tokens=2600`, `wall_time_sec=1540`, `tool_calls=24`).

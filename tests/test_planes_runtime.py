@@ -786,6 +786,18 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertEqual(ctx.begin_calls, begin_before)
             self.assertEqual(ctx.finalize_calls, finalize_before)
 
+    def test_plane_runtime_bootstrap_present_uses_split_dirty_rects(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_file(Path(td))
+            app = load_plane_app(plane_path, handlers={"handlers::open": lambda e, s: None})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(str(perf.get("compose_mode", "")), "partial_dirty")
+            self.assertEqual(ctx.last_dirty_rects, [(0, 0, 160, 180), (160, 0, 160, 180)])
+            self.assertEqual(int(perf.get("dirty_rect_area_px", -1)), 320 * 180)
+
     def test_plane_runtime_pointer_move_without_visual_delta_skips_compose(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             plane_path = _build_plane_file(Path(td))

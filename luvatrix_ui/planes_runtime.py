@@ -1319,7 +1319,7 @@ class PlaneApp:
         full = [(0, 0, view_w, view_h)]
         if self._last_dirty_signature is None or self._last_plane_scroll is None:
             self._reset_scroll_shift_residual()
-            return full
+            return self._bootstrap_dirty_rects(view_w=view_w, view_h=view_h)
         if (
             pre_signature == post_signature
             and pre_plane_scroll == post_plane_scroll
@@ -1398,6 +1398,19 @@ class PlaneApp:
         dirty_rects.extend(self._plane_scrollbar_dirty_rects())
         normalized = self._normalize_local_dirty_rects(dirty_rects, view_w=view_w, view_h=view_h)
         return normalized
+
+    @staticmethod
+    def _bootstrap_dirty_rects(*, view_w: int, view_h: int) -> list[tuple[int, int, int, int]]:
+        """Prime first present via split rects to avoid full-frame compose mode spikes."""
+        if view_w <= 0 or view_h <= 0:
+            return []
+        if view_w == 1:
+            return [(0, 0, 1, view_h)]
+        left_w = max(1, int(view_w // 2))
+        right_w = int(view_w - left_w)
+        if right_w <= 0:
+            return [(0, 0, view_w, view_h)]
+        return [(0, 0, left_w, view_h), (left_w, 0, right_w, view_h)]
 
     def _hover_transition_dirty_rects(
         self,
