@@ -21,6 +21,16 @@ from .debug_menu import (
     default_debug_menu_adapter_specs,
     validate_debug_menu_actions,
 )
+from .debug_capture import (
+    REQUIRED_SCREENSHOT_SIDECAR_KEYS,
+    DebugCapturePlatformSpec,
+    ScreenshotArtifactBundle,
+    build_screenshot_artifact_bundle,
+    build_screenshot_sidecar,
+    debug_capture_platform_capability_matrix,
+    default_debug_capture_platform_specs,
+    screenshot_artifacts_are_atomic,
+)
 from .frame_rate_controller import FrameRateController
 from .ui_frame_renderer import MatrixUIFrameRenderer
 from .coordinates import (
@@ -82,7 +92,15 @@ __all__ = [
     "DebugMenuDispatcher",
     "DebugMenuActionSpec",
     "DebugMenuAdapterSpec",
+    "DebugCapturePlatformSpec",
+    "ScreenshotArtifactBundle",
     "DEFAULT_DEBUG_MENU_ACTIONS",
+    "REQUIRED_SCREENSHOT_SIDECAR_KEYS",
+    "build_screenshot_artifact_bundle",
+    "build_screenshot_sidecar",
+    "screenshot_artifacts_are_atomic",
+    "default_debug_capture_platform_specs",
+    "debug_capture_platform_capability_matrix",
     "build_debug_capability_registry",
     "default_debug_menu_adapter_specs",
     "debug_menu_adapter_capability_matrix",
