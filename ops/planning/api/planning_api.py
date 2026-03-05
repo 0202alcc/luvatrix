@@ -293,6 +293,20 @@ def validate_closeout_criteria(milestone: dict[str, Any], *, required: bool) -> 
                 )
 
 
+def validate_ci_required_checks(milestone: dict[str, Any], *, required: bool) -> None:
+    mid = milestone.get("id", "<unknown>")
+    checks = milestone.get("ci_required_checks")
+    if checks is None:
+        if required:
+            raise ApiError(f"milestone {mid} missing required ci_required_checks")
+        return
+    if not isinstance(checks, list) or not checks:
+        raise ApiError(f"milestone {mid} ci_required_checks must be a non-empty list")
+    for idx, item in enumerate(checks):
+        if not isinstance(item, str) or not item.strip():
+            raise ApiError(f"milestone {mid} ci_required_checks[{idx}] must be a non-empty string")
+
+
 def normalize_task_type_and_title(task: dict[str, Any]) -> None:
     ttype = task.get("task_type", "standard")
     if ttype not in ALLOWED_TASK_TYPES:
@@ -742,6 +756,8 @@ def validate_cross_refs(
         validate_milestone_descriptions(milestones[mid])
         if "closeout_criteria" in milestones[mid]:
             validate_closeout_criteria(milestones[mid], required=False)
+        if "ci_required_checks" in milestones[mid]:
+            validate_ci_required_checks(milestones[mid], required=False)
 
     validate_board_definitions(boards)
     statuses = allowed_task_statuses(boards)
@@ -778,6 +794,7 @@ def create_milestone(schedule: dict[str, Any], body: dict[str, Any], task_ids_al
         "status",
         "success_criteria",
         "closeout_criteria",
+        "ci_required_checks",
     }
     missing = sorted(required - set(body))
     if missing:
@@ -798,6 +815,7 @@ def create_milestone(schedule: dict[str, Any], body: dict[str, Any], task_ids_al
     body.setdefault("descriptions", [])
     validate_milestone_descriptions(body)
     validate_closeout_criteria(body, required=True)
+    validate_ci_required_checks(body, required=True)
     body.setdefault("task_ids", [])
     if not isinstance(body["task_ids"], list):
         raise ApiError("milestone task_ids must be a list")
@@ -831,6 +849,7 @@ def patch_milestone(schedule: dict[str, Any], milestone_id: str, body: dict[str,
                 raise ApiError(f"milestone success_criteria[{idx}] must be a non-empty string")
     require_closeout = row.get("status") in {"In Progress", "Complete"}
     validate_closeout_criteria(row, required=require_closeout)
+    validate_ci_required_checks(row, required=require_closeout)
     row.setdefault("task_ids", [])
     if not isinstance(row.get("task_ids"), list):
         raise ApiError("milestone task_ids must be a list")

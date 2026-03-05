@@ -27,6 +27,7 @@ Quick operator reference:
 - note: `task_ids` may be omitted or empty at milestone creation; attach tasks later or stage in backlog.
 - optional: `descriptions` (`string[]`) can capture milestone objective snapshots across reopen cycles.
 - required on `POST /milestones`: non-empty `success_criteria` and `closeout_criteria`.
+- required on `POST /milestones`: non-empty `ci_required_checks` (milestone-specific CI profile).
 
 2. Tasks
 - `GET /tasks`
@@ -73,6 +74,7 @@ Quick operator reference:
 - milestone `descriptions` is a list of non-empty strings when present
 - milestone `success_criteria` is required/non-empty on create
 - milestone `closeout_criteria` structure is required on create and when milestone is active/complete
+- milestone `ci_required_checks` is required/non-empty on create and when milestone is active/complete
 - task `notes` is a non-empty string or list of non-empty strings when present
 - task `task_type` (`standard|closeout_harness`) and closeout-harness title normalization (`[CLOSEOUT HARNESS]`)
 - for milestones with `closeout_criteria`, API enforces harness-first sequencing (first task type must be `closeout_harness`)
@@ -162,7 +164,7 @@ python ops/planning/api/planning_api.py GET /milestones
 1b. Create milestone with required closeout criteria (dry-run):
 ```bash
 python ops/planning/api/planning_api.py POST /milestones \
-  --body '{"id":"A-021","emoji":"🧩","name":"Example app project","descriptions":["Initial objective snapshot."],"start_week":13,"end_week":16,"status":"Planned","task_ids":[],"success_criteria":["Feature-level outcomes validated on main."],"closeout_criteria":{"metric_id":"A-021-closeout-v1","metric_description":"Milestone go/no-go composite score.","score_formula":"0.5*correctness + 0.3*safety + 0.2*performance","score_components":["correctness","safety","performance"],"go_threshold":85,"hard_no_go_conditions":["any required validator fails","unresolved high-severity risk"],"required_evidence":["closeout packet","raw benchmark artifact","validator outputs"],"required_commands":["uv run python ops/planning/api/validate_closeout_packet.py --milestone-id A-021","uv run python ops/planning/agile/validate_milestone_task_links.py"],"rubric_version":"closeout_rubric_v1"}}'
+  --body '{"id":"A-021","emoji":"🧩","name":"Example app project","descriptions":["Initial objective snapshot."],"start_week":13,"end_week":16,"status":"Planned","task_ids":[],"success_criteria":["Feature-level outcomes validated on main."],"closeout_criteria":{"metric_id":"A-021-closeout-v1","metric_description":"Milestone go/no-go composite score.","score_formula":"0.5*correctness + 0.3*safety + 0.2*performance","score_components":["correctness","safety","performance"],"go_threshold":85,"hard_no_go_conditions":["any required validator fails","unresolved high-severity risk"],"required_evidence":["closeout packet","raw benchmark artifact","validator outputs"],"required_commands":["uv run python ops/planning/api/validate_closeout_packet.py --milestone-id A-021","uv run python ops/planning/agile/validate_milestone_task_links.py"],"rubric_version":"closeout_rubric_v1"},"ci_required_checks":["uv run python ops/planning/agile/validate_milestone_task_links.py","uv run pytest -q"]}'
 ```
 
 2. Add task (dry-run):

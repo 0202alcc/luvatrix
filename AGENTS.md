@@ -66,6 +66,7 @@ Before planning or editing code, read:
 3. Every milestone must have a `task_ids` list (empty allowed for bootstrap/split states).
 4. Milestones should include `descriptions` (`string[]`) to record objective snapshots (especially across reopen cycles).
 5. New milestones must include non-empty `success_criteria` and `closeout_criteria` (quantitative Go/No-Go metric contract).
+6. New milestones must include non-empty `ci_required_checks` so each milestone branch has an explicit CI profile.
 6. For milestones with `closeout_criteria`, add a `closeout_harness` task first before adding other task types.
 7. `closeout_harness` task titles should use `[CLOSEOUT HARNESS]` prefix for clear visual separation.
 8. Every populated milestone `task_id` must exist in active or archived task ledgers.
@@ -84,6 +85,8 @@ Before planning or editing code, read:
    - `ops/planning/agile/gateflow_cost_rubric.md`
 17. Closeout criteria rubric reference:
    - `ops/planning/agile/gateflow_guide.md` (`Valid Closeout Criteria Rubric`)
+18. Milestone CI profile:
+   - `ci_required_checks` must list required commands/check suites for milestone gate and post-merge validation.
 
 ## Planning API Usage (Required Flow)
 1. Always run API calls in dry-run first (no `--apply`).
@@ -139,7 +142,12 @@ Before planning or editing code, read:
    - reopen task to `Verification Review`,
    - increment `actuals.reopen_count`,
    - create backlog incident record.
-2. Use:
+2. If milestone PR merges to `main` but milestone-level CI checks fail:
+   - reopen milestone to `In Progress`,
+   - reopen failed tasks to `Verification Review`,
+   - add remediation tasks and incident entries,
+   - re-run `ci_required_checks` before requesting new Go.
+3. Use:
    - `uv run python ops/planning/api/reopen_on_ci_failure.py --task-id <T-ID> --check-id <CHECK-ID> --summary \"<short reason>\" --apply`
 
 ## GateFlow Workflow (Default)

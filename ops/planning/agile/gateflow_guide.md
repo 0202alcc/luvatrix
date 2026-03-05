@@ -74,7 +74,8 @@ flowchart TD
   subgraph MILESTONE_GENERATION["Milestone Generation (Top)"]
     direction TB
     MG1["Define Milestone Objective + Success Criteria"] --> MG2["Define Closeout Criteria (Quantitative Go/No-Go)"]
-    MG2 --> MG3["Create Milestone in Planning API"]
+    MG2 --> MG2B["Define Milestone CI Required Checks"]
+    MG2B --> MG3["Create Milestone in Planning API"]
     MG3 --> MB0["Create Milestone Branch from main"]
     MB0 --> MG4["Create First Task Type: [CLOSEOUT HARNESS]"]
   end
@@ -111,24 +112,27 @@ flowchart TD
     direction TB
     MC1["Milestone Integration Gate"] --> MC2{"Go/No-Go Decision"}
     MC2 -->|Go| MP1{"Milestone PR Merged to main?"}
-    MP1 -->|Yes| MC3["Milestone Complete"]
+    MP1 -->|Yes| MC7{"Milestone CI Required Checks PASS on main?"}
+    MC7 -->|Yes| MC3["Milestone Complete"]
+    MC7 -->|No| MC8["Post-merge CI failure procedure: reopen milestone + reopen failed tasks to Verification Review + add incident/remediation tasks"]
     MP1 -->|No| MC4["Blocked (Await Milestone PR Merge)"]
     MC2 -->|No-Go| MC5["Reopen Milestone + Add/Edit Remediation Tasks"]
     MC5 --> MC1
     MC3 --> MC6["Delete Task Branches (Post-Merge Cleanup)"]
+    MC8 --> MC1
     MC4 --> MC1
   end
 
   MG4 --> TB0
   J --> MC1
-  MC1 -.all required task_ids Done + merged to main + checks pass + closeout criteria met.-> MC2
+  MC1 -.all required task_ids Done + closeout criteria met + CI required checks defined.-> MC2
 
   classDef task fill:#c7f9cc,stroke:#166534,color:#111827,stroke-width:1px;
   classDef milestone fill:#bfdbfe,stroke:#1e3a8a,color:#111827,stroke-width:1px;
   classDef blocked fill:#fecaca,stroke:#991b1b,color:#111827,stroke-width:1px;
 
   class A,B,C,D,E,F,G,H,I,J,R,TB0 task;
-  class MG1,MG2,MG3,MB0,MG4,TP1,MC1,MC2,MP1,MC3,MC5,MC6 milestone;
+  class MG1,MG2,MG2B,MG3,MB0,MG4,TP1,MC1,MC2,MP1,MC3,MC5,MC6,MC7,MC8 milestone;
   class X blocked;
 ```
 
@@ -266,9 +270,10 @@ Use this before creating a new milestone in `milestone_schedule.json`.
 6. `task_ids` (or explicit bootstrap note)
 7. `success_criteria` (measurable)
 8. `closeout_criteria` (quantitative go/no-go metric contract)
-9. `acceptance_checks` (task-level or milestone-level)
-10. `dependencies` (milestones/tasks)
-11. `lifecycle_events` initial record (`active` or `created`)
+9. `ci_required_checks` (non-empty list of required CI commands/check suites for this milestone branch)
+10. `acceptance_checks` (task-level or milestone-level)
+11. `dependencies` (milestones/tasks)
+12. `lifecycle_events` initial record (`active` or `created`)
 
 ## Valid Closeout Criteria Rubric
 
