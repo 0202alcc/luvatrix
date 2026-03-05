@@ -1,0 +1,52 @@
+{
+  "id": "F-031",
+  "emoji": "\ud83d\udd01",
+  "name": "Planes v2 Backward-Compat Adapter + Migration Tooling",
+  "start_week": 20,
+  "end_week": 23,
+  "status": "Planned",
+  "task_ids": [],
+  "descriptions": [
+    "Preserve existing app behavior through monolith adapter and controlled migration to canonical k_hat ordering semantics."
+  ],
+  "success_criteria": [
+    "Legacy apps run through adapter with no forced rewrites.",
+    "z_index_alias compatibility preserved during migration to k_hat_index canonical order."
+  ],
+  "closeout_criteria": {
+    "metric_id": "f-031-closeout-v1",
+    "metric_description": "Compatibility + migration safety score.",
+    "score_formula": "0.5*legacy_conformance + 0.3*compatibility_stability + 0.2*migration_readiness",
+    "score_components": [
+      "legacy_conformance",
+      "compatibility_stability",
+      "migration_readiness"
+    ],
+    "go_threshold": 86,
+    "hard_no_go_conditions": [
+      "legacy conformance fails on required app set",
+      "forced rewrite required for existing apps"
+    ],
+    "required_evidence": [
+      "conformance suite output",
+      "adapter parity tests",
+      "migration docs"
+    ],
+    "required_commands": [
+      "uv run pytest tests -k \"legacy_planes_conformance or planes_monolith_adapter or z_index_alias\" -q"
+    ],
+    "rubric_version": "closeout_rubric_v1"
+  },
+  "ci_required_checks": [
+    "uv run pytest tests -k \"legacy_planes_conformance or planes_monolith_adapter or z_index_alias\" -q",
+    "uv run python ops/planning/agile/validate_milestone_task_links.py"
+  ],
+  "lifecycle_events": [
+    {
+      "date": "2026-03-05",
+      "event": "active",
+      "framework": "gateflow_v1",
+      "note": "compatibility milestone staged"
+    }
+  ]
+}

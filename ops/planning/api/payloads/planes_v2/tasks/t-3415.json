@@ -1,0 +1,19 @@
+{
+  "id": "T-3415",
+  "title": "Deliver legacy app conformance suite under adapter path",
+  "task_type": "standard",
+  "milestone_id": "F-031",
+  "status": "Intake",
+  "depends_on": [
+    "T-3413",
+    "T-3408"
+  ],
+  "board_refs": [
+    "milestone:F-031",
+    "team:platform-ci",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Conformance tests prove existing apps still run with adapter and canonical runtime ingestion."
+  ]
+}

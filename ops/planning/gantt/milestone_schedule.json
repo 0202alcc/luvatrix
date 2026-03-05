@@ -1757,6 +1757,410 @@
         "uv run python ops/planning/agile/validate_milestone_task_links.py",
         "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-026"
       ]
+    },
+    {
+      "id": "F-027",
+      "emoji": "\ud83e\uddf1",
+      "name": "Planes v2 Protocol Foundation + File Layout Spec",
+      "start_week": 15,
+      "end_week": 17,
+      "status": "Planned",
+      "task_ids": [
+        "T-3400",
+        "T-3401",
+        "T-3402"
+      ],
+      "descriptions": [
+        "Productize Planes v2 split-file protocol with canonical basis and deterministic rules while preserving app API compatibility."
+      ],
+      "success_criteria": [
+        "Split-file contract and canonical basis rules are frozen and documented.",
+        "Deterministic runtime rules are explicitly specified and testable.",
+        "Milestone CI profile and closeout scoring criteria are defined before implementation."
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-027-closeout-v1",
+        "metric_description": "Foundation spec completeness + determinism policy readiness score.",
+        "score_formula": "0.4*spec_completeness + 0.3*determinism_coverage + 0.3*ci_closeout_readiness",
+        "score_components": [
+          "spec_completeness",
+          "determinism_coverage",
+          "ci_closeout_readiness"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "missing canonical basis alias policy",
+          "missing deterministic runtime rule definitions",
+          "missing milestone ci_required_checks"
+        ],
+        "required_evidence": [
+          "spec docs",
+          "planning task evidence",
+          "validator outputs"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run pytest tests -k \"planes_v2_spec or planes_v2_contract\" -q"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "milestone created for planes v2 foundation"
+        }
+      ]
+    },
+    {
+      "id": "F-028",
+      "emoji": "\u2705",
+      "name": "Planes v2 Schema + Cross-File Validator Layer",
+      "start_week": 16,
+      "end_week": 18,
+      "status": "Planned",
+      "task_ids": [
+        "T-3420",
+        "T-3403",
+        "T-3404",
+        "T-3405"
+      ],
+      "descriptions": [
+        "Implement strict schema and cross-file invariant validators for split-file Planes v2."
+      ],
+      "success_criteria": [
+        "All schema files validate deterministically.",
+        "All required cross-file invariants enforced in strict mode with explicit permissive policy boundaries."
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-028-closeout-v1",
+        "metric_description": "Validator coverage + strictness completeness score.",
+        "score_formula": "0.5*invariant_coverage + 0.3*strict_mode_enforcement + 0.2*diagnostic_quality",
+        "score_components": [
+          "invariant_coverage",
+          "strict_mode_enforcement",
+          "diagnostic_quality"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "any listed invariant lacks failing test",
+          "strict mode allows invalid cross-file state"
+        ],
+        "required_evidence": [
+          "validator tests",
+          "fixture set",
+          "closeout packet"
+        ],
+        "required_commands": [
+          "uv run pytest tests -k \"planes_schema_validation or planes_cross_file_invariants\" -q"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run pytest tests -k \"planes_schema_validation or planes_cross_file_invariants\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "validator milestone staged"
+        }
+      ]
+    },
+    {
+      "id": "UF-029",
+      "emoji": "\ud83e\udde0",
+      "name": "Planes v2 Compiler to Canonical IR + Parity Contract",
+      "start_week": 17,
+      "end_week": 20,
+      "status": "Planned",
+      "task_ids": [
+        "T-3421",
+        "T-3406",
+        "T-3407",
+        "T-3408",
+        "T-3409"
+      ],
+      "descriptions": [
+        "Compile split files and monolith adapter into canonical Planes IR with deterministic parity guarantees."
+      ],
+      "success_criteria": [
+        "Split-file and monolith inputs compile to canonically equivalent IR.",
+        "Compiler resolves basis aliases and frame refs into canonical u/v/w model."
+      ],
+      "closeout_criteria": {
+        "metric_id": "uf-029-closeout-v1",
+        "metric_description": "Compiler correctness + parity score.",
+        "score_formula": "0.45*compile_correctness + 0.35*parity_equivalence + 0.2*error_diagnostics",
+        "score_components": [
+          "compile_correctness",
+          "parity_equivalence",
+          "error_diagnostics"
+        ],
+        "go_threshold": 86,
+        "hard_no_go_conditions": [
+          "monolith and split compile mismatch on ordering/rounding/hit-test",
+          "canonical IR contract mismatch against ir types"
+        ],
+        "required_evidence": [
+          "compiler tests",
+          "parity artifacts",
+          "ir contract docs"
+        ],
+        "required_commands": [
+          "uv run pytest tests -k \"planes_split_compile or planes_parity_equivalence or planes_ir_contract\" -q"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run pytest tests -k \"planes_split_compile or planes_parity_equivalence or planes_ir_contract\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "compiler milestone staged"
+        }
+      ]
+    },
+    {
+      "id": "RF-030",
+      "emoji": "\u2699\ufe0f",
+      "name": "Planes v2 Runtime Integration on Canonical IR",
+      "start_week": 19,
+      "end_week": 22,
+      "status": "Planned",
+      "task_ids": [
+        "T-3422",
+        "T-3410",
+        "T-3411",
+        "T-3412"
+      ],
+      "descriptions": [
+        "Integrate runtime to consume canonical IR only with deterministic composition/order/hit-test behavior."
+      ],
+      "success_criteria": [
+        "Runtime consumes canonical IR only.",
+        "Deterministic transform/render/hit-test/compositing rules are enforced and tested."
+      ],
+      "closeout_criteria": {
+        "metric_id": "rf-030-closeout-v1",
+        "metric_description": "Runtime deterministic correctness score.",
+        "score_formula": "0.5*determinism_pass + 0.3*runtime_integration_pass + 0.2*backend_normalization_pass",
+        "score_components": [
+          "determinism_pass",
+          "runtime_integration_pass",
+          "backend_normalization_pass"
+        ],
+        "go_threshold": 88,
+        "hard_no_go_conditions": [
+          "transform/render/hit-test order mismatch",
+          "runtime bypasses canonical IR path"
+        ],
+        "required_evidence": [
+          "runtime tests",
+          "determinism snapshots",
+          "integration logs"
+        ],
+        "required_commands": [
+          "uv run pytest tests -k \"planes_runtime_ir_ingest or planes_determinism or planes_backend_normalization\" -q"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run pytest tests -k \"planes_runtime_ir_ingest or planes_determinism or planes_backend_normalization\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "runtime integration milestone staged"
+        }
+      ]
+    },
+    {
+      "id": "F-031",
+      "emoji": "\ud83d\udd01",
+      "name": "Planes v2 Backward-Compat Adapter + Migration Tooling",
+      "start_week": 20,
+      "end_week": 23,
+      "status": "Planned",
+      "task_ids": [
+        "T-3423",
+        "T-3413",
+        "T-3414",
+        "T-3415"
+      ],
+      "descriptions": [
+        "Preserve existing app behavior through monolith adapter and controlled migration to canonical k_hat ordering semantics."
+      ],
+      "success_criteria": [
+        "Legacy apps run through adapter with no forced rewrites.",
+        "z_index_alias compatibility preserved during migration to k_hat_index canonical order."
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-031-closeout-v1",
+        "metric_description": "Compatibility + migration safety score.",
+        "score_formula": "0.5*legacy_conformance + 0.3*compatibility_stability + 0.2*migration_readiness",
+        "score_components": [
+          "legacy_conformance",
+          "compatibility_stability",
+          "migration_readiness"
+        ],
+        "go_threshold": 86,
+        "hard_no_go_conditions": [
+          "legacy conformance fails on required app set",
+          "forced rewrite required for existing apps"
+        ],
+        "required_evidence": [
+          "conformance suite output",
+          "adapter parity tests",
+          "migration docs"
+        ],
+        "required_commands": [
+          "uv run pytest tests -k \"legacy_planes_conformance or planes_monolith_adapter or z_index_alias\" -q"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run pytest tests -k \"legacy_planes_conformance or planes_monolith_adapter or z_index_alias\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "compatibility milestone staged"
+        }
+      ]
+    },
+    {
+      "id": "P-032",
+      "emoji": "\ud83d\udea6",
+      "name": "Planes v2 Rollout Gates + Go/No-Go Closeout",
+      "start_week": 22,
+      "end_week": 24,
+      "status": "Planned",
+      "task_ids": [
+        "T-3424",
+        "T-3416",
+        "T-3417"
+      ],
+      "descriptions": [
+        "Execute feature-flagged rollout, closeout evidence, and go/no-go policy for Planes v2 switch decisions."
+      ],
+      "success_criteria": [
+        "Feature flags and rollback points defined and tested.",
+        "Go/No-Go closeout is evidence-backed and reproducible."
+      ],
+      "closeout_criteria": {
+        "metric_id": "p-032-closeout-v1",
+        "metric_description": "Rollout gate and closeout evidence score.",
+        "score_formula": "0.4*rollout_gate_pass + 0.3*evidence_integrity + 0.3*compatibility_non_regression",
+        "score_components": [
+          "rollout_gate_pass",
+          "evidence_integrity",
+          "compatibility_non_regression"
+        ],
+        "go_threshold": 90,
+        "hard_no_go_conditions": [
+          "required rollout flags missing",
+          "closeout packet invalid",
+          "P-026 non-regression gate fails"
+        ],
+        "required_evidence": [
+          "closeout packet",
+          "validator outputs",
+          "rollout logs"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-032",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-032",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run pytest tests -k \"planes_v2_flags or planes_v2_rollout\" -q"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "rollout milestone staged"
+        }
+      ]
+    },
+    {
+      "id": "R-033",
+      "emoji": "\ud83d\udcc8",
+      "name": "Planes v2 Performance Follow-ups (Post-Foundation)",
+      "start_week": 24,
+      "end_week": 27,
+      "status": "Planned",
+      "task_ids": [
+        "T-3425",
+        "T-3418",
+        "T-3419"
+      ],
+      "descriptions": [
+        "Apply performance optimizations after protocol foundation while preserving P-026 guarantees."
+      ],
+      "success_criteria": [
+        "P-026 envelopes are preserved or explicitly re-baselined with evidence.",
+        "Optimizations do not break determinism or compatibility."
+      ],
+      "closeout_criteria": {
+        "metric_id": "r-033-closeout-v1",
+        "metric_description": "Post-foundation performance non-regression score.",
+        "score_formula": "0.5*p026_non_regression + 0.3*perf_improvement + 0.2*determinism_stability",
+        "score_components": [
+          "p026_non_regression",
+          "perf_improvement",
+          "determinism_stability"
+        ],
+        "go_threshold": 88,
+        "hard_no_go_conditions": [
+          "incremental-present cap regressions relative to P-026",
+          "determinism replay mismatch"
+        ],
+        "required_evidence": [
+          "perf artifacts",
+          "p026 validator outputs",
+          "closeout packet"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+          "uv run pytest tests -k \"planes_v2_perf\" -q"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+        "uv run pytest tests -k \"planes_v2_perf or p026_non_regression\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "perf follow-up milestone staged"
+        }
+      ]
     }
   ]
 }

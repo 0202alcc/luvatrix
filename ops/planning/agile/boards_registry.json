@@ -466,6 +466,97 @@
         "channel": "#milestones-gantt",
         "threads_enabled": true
       }
+    },
+    {
+      "id": "milestone:F-027",
+      "title": "F-027 Planes v2 Protocol Foundation + File Layout Spec",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "F-027"
+      },
+      "discord": {
+        "channel": "#milestone-f-027",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:F-028",
+      "title": "F-028 Planes v2 Schema + Cross-File Validator Layer",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "F-028"
+      },
+      "discord": {
+        "channel": "#milestone-f-028",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:UF-029",
+      "title": "UF-029 Planes v2 Compiler to Canonical IR + Parity Contract",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "UF-029"
+      },
+      "discord": {
+        "channel": "#milestone-uf-029",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:RF-030",
+      "title": "RF-030 Planes v2 Runtime Integration on Canonical IR",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "RF-030"
+      },
+      "discord": {
+        "channel": "#milestone-rf-030",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:F-031",
+      "title": "F-031 Planes v2 Backward-Compat Adapter + Migration Tooling",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "F-031"
+      },
+      "discord": {
+        "channel": "#milestone-f-031",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:P-032",
+      "title": "P-032 Planes v2 Rollout Gates + Go/No-Go Closeout",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "P-032"
+      },
+      "discord": {
+        "channel": "#milestone-p-032",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:R-033",
+      "title": "R-033 Planes v2 Performance Follow-ups (Post-Foundation)",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "R-033"
+      },
+      "discord": {
+        "channel": "#milestone-r-033",
+        "threads_enabled": true
+      }
     }
   ]
 }

@@ -1,0 +1,20 @@
+{
+  "id": "T-3411",
+  "title": "Enforce deterministic transform/render/hit-test/compositing rules in runtime",
+  "task_type": "standard",
+  "milestone_id": "RF-030",
+  "status": "Intake",
+  "depends_on": [
+    "T-3410"
+  ],
+  "board_refs": [
+    "milestone:RF-030",
+    "team:runtime",
+    "specialist:testing"
+  ],
+  "notes": [
+    "Transform order fixed: `T_parent * T_attachment * T_motion * T_component`.",
+    "Render order: planes by ascending k_hat_index with camera(k=0) last; components by z_local asc, mount_order asc, component_id asc.",
+    "Hit-test order is reverse draw order; compositing absolute overwrite, delta add+clamp [0,255]."
+  ]
+}

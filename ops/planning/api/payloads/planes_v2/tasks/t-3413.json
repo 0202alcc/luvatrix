@@ -1,0 +1,18 @@
+{
+  "id": "T-3413",
+  "title": "Add version-gated v2 entry path while preserving existing app-facing APIs",
+  "task_type": "standard",
+  "milestone_id": "F-031",
+  "status": "Intake",
+  "depends_on": [
+    "T-3410"
+  ],
+  "board_refs": [
+    "milestone:F-031",
+    "team:protocol",
+    "specialist:pm"
+  ],
+  "notes": [
+    "No forced immediate app rewrites; maintain old API semantics unless explicitly version-gated."
+  ]
+}

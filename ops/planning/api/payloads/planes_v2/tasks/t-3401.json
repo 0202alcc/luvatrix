@@ -1,0 +1,21 @@
+{
+  "id": "T-3401",
+  "title": "Freeze Planes v2 protocol/file-system architecture spec",
+  "task_type": "standard",
+  "milestone_id": "F-027",
+  "status": "Intake",
+  "depends_on": [
+    "T-3400"
+  ],
+  "board_refs": [
+    "milestone:F-027",
+    "team:protocol",
+    "specialist:pm"
+  ],
+  "notes": [
+    "Reference basis contract snippet: `\"canonical_basis\": {\"u_basis\": \"canonical_screen_right\", \"v_basis\": \"canonical_screen_up\", \"w_basis\": \"canonical_time_forward\"}` and `\"aliases\": {\"developer\": {\"x\":\"u_basis\",\"y\":\"v_basis\",\"z\":\"w_basis\"}, \"native\": {\"i_hat\":\"u_basis\",\"j_hat\":\"v_basis\",\"k_hat\":\"w_basis\"}}`.",
+    "Reference temporal rule snippet: `\"camera_k_hat\": 0` and `\"world_plane_k_hat_rule\": \"strictly_less_than_zero\"`.",
+    "Reference plane schema snippet: `if kind=camera then k_hat_index const 0; if kind=world then k_hat_index exclusiveMaximum 0 and attachment required`.",
+    "Confirm default native frame policy includes cartesian_center with i_hat/j_hat semantics."
+  ]
+}

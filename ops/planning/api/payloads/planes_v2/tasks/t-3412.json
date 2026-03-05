@@ -1,0 +1,18 @@
+{
+  "id": "T-3412",
+  "title": "Normalize device-native orientation to canonical u/v/w before app transforms",
+  "task_type": "standard",
+  "milestone_id": "RF-030",
+  "status": "Intake",
+  "depends_on": [
+    "T-3410"
+  ],
+  "board_refs": [
+    "milestone:RF-030",
+    "team:rendering",
+    "specialist:architecture"
+  ],
+  "notes": [
+    "Platform backend must normalize orientation into canonical basis before app-level transforms."
+  ]
+}

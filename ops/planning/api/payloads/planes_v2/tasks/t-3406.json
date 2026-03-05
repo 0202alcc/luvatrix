@@ -1,0 +1,20 @@
+{
+  "id": "T-3406",
+  "title": "Define canonical IR mapping contract for split files and monolith adapter",
+  "task_type": "standard",
+  "milestone_id": "UF-029",
+  "status": "Intake",
+  "depends_on": [
+    "T-3401",
+    "T-3404"
+  ],
+  "board_refs": [
+    "milestone:UF-029",
+    "team:protocol",
+    "specialist:pm"
+  ],
+  "notes": [
+    "Reference IR types snippet: `PlanesAppIR(ir_version=\"planes-ir-v2-basis\", app, frames, planes, components, routes)` and compiler entrypoint `compile_to_ir(app_toml_path)`.",
+    "Canonical runtime basis is u/v/w only; aliases x/y/z and i_hat/j_hat/k_hat must normalize pre-runtime."
+  ]
+}

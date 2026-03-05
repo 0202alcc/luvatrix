@@ -5500,6 +5500,479 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       }
+    },
+    {
+      "id": "T-3400",
+      "title": "[CLOSEOUT HARNESS] Define Planes v2 closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "F-027",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:F-027",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Establish quantitative go/no-go scoring and hard no-go conditions for Planes v2 milestones.",
+        "Include explicit non-regression gate linkage to P-026 evidence expectations."
+      ]
+    },
+    {
+      "id": "T-3401",
+      "title": "Freeze Planes v2 protocol/file-system architecture spec",
+      "task_type": "standard",
+      "milestone_id": "F-027",
+      "status": "Intake",
+      "depends_on": [
+        "T-3400"
+      ],
+      "board_refs": [
+        "milestone:F-027",
+        "team:protocol",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Reference basis contract snippet: `\"canonical_basis\": {\"u_basis\": \"canonical_screen_right\", \"v_basis\": \"canonical_screen_up\", \"w_basis\": \"canonical_time_forward\"}` and `\"aliases\": {\"developer\": {\"x\":\"u_basis\",\"y\":\"v_basis\",\"z\":\"w_basis\"}, \"native\": {\"i_hat\":\"u_basis\",\"j_hat\":\"v_basis\",\"k_hat\":\"w_basis\"}}`.",
+        "Reference temporal rule snippet: `\"camera_k_hat\": 0` and `\"world_plane_k_hat_rule\": \"strictly_less_than_zero\"`.",
+        "Reference plane schema snippet: `if kind=camera then k_hat_index const 0; if kind=world then k_hat_index exclusiveMaximum 0 and attachment required`.",
+        "Confirm default native frame policy includes cartesian_center with i_hat/j_hat semantics."
+      ]
+    },
+    {
+      "id": "T-3402",
+      "title": "Define milestone CI profile and post-merge failure procedure for Planes v2 milestones",
+      "task_type": "standard",
+      "milestone_id": "F-027",
+      "status": "Intake",
+      "depends_on": [
+        "T-3400"
+      ],
+      "board_refs": [
+        "milestone:F-027",
+        "team:platform-ci",
+        "specialist:release"
+      ],
+      "notes": [
+        "Each first-degree milestone branch must declare ci_required_checks before implementation starts.",
+        "Procedure must include milestone reopen + task reopen to Verification Review on post-merge CI failures."
+      ]
+    },
+    {
+      "id": "T-3420",
+      "title": "[CLOSEOUT HARNESS] Define F-028 validator closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "F-028",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:F-028",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Milestone-level scoring + hard no-go criteria + evidence/command profile for Go/No-Go decision."
+      ]
+    },
+    {
+      "id": "T-3421",
+      "title": "[CLOSEOUT HARNESS] Define UF-029 compiler/parity closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "UF-029",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:UF-029",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Milestone-level scoring + hard no-go criteria + evidence/command profile for Go/No-Go decision."
+      ]
+    },
+    {
+      "id": "T-3422",
+      "title": "[CLOSEOUT HARNESS] Define RF-030 runtime deterministic closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "RF-030",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:RF-030",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Milestone-level scoring + hard no-go criteria + evidence/command profile for Go/No-Go decision."
+      ]
+    },
+    {
+      "id": "T-3423",
+      "title": "[CLOSEOUT HARNESS] Define F-031 compatibility/migration closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "F-031",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:F-031",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Milestone-level scoring + hard no-go criteria + evidence/command profile for Go/No-Go decision."
+      ]
+    },
+    {
+      "id": "T-3424",
+      "title": "[CLOSEOUT HARNESS] Define P-032 rollout go/no-go closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "P-032",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:P-032",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Milestone-level scoring + hard no-go criteria + evidence/command profile for Go/No-Go decision."
+      ]
+    },
+    {
+      "id": "T-3425",
+      "title": "[CLOSEOUT HARNESS] Define R-033 perf non-regression closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "R-033",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:R-033",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Milestone-level scoring + hard no-go criteria + evidence/command profile for Go/No-Go decision."
+      ]
+    },
+    {
+      "id": "T-3403",
+      "title": "Implement schema validation pipeline for Planes v2 split files",
+      "task_type": "standard",
+      "milestone_id": "F-028",
+      "status": "Intake",
+      "depends_on": [
+        "T-3401"
+      ],
+      "board_refs": [
+        "milestone:F-028",
+        "team:protocol",
+        "specialist:testing"
+      ],
+      "notes": [
+        "Validate manifest/custom_frames/plane/route/app.planes/basis_contract in strict mode by default.",
+        "Schema files source: tmp/planes_v2_handoff/schemas/*.json."
+      ]
+    },
+    {
+      "id": "T-3404",
+      "title": "Implement cross-file invariant validator for manifest/plane/route/frame references",
+      "task_type": "standard",
+      "milestone_id": "F-028",
+      "status": "Intake",
+      "depends_on": [
+        "T-3403"
+      ],
+      "board_refs": [
+        "milestone:F-028",
+        "team:protocol",
+        "specialist:safety"
+      ],
+      "notes": [
+        "Enforce invariants: camera exists + kind camera + k_hat_index==0; world planes k_hat_index<0; no duplicate ids; no attachment cycles; route/startup/frame ref constraints.",
+        "Reference manifest required fields snippet: `required: [planes_protocol_version, camera_plane_id, planes]`."
+      ]
+    },
+    {
+      "id": "T-3405",
+      "title": "Define strict vs permissive mode policy and diagnostics contract",
+      "task_type": "standard",
+      "milestone_id": "F-028",
+      "status": "Intake",
+      "depends_on": [
+        "T-3404"
+      ],
+      "board_refs": [
+        "milestone:F-028",
+        "team:security-quality",
+        "specialist:safety"
+      ],
+      "notes": [
+        "Strict mode must hard-fail invalid schema/reference data.",
+        "Permissive mode allowed only for explicit compatibility windows with warnings."
+      ]
+    },
+    {
+      "id": "T-3406",
+      "title": "Define canonical IR mapping contract for split files and monolith adapter",
+      "task_type": "standard",
+      "milestone_id": "UF-029",
+      "status": "Intake",
+      "depends_on": [
+        "T-3401",
+        "T-3404"
+      ],
+      "board_refs": [
+        "milestone:UF-029",
+        "team:protocol",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Reference IR types snippet: `PlanesAppIR(ir_version=\"planes-ir-v2-basis\", app, frames, planes, components, routes)` and compiler entrypoint `compile_to_ir(app_toml_path)`.",
+        "Canonical runtime basis is u/v/w only; aliases x/y/z and i_hat/j_hat/k_hat must normalize pre-runtime."
+      ]
+    },
+    {
+      "id": "T-3407",
+      "title": "Implement split-file compiler path to canonical Planes IR",
+      "task_type": "standard",
+      "milestone_id": "UF-029",
+      "status": "Intake",
+      "depends_on": [
+        "T-3406"
+      ],
+      "board_refs": [
+        "milestone:UF-029",
+        "team:protocol",
+        "specialist:development"
+      ],
+      "notes": [
+        "Reference IR types snippet: `PlanesAppIR(ir_version=\"planes-ir-v2-basis\", app, frames, planes, components, routes)` and compiler entrypoint `compile_to_ir(app_toml_path)`.",
+        "Runtime must receive canonical IR only (no split-file direct runtime bypass)."
+      ]
+    },
+    {
+      "id": "T-3408",
+      "title": "Implement monolith compatibility adapter to canonical Planes IR",
+      "task_type": "standard",
+      "milestone_id": "UF-029",
+      "status": "Intake",
+      "depends_on": [
+        "T-3406"
+      ],
+      "board_refs": [
+        "milestone:UF-029",
+        "team:protocol",
+        "specialist:architecture"
+      ],
+      "notes": [
+        "Adapter path required: monolith -> canonical IR.",
+        "Preserve existing app-facing behavior with version-gated protocol path."
+      ]
+    },
+    {
+      "id": "T-3409",
+      "title": "Implement parity suite for monolith vs split canonical equivalence",
+      "task_type": "standard",
+      "milestone_id": "UF-029",
+      "status": "Intake",
+      "depends_on": [
+        "T-3407",
+        "T-3408"
+      ],
+      "board_refs": [
+        "milestone:UF-029",
+        "team:platform-ci",
+        "specialist:testing"
+      ],
+      "notes": [
+        "Parity must prove ordering/transforms/rounding/hit-test precedence equivalence for equivalent inputs."
+      ]
+    },
+    {
+      "id": "T-3410",
+      "title": "Integrate runtime to consume canonical IR only",
+      "task_type": "standard",
+      "milestone_id": "RF-030",
+      "status": "Intake",
+      "depends_on": [
+        "T-3407",
+        "T-3408"
+      ],
+      "board_refs": [
+        "milestone:RF-030",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "notes": [
+        "Remove/disable any runtime path that consumes non-canonical IR structures directly."
+      ]
+    },
+    {
+      "id": "T-3411",
+      "title": "Enforce deterministic transform/render/hit-test/compositing rules in runtime",
+      "task_type": "standard",
+      "milestone_id": "RF-030",
+      "status": "Intake",
+      "depends_on": [
+        "T-3410"
+      ],
+      "board_refs": [
+        "milestone:RF-030",
+        "team:runtime",
+        "specialist:testing"
+      ],
+      "notes": [
+        "Transform order fixed: `T_parent * T_attachment * T_motion * T_component`.",
+        "Render order: planes by ascending k_hat_index with camera(k=0) last; components by z_local asc, mount_order asc, component_id asc.",
+        "Hit-test order is reverse draw order; compositing absolute overwrite, delta add+clamp [0,255]."
+      ]
+    },
+    {
+      "id": "T-3412",
+      "title": "Normalize device-native orientation to canonical u/v/w before app transforms",
+      "task_type": "standard",
+      "milestone_id": "RF-030",
+      "status": "Intake",
+      "depends_on": [
+        "T-3410"
+      ],
+      "board_refs": [
+        "milestone:RF-030",
+        "team:rendering",
+        "specialist:architecture"
+      ],
+      "notes": [
+        "Platform backend must normalize orientation into canonical basis before app-level transforms."
+      ]
+    },
+    {
+      "id": "T-3413",
+      "title": "Add version-gated v2 entry path while preserving existing app-facing APIs",
+      "task_type": "standard",
+      "milestone_id": "F-031",
+      "status": "Intake",
+      "depends_on": [
+        "T-3410"
+      ],
+      "board_refs": [
+        "milestone:F-031",
+        "team:protocol",
+        "specialist:pm"
+      ],
+      "notes": [
+        "No forced immediate app rewrites; maintain old API semantics unless explicitly version-gated."
+      ]
+    },
+    {
+      "id": "T-3414",
+      "title": "Maintain z_index_alias compatibility while canonicalizing on k_hat_index ordering",
+      "task_type": "standard",
+      "milestone_id": "F-031",
+      "status": "Intake",
+      "depends_on": [
+        "T-3411"
+      ],
+      "board_refs": [
+        "milestone:F-031",
+        "team:protocol",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Compatibility bridge must preserve ordering behavior for legacy apps during migration horizon."
+      ]
+    },
+    {
+      "id": "T-3415",
+      "title": "Deliver legacy app conformance suite under adapter path",
+      "task_type": "standard",
+      "milestone_id": "F-031",
+      "status": "Intake",
+      "depends_on": [
+        "T-3413",
+        "T-3408"
+      ],
+      "board_refs": [
+        "milestone:F-031",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Conformance tests prove existing apps still run with adapter and canonical runtime ingestion."
+      ]
+    },
+    {
+      "id": "T-3416",
+      "title": "Implement feature flags and rollback points for Planes v2 switchover",
+      "task_type": "standard",
+      "milestone_id": "P-032",
+      "status": "Intake",
+      "depends_on": [
+        "T-3411",
+        "T-3415"
+      ],
+      "board_refs": [
+        "milestone:P-032",
+        "team:platform-ci",
+        "specialist:release"
+      ],
+      "notes": [
+        "Flags: planes_v2_schema, planes_v2_compiler, planes_v2_runtime.",
+        "Rollback path must restore compatibility adapter default without data loss."
+      ]
+    },
+    {
+      "id": "T-3417",
+      "title": "Build final closeout packet and execute Go/No-Go scoring for Planes v2 rollout",
+      "task_type": "standard",
+      "milestone_id": "P-032",
+      "status": "Intake",
+      "depends_on": [
+        "T-3416"
+      ],
+      "board_refs": [
+        "milestone:P-032",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Closeout must include scenario-level policy verdict table and CI outputs; no unresolved high-severity blockers."
+      ]
+    },
+    {
+      "id": "T-3418",
+      "title": "Run P-026 non-regression evidence gate for Planes v2 path",
+      "task_type": "standard",
+      "milestone_id": "R-033",
+      "status": "Intake",
+      "depends_on": [
+        "T-3416"
+      ],
+      "board_refs": [
+        "milestone:R-033",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Must preserve incremental-present caps and determinism replay semantics from P-026 unless explicitly re-baselined with evidence."
+      ]
+    },
+    {
+      "id": "T-3419",
+      "title": "Implement post-foundation performance optimizations with determinism/compatibility guardrails",
+      "task_type": "standard",
+      "milestone_id": "R-033",
+      "status": "Intake",
+      "depends_on": [
+        "T-3418"
+      ],
+      "board_refs": [
+        "milestone:R-033",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "notes": [
+        "Only optimize after non-regression pass; maintain app/protocol/compiler/runtime/backend modular boundaries."
+      ]
     }
   ]
 }

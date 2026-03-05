@@ -1,0 +1,19 @@
+{
+  "id": "T-3408",
+  "title": "Implement monolith compatibility adapter to canonical Planes IR",
+  "task_type": "standard",
+  "milestone_id": "UF-029",
+  "status": "Intake",
+  "depends_on": [
+    "T-3406"
+  ],
+  "board_refs": [
+    "milestone:UF-029",
+    "team:protocol",
+    "specialist:architecture"
+  ],
+  "notes": [
+    "Adapter path required: monolith -> canonical IR.",
+    "Preserve existing app-facing behavior with version-gated protocol path."
+  ]
+}

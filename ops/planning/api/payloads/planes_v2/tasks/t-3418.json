@@ -1,0 +1,18 @@
+{
+  "id": "T-3418",
+  "title": "Run P-026 non-regression evidence gate for Planes v2 path",
+  "task_type": "standard",
+  "milestone_id": "R-033",
+  "status": "Intake",
+  "depends_on": [
+    "T-3416"
+  ],
+  "board_refs": [
+    "milestone:R-033",
+    "team:runtime",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Must preserve incremental-present caps and determinism replay semantics from P-026 unless explicitly re-baselined with evidence."
+  ]
+}

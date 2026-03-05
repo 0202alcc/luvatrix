@@ -1,0 +1,13 @@
+{
+  "id": "milestone:RF-030",
+  "title": "RF-030 Planes v2 Runtime Integration on Canonical IR",
+  "type": "milestone",
+  "framework_template": "gateflow_v1",
+  "source_filter": {
+    "milestone_id": "RF-030"
+  },
+  "discord": {
+    "channel": "#milestone-rf-030",
+    "threads_enabled": true
+  }
+}

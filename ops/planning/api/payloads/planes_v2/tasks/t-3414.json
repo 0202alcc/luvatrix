@@ -1,0 +1,18 @@
+{
+  "id": "T-3414",
+  "title": "Maintain z_index_alias compatibility while canonicalizing on k_hat_index ordering",
+  "task_type": "standard",
+  "milestone_id": "F-031",
+  "status": "Intake",
+  "depends_on": [
+    "T-3411"
+  ],
+  "board_refs": [
+    "milestone:F-031",
+    "team:protocol",
+    "specialist:pm"
+  ],
+  "notes": [
+    "Compatibility bridge must preserve ordering behavior for legacy apps during migration horizon."
+  ]
+}

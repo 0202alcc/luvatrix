@@ -1,0 +1,52 @@
+{
+  "id": "F-028",
+  "emoji": "\u2705",
+  "name": "Planes v2 Schema + Cross-File Validator Layer",
+  "start_week": 16,
+  "end_week": 18,
+  "status": "Planned",
+  "task_ids": [],
+  "descriptions": [
+    "Implement strict schema and cross-file invariant validators for split-file Planes v2."
+  ],
+  "success_criteria": [
+    "All schema files validate deterministically.",
+    "All required cross-file invariants enforced in strict mode with explicit permissive policy boundaries."
+  ],
+  "closeout_criteria": {
+    "metric_id": "f-028-closeout-v1",
+    "metric_description": "Validator coverage + strictness completeness score.",
+    "score_formula": "0.5*invariant_coverage + 0.3*strict_mode_enforcement + 0.2*diagnostic_quality",
+    "score_components": [
+      "invariant_coverage",
+      "strict_mode_enforcement",
+      "diagnostic_quality"
+    ],
+    "go_threshold": 85,
+    "hard_no_go_conditions": [
+      "any listed invariant lacks failing test",
+      "strict mode allows invalid cross-file state"
+    ],
+    "required_evidence": [
+      "validator tests",
+      "fixture set",
+      "closeout packet"
+    ],
+    "required_commands": [
+      "uv run pytest tests -k \"planes_schema_validation or planes_cross_file_invariants\" -q"
+    ],
+    "rubric_version": "closeout_rubric_v1"
+  },
+  "ci_required_checks": [
+    "uv run pytest tests -k \"planes_schema_validation or planes_cross_file_invariants\" -q",
+    "uv run python ops/planning/agile/validate_milestone_task_links.py"
+  ],
+  "lifecycle_events": [
+    {
+      "date": "2026-03-05",
+      "event": "active",
+      "framework": "gateflow_v1",
+      "note": "validator milestone staged"
+    }
+  ]
+}

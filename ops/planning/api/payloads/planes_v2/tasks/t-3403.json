@@ -1,0 +1,19 @@
+{
+  "id": "T-3403",
+  "title": "Implement schema validation pipeline for Planes v2 split files",
+  "task_type": "standard",
+  "milestone_id": "F-028",
+  "status": "Intake",
+  "depends_on": [
+    "T-3401"
+  ],
+  "board_refs": [
+    "milestone:F-028",
+    "team:protocol",
+    "specialist:testing"
+  ],
+  "notes": [
+    "Validate manifest/custom_frames/plane/route/app.planes/basis_contract in strict mode by default.",
+    "Schema files source: tmp/planes_v2_handoff/schemas/*.json."
+  ]
+}

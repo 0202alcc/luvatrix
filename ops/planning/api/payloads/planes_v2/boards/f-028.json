@@ -1,0 +1,13 @@
+{
+  "id": "milestone:F-028",
+  "title": "F-028 Planes v2 Schema + Cross-File Validator Layer",
+  "type": "milestone",
+  "framework_template": "gateflow_v1",
+  "source_filter": {
+    "milestone_id": "F-028"
+  },
+  "discord": {
+    "channel": "#milestone-f-028",
+    "threads_enabled": true
+  }
+}

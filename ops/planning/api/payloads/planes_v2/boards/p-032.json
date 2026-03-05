@@ -1,0 +1,13 @@
+{
+  "id": "milestone:P-032",
+  "title": "P-032 Planes v2 Rollout Gates + Go/No-Go Closeout",
+  "type": "milestone",
+  "framework_template": "gateflow_v1",
+  "source_filter": {
+    "milestone_id": "P-032"
+  },
+  "discord": {
+    "channel": "#milestone-p-032",
+    "threads_enabled": true
+  }
+}

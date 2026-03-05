@@ -3,36 +3,43 @@
 Canonical schedule source: `ops/planning/gantt/milestone_schedule.json`
 
 ```text
-                                                                                                   |W01    W02    W03    W04    W05    W06    W07    W08    W09    W10    W11    W12    W13    W14    W15    W16    W17    |
-                                                                                                   |02/23  03/02  03/09  03/16  03/23  03/30  04/06  04/13  04/20  04/27  05/04  05/11  05/18  05/25  06/01  06/08  06/15  |
----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-APU-020 🧭 Native Gantt + Agile visualization in Luvatrix                                           |                                                               ============================                            | Complete
-ARU-016 🌐 Cross-platform full-suite interactive generalization                                     |############################                                                                                           | In Progress
-AU-018 🗓️ Data workspace UI (calendar app)                                                         |                                                 ~~~~~~~~~~~~~~                                                        | Planned
-AU-019 📈 Custom marketbook dynamic plotting system (integrated with U-021 plots module)            |                                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                   | Planned
-F-001 🧬 Core package transition and repository cleanup                                             |=======                                                                                                                | Complete (2026-02-23)
-F-003 ⚡ Runtime safety controller and audit pipeline hardening                                     |=======                                                                                                                | Complete (2026-02-24)
-F-011 📜 App protocol docs finalized                                                                |       ==============                                                                                                  | Complete (2026-03-03)
-F-014 🛡️ Audit retention lifecycle                                                                 |                            ~~~~~~~~~~~~~~~~~~~~~                                                                      | Planned
-F-024 🛰️ Sensor backend performance modernization                                                  |                                                                                           ============================| Complete
-FR-004 🧭 Platform variant routing and HDI phase standardization                                    |=======                                                                                                                | Complete (2026-02-26)
-P-008 🗂️ Discord ops consolidation under /discord                                                  |=======                                                                                                                | Complete (2026-02-26)
-P-010 🧱 Discord governance artifacts and onboarding system                                         |##############                                                                                                         | In Progress
-P-013 🧪 CI hardening and flaky governance                                                          |                     ~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
-P-015 🚀 Production-hardening go/no-go review                                                       |                                                 ~~~~~~~~~~~~~~~~~~~~~                                                 | Planned
-P-021 📏 Performance baseline and telemetry gates                                                   |                                                                                    ==============                     | Complete
-R-002 🖥️ macOS visual runtime foundation merged to main                                            |=======                                                                                                                | Complete (2026-02-23)
-R-005 🎯 Rendering fallback, smoke docs, and GPU blit path                                          |=======                                                                                                                | Complete (2026-02-26)
-R-012 🎮 Vulkan stabilization                                                                       |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
-R-022 🧬 Render copy elimination                                                                    |                                                                                    ============================       | Complete (2026-03-03)
-R-023 🚚 Vulkan transfer path efficiency                                                            |                                                                                           ============================| Complete (2026-03-03)
-R-025 🎛️ Event loop and input scheduling tightening                                                |                                                                                    ============================       | Complete
-RF-009 📦 Packaging metadata and Vulkan runtime preflight guidance                                  |=======                                                                                                                | Complete (2026-02-27)
-U-007 🔌 Plot stabilization and stream simulation integration                                       |=======                                                                                                                | Complete (2026-02-27)
-U-017 📊 UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)                      |                     ##########################################                                                        | In Progress
-U-021 📉 Plots module foundations (labels, bars, subplots, dynamic data, financial visualizations)  |                     ########################################################                                          | In Progress
-UF-006 📈 Interactive plot module and UI IR integration                                             |=======                                                                                                                | Complete (2026-02-26)
-P-026 ✅ Runtime Performance Hardening Closeout Signoff                                             |                                                                      ============================                     | Complete (2026-03-05)
+                                                                                                   |W01    W02    W03    W04    W05    W06    W07    W08    W09    W10    W11    W12    W13    W14    W15    W16    W17    W18    W19    W20    W21    W22    W23    W24    W25    W26    W27    |
+                                                                                                   |02/23  03/02  03/09  03/16  03/23  03/30  04/06  04/13  04/20  04/27  05/04  05/11  05/18  05/25  06/01  06/08  06/15  06/22  06/29  07/06  07/13  07/20  07/27  08/03  08/10  08/17  08/24  |
+---------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+APU-020 🧭 Native Gantt + Agile visualization in Luvatrix                                           |                                                               ============================                                                                                                  | Complete
+ARU-016 🌐 Cross-platform full-suite interactive generalization                                     |############################                                                                                                                                                                 | In Progress
+AU-018 🗓️ Data workspace UI (calendar app)                                                         |                                                 ~~~~~~~~~~~~~~                                                                                                                              | Planned
+AU-019 📈 Custom marketbook dynamic plotting system (integrated with U-021 plots module)            |                                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                                                         | Planned
+F-001 🧬 Core package transition and repository cleanup                                             |=======                                                                                                                                                                                      | Complete (2026-02-23)
+F-003 ⚡ Runtime safety controller and audit pipeline hardening                                     |=======                                                                                                                                                                                      | Complete (2026-02-24)
+F-011 📜 App protocol docs finalized                                                                |       ==============                                                                                                                                                                        | Complete (2026-03-03)
+F-014 🛡️ Audit retention lifecycle                                                                 |                            ~~~~~~~~~~~~~~~~~~~~~                                                                                                                                            | Planned
+F-024 🛰️ Sensor backend performance modernization                                                  |                                                                                           ============================                                                                      | Complete
+FR-004 🧭 Platform variant routing and HDI phase standardization                                    |=======                                                                                                                                                                                      | Complete (2026-02-26)
+P-008 🗂️ Discord ops consolidation under /discord                                                  |=======                                                                                                                                                                                      | Complete (2026-02-26)
+P-010 🧱 Discord governance artifacts and onboarding system                                         |##############                                                                                                                                                                               | In Progress
+P-013 🧪 CI hardening and flaky governance                                                          |                     ~~~~~~~~~~~~~~~~~~~~~                                                                                                                                                   | Planned
+P-015 🚀 Production-hardening go/no-go review                                                       |                                                 ~~~~~~~~~~~~~~~~~~~~~                                                                                                                       | Planned
+P-021 📏 Performance baseline and telemetry gates                                                   |                                                                                    ==============                                                                                           | Complete
+R-002 🖥️ macOS visual runtime foundation merged to main                                            |=======                                                                                                                                                                                      | Complete (2026-02-23)
+R-005 🎯 Rendering fallback, smoke docs, and GPU blit path                                          |=======                                                                                                                                                                                      | Complete (2026-02-26)
+R-012 🎮 Vulkan stabilization                                                                       |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                                                                                                   | Planned
+R-022 🧬 Render copy elimination                                                                    |                                                                                    ============================                                                                             | Complete (2026-03-03)
+R-023 🚚 Vulkan transfer path efficiency                                                            |                                                                                           ============================                                                                      | Complete (2026-03-03)
+R-025 🎛️ Event loop and input scheduling tightening                                                |                                                                                    ============================                                                                             | Complete
+RF-009 📦 Packaging metadata and Vulkan runtime preflight guidance                                  |=======                                                                                                                                                                                      | Complete (2026-02-27)
+U-007 🔌 Plot stabilization and stream simulation integration                                       |=======                                                                                                                                                                                      | Complete (2026-02-27)
+U-017 📊 UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)                      |                     ##########################################                                                                                                                              | In Progress
+U-021 📉 Plots module foundations (labels, bars, subplots, dynamic data, financial visualizations)  |                     ########################################################                                                                                                                | In Progress
+UF-006 📈 Interactive plot module and UI IR integration                                             |=======                                                                                                                                                                                      | Complete (2026-02-26)
+P-026 ✅ Runtime Performance Hardening Closeout Signoff                                             |                                                                      ============================                                                                                           | Complete (2026-03-05)
+F-027 🧱 Planes v2 Protocol Foundation + File Layout Spec                                           |                                                                                                  ~~~~~~~~~~~~~~~~~~~~~                                                                      | Planned
+F-028 ✅ Planes v2 Schema + Cross-File Validator Layer                                              |                                                                                                         ~~~~~~~~~~~~~~~~~~~~~                                                               | Planned
+UF-029 🧠 Planes v2 Compiler to Canonical IR + Parity Contract                                      |                                                                                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                 | Planned
+RF-030 ⚙️ Planes v2 Runtime Integration on Canonical IR                                            |                                                                                                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                   | Planned
+F-031 🔁 Planes v2 Backward-Compat Adapter + Migration Tooling                                      |                                                                                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                            | Planned
+P-032 🚦 Planes v2 Rollout Gates + Go/No-Go Closeout                                                |                                                                                                                                                   ~~~~~~~~~~~~~~~~~~~~~                     | Planned
+R-033 📈 Planes v2 Performance Follow-ups (Post-Foundation)                                         |                                                                                                                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Planned
 
 Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 ```
@@ -296,6 +303,77 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - `T-2820`: Input burst compose path remediation achieves incremental>=85, full<=15, max consecutive full-frame<=8 without regressions in other required scenarios.
   - `T-2821`: Measured summary embeds required per-scenario policy verdict fields and top-level policy_verdict; generation fails on missing verdict inputs.
   - `T-2822`: Final closeout packet/manifest/hash reconciliation completed with scenario verdict table and all validators passing.
+
+### F-027 🧱 Planes v2 Protocol Foundation + File Layout Spec
+- Status: Planned
+- Target window: Week 15-17
+- Tasks: `T-3400, T-3401, T-3402`
+- Lifecycle events:
+  - 2026-03-05 active (framework=gateflow_v1) - milestone created for planes v2 foundation
+- Success criteria:
+  - Split-file contract and canonical basis rules are frozen and documented.
+  - Deterministic runtime rules are explicitly specified and testable.
+  - Milestone CI profile and closeout scoring criteria are defined before implementation.
+
+### F-028 ✅ Planes v2 Schema + Cross-File Validator Layer
+- Status: Planned
+- Target window: Week 16-18
+- Tasks: `T-3420, T-3403, T-3404, T-3405`
+- Lifecycle events:
+  - 2026-03-05 active (framework=gateflow_v1) - validator milestone staged
+- Success criteria:
+  - All schema files validate deterministically.
+  - All required cross-file invariants enforced in strict mode with explicit permissive policy boundaries.
+
+### UF-029 🧠 Planes v2 Compiler to Canonical IR + Parity Contract
+- Status: Planned
+- Target window: Week 17-20
+- Tasks: `T-3421, T-3406, T-3407, T-3408, T-3409`
+- Lifecycle events:
+  - 2026-03-05 active (framework=gateflow_v1) - compiler milestone staged
+- Success criteria:
+  - Split-file and monolith inputs compile to canonically equivalent IR.
+  - Compiler resolves basis aliases and frame refs into canonical u/v/w model.
+
+### RF-030 ⚙️ Planes v2 Runtime Integration on Canonical IR
+- Status: Planned
+- Target window: Week 19-22
+- Tasks: `T-3422, T-3410, T-3411, T-3412`
+- Lifecycle events:
+  - 2026-03-05 active (framework=gateflow_v1) - runtime integration milestone staged
+- Success criteria:
+  - Runtime consumes canonical IR only.
+  - Deterministic transform/render/hit-test/compositing rules are enforced and tested.
+
+### F-031 🔁 Planes v2 Backward-Compat Adapter + Migration Tooling
+- Status: Planned
+- Target window: Week 20-23
+- Tasks: `T-3423, T-3413, T-3414, T-3415`
+- Lifecycle events:
+  - 2026-03-05 active (framework=gateflow_v1) - compatibility milestone staged
+- Success criteria:
+  - Legacy apps run through adapter with no forced rewrites.
+  - z_index_alias compatibility preserved during migration to k_hat_index canonical order.
+
+### P-032 🚦 Planes v2 Rollout Gates + Go/No-Go Closeout
+- Status: Planned
+- Target window: Week 22-24
+- Tasks: `T-3424, T-3416, T-3417`
+- Lifecycle events:
+  - 2026-03-05 active (framework=gateflow_v1) - rollout milestone staged
+- Success criteria:
+  - Feature flags and rollback points defined and tested.
+  - Go/No-Go closeout is evidence-backed and reproducible.
+
+### R-033 📈 Planes v2 Performance Follow-ups (Post-Foundation)
+- Status: Planned
+- Target window: Week 24-27
+- Tasks: `T-3425, T-3418, T-3419`
+- Lifecycle events:
+  - 2026-03-05 active (framework=gateflow_v1) - perf follow-up milestone staged
+- Success criteria:
+  - P-026 envelopes are preserved or explicitly re-baselined with evidence.
+  - Optimizations do not break determinism or compatibility.
 
 ## Branching and Merge Gate Policy
 1. Each milestone is implemented first on its own milestone branch.

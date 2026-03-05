@@ -1,0 +1,19 @@
+{
+  "id": "T-3405",
+  "title": "Define strict vs permissive mode policy and diagnostics contract",
+  "task_type": "standard",
+  "milestone_id": "F-028",
+  "status": "Intake",
+  "depends_on": [
+    "T-3404"
+  ],
+  "board_refs": [
+    "milestone:F-028",
+    "team:security-quality",
+    "specialist:safety"
+  ],
+  "notes": [
+    "Strict mode must hard-fail invalid schema/reference data.",
+    "Permissive mode allowed only for explicit compatibility windows with warnings."
+  ]
+}
