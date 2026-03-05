@@ -1,0 +1,19 @@
+{
+  "id": "T-3104",
+  "title": "macOS adapter",
+  "task_type": "standard",
+  "depends_on": [
+    "T-3103"
+  ],
+  "board_refs": [
+    "milestone:F-038",
+    "team:runtime",
+    "specialist:development"
+  ],
+  "notes": [
+    "Implement macOS adapter with payload parity/degradation table.",
+    "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+  ],
+  "milestone_id": "F-038",
+  "status": "Intake"
+}

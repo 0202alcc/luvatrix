@@ -774,14 +774,15 @@
     {
       "id": "P-013",
       "emoji": "\ud83e\uddea",
-      "name": "CI hardening and flaky governance",
+      "name": "CI hardening, flaky governance, and non-regression gate packs",
       "start_week": 4,
       "end_week": 6,
       "status": "Planned",
       "task_ids": [
         "T-401",
         "T-402",
-        "T-403"
+        "T-403",
+        "T-2911"
       ],
       "legacy_id": "M-004",
       "lifecycle_events": [
@@ -793,7 +794,7 @@
         }
       ],
       "descriptions": [
-        "Deliver milestone outcome: CI hardening and flaky governance."
+        "Owns deterministic gate ownership plus feature-specific non-regression conformance packs feeding milestone closeouts."
       ],
       "closeout_criteria": {
         "metric_id": "p-013-closeout-v1",
@@ -2350,8 +2351,7 @@
       "status": "Planned",
       "task_ids": [
         "T-2923",
-        "T-2910",
-        "T-2911"
+        "T-2910"
       ],
       "descriptions": [
         "App manifest debug policy controls with backward compatibility and P-026 non-regression gates."
@@ -2399,6 +2399,76 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "app policy compatibility milestone created"
+        }
+      ]
+    },
+    {
+      "id": "F-038",
+      "emoji": "\ud83d\udd14",
+      "name": "Cross-Platform Notification Protocol + Runtime Adapters",
+      "descriptions": [
+        "Ship unified notify.send/cancel/capabilities across macOS/Windows/Linux/Web with strict compatibility and deterministic behavior preservation."
+      ],
+      "start_week": 20,
+      "end_week": 24,
+      "status": "Planned",
+      "task_ids": [
+        "T-3120",
+        "T-3101",
+        "T-3102",
+        "T-3103",
+        "T-3104",
+        "T-3105",
+        "T-3106",
+        "T-3107",
+        "T-3108",
+        "T-3109",
+        "T-3110",
+        "T-3111",
+        "T-3112"
+      ],
+      "success_criteria": [
+        "Unified versioned API exists: notify.send/cancel/capabilities.",
+        "Existing apps remain behaviorally compatible when notifications are unused.",
+        "Adapters preserve protocol/runtime modular boundary with deterministic safety."
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-038-closeout-v1",
+        "metric_description": "Go/No-Go score for cross-platform notification protocol rollout.",
+        "score_formula": "weighted_sum(api_compatibility,determinism_safety,adapter_conformance,evidence_integrity)",
+        "score_components": [
+          "api_compatibility",
+          "determinism_safety",
+          "adapter_conformance",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "determinism regression detected",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-038_closeout.md",
+          "conformance test outputs",
+          "determinism replay outputs"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-038",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-038"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "opened from architect packet"
         }
       ]
     }

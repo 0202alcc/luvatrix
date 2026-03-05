@@ -609,6 +609,19 @@
         "channel": "#milestone-a-037",
         "threads_enabled": true
       }
+    },
+    {
+      "id": "milestone:F-038",
+      "title": "F-038 Cross-Platform Notification Protocol + Runtime Adapters",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "F-038"
+      },
+      "discord": {
+        "channel": "#milestone-f-038-board",
+        "threads_enabled": true
+      }
     }
   ]
 }

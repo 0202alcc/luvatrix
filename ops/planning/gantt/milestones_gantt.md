@@ -18,7 +18,7 @@ F-024 🛰️ Sensor backend performance modernization                          
 FR-004 🧭 Platform variant routing and HDI phase standardization                       |=======                                                                                                                                                                                                                                              | Complete (2026-02-26)
 P-008 🗂️ Discord ops consolidation under /discord                                     |=======                                                                                                                                                                                                                                              | Complete (2026-02-26)
 P-010 🧱 Discord governance artifacts and onboarding system                            |##############                                                                                                                                                                                                                                       | In Progress
-P-013 🧪 CI hardening and flaky governance                                             |                     ~~~~~~~~~~~~~~~~~~~~~                                                                                                                                                                                                           | Planned
+P-013 🧪 CI hardening, flaky governance, and non-regression gate packs                 |                     ~~~~~~~~~~~~~~~~~~~~~                                                                                                                                                                                                           | Planned
 P-015 🚀 Production-hardening go/no-go review                                          |                                                 ~~~~~~~~~~~~~~~~~~~~~                                                                                                                                                                               | Planned
 P-021 📏 Performance baseline and telemetry gates                                      |                                                                                    ==============                                                                                                                                                   | Complete
 R-002 🖥️ macOS visual runtime foundation merged to main                               |=======                                                                                                                                                                                                                                              | Complete (2026-02-23)
@@ -44,6 +44,7 @@ F-034 🛡️ Cross-Platform Debug Menu Foundation                              
 U-035 🖼️ Visual + Capture Tooling                                                     |                                                                                                                                                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                            | Planned
 R-036 🎛️ Replay + Perf Observability                                                  |                                                                                                                                                                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~              | Planned
 A-037 🧩 App-Configurable Debug Policy + Compatibility                                 |                                                                                                                                                                                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Planned
+F-038 🔔 Cross-Platform Notification Protocol + Runtime Adapters                       |                                                                                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
 
 Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 ```
@@ -157,10 +158,10 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 - Lifecycle events:
   - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
 
-### P-013 🧪 CI hardening and flaky governance
+### P-013 🧪 CI hardening, flaky governance, and non-regression gate packs
 - Status: Planned
 - Target window: Week 4-6
-- Tasks: `T-401, T-402, T-403`
+- Tasks: `T-401, T-402, T-403, T-2911`
 - Lifecycle events:
   - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
 
@@ -415,13 +416,24 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 ### A-037 🧩 App-Configurable Debug Policy + Compatibility
 - Status: Planned
 - Target window: Week 32-35
-- Tasks: `T-2923, T-2910, T-2911`
+- Tasks: `T-2923, T-2910`
 - Lifecycle events:
   - 2026-03-05 active (framework=gateflow_v1) - app policy compatibility milestone created
 - Success criteria:
   - Existing apps continue to run unchanged by default.
   - Manifest-level debug policy is version-gated and safe.
   - P-026 non-regression expectations hold before default-path switch.
+
+### F-038 🔔 Cross-Platform Notification Protocol + Runtime Adapters
+- Status: Planned
+- Target window: Week 20-24
+- Tasks: `T-3120, T-3101, T-3102, T-3103, T-3104, T-3105, T-3106, T-3107, T-3108, T-3109, T-3110, T-3111, T-3112`
+- Lifecycle events:
+  - 2026-03-05 active (framework=gateflow_v1) - opened from architect packet
+- Success criteria:
+  - Unified versioned API exists: notify.send/cancel/capabilities.
+  - Existing apps remain behaviorally compatible when notifications are unused.
+  - Adapters preserve protocol/runtime modular boundary with deterministic safety.
 
 ## Branching and Merge Gate Policy
 1. Each milestone is implemented first on its own milestone branch.

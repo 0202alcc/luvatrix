@@ -1,0 +1,19 @@
+{
+  "id": "T-3102",
+  "title": "Permission/capability model",
+  "task_type": "standard",
+  "depends_on": [
+    "T-3101"
+  ],
+  "board_refs": [
+    "milestone:F-038",
+    "team:protocol",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Define permission FSM and capability response contract with non-blocking behavior.",
+    "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+  ],
+  "milestone_id": "F-038",
+  "status": "Intake"
+}

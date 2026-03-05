@@ -6194,7 +6194,7 @@
       "id": "T-2911",
       "title": "Conformance + non-regression gate pack (incl. P-026 guarantees)",
       "task_type": "standard",
-      "milestone_id": "A-037",
+      "milestone_id": "P-013",
       "status": "Intake",
       "depends_on": [
         "T-2901",
@@ -6209,13 +6209,269 @@
         "T-2910"
       ],
       "board_refs": [
-        "milestone:A-037",
+        "milestone:P-013",
         "team:platform-ci",
         "specialist:release"
       ],
       "notes": [
-        "Include explicit non-regression gates: incremental-present policy behavior/caps, determinism replay semantics, throughput/latency envelopes from P-026 unless re-baselined with evidence."
+        "Moved from A-037 to P-013 to consolidate CI non-regression gate ownership in project-management/CI milestone.",
+        "Still enforces debug-menu conformance and P-026 non-regression guarantees for related feature milestones."
       ]
+    },
+    {
+      "id": "T-3120",
+      "title": "[CLOSEOUT HARNESS] Define F-038 closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:F-038",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Define quantitative closeout scoring and evidence packet rules for F-038.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
+    },
+    {
+      "id": "T-3101",
+      "title": "Notification protocol contract (API + schema)",
+      "task_type": "standard",
+      "depends_on": [
+        "T-3120"
+      ],
+      "board_refs": [
+        "milestone:F-038",
+        "team:protocol",
+        "specialist:architecture"
+      ],
+      "notes": [
+        "Define canonical notify.send/cancel/capabilities API and schema contracts.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
+    },
+    {
+      "id": "T-3102",
+      "title": "Permission/capability model",
+      "task_type": "standard",
+      "depends_on": [
+        "T-3101"
+      ],
+      "board_refs": [
+        "milestone:F-038",
+        "team:protocol",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Define permission FSM and capability response contract with non-blocking behavior.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
+    },
+    {
+      "id": "T-3103",
+      "title": "Runtime notification service + adapter interface",
+      "task_type": "standard",
+      "depends_on": [
+        "T-3101",
+        "T-3102"
+      ],
+      "board_refs": [
+        "milestone:F-038",
+        "team:runtime",
+        "specialist:architecture"
+      ],
+      "notes": [
+        "Implement NotificationAdapter boundary and runtime service contract.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
+    },
+    {
+      "id": "T-3104",
+      "title": "macOS adapter",
+      "task_type": "standard",
+      "depends_on": [
+        "T-3103"
+      ],
+      "board_refs": [
+        "milestone:F-038",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "notes": [
+        "Implement macOS adapter with payload parity/degradation table.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
+    },
+    {
+      "id": "T-3105",
+      "title": "Windows adapter",
+      "task_type": "standard",
+      "depends_on": [
+        "T-3103"
+      ],
+      "board_refs": [
+        "milestone:F-038",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "notes": [
+        "Implement Windows adapter with payload parity/degradation table.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
+    },
+    {
+      "id": "T-3106",
+      "title": "Linux adapter",
+      "task_type": "standard",
+      "depends_on": [
+        "T-3103"
+      ],
+      "board_refs": [
+        "milestone:F-038",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "notes": [
+        "Implement Linux adapter with payload parity/degradation table.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
+    },
+    {
+      "id": "T-3107",
+      "title": "Web adapter contract/path",
+      "task_type": "standard",
+      "depends_on": [
+        "T-3103",
+        "T-3102"
+      ],
+      "board_refs": [
+        "milestone:F-038",
+        "team:protocol",
+        "specialist:architecture"
+      ],
+      "notes": [
+        "Define web notification path and fallback behavior for unsupported states.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
+    },
+    {
+      "id": "T-3108",
+      "title": "Noop/headless adapter + telemetry fallback",
+      "task_type": "standard",
+      "depends_on": [
+        "T-3103"
+      ],
+      "board_refs": [
+        "milestone:F-038",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Provide deterministic no-op response envelope and structured telemetry fallback.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
+    },
+    {
+      "id": "T-3109",
+      "title": "Lifecycle controls (dedupe/TTL/cancel/rate-limit/action callbacks)",
+      "task_type": "standard",
+      "depends_on": [
+        "T-3103"
+      ],
+      "board_refs": [
+        "milestone:F-038",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Specify and test lifecycle controls to prevent storms and unstable callback ordering.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
+    },
+    {
+      "id": "T-3110",
+      "title": "Determinism + compatibility conformance suite",
+      "task_type": "standard",
+      "depends_on": [
+        "T-3104",
+        "T-3105",
+        "T-3106",
+        "T-3107",
+        "T-3108",
+        "T-3109"
+      ],
+      "board_refs": [
+        "milestone:F-038",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Add seeded replay and compatibility suite; ensure no drift when notifications are unused.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
+    },
+    {
+      "id": "T-3111",
+      "title": "Rollout flags + docs + closeout packet",
+      "task_type": "standard",
+      "depends_on": [
+        "T-3110"
+      ],
+      "board_refs": [
+        "milestone:F-038",
+        "team:platform-ci",
+        "specialist:release"
+      ],
+      "notes": [
+        "Define rollout/rollback controls and complete closeout evidence packet.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
+    },
+    {
+      "id": "T-3112",
+      "title": "First-party notification example app + CI smoke harness",
+      "task_type": "standard",
+      "depends_on": [
+        "T-3101",
+        "T-3102",
+        "T-3108",
+        "T-3109"
+      ],
+      "board_refs": [
+        "milestone:F-038",
+        "team:runtime",
+        "specialist:release"
+      ],
+      "notes": [
+        "Build first-party demo app with deterministic trace artifact and CI smoke coverage.",
+        "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+      ],
+      "milestone_id": "F-038",
+      "status": "Intake"
     }
   ]
 }

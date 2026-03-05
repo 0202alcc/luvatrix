@@ -1,0 +1,17 @@
+{
+  "id": "T-3120",
+  "title": "[CLOSEOUT HARNESS] Define F-038 closeout metric and evidence harness",
+  "task_type": "closeout_harness",
+  "depends_on": [],
+  "board_refs": [
+    "milestone:F-038",
+    "team:platform-ci",
+    "specialist:pm"
+  ],
+  "notes": [
+    "Define quantitative closeout scoring and evidence packet rules for F-038.",
+    "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+  ],
+  "milestone_id": "F-038",
+  "status": "Intake"
+}

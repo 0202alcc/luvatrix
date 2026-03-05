@@ -1,0 +1,22 @@
+{
+  "id": "T-3112",
+  "title": "First-party notification example app + CI smoke harness",
+  "task_type": "standard",
+  "depends_on": [
+    "T-3101",
+    "T-3102",
+    "T-3108",
+    "T-3109"
+  ],
+  "board_refs": [
+    "milestone:F-038",
+    "team:runtime",
+    "specialist:release"
+  ],
+  "notes": [
+    "Build first-party demo app with deterministic trace artifact and CI smoke coverage.",
+    "Architect packet integrated: preserve protocol compatibility, deterministic behavior, and adapter boundary isolation."
+  ],
+  "milestone_id": "F-038",
+  "status": "Intake"
+}
