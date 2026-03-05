@@ -14,6 +14,6 @@ jobs:
       - name: Sync deps
         run: uv sync
       - name: Runtime perf tests
-        run: PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py tests/test_m008_perf_gate.py
+        run: PYTHONPATH=. uv run --with pytest pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py tests/test_m008_perf_gate.py
       - name: M-008 perf smoke gate
         run: PYTHONPATH=. uv run python ops/ci/m008_perf_gate.py --samples 60 --budget-p95-ms 40 --budget-jitter-ms 25
