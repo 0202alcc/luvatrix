@@ -10,6 +10,7 @@ from .app_runtime import (
     ResolvedAppVariant,
 )
 from .display_runtime import DisplayRuntime, RenderTick
+from .debug_menu import DebugMenuDispatchResult, DebugMenuDispatcher
 from .frame_rate_controller import FrameRateController
 from .ui_frame_renderer import MatrixUIFrameRenderer
 from .coordinates import (
@@ -67,6 +68,8 @@ __all__ = [
     "ResolvedAppVariant",
     "JsonlAuditSink",
     "DisplayRuntime",
+    "DebugMenuDispatchResult",
+    "DebugMenuDispatcher",
     "FrameRateController",
     "Engine",
     "FullRewrite",
