@@ -223,6 +223,19 @@ Before planning or editing code, read:
 ## Execution Autonomy and Permission Boundaries
 1. In a dedicated milestone thread, agents may run `uv` commands without asking for additional permission.
 2. In that same milestone thread, agents may run local `git` workflow commands without asking (for example: `git status`, `git add`, `git commit`, branch-local history checks).
-3. Any merge or pull request activity across threads requires explicit human permission.
-4. Any merge or pull request activity from or to `main` requires explicit human permission.
-5. If unsure whether an operation crosses thread boundaries or affects `main`, stop and ask a human before proceeding.
+3. Default policy: any merge or pull request activity across threads requires explicit human permission.
+4. Default policy: any merge or pull request activity from or to `main` requires explicit human permission.
+5. Autonomous exception (one-shot milestone execution):
+   - If the user explicitly instructs the agent to execute a milestone end-to-end without permission prompts in that thread, the agent is authorized for that thread to:
+   - create task PRs from `codex/t-*` -> milestone branch,
+   - merge task PRs into the milestone branch after checks pass,
+   - create milestone PR from milestone branch -> `main`,
+   - merge milestone PR to `main` after Go/No-Go is `GO` and required checks pass.
+6. Autonomous exception boundaries:
+   - Only applies to milestone/task branches and milestone IDs explicitly named in that thread.
+   - Does not authorize unrelated cross-thread merges or repo-wide refactors outside milestone scope.
+   - If scope is ambiguous, stop and ask for clarification.
+7. GitHub CLI/network fallback:
+   - If `gh` commands fail in sandbox with API connectivity errors (for example `api.github.com` unreachable), retry using escalated execution instead of asking the user to run commands manually.
+   - Record the final PR URL (or the exact blocking error) in the task/milestone log.
+8. If unsure whether an operation crosses thread boundaries or affects out-of-scope work, stop and ask a human before proceeding.
