@@ -1,0 +1,55 @@
+{
+  "id": "R-036",
+  "emoji": "\ud83c\udf9b\ufe0f",
+  "name": "Replay + Perf Observability",
+  "start_week": 30,
+  "end_week": 33,
+  "status": "Planned",
+  "task_ids": [],
+  "descriptions": [
+    "Input replay, frame-step, perf HUD, and exportable debug bundles with deterministic evidence."
+  ],
+  "success_criteria": [
+    "Replay reproduces deterministic ordering digests.",
+    "Frame-step/HUD preserve ordering guarantees.",
+    "Debug bundles are complete and validator-friendly."
+  ],
+  "closeout_criteria": {
+    "metric_id": "r-036-closeout-v1",
+    "metric_description": "Replay/HUD/bundle determinism and observability score.",
+    "score_formula": "0.4*replay_determinism + 0.25*frame_step_safety + 0.35*bundle_completeness",
+    "score_components": [
+      "replay_determinism",
+      "frame_step_safety",
+      "bundle_completeness"
+    ],
+    "go_threshold": 89,
+    "hard_no_go_conditions": [
+      "replay digest mismatch in required seed matrix",
+      "frame-step violates deterministic ordering",
+      "bundle export missing required artifact classes"
+    ],
+    "required_evidence": [
+      "replay matrix tests",
+      "frame-step determinism tests",
+      "bundle validator outputs"
+    ],
+    "required_commands": [
+      "uv run pytest tests -k \"debug_replay or debug_frame_step or debug_bundle\" -q",
+      "uv run python ops/planning/agile/validate_milestone_task_links.py"
+    ],
+    "rubric_version": "closeout_rubric_v1"
+  },
+  "ci_required_checks": [
+    "uv run pytest tests -k \"debug_replay or debug_frame_step or debug_bundle\" -q",
+    "uv run python ops/planning/agile/validate_milestone_task_links.py"
+  ],
+  "lifecycle_events": [
+    {
+      "date": "2026-03-05",
+      "event": "active",
+      "framework": "gateflow_v1",
+      "note": "replay/perf milestone created"
+    }
+  ]
+}

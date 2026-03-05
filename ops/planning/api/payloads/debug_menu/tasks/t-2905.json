@@ -1,0 +1,19 @@
+{
+  "id": "T-2905",
+  "title": "Window recording tool spec + artifact contract",
+  "task_type": "standard",
+  "milestone_id": "U-035",
+  "status": "Intake",
+  "depends_on": [
+    "T-2902",
+    "T-2904"
+  ],
+  "board_refs": [
+    "milestone:U-035",
+    "team:runtime",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Recording start/stop must not exceed allowed render-loop budget envelopes (P-026 non-regression)."
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "T-2921",
+  "title": "Define visual/capture closeout metric and evidence harness",
+  "task_type": "closeout_harness",
+  "milestone_id": "U-035",
+  "status": "Intake",
+  "depends_on": [],
+  "board_refs": [
+    "milestone:U-035",
+    "team:platform-ci",
+    "specialist:pm"
+  ],
+  "notes": [
+    "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for screenshot/record/overlay tooling."
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "T-2907",
+  "title": "Input monitor + record/replay deterministic contract",
+  "task_type": "standard",
+  "milestone_id": "R-036",
+  "status": "Intake",
+  "depends_on": [
+    "T-2902"
+  ],
+  "board_refs": [
+    "milestone:R-036",
+    "team:runtime",
+    "specialist:testing"
+  ],
+  "notes": [
+    "Seed-pinned replay must reproduce ordering digest; preserve determinism semantics validated in P-026."
+  ]
+}

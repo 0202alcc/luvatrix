@@ -1,0 +1,57 @@
+{
+  "id": "A-037",
+  "emoji": "\ud83e\udde9",
+  "name": "App-Configurable Debug Policy + Compatibility",
+  "start_week": 32,
+  "end_week": 35,
+  "status": "Planned",
+  "task_ids": [],
+  "descriptions": [
+    "App manifest debug policy controls with backward compatibility and P-026 non-regression gates."
+  ],
+  "success_criteria": [
+    "Existing apps continue to run unchanged by default.",
+    "Manifest-level debug policy is version-gated and safe.",
+    "P-026 non-regression expectations hold before default-path switch."
+  ],
+  "closeout_criteria": {
+    "metric_id": "a-037-closeout-v1",
+    "metric_description": "Compatibility-safe debug policy rollout score.",
+    "score_formula": "0.4*legacy_compat + 0.3*policy_correctness + 0.3*p026_non_regression",
+    "score_components": [
+      "legacy_compat",
+      "policy_correctness",
+      "p026_non_regression"
+    ],
+    "go_threshold": 90,
+    "hard_no_go_conditions": [
+      "legacy app conformance fails",
+      "app override removes mandatory debug fallback without policy approval",
+      "P-026 non-regression gates fail"
+    ],
+    "required_evidence": [
+      "manifest schema tests",
+      "legacy conformance suite",
+      "p026 non-regression evidence"
+    ],
+    "required_commands": [
+      "uv run pytest tests -k \"debug_manifest or legacy_debug_conformance\" -q",
+      "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+      "uv run python ops/planning/agile/validate_milestone_task_links.py"
+    ],
+    "rubric_version": "closeout_rubric_v1"
+  },
+  "ci_required_checks": [
+    "uv run pytest tests -k \"debug_manifest or legacy_debug_conformance\" -q",
+    "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+    "uv run python ops/planning/agile/validate_milestone_task_links.py"
+  ],
+  "lifecycle_events": [
+    {
+      "date": "2026-03-05",
+      "event": "active",
+      "framework": "gateflow_v1",
+      "note": "app policy compatibility milestone created"
+    }
+  ]
+}

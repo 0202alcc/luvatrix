@@ -2161,6 +2161,247 @@
           "note": "perf follow-up milestone staged"
         }
       ]
+    },
+    {
+      "id": "F-034",
+      "emoji": "\ud83d\udee1\ufe0f",
+      "name": "Cross-Platform Debug Menu Foundation",
+      "start_week": 27,
+      "end_week": 29,
+      "status": "Planned",
+      "task_ids": [
+        "T-2920",
+        "T-2901",
+        "T-2902",
+        "T-2903"
+      ],
+      "descriptions": [
+        "Crash-proof debug menu foundation with standardized capability IDs and platform adapter semantics."
+      ],
+      "success_criteria": [
+        "Menu handling is crash-proof with safe dispatch fallbacks.",
+        "Debug capabilities are standardized and unambiguous across platforms.",
+        "Platform adapter contract preserves semantic parity on macOS/Windows/Linux."
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-034-closeout-v1",
+        "metric_description": "Debug menu foundation stability and standardization score.",
+        "score_formula": "0.4*menu_safety + 0.3*capability_standardization + 0.3*adapter_parity",
+        "score_components": [
+          "menu_safety",
+          "capability_standardization",
+          "adapter_parity"
+        ],
+        "go_threshold": 88,
+        "hard_no_go_conditions": [
+          "any menu action can crash app process",
+          "capability IDs are ambiguous/overlapping",
+          "adapter contract lacks parity guarantees"
+        ],
+        "required_evidence": [
+          "menu dispatch safety tests",
+          "capability schema/tests",
+          "adapter conformance tests"
+        ],
+        "required_commands": [
+          "uv run pytest tests -k \"debug_menu_dispatch or debug_capabilities or debug_menu_adapter\" -q",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run pytest tests -k \"debug_menu_dispatch or debug_capabilities or debug_menu_adapter\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "debug menu milestone created"
+        }
+      ]
+    },
+    {
+      "id": "U-035",
+      "emoji": "\ud83d\uddbc\ufe0f",
+      "name": "Visual + Capture Tooling",
+      "start_week": 28,
+      "end_week": 31,
+      "status": "Planned",
+      "task_ids": [
+        "T-2921",
+        "T-2904",
+        "T-2905",
+        "T-2906"
+      ],
+      "descriptions": [
+        "Screenshot/record tooling and visual overlays with deterministic metadata and safe runtime behavior."
+      ],
+      "success_criteria": [
+        "Screenshot and recording artifacts are deterministic with metadata sidecars.",
+        "Overlays are non-destructive and toggle cleanly.",
+        "Capture paths respect render-loop budget constraints."
+      ],
+      "closeout_criteria": {
+        "metric_id": "u-035-closeout-v1",
+        "metric_description": "Capture/overlay correctness and performance safety score.",
+        "score_formula": "0.45*capture_contract + 0.25*overlay_safety + 0.3*runtime_budget_safety",
+        "score_components": [
+          "capture_contract",
+          "overlay_safety",
+          "runtime_budget_safety"
+        ],
+        "go_threshold": 87,
+        "hard_no_go_conditions": [
+          "capture start/stop violates render budget envelope",
+          "metadata sidecar missing required provenance fields",
+          "overlay toggles alter app state/render semantics"
+        ],
+        "required_evidence": [
+          "screenshot schema tests",
+          "recording lifecycle perf tests",
+          "overlay regression snapshots"
+        ],
+        "required_commands": [
+          "uv run pytest tests -k \"debug_screenshot or debug_recording or debug_overlay\" -q",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run pytest tests -k \"debug_screenshot or debug_recording or debug_overlay\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "visual/capture milestone created"
+        }
+      ]
+    },
+    {
+      "id": "R-036",
+      "emoji": "\ud83c\udf9b\ufe0f",
+      "name": "Replay + Perf Observability",
+      "start_week": 30,
+      "end_week": 33,
+      "status": "Planned",
+      "task_ids": [
+        "T-2922",
+        "T-2907",
+        "T-2908",
+        "T-2909"
+      ],
+      "descriptions": [
+        "Input replay, frame-step, perf HUD, and exportable debug bundles with deterministic evidence."
+      ],
+      "success_criteria": [
+        "Replay reproduces deterministic ordering digests.",
+        "Frame-step/HUD preserve ordering guarantees.",
+        "Debug bundles are complete and validator-friendly."
+      ],
+      "closeout_criteria": {
+        "metric_id": "r-036-closeout-v1",
+        "metric_description": "Replay/HUD/bundle determinism and observability score.",
+        "score_formula": "0.4*replay_determinism + 0.25*frame_step_safety + 0.35*bundle_completeness",
+        "score_components": [
+          "replay_determinism",
+          "frame_step_safety",
+          "bundle_completeness"
+        ],
+        "go_threshold": 89,
+        "hard_no_go_conditions": [
+          "replay digest mismatch in required seed matrix",
+          "frame-step violates deterministic ordering",
+          "bundle export missing required artifact classes"
+        ],
+        "required_evidence": [
+          "replay matrix tests",
+          "frame-step determinism tests",
+          "bundle validator outputs"
+        ],
+        "required_commands": [
+          "uv run pytest tests -k \"debug_replay or debug_frame_step or debug_bundle\" -q",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run pytest tests -k \"debug_replay or debug_frame_step or debug_bundle\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "replay/perf milestone created"
+        }
+      ]
+    },
+    {
+      "id": "A-037",
+      "emoji": "\ud83e\udde9",
+      "name": "App-Configurable Debug Policy + Compatibility",
+      "start_week": 32,
+      "end_week": 35,
+      "status": "Planned",
+      "task_ids": [
+        "T-2923",
+        "T-2910",
+        "T-2911"
+      ],
+      "descriptions": [
+        "App manifest debug policy controls with backward compatibility and P-026 non-regression gates."
+      ],
+      "success_criteria": [
+        "Existing apps continue to run unchanged by default.",
+        "Manifest-level debug policy is version-gated and safe.",
+        "P-026 non-regression expectations hold before default-path switch."
+      ],
+      "closeout_criteria": {
+        "metric_id": "a-037-closeout-v1",
+        "metric_description": "Compatibility-safe debug policy rollout score.",
+        "score_formula": "0.4*legacy_compat + 0.3*policy_correctness + 0.3*p026_non_regression",
+        "score_components": [
+          "legacy_compat",
+          "policy_correctness",
+          "p026_non_regression"
+        ],
+        "go_threshold": 90,
+        "hard_no_go_conditions": [
+          "legacy app conformance fails",
+          "app override removes mandatory debug fallback without policy approval",
+          "P-026 non-regression gates fail"
+        ],
+        "required_evidence": [
+          "manifest schema tests",
+          "legacy conformance suite",
+          "p026 non-regression evidence"
+        ],
+        "required_commands": [
+          "uv run pytest tests -k \"debug_manifest or legacy_debug_conformance\" -q",
+          "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run pytest tests -k \"debug_manifest or legacy_debug_conformance\" -q",
+        "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "app policy compatibility milestone created"
+        }
+      ]
     }
   ]
 }

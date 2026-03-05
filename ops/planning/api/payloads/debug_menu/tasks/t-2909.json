@@ -1,0 +1,21 @@
+{
+  "id": "T-2909",
+  "title": "Debug bundle export spec (zip manifest + evidence schema)",
+  "task_type": "standard",
+  "milestone_id": "R-036",
+  "status": "Intake",
+  "depends_on": [
+    "T-2904",
+    "T-2905",
+    "T-2907",
+    "T-2908"
+  ],
+  "board_refs": [
+    "milestone:R-036",
+    "team:platform-ci",
+    "specialist:release"
+  ],
+  "notes": [
+    "Bundle must include captures, traces, perf, provenance in one-command export."
+  ]
+}

@@ -557,6 +557,58 @@
         "channel": "#milestone-r-033",
         "threads_enabled": true
       }
+    },
+    {
+      "id": "milestone:F-034",
+      "title": "F-034 Cross-Platform Debug Menu Foundation",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "F-034"
+      },
+      "discord": {
+        "channel": "#milestone-f-034",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:U-035",
+      "title": "U-035 Visual + Capture Tooling",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "U-035"
+      },
+      "discord": {
+        "channel": "#milestone-u-035",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:R-036",
+      "title": "R-036 Replay + Perf Observability",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "R-036"
+      },
+      "discord": {
+        "channel": "#milestone-r-036",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:A-037",
+      "title": "A-037 App-Configurable Debug Policy + Compatibility",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "A-037"
+      },
+      "discord": {
+        "channel": "#milestone-a-037",
+        "threads_enabled": true
+      }
     }
   ]
 }

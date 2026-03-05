@@ -1,0 +1,13 @@
+{
+  "id": "milestone:F-034",
+  "title": "F-034 Cross-Platform Debug Menu Foundation",
+  "type": "milestone",
+  "framework_template": "gateflow_v1",
+  "source_filter": {
+    "milestone_id": "F-034"
+  },
+  "discord": {
+    "channel": "#milestone-f-034",
+    "threads_enabled": true
+  }
+}

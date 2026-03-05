@@ -1,0 +1,18 @@
+{
+  "id": "T-2902",
+  "title": "Debug capability registry + menu ID standard",
+  "task_type": "standard",
+  "milestone_id": "F-034",
+  "status": "Intake",
+  "depends_on": [
+    "T-2901"
+  ],
+  "board_refs": [
+    "milestone:F-034",
+    "team:protocol",
+    "specialist:architecture"
+  ],
+  "notes": [
+    "Define canonical debug capability IDs and one-to-one action mapping."
+  ]
+}

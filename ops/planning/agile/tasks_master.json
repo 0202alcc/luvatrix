@@ -5973,6 +5973,281 @@
       "notes": [
         "Only optimize after non-regression pass; maintain app/protocol/compiler/runtime/backend modular boundaries."
       ]
+    },
+    {
+      "id": "T-2920",
+      "title": "[CLOSEOUT HARNESS] Define debug menu foundation closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "F-034",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:F-034",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for crash-proof debug menu foundation."
+      ]
+    },
+    {
+      "id": "T-2921",
+      "title": "[CLOSEOUT HARNESS] Define visual/capture closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "U-035",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:U-035",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for screenshot/record/overlay tooling."
+      ]
+    },
+    {
+      "id": "T-2922",
+      "title": "[CLOSEOUT HARNESS] Define replay/perf closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "R-036",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:R-036",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for replay/frame-step/HUD/bundle tooling."
+      ]
+    },
+    {
+      "id": "T-2923",
+      "title": "[CLOSEOUT HARNESS] Define app policy compatibility closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "A-037",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:A-037",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for manifest policy and compatibility gates."
+      ]
+    },
+    {
+      "id": "T-2901",
+      "title": "Menu crash hardening + safe dispatch contract",
+      "task_type": "standard",
+      "milestone_id": "F-034",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:F-034",
+        "team:runtime",
+        "specialist:safety"
+      ],
+      "notes": [
+        "All unsupported menu actions must degrade to disabled/noop+warning; no crash path allowed."
+      ]
+    },
+    {
+      "id": "T-2902",
+      "title": "Debug capability registry + menu ID standard",
+      "task_type": "standard",
+      "milestone_id": "F-034",
+      "status": "Intake",
+      "depends_on": [
+        "T-2901"
+      ],
+      "board_refs": [
+        "milestone:F-034",
+        "team:protocol",
+        "specialist:architecture"
+      ],
+      "notes": [
+        "Define canonical debug capability IDs and one-to-one action mapping."
+      ]
+    },
+    {
+      "id": "T-2903",
+      "title": "Cross-platform menu adapter spec (macOS/Windows/Linux)",
+      "task_type": "standard",
+      "milestone_id": "F-034",
+      "status": "Intake",
+      "depends_on": [
+        "T-2902"
+      ],
+      "board_refs": [
+        "milestone:F-034",
+        "team:rendering",
+        "specialist:testing"
+      ],
+      "notes": [
+        "Define semantic parity contract for top-menu behavior across platforms."
+      ]
+    },
+    {
+      "id": "T-2904",
+      "title": "Screenshot tool spec + metadata sidecar contract",
+      "task_type": "standard",
+      "milestone_id": "U-035",
+      "status": "Intake",
+      "depends_on": [
+        "T-2902"
+      ],
+      "board_refs": [
+        "milestone:U-035",
+        "team:runtime",
+        "specialist:testing"
+      ],
+      "notes": [
+        "Metadata sidecar must include route/revision/timestamp/provenance and be emitted atomically with PNG."
+      ]
+    },
+    {
+      "id": "T-2905",
+      "title": "Window recording tool spec + artifact contract",
+      "task_type": "standard",
+      "milestone_id": "U-035",
+      "status": "Intake",
+      "depends_on": [
+        "T-2902",
+        "T-2904"
+      ],
+      "board_refs": [
+        "milestone:U-035",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Recording start/stop must not exceed allowed render-loop budget envelopes (P-026 non-regression)."
+      ]
+    },
+    {
+      "id": "T-2906",
+      "title": "Overlay tooling spec (bounds/dirty-rect/coordinates)",
+      "task_type": "standard",
+      "milestone_id": "U-035",
+      "status": "Intake",
+      "depends_on": [
+        "T-2902"
+      ],
+      "board_refs": [
+        "milestone:U-035",
+        "team:rendering",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Overlay draw order/opacity/toggles must be non-destructive and disable cleanly."
+      ]
+    },
+    {
+      "id": "T-2907",
+      "title": "Input monitor + record/replay deterministic contract",
+      "task_type": "standard",
+      "milestone_id": "R-036",
+      "status": "Intake",
+      "depends_on": [
+        "T-2902"
+      ],
+      "board_refs": [
+        "milestone:R-036",
+        "team:runtime",
+        "specialist:testing"
+      ],
+      "notes": [
+        "Seed-pinned replay must reproduce ordering digest; preserve determinism semantics validated in P-026."
+      ]
+    },
+    {
+      "id": "T-2908",
+      "title": "Frame-step + perf HUD contract",
+      "task_type": "standard",
+      "milestone_id": "R-036",
+      "status": "Intake",
+      "depends_on": [
+        "T-2902",
+        "T-2907"
+      ],
+      "board_refs": [
+        "milestone:R-036",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Frame-step state machine must preserve deterministic ordering and non-regression perf telemetry semantics."
+      ]
+    },
+    {
+      "id": "T-2909",
+      "title": "Debug bundle export spec (zip manifest + evidence schema)",
+      "task_type": "standard",
+      "milestone_id": "R-036",
+      "status": "Intake",
+      "depends_on": [
+        "T-2904",
+        "T-2905",
+        "T-2907",
+        "T-2908"
+      ],
+      "board_refs": [
+        "milestone:R-036",
+        "team:platform-ci",
+        "specialist:release"
+      ],
+      "notes": [
+        "Bundle must include captures, traces, perf, provenance in one-command export."
+      ]
+    },
+    {
+      "id": "T-2910",
+      "title": "App manifest debug policy + backward compatibility path",
+      "task_type": "standard",
+      "milestone_id": "A-037",
+      "status": "Intake",
+      "depends_on": [
+        "T-2902",
+        "T-2903"
+      ],
+      "board_refs": [
+        "milestone:A-037",
+        "team:protocol",
+        "specialist:architecture"
+      ],
+      "notes": [
+        "Maintain existing app compatibility; default Luvatrix debug root present unless explicitly policy-disabled."
+      ]
+    },
+    {
+      "id": "T-2911",
+      "title": "Conformance + non-regression gate pack (incl. P-026 guarantees)",
+      "task_type": "standard",
+      "milestone_id": "A-037",
+      "status": "Intake",
+      "depends_on": [
+        "T-2901",
+        "T-2902",
+        "T-2903",
+        "T-2904",
+        "T-2905",
+        "T-2906",
+        "T-2907",
+        "T-2908",
+        "T-2909",
+        "T-2910"
+      ],
+      "board_refs": [
+        "milestone:A-037",
+        "team:platform-ci",
+        "specialist:release"
+      ],
+      "notes": [
+        "Include explicit non-regression gates: incremental-present policy behavior/caps, determinism replay semantics, throughput/latency envelopes from P-026 unless re-baselined with evidence."
+      ]
     }
   ]
 }

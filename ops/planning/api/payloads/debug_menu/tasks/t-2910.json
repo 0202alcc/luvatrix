@@ -1,0 +1,19 @@
+{
+  "id": "T-2910",
+  "title": "App manifest debug policy + backward compatibility path",
+  "task_type": "standard",
+  "milestone_id": "A-037",
+  "status": "Intake",
+  "depends_on": [
+    "T-2902",
+    "T-2903"
+  ],
+  "board_refs": [
+    "milestone:A-037",
+    "team:protocol",
+    "specialist:architecture"
+  ],
+  "notes": [
+    "Maintain existing app compatibility; default Luvatrix debug root present unless explicitly policy-disabled."
+  ]
+}

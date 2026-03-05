@@ -1,0 +1,18 @@
+{
+  "id": "T-2904",
+  "title": "Screenshot tool spec + metadata sidecar contract",
+  "task_type": "standard",
+  "milestone_id": "U-035",
+  "status": "Intake",
+  "depends_on": [
+    "T-2902"
+  ],
+  "board_refs": [
+    "milestone:U-035",
+    "team:runtime",
+    "specialist:testing"
+  ],
+  "notes": [
+    "Metadata sidecar must include route/revision/timestamp/provenance and be emitted atomically with PNG."
+  ]
+}

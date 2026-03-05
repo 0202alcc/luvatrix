@@ -1,0 +1,55 @@
+{
+  "id": "U-035",
+  "emoji": "\ud83d\uddbc\ufe0f",
+  "name": "Visual + Capture Tooling",
+  "start_week": 28,
+  "end_week": 31,
+  "status": "Planned",
+  "task_ids": [],
+  "descriptions": [
+    "Screenshot/record tooling and visual overlays with deterministic metadata and safe runtime behavior."
+  ],
+  "success_criteria": [
+    "Screenshot and recording artifacts are deterministic with metadata sidecars.",
+    "Overlays are non-destructive and toggle cleanly.",
+    "Capture paths respect render-loop budget constraints."
+  ],
+  "closeout_criteria": {
+    "metric_id": "u-035-closeout-v1",
+    "metric_description": "Capture/overlay correctness and performance safety score.",
+    "score_formula": "0.45*capture_contract + 0.25*overlay_safety + 0.3*runtime_budget_safety",
+    "score_components": [
+      "capture_contract",
+      "overlay_safety",
+      "runtime_budget_safety"
+    ],
+    "go_threshold": 87,
+    "hard_no_go_conditions": [
+      "capture start/stop violates render budget envelope",
+      "metadata sidecar missing required provenance fields",
+      "overlay toggles alter app state/render semantics"
+    ],
+    "required_evidence": [
+      "screenshot schema tests",
+      "recording lifecycle perf tests",
+      "overlay regression snapshots"
+    ],
+    "required_commands": [
+      "uv run pytest tests -k \"debug_screenshot or debug_recording or debug_overlay\" -q",
+      "uv run python ops/planning/agile/validate_milestone_task_links.py"
+    ],
+    "rubric_version": "closeout_rubric_v1"
+  },
+  "ci_required_checks": [
+    "uv run pytest tests -k \"debug_screenshot or debug_recording or debug_overlay\" -q",
+    "uv run python ops/planning/agile/validate_milestone_task_links.py"
+  ],
+  "lifecycle_events": [
+    {
+      "date": "2026-03-05",
+      "event": "active",
+      "framework": "gateflow_v1",
+      "note": "visual/capture milestone created"
+    }
+  ]
+}

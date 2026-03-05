@@ -1,0 +1,16 @@
+{
+  "id": "T-2901",
+  "title": "Menu crash hardening + safe dispatch contract",
+  "task_type": "standard",
+  "milestone_id": "F-034",
+  "status": "Intake",
+  "depends_on": [],
+  "board_refs": [
+    "milestone:F-034",
+    "team:runtime",
+    "specialist:safety"
+  ],
+  "notes": [
+    "All unsupported menu actions must degrade to disabled/noop+warning; no crash path allowed."
+  ]
+}
