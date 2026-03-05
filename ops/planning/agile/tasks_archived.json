@@ -130,6 +130,40 @@
       "milestone_id": "RF-009",
       "status": "Archived",
       "archived_on": "2026-02-27"
+    },
+    {
+      "id": "T-1003",
+      "title": "Streaming update strategy + latency/perf budgets.",
+      "epic_id": "E-1001",
+      "milestone_id": "AU-019",
+      "status": "Archived",
+      "depends_on": [
+        "T-1002"
+      ],
+      "board_refs": [
+        "milestone:AU-019",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "cost_components": {
+        "context_load": 47,
+        "reasoning_depth": 43,
+        "code_edit_surface": 49,
+        "validation_scope": 41,
+        "iteration_risk": 38
+      },
+      "cost_confidence": 0.35,
+      "cost_score": 43.85,
+      "cost_bucket": "L",
+      "stage_multiplier_applied": 1.0,
+      "cost_basis_version": "gateflow_cost_v1",
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-1003 for milestone AU-019 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Streaming update strategy + latency/perf budgets."
+      ],
+      "task_type": "standard",
+      "archived_on": "2026-03-05"
     }
   ]
 }

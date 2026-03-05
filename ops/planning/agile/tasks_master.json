@@ -1689,13 +1689,13 @@
       "id": "T-804",
       "title": "Scrolling and viewport controls for dense plot surfaces.",
       "epic_id": "E-801",
-      "milestone_id": "U-017",
+      "milestone_id": "U-021",
       "status": "Verification Review",
       "depends_on": [
         "T-803"
       ],
       "board_refs": [
-        "milestone:U-017",
+        "milestone:U-021",
         "team:runtime",
         "specialist:qa"
       ],
@@ -1713,13 +1713,13 @@
         "iteration_risk": 54
       },
       "cost_confidence": 0.35,
-      "cost_score": 50.87,
+      "cost_score": 43.24,
       "cost_bucket": "L",
       "stage_multiplier_applied": 0.85,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
       "notes": [
-        "Handoff intent: complete T-804 for milestone U-017 without breaking protocol or determinism constraints.",
+        "Moved from U-017 to U-021 because dense-plot scrolling is a plot-module concern and should land with plot foundations.",
         "Execution outline seed: Scrolling and viewport controls for dense plot surfaces."
       ],
       "task_type": "standard"
@@ -1765,7 +1765,7 @@
     },
     {
       "id": "T-821",
-      "title": "Dynamic data plotting primitives (incremental redraw windows, axis rescale policy, stream cadence hooks).",
+      "title": "Dynamic data plotting primitives + streaming cadence/latency budget hooks.",
       "epic_id": "E-801",
       "milestone_id": "U-021",
       "status": "Backlog",
@@ -1792,8 +1792,8 @@
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
       "notes": [
-        "Handoff intent: complete T-821 for milestone U-021 without breaking protocol or determinism constraints.",
-        "Execution outline seed: Dynamic data plotting primitives (incremental redraw windows, axis rescale policy, stream cadence hooks)."
+        "Merged scope from former T-1003 to remove overlap between plot primitives and stream budget strategy.",
+        "Deliver incremental redraw windows, axis rescale policy, stream cadence hooks, and baseline latency/perf budget contracts for downstream renderers."
       ],
       "task_type": "standard"
     },
@@ -2279,46 +2279,14 @@
       "task_type": "standard"
     },
     {
-      "id": "T-1003",
-      "title": "Streaming update strategy + latency/perf budgets.",
-      "epic_id": "E-1001",
-      "milestone_id": "AU-019",
-      "status": "Backlog",
-      "depends_on": [
-        "T-1002"
-      ],
-      "board_refs": [
-        "milestone:AU-019",
-        "team:runtime",
-        "specialist:qa"
-      ],
-      "cost_components": {
-        "context_load": 47,
-        "reasoning_depth": 43,
-        "code_edit_surface": 49,
-        "validation_scope": 41,
-        "iteration_risk": 38
-      },
-      "cost_confidence": 0.35,
-      "cost_score": 43.85,
-      "cost_bucket": "L",
-      "stage_multiplier_applied": 1.0,
-      "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true,
-      "notes": [
-        "Handoff intent: complete T-1003 for milestone AU-019 without breaking protocol or determinism constraints.",
-        "Execution outline seed: Streaming update strategy + latency/perf budgets."
-      ],
-      "task_type": "standard"
-    },
-    {
       "id": "T-1004",
       "title": "Regression/safety tests and operator docs.",
       "epic_id": "E-1001",
       "milestone_id": "AU-019",
       "status": "Backlog",
       "depends_on": [
-        "T-1003"
+        "T-1002",
+        "T-821"
       ],
       "board_refs": [
         "milestone:AU-019",
@@ -2339,8 +2307,7 @@
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
       "notes": [
-        "Handoff intent: complete T-1004 for milestone AU-019 without breaking protocol or determinism constraints.",
-        "Execution outline seed: Regression/safety tests and operator docs."
+        "Regression/safety docs now depend on marketbook renderer (T-1002) plus shared stream/latency primitives in T-821."
       ],
       "task_type": "standard"
     },
@@ -5942,17 +5909,18 @@
       "id": "T-3418",
       "title": "Run P-026 non-regression evidence gate for Planes v2 path",
       "task_type": "standard",
-      "milestone_id": "R-033",
+      "milestone_id": "P-032",
       "status": "Intake",
       "depends_on": [
         "T-3416"
       ],
       "board_refs": [
-        "milestone:R-033",
+        "milestone:P-032",
         "team:runtime",
         "specialist:qa"
       ],
       "notes": [
+        "Moved from R-033 to P-032 so P-026 non-regression gating runs before rollout closeout.",
         "Must preserve incremental-present caps and determinism replay semantics from P-026 unless explicitly re-baselined with evidence."
       ]
     },

@@ -220,14 +220,13 @@
     {
       "id": "AU-019",
       "emoji": "\ud83d\udcc8",
-      "name": "Custom marketbook dynamic plotting system (integrated with U-021 plots module)",
+      "name": "Custom marketbook dynamic plotting system (built on U-021 plot foundations)",
       "start_week": 9,
       "end_week": 12,
       "status": "Planned",
       "task_ids": [
         "T-1001",
         "T-1002",
-        "T-1003",
         "T-1004"
       ],
       "legacy_id": "M-010",
@@ -1411,7 +1410,6 @@
       "end_week": 9,
       "status": "In Progress",
       "task_ids": [
-        "T-804",
         "T-805",
         "T-834",
         "T-835",
@@ -1491,7 +1489,7 @@
     {
       "id": "U-021",
       "emoji": "\ud83d\udcc9",
-      "name": "Plots module foundations (labels, bars, subplots, dynamic data, financial visualizations)",
+      "name": "Plots module foundations (labels, bars, subplots, scrolling, dynamic data)",
       "start_week": 4,
       "end_week": 11,
       "status": "In Progress",
@@ -1500,7 +1498,8 @@
         "T-802",
         "T-803",
         "T-821",
-        "T-822"
+        "T-822",
+        "T-804"
       ],
       "lifecycle_events": [
         {
@@ -1511,7 +1510,7 @@
         }
       ],
       "descriptions": [
-        "Deliver milestone outcome: Plots module foundations (labels, bars, subplots, dynamic data, financial visualizations)."
+        "Foundational plotting capabilities shared by downstream apps, including viewport/scroll behavior and stream cadence/latency primitives."
       ],
       "closeout_criteria": {
         "metric_id": "u-021-closeout-v1",
@@ -2048,17 +2047,18 @@
     {
       "id": "P-032",
       "emoji": "\ud83d\udea6",
-      "name": "Planes v2 Rollout Gates + Go/No-Go Closeout",
+      "name": "Planes v2 rollout non-regression gates + Go/No-Go closeout",
       "start_week": 22,
       "end_week": 24,
       "status": "Planned",
       "task_ids": [
         "T-3424",
         "T-3416",
-        "T-3417"
+        "T-3417",
+        "T-3418"
       ],
       "descriptions": [
-        "Execute feature-flagged rollout, closeout evidence, and go/no-go policy for Planes v2 switch decisions."
+        "Rollout controls, P-026 non-regression evidence gate, and final go/no-go closeout packet for Planes v2 switchover."
       ],
       "success_criteria": [
         "Feature flags and rollback points defined and tested.",
@@ -2107,17 +2107,16 @@
     {
       "id": "R-033",
       "emoji": "\ud83d\udcc8",
-      "name": "Planes v2 Performance Follow-ups (Post-Foundation)",
+      "name": "Planes v2 post-foundation performance optimization",
       "start_week": 24,
       "end_week": 27,
       "status": "Planned",
       "task_ids": [
         "T-3425",
-        "T-3418",
         "T-3419"
       ],
       "descriptions": [
-        "Apply performance optimizations after protocol foundation while preserving P-026 guarantees."
+        "Optimization-only phase after rollout gates pass; focuses on throughput and latency improvements under determinism/compatibility guardrails."
       ],
       "success_criteria": [
         "P-026 envelopes are preserved or explicitly re-baselined with evidence.",
