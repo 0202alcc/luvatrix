@@ -22,6 +22,9 @@ from .debug_menu import (
     validate_debug_menu_actions,
 )
 from .debug_capture import (
+    OverlayRect,
+    OverlaySpec,
+    OverlayToggleResult,
     REQUIRED_SCREENSHOT_SIDECAR_KEYS,
     REQUIRED_RECORDING_MANIFEST_KEYS,
     DebugCapturePlatformSpec,
@@ -32,9 +35,12 @@ from .debug_capture import (
     build_screenshot_artifact_bundle,
     build_screenshot_sidecar,
     debug_capture_platform_capability_matrix,
+    build_overlay_spec,
     evaluate_recording_budget,
     default_debug_capture_platform_specs,
     screenshot_artifacts_are_atomic,
+    toggle_overlay_non_destructive,
+    validate_overlay_spec,
 )
 from .frame_rate_controller import FrameRateController
 from .ui_frame_renderer import MatrixUIFrameRenderer
@@ -100,14 +106,20 @@ __all__ = [
     "DebugCapturePlatformSpec",
     "RecordingBudgetEnvelope",
     "RecordingBudgetResult",
+    "OverlayRect",
+    "OverlaySpec",
+    "OverlayToggleResult",
     "ScreenshotArtifactBundle",
     "DEFAULT_DEBUG_MENU_ACTIONS",
     "REQUIRED_RECORDING_MANIFEST_KEYS",
     "REQUIRED_SCREENSHOT_SIDECAR_KEYS",
     "build_recording_manifest",
+    "build_overlay_spec",
     "build_screenshot_artifact_bundle",
     "build_screenshot_sidecar",
+    "validate_overlay_spec",
     "evaluate_recording_budget",
+    "toggle_overlay_non_destructive",
     "screenshot_artifacts_are_atomic",
     "default_debug_capture_platform_specs",
     "debug_capture_platform_capability_matrix",

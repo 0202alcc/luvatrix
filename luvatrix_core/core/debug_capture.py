@@ -54,6 +54,34 @@ class RecordingBudgetResult:
     observed_steady_overhead_ms: float
 
 
+@dataclass(frozen=True)
+class OverlayRect:
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+@dataclass(frozen=True)
+class OverlaySpec:
+    overlay_id: str
+    bounds: OverlayRect
+    dirty_rects: tuple[OverlayRect, ...]
+    coordinate_space: str
+    opacity: float
+    enabled: bool
+
+
+@dataclass(frozen=True)
+class OverlayToggleResult:
+    overlay_id: str
+    previous_enabled: bool
+    next_enabled: bool
+    content_digest_before: str
+    content_digest_after: str
+    destructive: bool
+
+
 def build_screenshot_sidecar(
     *,
     route: str,
@@ -115,6 +143,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
                 "debug.capture.screenshot",
                 "debug.capture.screenshot.sidecar",
                 "debug.capture.record",
+                "debug.overlay.render",
             ),
             unsupported_reason=None,
         ),
@@ -125,6 +154,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
                 "debug.capture.windows.stub",
                 "debug.capture.screenshot.stub",
                 "debug.capture.record.stub",
+                "debug.overlay.stub",
             ),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
@@ -135,6 +165,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
                 "debug.capture.linux.stub",
                 "debug.capture.screenshot.stub",
                 "debug.capture.record.stub",
+                "debug.overlay.stub",
             ),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
@@ -210,3 +241,61 @@ def evaluate_recording_budget(
         observed_stop_overhead_ms=float(observed_stop_overhead_ms),
         observed_steady_overhead_ms=float(observed_steady_overhead_ms),
     )
+
+
+def build_overlay_spec(
+    *,
+    overlay_id: str,
+    bounds: OverlayRect,
+    dirty_rects: tuple[OverlayRect, ...],
+    coordinate_space: str,
+    opacity: float,
+    enabled: bool,
+) -> OverlaySpec:
+    spec = OverlaySpec(
+        overlay_id=overlay_id.strip(),
+        bounds=bounds,
+        dirty_rects=dirty_rects,
+        coordinate_space=coordinate_space.strip(),
+        opacity=float(opacity),
+        enabled=bool(enabled),
+    )
+    validate_overlay_spec(spec)
+    return spec
+
+
+def validate_overlay_spec(spec: OverlaySpec) -> None:
+    if not spec.overlay_id:
+        raise ValueError("overlay_id must be non-empty")
+    if spec.coordinate_space not in {"window_px", "content_px"}:
+        raise ValueError("overlay coordinate_space must be one of: window_px, content_px")
+    if not (0.0 <= spec.opacity <= 1.0):
+        raise ValueError("overlay opacity must be in [0.0, 1.0]")
+    _validate_overlay_rect(spec.bounds, field_name="bounds")
+    for idx, rect in enumerate(spec.dirty_rects):
+        _validate_overlay_rect(rect, field_name=f"dirty_rects[{idx}]")
+
+
+def toggle_overlay_non_destructive(
+    *,
+    overlay_id: str,
+    previous_enabled: bool,
+    next_enabled: bool,
+    content_digest: str,
+) -> OverlayToggleResult:
+    digest = content_digest.strip()
+    if not digest:
+        raise ValueError("content_digest must be non-empty")
+    return OverlayToggleResult(
+        overlay_id=overlay_id.strip(),
+        previous_enabled=bool(previous_enabled),
+        next_enabled=bool(next_enabled),
+        content_digest_before=digest,
+        content_digest_after=digest,
+        destructive=False,
+    )
+
+
+def _validate_overlay_rect(rect: OverlayRect, *, field_name: str) -> None:
+    if rect.width < 0 or rect.height < 0:
+        raise ValueError(f"{field_name} width/height must be >= 0")
