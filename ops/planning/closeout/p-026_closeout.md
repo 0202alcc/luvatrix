@@ -20,11 +20,11 @@
   "artifacts": [
     {
       "path": "artifacts/perf/closeout/raw_closeout_required.json",
-      "sha256": "01bb8b0f6aa5470a545e4ca552248d6f152fb77176f62b9ddafc91c0434c381d"
+      "sha256": "075012048594ba869fc218118059f1869d434c8001e63ef18a813624b9b618fb"
     },
     {
       "path": "artifacts/perf/closeout/measured_summary.json",
-      "sha256": "e394695f6331944caf5b02cbe149d942a391e3bdd8ffb5106fef24a35a2addcb"
+      "sha256": "c5df1e9901eb2e9ee743987913f184e9862549c34460588731c207bb119c4145"
     },
     {
       "path": "artifacts/perf/closeout/determinism_replay_matrix.json",
@@ -33,6 +33,18 @@
   ]
 }
 ```
+
+| Scenario | observed_incremental_pct | target_incremental_pct | observed_full_pct | full_pct_cap | max_consecutive_full_frame | consecutive_full_cap | exception_applied | pass |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| scroll | 100.0 | 95.0 | 0.0 | 15.0 | 0 | 8 | false | true |
+| horizontal_pan | 100.0 | 92.0 | 0.0 | 15.0 | 0 | 8 | false | true |
+| drag_heavy | 100.0 | 85.0 | 0.0 | 15.0 | 0 | 8 | false | true |
+| mixed_burst | 100.0 | 88.0 | 0.0 | 15.0 | 0 | 8 | false | true |
+| sensor_overlay | 100.0 | 90.0 | 0.0 | 15.0 | 0 | 8 | false | true |
+| resize_overlap_incremental_required | 100.0 | 75.0 | 0.0 | 15.0 | 0 | 8 | false | true |
+| input_burst | 100.0 | 85.0 | 0.0 | 15.0 | 0 | 8 | false | true |
+
+- Top-level `policy_verdict.pass=true` computed across all required scenarios and caps.
 - Verification commands:
   - `uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-026`
   - `uv run python ops/planning/agile/validate_milestone_task_links.py`

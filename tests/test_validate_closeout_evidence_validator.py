@@ -51,6 +51,35 @@ def _base_summary_scenario() -> dict[str, float | None]:
     }
 
 
+def _attach_policy_verdict(
+    scenario: dict[str, Any],
+    *,
+    observed_incremental_pct: float,
+    target_incremental_pct: float,
+    observed_full_pct: float,
+    max_consecutive_full_frame: int,
+    exception_applied: bool = False,
+) -> dict[str, Any]:
+    out = dict(scenario)
+    out.update(
+        {
+            "observed_incremental_pct": float(observed_incremental_pct),
+            "target_incremental_pct": float(target_incremental_pct),
+            "observed_full_pct": float(observed_full_pct),
+            "full_pct_cap": 15.0,
+            "max_consecutive_full_frame": int(max_consecutive_full_frame),
+            "consecutive_full_cap": 8,
+            "exception_applied": bool(exception_applied),
+            "pass": (
+                (float(observed_incremental_pct) >= float(target_incremental_pct) or bool(exception_applied))
+                and float(observed_full_pct) <= 15.0
+                and int(max_consecutive_full_frame) <= 8
+            ),
+        }
+    )
+    return out
+
+
 def _write_closeout_bundle(
     root: Path,
     *,
@@ -87,20 +116,38 @@ def _write_closeout_bundle(
     }
 
     summary_scenarios: dict[str, dict[str, Any]] = {
-        "scroll": _base_summary_scenario(),
-        "horizontal_pan": _base_summary_scenario(),
-        "drag_heavy": _base_summary_scenario(),
-        "mixed_burst": _base_summary_scenario(),
-        "sensor_overlay": _base_summary_scenario(),
+        "scroll": _attach_policy_verdict(
+            _base_summary_scenario(), observed_incremental_pct=99.0, target_incremental_pct=95.0, observed_full_pct=1.0, max_consecutive_full_frame=1
+        ),
+        "horizontal_pan": _attach_policy_verdict(
+            _base_summary_scenario(), observed_incremental_pct=99.0, target_incremental_pct=92.0, observed_full_pct=1.0, max_consecutive_full_frame=1
+        ),
+        "drag_heavy": _attach_policy_verdict(
+            _base_summary_scenario(), observed_incremental_pct=99.0, target_incremental_pct=85.0, observed_full_pct=1.0, max_consecutive_full_frame=1
+        ),
+        "mixed_burst": _attach_policy_verdict(
+            _base_summary_scenario(), observed_incremental_pct=99.0, target_incremental_pct=88.0, observed_full_pct=1.0, max_consecutive_full_frame=1
+        ),
+        "sensor_overlay": _attach_policy_verdict(
+            _base_summary_scenario(), observed_incremental_pct=99.0, target_incremental_pct=90.0, observed_full_pct=1.0, max_consecutive_full_frame=1
+        ),
         "resize_overlap_incremental_required": {
-            **_base_summary_scenario(),
+            **_attach_policy_verdict(
+                _base_summary_scenario(),
+                observed_incremental_pct=99.0,
+                target_incremental_pct=75.0,
+                observed_full_pct=1.0,
+                max_consecutive_full_frame=1,
+            ),
             "incremental_present_pct": 99.0,
         },
         "resize_stress_fullframe_allowed": {
             **_base_summary_scenario(),
             "resize_recovery_sec": 0.02,
         },
-        "input_burst": _base_summary_scenario(),
+        "input_burst": _attach_policy_verdict(
+            _base_summary_scenario(), observed_incremental_pct=90.0, target_incremental_pct=85.0, observed_full_pct=10.0, max_consecutive_full_frame=1
+        ),
     }
     if summary_exception_overrides:
         for scenario, payload in summary_exception_overrides.items():
@@ -116,6 +163,20 @@ def _write_closeout_bundle(
             "dropped_frame_ratio": 0.0,
         },
         "scenario_metrics": summary_scenarios,
+        "policy_verdict": {
+            "required_scenarios": [
+                "scroll",
+                "horizontal_pan",
+                "drag_heavy",
+                "mixed_burst",
+                "sensor_overlay",
+                "resize_overlap_incremental_required",
+                "input_burst",
+            ],
+            "full_pct_cap": 15.0,
+            "consecutive_full_cap": 8,
+            "pass": True,
+        },
         "provenance": {
             "raw_artifact": "artifacts/perf/closeout/raw_closeout_required.json",
             "raw_command": "run_suite",

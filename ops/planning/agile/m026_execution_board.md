@@ -273,3 +273,134 @@ Last updated: `2026-03-05` (T-2819 moved to Success Criteria Spec)
 1. `T-2819` blocked from `Done`:
    - current status is `Verification Review` and cannot skip directly to `Done`
    - required evidence commands not both passing (`pytest` collection/import failures; validator policy fail on `input_burst`)
+
+## T-2821 GateFlow Transitions
+1. Transition method: `planning_api.py` dry-run transitions executed in order on task branch; `--apply` is branch-guarded to `main` by policy.
+2. `Intake` -> `Success Criteria Spec`
+```text
+Before
++--------+------------+
+| Task   | Status     |
++--------+------------+
+| T-2821 | Intake     |
++--------+------------+
+After
++--------+-----------------------+
+| Task   | Status                |
++--------+-----------------------+
+| T-2821 | Success Criteria Spec |
++--------+-----------------------+
+```
+3. `Success Criteria Spec` -> `Safety Tests Spec`
+```text
+Before
++--------+-----------------------+
+| Task   | Status                |
++--------+-----------------------+
+| T-2821 | Success Criteria Spec |
++--------+-----------------------+
+After
++--------+-------------------+
+| Task   | Status            |
++--------+-------------------+
+| T-2821 | Safety Tests Spec |
++--------+-------------------+
+```
+4. `Safety Tests Spec` -> `Implementation Tests Spec`
+```text
+Before
++--------+-------------------+
+| Task   | Status            |
++--------+-------------------+
+| T-2821 | Safety Tests Spec |
++--------+-------------------+
+After
++--------+---------------------------+
+| Task   | Status                    |
++--------+---------------------------+
+| T-2821 | Implementation Tests Spec |
++--------+---------------------------+
+```
+5. `Implementation Tests Spec` -> `Edge Case Tests Spec`
+```text
+Before
++--------+---------------------------+
+| Task   | Status                    |
++--------+---------------------------+
+| T-2821 | Implementation Tests Spec |
++--------+---------------------------+
+After
++--------+----------------------+
+| Task   | Status               |
++--------+----------------------+
+| T-2821 | Edge Case Tests Spec |
++--------+----------------------+
+```
+6. `Edge Case Tests Spec` -> `Prototype Stage 1`
+```text
+Before
++--------+----------------------+
+| Task   | Status               |
++--------+----------------------+
+| T-2821 | Edge Case Tests Spec |
++--------+----------------------+
+After
++--------+-------------------+
+| Task   | Status            |
++--------+-------------------+
+| T-2821 | Prototype Stage 1 |
++--------+-------------------+
+```
+7. `Prototype Stage 1` -> `Prototype Stage 2+`
+```text
+Before
++--------+-------------------+
+| Task   | Status            |
++--------+-------------------+
+| T-2821 | Prototype Stage 1 |
++--------+-------------------+
+After
++--------+--------------------+
+| Task   | Status             |
++--------+--------------------+
+| T-2821 | Prototype Stage 2+ |
++--------+--------------------+
+```
+8. `Prototype Stage 2+` -> `Verification Review`
+```text
+Before
++--------+--------------------+
+| Task   | Status             |
++--------+--------------------+
+| T-2821 | Prototype Stage 2+ |
++--------+--------------------+
+After
++--------+---------------------+
+| Task   | Status              |
++--------+---------------------+
+| T-2821 | Verification Review |
++--------+---------------------+
+```
+9. Verification evidence attachments:
+   - `artifacts/perf/closeout/measured_summary.json`
+   - `artifacts/perf/closeout/raw_closeout_required.json`
+   - `artifacts/perf/closeout/manifest.json`
+   - `ops/planning/closeout/p-026_closeout.md`
+   - `python3 tools/perf/build_p026_measured_summary.py --raw artifacts/perf/closeout/raw_closeout_required.json --out artifacts/perf/closeout/measured_summary.json` -> success.
+   - `python3 ops/planning/api/validate_closeout_evidence.py --milestone-id P-026` -> `validation: PASS (evidence)`.
+10. `Verification Review` -> `Integration Ready`
+```text
+Before
++--------+---------------------+
+| Task   | Status              |
++--------+---------------------+
+| T-2821 | Verification Review |
++--------+---------------------+
+After
++--------+-------------------+
+| Task   | Status            |
++--------+-------------------+
+| T-2821 | Integration Ready |
++--------+-------------------+
+```
+11. `Integration Ready` -> `Done` is gated until task PR is opened and ready for merge into milestone branch.
