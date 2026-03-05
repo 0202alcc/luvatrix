@@ -10,7 +10,14 @@ from .app_runtime import (
     ResolvedAppVariant,
 )
 from .display_runtime import DisplayRuntime, RenderTick
-from .debug_menu import DebugMenuDispatchResult, DebugMenuDispatcher
+from .debug_menu import (
+    DEFAULT_DEBUG_MENU_ACTIONS,
+    DebugMenuActionSpec,
+    DebugMenuDispatchResult,
+    DebugMenuDispatcher,
+    build_debug_capability_registry,
+    validate_debug_menu_actions,
+)
 from .frame_rate_controller import FrameRateController
 from .ui_frame_renderer import MatrixUIFrameRenderer
 from .coordinates import (
@@ -70,6 +77,10 @@ __all__ = [
     "DisplayRuntime",
     "DebugMenuDispatchResult",
     "DebugMenuDispatcher",
+    "DebugMenuActionSpec",
+    "DEFAULT_DEBUG_MENU_ACTIONS",
+    "build_debug_capability_registry",
+    "validate_debug_menu_actions",
     "FrameRateController",
     "Engine",
     "FullRewrite",
