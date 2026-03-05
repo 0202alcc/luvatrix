@@ -24,6 +24,7 @@ Quick operator reference:
 - `DELETE /milestones/{id}` (`--force` required if active tasks still linked)
 - note: `task_ids` may be omitted or empty at milestone creation; attach tasks later or stage in backlog.
 - optional: `descriptions` (`string[]`) can capture milestone objective snapshots across reopen cycles.
+- required on `POST /milestones`: non-empty `success_criteria` and `closeout_criteria`.
 
 2. Tasks
 - `GET /tasks`
@@ -32,6 +33,7 @@ Quick operator reference:
 - `PATCH /tasks/{id}`
 - `DELETE /tasks/{id}` (archives task in `tasks_archived.json`)
 - optional: `notes` (`string | string[]`) can store architect/system handoff details and implementation outlines.
+- optional: `task_type` (`standard|closeout_harness`), default `standard`.
 
 3. Boards
 - `GET /boards`
@@ -67,7 +69,11 @@ Quick operator reference:
 - milestone `task_ids` (if populated) all resolve in active or archived task ledgers
 - task dependency IDs are well-formed (`T-###` style)
 - milestone `descriptions` is a list of non-empty strings when present
+- milestone `success_criteria` is required/non-empty on create
+- milestone `closeout_criteria` structure is required on create and when milestone is active/complete
 - task `notes` is a non-empty string or list of non-empty strings when present
+- task `task_type` (`standard|closeout_harness`) and closeout-harness title normalization (`[CLOSEOUT HARNESS]`)
+- for milestones with `closeout_criteria`, API enforces harness-first sequencing (first task type must be `closeout_harness`)
 - backlog item IDs/status/bucket formats and optional references
 4. Prevents unsafe deletes unless force flags are explicit.
 5. On successful `--apply`, automatically regenerates:
@@ -151,10 +157,22 @@ Notes:
 python ops/planning/api/planning_api.py GET /milestones
 ```
 
+1b. Create milestone with required closeout criteria (dry-run):
+```bash
+python ops/planning/api/planning_api.py POST /milestones \
+  --body '{"id":"A-021","emoji":"🧩","name":"Example app project","descriptions":["Initial objective snapshot."],"start_week":13,"end_week":16,"status":"Planned","task_ids":[],"success_criteria":["Feature-level outcomes validated on main."],"closeout_criteria":{"metric_id":"A-021-closeout-v1","metric_description":"Milestone go/no-go composite score.","score_formula":"0.5*correctness + 0.3*safety + 0.2*performance","score_components":["correctness","safety","performance"],"go_threshold":85,"hard_no_go_conditions":["any required validator fails","unresolved high-severity risk"],"required_evidence":["closeout packet","raw benchmark artifact","validator outputs"],"required_commands":["uv run python ops/planning/api/validate_closeout_packet.py --milestone-id A-021","uv run python ops/planning/agile/validate_milestone_task_links.py"],"rubric_version":"closeout_rubric_v1"}}'
+```
+
 2. Add task (dry-run):
 ```bash
 python ops/planning/api/planning_api.py POST /tasks \
   --body '{"id":"T-1201","title":"Add X","milestone_id":"A-021","status":"Intake","depends_on":[],"board_refs":["milestone:A-021","team:runtime","specialist:development"],"notes":["Architect outline: use adapter boundary only.","No app protocol breaking changes allowed."]}'
+```
+
+2b. Add closeout harness task (required first for policy milestones):
+```bash
+python ops/planning/api/planning_api.py POST /tasks \
+  --body '{"id":"T-1200","title":"Define milestone closeout metric and evidence harness","task_type":"closeout_harness","milestone_id":"A-021","status":"Intake","depends_on":[],"board_refs":["milestone:A-021","team:platform-ci","specialist:pm"],"notes":["Define score formula + hard no-go conditions.","Define evidence artifact and validator command set."]}'
 ```
 
 3. Apply edit to task:

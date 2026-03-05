@@ -42,14 +42,14 @@ uv run python ops/planning/api/planning_api.py GET /backlog
 
 ```bash
 uv run python ops/planning/api/planning_api.py POST /milestones \
-  --body '{"id":"A-021","emoji":"🧩","name":"Example app project","descriptions":["Initial objective: deliver app-level baseline workflow.","Reopen objective: add remediation scope without changing protocol compatibility."],"start_week":13,"end_week":16,"status":"Planned","task_ids":["T-1201"],"lifecycle_events":[{"date":"2026-03-03","event":"active","framework":"gateflow_v1","note":"opened"}]}'
+  --body '{"id":"A-021","emoji":"🧩","name":"Example app project","descriptions":["Initial objective: deliver app-level baseline workflow.","Reopen objective: add remediation scope without changing protocol compatibility."],"start_week":13,"end_week":16,"status":"Planned","task_ids":[],"success_criteria":["Milestone outcomes are validated on main with required checks passing."],"closeout_criteria":{"metric_id":"A-021-closeout-v1","metric_description":"Composite go/no-go score for milestone closeout.","score_formula":"0.5*correctness + 0.3*safety + 0.2*performance","score_components":["correctness","safety","performance"],"go_threshold":85,"hard_no_go_conditions":["any required validator fails","any unresolved high-severity risk"],"required_evidence":["ops/planning/closeout/a-021_closeout.md","validator outputs"],"required_commands":["uv run python ops/planning/api/validate_closeout_packet.py --milestone-id A-021","uv run python ops/planning/agile/validate_milestone_task_links.py"],"rubric_version":"closeout_rubric_v1"},"lifecycle_events":[{"date":"2026-03-03","event":"active","framework":"gateflow_v1","note":"opened"}]}'
 ```
 
 Bootstrap milestone (no tasks yet):
 
 ```bash
 uv run python ops/planning/api/planning_api.py POST /milestones \
-  --body '{"id":"U-099","emoji":"🧪","name":"New milestone bootstrap","start_week":13,"end_week":14,"status":"Planned","task_ids":[]}'
+  --body '{"id":"U-099","emoji":"🧪","name":"New milestone bootstrap","start_week":13,"end_week":14,"status":"Planned","task_ids":[],"success_criteria":["Bootstrap success criteria placeholder."],"closeout_criteria":{"metric_id":"U-099-closeout-v1","metric_description":"Bootstrap closeout metric.","score_formula":"1.0*readiness","score_components":["readiness"],"go_threshold":80,"hard_no_go_conditions":["missing closeout packet"],"required_evidence":["ops/planning/closeout/u-099_closeout.md"],"required_commands":["uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-099"],"rubric_version":"closeout_rubric_v1"}}'
 ```
 
 ```bash
@@ -70,7 +70,14 @@ Create:
 
 ```bash
 uv run python ops/planning/api/planning_api.py POST /tasks \
-  --body '{"id":"T-1201","title":"Define success criteria","milestone_id":"A-021","status":"Intake","depends_on":[],"board_refs":["milestone:A-021","team:protocol","specialist:pm"],"notes":["Architect intent: preserve RenderTarget boundary.","Include deterministic replay evidence commands in acceptance criteria."]}'
+  --body '{"id":"T-1200","title":"Define milestone closeout metric and evidence harness","task_type":"closeout_harness","milestone_id":"A-021","status":"Intake","depends_on":[],"board_refs":["milestone:A-021","team:platform-ci","specialist:pm"],"notes":["Define scoring formula and threshold.","Define required evidence artifacts and validator commands."]}'
+```
+
+Add a standard task (after harness exists):
+
+```bash
+uv run python ops/planning/api/planning_api.py POST /tasks \
+  --body '{"id":"T-1201","title":"Define success criteria","task_type":"standard","milestone_id":"A-021","status":"Intake","depends_on":["T-1200"],"board_refs":["milestone:A-021","team:protocol","specialist:pm"],"notes":["Architect intent: preserve RenderTarget boundary.","Include deterministic replay evidence commands in acceptance criteria."]}'
 ```
 
 Move status:

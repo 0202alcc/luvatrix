@@ -215,6 +215,7 @@ Use this before creating a new milestone in `milestone_schedule.json`.
 5. Acceptance and exit gate
 - Defines milestone-level success criteria and acceptance checks.
 - Defines what is required for Go/No-Go closeout.
+- Includes explicit `closeout_criteria` quantitative metric contract.
 
 6. Dependency map
 - Cross-milestone dependencies are explicit (upstream/downstream).
@@ -251,9 +252,46 @@ Use this before creating a new milestone in `milestone_schedule.json`.
 5. `start_week` / `end_week`
 6. `task_ids` (or explicit bootstrap note)
 7. `success_criteria` (measurable)
-8. `acceptance_checks` (task-level or milestone-level)
-9. `dependencies` (milestones/tasks)
-10. `lifecycle_events` initial record (`active` or `created`)
+8. `closeout_criteria` (quantitative go/no-go metric contract)
+9. `acceptance_checks` (task-level or milestone-level)
+10. `dependencies` (milestones/tasks)
+11. `lifecycle_events` initial record (`active` or `created`)
+
+## Valid Closeout Criteria Rubric
+
+Use this rubric to validate `milestone.closeout_criteria`.
+
+### Required fields
+
+1. `metric_id` (stable identifier)
+2. `metric_description` (what is being scored)
+3. `score_formula` (how score is computed)
+4. `score_components` (non-empty list of measured components)
+5. `go_threshold` (`0..100`)
+6. `hard_no_go_conditions` (non-empty list of automatic failure conditions)
+7. `required_evidence` (non-empty list of required artifact paths/types)
+8. `required_commands` (non-empty list of reproducible commands)
+9. `rubric_version` (version tag for policy evolution)
+
+### Validity tests
+
+1. Quantitative:
+- score can be recomputed from raw evidence using `score_formula` + `score_components`.
+
+2. Deterministic:
+- required commands produce reproducible outputs (same inputs/seeds -> same verdict).
+
+3. Auditable:
+- each go/no-go claim maps to evidence artifacts and validator outputs.
+
+4. Falsifiable:
+- hard no-go conditions can independently fail closeout even if aggregate score is high.
+
+### Mandatory milestone sequencing rule
+
+1. For milestones with `closeout_criteria`, the first required task type is `closeout_harness`.
+2. `closeout_harness` tasks should be titled with `[CLOSEOUT HARNESS]` prefix for visual separation.
+3. Non-harness tasks should not be added until at least one harness task exists for that milestone.
 
 ## Where This Is Enforced
 

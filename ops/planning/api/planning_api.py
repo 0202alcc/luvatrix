@@ -104,6 +104,8 @@ REQUIRED_CLOSEOUT_SECTIONS = [
     "Modularity",
     "Residual Risks",
 ]
+ALLOWED_TASK_TYPES = {"standard", "closeout_harness"}
+CLOSEOUT_HARNESS_TITLE_PREFIX = "[CLOSEOUT HARNESS]"
 
 
 class ApiError(RuntimeError):
@@ -240,6 +242,98 @@ def validate_task_notes(task: dict[str, Any]) -> None:
     for idx, item in enumerate(notes):
         if not isinstance(item, str) or not item.strip():
             raise ApiError(f"task {tid} notes[{idx}] must be a non-empty string")
+
+
+def validate_closeout_criteria(milestone: dict[str, Any], *, required: bool) -> None:
+    mid = milestone.get("id", "<unknown>")
+    criteria = milestone.get("closeout_criteria")
+    if criteria is None:
+        if required:
+            raise ApiError(f"milestone {mid} missing required closeout_criteria")
+        return
+    if not isinstance(criteria, dict):
+        raise ApiError(f"milestone {mid} closeout_criteria must be an object")
+
+    required_keys = {
+        "metric_id",
+        "metric_description",
+        "score_formula",
+        "score_components",
+        "go_threshold",
+        "hard_no_go_conditions",
+        "required_evidence",
+        "required_commands",
+        "rubric_version",
+    }
+    missing = sorted(k for k in required_keys if k not in criteria)
+    if missing:
+        raise ApiError(
+            f"milestone {mid} closeout_criteria missing fields: {', '.join(missing)}"
+        )
+
+    for key in {"metric_id", "metric_description", "score_formula", "rubric_version"}:
+        val = criteria.get(key)
+        if not isinstance(val, str) or not val.strip():
+            raise ApiError(f"milestone {mid} closeout_criteria.{key} must be a non-empty string")
+
+    gt = criteria.get("go_threshold")
+    if not isinstance(gt, (int, float)):
+        raise ApiError(f"milestone {mid} closeout_criteria.go_threshold must be numeric")
+    if gt < 0 or gt > 100:
+        raise ApiError(f"milestone {mid} closeout_criteria.go_threshold must be in [0,100]")
+
+    for key in {"score_components", "hard_no_go_conditions", "required_evidence", "required_commands"}:
+        val = criteria.get(key)
+        if not isinstance(val, list) or not val:
+            raise ApiError(f"milestone {mid} closeout_criteria.{key} must be a non-empty list")
+        for idx, item in enumerate(val):
+            if not isinstance(item, str) or not item.strip():
+                raise ApiError(
+                    f"milestone {mid} closeout_criteria.{key}[{idx}] must be a non-empty string"
+                )
+
+
+def normalize_task_type_and_title(task: dict[str, Any]) -> None:
+    ttype = task.get("task_type", "standard")
+    if ttype not in ALLOWED_TASK_TYPES:
+        raise ApiError(
+            f"task {task.get('id')} task_type must be one of: {', '.join(sorted(ALLOWED_TASK_TYPES))}"
+        )
+    task["task_type"] = ttype
+
+    title = task.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise ApiError(f"task {task.get('id')} title must be a non-empty string")
+    if ttype == "closeout_harness" and not title.startswith(CLOSEOUT_HARNESS_TITLE_PREFIX):
+        task["title"] = f"{CLOSEOUT_HARNESS_TITLE_PREFIX} {title}"
+
+
+def enforce_closeout_harness_first(
+    schedule: dict[str, Any],
+    tasks_master: dict[str, Any],
+    tasks_archived: dict[str, Any],
+    *,
+    milestone_id: str,
+    candidate_task_type: str,
+) -> None:
+    milestone = next((m for m in schedule.get("milestones", []) if m.get("id") == milestone_id), None)
+    if milestone is None:
+        raise ApiError(f"unknown milestone_id: {milestone_id}")
+
+    # Legacy milestones without closeout_criteria are exempt.
+    if "closeout_criteria" not in milestone:
+        return
+
+    linked_active = [t for t in tasks_master.get("tasks", []) if t.get("milestone_id") == milestone_id]
+    linked_archived = [t for t in tasks_archived.get("tasks", []) if t.get("milestone_id") == milestone_id]
+    linked_all = linked_active + linked_archived
+    has_harness = any(t.get("task_type", "standard") == "closeout_harness" for t in linked_all)
+
+    # Enforce only for new milestone task streams: no tasks exist yet.
+    if not linked_all and candidate_task_type != "closeout_harness":
+        raise ApiError(
+            f"milestone {milestone_id} requires a closeout harness task before other task types"
+        )
 
 
 def validate_dep_id_format(task_id: str, dep: str) -> None:
@@ -646,6 +740,8 @@ def validate_cross_refs(
         if not MILESTONE_ID_RE.match(mid):
             raise ApiError(f"invalid milestone id format: {mid}")
         validate_milestone_descriptions(milestones[mid])
+        if "closeout_criteria" in milestones[mid]:
+            validate_closeout_criteria(milestones[mid], required=False)
 
     validate_board_definitions(boards)
     statuses = allowed_task_statuses(boards)
@@ -658,6 +754,7 @@ def validate_cross_refs(
             raise ApiError(f"task {tid} references unknown milestone_id {task.get('milestone_id')}")
         if task.get("status") not in statuses:
             raise ApiError(f"task {tid} has invalid status {task.get('status')}")
+        normalize_task_type_and_title(task)
         validate_board_refs(task, board_ids)
         deps = task.get("depends_on", [])
         if not isinstance(deps, list):
@@ -672,7 +769,16 @@ def validate_cross_refs(
 
 
 def create_milestone(schedule: dict[str, Any], body: dict[str, Any], task_ids_all: set[str]) -> str:
-    required = {"id", "name", "emoji", "start_week", "end_week", "status"}
+    required = {
+        "id",
+        "name",
+        "emoji",
+        "start_week",
+        "end_week",
+        "status",
+        "success_criteria",
+        "closeout_criteria",
+    }
     missing = sorted(required - set(body))
     if missing:
         raise ApiError(f"POST /milestones missing fields: {', '.join(missing)}")
@@ -684,8 +790,14 @@ def create_milestone(schedule: dict[str, Any], body: dict[str, Any], task_ids_al
         raise ApiError(f"milestone already exists: {mid}")
     if body["status"] not in ALLOWED_MILESTONE_STATUS:
         raise ApiError(f"invalid milestone status: {body['status']}")
+    if not isinstance(body.get("success_criteria"), list) or not body["success_criteria"]:
+        raise ApiError("milestone success_criteria must be a non-empty list")
+    for idx, item in enumerate(body["success_criteria"]):
+        if not isinstance(item, str) or not item.strip():
+            raise ApiError(f"milestone success_criteria[{idx}] must be a non-empty string")
     body.setdefault("descriptions", [])
     validate_milestone_descriptions(body)
+    validate_closeout_criteria(body, required=True)
     body.setdefault("task_ids", [])
     if not isinstance(body["task_ids"], list):
         raise ApiError("milestone task_ids must be a list")
@@ -711,6 +823,14 @@ def patch_milestone(schedule: dict[str, Any], milestone_id: str, body: dict[str,
     if row.get("status") not in ALLOWED_MILESTONE_STATUS:
         raise ApiError(f"invalid milestone status: {row.get('status')}")
     validate_milestone_descriptions(row)
+    if "success_criteria" in row:
+        if not isinstance(row["success_criteria"], list) or not row["success_criteria"]:
+            raise ApiError("milestone success_criteria must be a non-empty list")
+        for idx, item in enumerate(row["success_criteria"]):
+            if not isinstance(item, str) or not item.strip():
+                raise ApiError(f"milestone success_criteria[{idx}] must be a non-empty string")
+    require_closeout = row.get("status") in {"In Progress", "Complete"}
+    validate_closeout_criteria(row, required=require_closeout)
     row.setdefault("task_ids", [])
     if not isinstance(row.get("task_ids"), list):
         raise ApiError("milestone task_ids must be a list")
@@ -741,6 +861,7 @@ def delete_milestone(
 
 def create_task(
     tasks_master: dict[str, Any],
+    tasks_archived: dict[str, Any],
     schedule: dict[str, Any],
     boards: dict[str, Any],
     body: dict[str, Any],
@@ -760,6 +881,14 @@ def create_task(
     milestone_ids = {m["id"] for m in schedule.get("milestones", [])}
     if body["milestone_id"] not in milestone_ids:
         raise ApiError(f"unknown milestone_id: {body['milestone_id']}")
+    normalize_task_type_and_title(body)
+    enforce_closeout_harness_first(
+        schedule,
+        tasks_master,
+        tasks_archived,
+        milestone_id=body["milestone_id"],
+        candidate_task_type=body.get("task_type", "standard"),
+    )
     if body["status"] not in allowed_task_statuses(boards):
         raise ApiError(f"invalid task status: {body['status']}")
     board_ids = {b["id"] for b in boards.get("boards", [])}
@@ -793,6 +922,7 @@ def create_task(
 
 def patch_task(
     tasks_master: dict[str, Any],
+    tasks_archived: dict[str, Any],
     schedule: dict[str, Any],
     boards: dict[str, Any],
     task_id: str,
@@ -813,10 +943,18 @@ def patch_task(
     old_status = row.get("status")
     for k, v in body.items():
         row[k] = v
+    normalize_task_type_and_title(row)
 
     milestone_ids = {m["id"] for m in schedule.get("milestones", [])}
     if row.get("milestone_id") not in milestone_ids:
         raise ApiError(f"unknown milestone_id: {row.get('milestone_id')}")
+    enforce_closeout_harness_first(
+        schedule,
+        tasks_master,
+        tasks_archived,
+        milestone_id=row.get("milestone_id", ""),
+        candidate_task_type=row.get("task_type", "standard"),
+    )
     if row.get("status") not in allowed_task_statuses(boards):
         raise ApiError(f"invalid task status: {row.get('status')}")
     board_ids = {b["id"] for b in boards.get("boards", [])}
@@ -1154,12 +1292,21 @@ def main() -> int:
         if method == "POST":
             if ident is not None:
                 raise ApiError("POST /tasks must not include id in path")
-            summary = create_task(tasks_master, schedule, boards, body, all_task_ids, reestimate_cost=args.reestimate_cost)
+            summary = create_task(
+                tasks_master,
+                tasks_archived,
+                schedule,
+                boards,
+                body,
+                all_task_ids,
+                reestimate_cost=args.reestimate_cost,
+            )
         elif method == "PATCH":
             if ident is None:
                 raise ApiError("PATCH /tasks/{id} requires id in path")
             summary = patch_task(
                 tasks_master,
+                tasks_archived,
                 schedule,
                 boards,
                 ident,

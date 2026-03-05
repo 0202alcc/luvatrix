@@ -72,7 +72,34 @@
       ],
       "descriptions": [
         "Must comply with first-party Luvatrix App Protocol contracts."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "apu-020-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone APU-020.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/apu-020_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id APU-020",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "ARU-016",
@@ -98,7 +125,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Cross-platform full-suite interactive generalization."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "aru-016-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone ARU-016.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/aru-016_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id ARU-016",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "AU-018",
@@ -122,7 +176,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Data workspace UI (calendar app)."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "au-018-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone AU-018.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/au-018_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id AU-018",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "AU-019",
@@ -154,7 +235,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Custom marketbook dynamic plotting system (integrated with U-021 plots module)."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "au-019-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone AU-019.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/au-019_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id AU-019",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "F-001",
@@ -179,7 +287,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Core package transition and repository cleanup."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-001-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone F-001.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-001_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-001",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "F-003",
@@ -204,7 +339,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Runtime safety controller and audit pipeline hardening."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-003-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone F-003.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-003_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-003",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "F-011",
@@ -267,7 +429,34 @@
       "completed_on": "2026-03-03",
       "descriptions": [
         "Deliver milestone outcome: App protocol docs finalized."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-011-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone F-011.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-011_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-011",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "F-014",
@@ -292,7 +481,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Audit retention lifecycle."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-014-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone F-014.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-014_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-014",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "F-024",
@@ -323,7 +539,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Sensor backend performance modernization."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-024-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone F-024.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-024_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-024",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "FR-004",
@@ -348,7 +591,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Platform variant routing and HDI phase standardization."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "fr-004-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone FR-004.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/fr-004_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id FR-004",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "P-008",
@@ -373,7 +643,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Discord ops consolidation under /discord."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "p-008-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone P-008.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-008_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-008",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "P-010",
@@ -398,7 +695,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Discord governance artifacts and onboarding system."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "p-010-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone P-010.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-010_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-010",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "P-013",
@@ -423,7 +747,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: CI hardening and flaky governance."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "p-013-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone P-013.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-013_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-013",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "P-015",
@@ -448,7 +799,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Production-hardening go/no-go review."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "p-015-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone P-015.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-015_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-015",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "P-021",
@@ -479,7 +857,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Performance baseline and telemetry gates."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "p-021-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone P-021.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-021_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-021",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "R-002",
@@ -504,7 +909,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: macOS visual runtime foundation merged to main."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "r-002-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone R-002.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-002_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-002",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "R-005",
@@ -529,7 +961,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Rendering fallback, smoke docs, and GPU blit path."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "r-005-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone R-005.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-005_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-005",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "R-012",
@@ -555,7 +1014,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Vulkan stabilization."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "r-012-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone R-012.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-012_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-012",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "R-022",
@@ -581,7 +1067,34 @@
       "completed_on": "2026-03-03",
       "descriptions": [
         "Deliver milestone outcome: Render copy elimination."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "r-022-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone R-022.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-022_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-022",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "R-023",
@@ -607,7 +1120,34 @@
       "completed_on": "2026-03-03",
       "descriptions": [
         "Deliver milestone outcome: Vulkan transfer path efficiency."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "r-023-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone R-023.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-023_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-023",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "R-025",
@@ -638,7 +1178,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Event loop and input scheduling tightening."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "r-025-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone R-025.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-025_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-025",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "RF-009",
@@ -663,7 +1230,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Packaging metadata and Vulkan runtime preflight guidance."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "rf-009-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone RF-009.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/rf-009_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id RF-009",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "U-007",
@@ -688,7 +1282,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Plot stabilization and stream simulation integration."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "u-007-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone U-007.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/u-007_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-007",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "U-017",
@@ -742,7 +1363,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "u-017-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone U-017.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/u-017_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-017",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "U-021",
@@ -768,7 +1416,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Plots module foundations (labels, bars, subplots, dynamic data, financial visualizations)."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "u-021-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone U-021.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/u-021_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-021",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "UF-006",
@@ -793,7 +1468,34 @@
       ],
       "descriptions": [
         "Deliver milestone outcome: Interactive plot module and UI IR integration."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "uf-006-closeout-v1",
+        "metric_description": "Go/No-Go closeout metric for milestone UF-006.",
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/uf-006_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id UF-006",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     },
     {
       "id": "P-026",
@@ -912,7 +1614,41 @@
       "completed_on": null,
       "descriptions": [
         "All closeout tasks complete with consolidated evidence package."
-      ]
+      ],
+      "closeout_criteria": {
+        "metric_id": "p-026-closeout-v3",
+        "metric_description": "Runtime performance hardening closeout score with scenario-level policy hard-gates.",
+        "score_formula": "gated_weighted_sum(perf_latency,incremental_policy,determinism,boundary_integrity,evidence_provenance)",
+        "score_components": [
+          "perf_latency_thresholds",
+          "incremental_present_required_scenarios",
+          "determinism_replay_matrix",
+          "boundary_contract_preservation",
+          "evidence_provenance_validation"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "any required scenario below incremental target without approved exception metadata",
+          "full_present_pct cap violation in required non-control scenario",
+          "determinism digest or invariant mismatch in required scenarios",
+          "validate_closeout_evidence.py fails",
+          "validate_closeout_packet.py fails",
+          "unresolved high-severity blocker in closeout packet"
+        ],
+        "required_evidence": [
+          "artifacts/perf/closeout/raw_closeout_required.json",
+          "artifacts/perf/closeout/measured_summary.json",
+          "artifacts/perf/closeout/determinism_replay_matrix.json",
+          "artifacts/perf/closeout/manifest.json",
+          "ops/planning/closeout/p-026_closeout.md"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-026",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      }
     }
   ]
 }

@@ -43,20 +43,25 @@ Before planning or editing code, read:
 2. Use `ops/planning/api/planning_api.py` for milestone/task CRUD instead of manual JSON edits whenever possible.
 3. Every milestone must have a `task_ids` list (empty allowed for bootstrap/split states).
 4. Milestones should include `descriptions` (`string[]`) to record objective snapshots (especially across reopen cycles).
-5. Every populated milestone `task_id` must exist in active or archived task ledgers.
-6. Tasks should include `notes` (`string | string[]`) for architect/system handoff context and implementation outline details.
-7. Validate links with:
+5. New milestones must include non-empty `success_criteria` and `closeout_criteria` (quantitative Go/No-Go metric contract).
+6. For milestones with `closeout_criteria`, add a `closeout_harness` task first before adding other task types.
+7. `closeout_harness` task titles should use `[CLOSEOUT HARNESS]` prefix for clear visual separation.
+8. Every populated milestone `task_id` must exist in active or archived task ledgers.
+9. Tasks should include `notes` (`string | string[]`) for architect/system handoff context and implementation outline details.
+10. Validate links with:
    - `uv run python ops/planning/agile/validate_milestone_task_links.py`
-8. On successful `planning_api.py --apply`, Gantt markdown and PNG are regenerated automatically.
-9. Agile framework default is `Luvatrix GateFlow (gateflow_v1)` defined in `ops/planning/agile/boards_registry.json`.
-10. Milestone IDs use lettered schema: `<1-3 letters>-<3 digits>` where letters map to:
+11. On successful `planning_api.py --apply`, Gantt markdown and PNG are regenerated automatically.
+12. Agile framework default is `Luvatrix GateFlow (gateflow_v1)` defined in `ops/planning/agile/boards_registry.json`.
+13. Milestone IDs use lettered schema: `<1-3 letters>-<3 digits>` where letters map to:
    - `A` app projects, `R` rendering backend, `F` first-party protocols/systems, `U` UI/UX tools, `P` project management, `X` other.
    - Combined IDs are allowed (up to 3 letters) and primary letter goes first.
-11. Milestone lifecycle must be tracked via `lifecycle_events` in `milestone_schedule.json` (close/reopen + framework notes).
-12. Use the operator command reference for standard actions:
+14. Milestone lifecycle must be tracked via `lifecycle_events` in `milestone_schedule.json` (close/reopen + framework notes).
+15. Use the operator command reference for standard actions:
    - `ops/planning/api/CHEATSHEET.md`
-13. Cost scoring rubric reference:
+16. Cost scoring rubric reference:
    - `ops/planning/agile/gateflow_cost_rubric.md`
+17. Closeout criteria rubric reference:
+   - `ops/planning/agile/gateflow_guide.md` (`Valid Closeout Criteria Rubric`)
 
 ## Planning API Usage (Required Flow)
 1. Always run API calls in dry-run first (no `--apply`).
