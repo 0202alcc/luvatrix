@@ -10,6 +10,17 @@ REQUIRED_SCREENSHOT_SIDECAR_KEYS: tuple[str, ...] = (
     "provenance_id",
 )
 
+REQUIRED_RECORDING_MANIFEST_KEYS: tuple[str, ...] = (
+    "session_id",
+    "route",
+    "revision",
+    "started_at_utc",
+    "stopped_at_utc",
+    "provenance_id",
+    "frame_count",
+    "platform",
+)
+
 
 @dataclass(frozen=True)
 class DebugCapturePlatformSpec:
@@ -25,6 +36,22 @@ class ScreenshotArtifactBundle:
     png_path: str
     sidecar_path: str
     sidecar: dict[str, str]
+
+
+@dataclass(frozen=True)
+class RecordingBudgetEnvelope:
+    start_overhead_ms: float
+    stop_overhead_ms: float
+    steady_overhead_ms: float
+
+
+@dataclass(frozen=True)
+class RecordingBudgetResult:
+    passed: bool
+    exceeded_limits: tuple[str, ...]
+    observed_start_overhead_ms: float
+    observed_stop_overhead_ms: float
+    observed_steady_overhead_ms: float
 
 
 def build_screenshot_sidecar(
@@ -87,6 +114,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
             declared_capabilities=(
                 "debug.capture.screenshot",
                 "debug.capture.screenshot.sidecar",
+                "debug.capture.record",
             ),
             unsupported_reason=None,
         ),
@@ -96,6 +124,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
             declared_capabilities=(
                 "debug.capture.windows.stub",
                 "debug.capture.screenshot.stub",
+                "debug.capture.record.stub",
             ),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
@@ -105,6 +134,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
             declared_capabilities=(
                 "debug.capture.linux.stub",
                 "debug.capture.screenshot.stub",
+                "debug.capture.record.stub",
             ),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
@@ -126,3 +156,57 @@ def _validate_required_sidecar_fields(sidecar: dict[str, str]) -> None:
     for key in REQUIRED_SCREENSHOT_SIDECAR_KEYS:
         if not sidecar.get(key, "").strip():
             raise ValueError(f"missing required screenshot sidecar field: {key}")
+
+
+def build_recording_manifest(
+    *,
+    session_id: str,
+    route: str,
+    revision: str,
+    started_at_utc: str,
+    stopped_at_utc: str,
+    provenance_id: str,
+    frame_count: int,
+    platform: str = "macos",
+) -> dict[str, str | int]:
+    manifest: dict[str, str | int] = {
+        "session_id": session_id.strip(),
+        "route": route.strip(),
+        "revision": revision.strip(),
+        "started_at_utc": started_at_utc.strip(),
+        "stopped_at_utc": stopped_at_utc.strip(),
+        "provenance_id": provenance_id.strip(),
+        "frame_count": int(frame_count),
+        "platform": platform.strip(),
+    }
+    for key in REQUIRED_RECORDING_MANIFEST_KEYS:
+        if key == "frame_count":
+            if int(manifest[key]) < 0:
+                raise ValueError("frame_count must be >= 0")
+            continue
+        if not str(manifest[key]).strip():
+            raise ValueError(f"missing required recording manifest field: {key}")
+    return manifest
+
+
+def evaluate_recording_budget(
+    *,
+    envelope: RecordingBudgetEnvelope,
+    observed_start_overhead_ms: float,
+    observed_stop_overhead_ms: float,
+    observed_steady_overhead_ms: float,
+) -> RecordingBudgetResult:
+    exceeded: list[str] = []
+    if float(observed_start_overhead_ms) > float(envelope.start_overhead_ms):
+        exceeded.append("start_overhead_ms")
+    if float(observed_stop_overhead_ms) > float(envelope.stop_overhead_ms):
+        exceeded.append("stop_overhead_ms")
+    if float(observed_steady_overhead_ms) > float(envelope.steady_overhead_ms):
+        exceeded.append("steady_overhead_ms")
+    return RecordingBudgetResult(
+        passed=not exceeded,
+        exceeded_limits=tuple(exceeded),
+        observed_start_overhead_ms=float(observed_start_overhead_ms),
+        observed_stop_overhead_ms=float(observed_stop_overhead_ms),
+        observed_steady_overhead_ms=float(observed_steady_overhead_ms),
+    )
