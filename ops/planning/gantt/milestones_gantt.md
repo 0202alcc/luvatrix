@@ -40,7 +40,7 @@ RF-030 ⚙️ Planes v2 Runtime Integration on Canonical IR                     
 F-031 🔁 Planes v2 Backward-Compat Adapter + Migration Tooling                         |                                                                                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                                    | Planned
 P-032 🚦 Planes v2 rollout non-regression gates + Go/No-Go closeout                    |                                                                                                                                                   ~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
 R-033 📈 Planes v2 post-foundation performance optimization                            |                                                                                                                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                        | Planned
-F-034 🛡️ Cross-Platform Debug Menu Foundation                                         |                                                                                                                                                                                      ~~~~~~~~~~~~~~~~~~~~~                                          | Planned
+F-034 🛡️ Cross-Platform Debug Menu Foundation                                         |                                                                                                                                                                                      =====================                                          | Complete
 U-035 🖼️ Visual + Capture Tooling                                                     |                                                                                                                                                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                            | Planned
 R-036 🎛️ Replay + Perf Observability                                                  |                                                                                                                                                                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~              | Planned
 A-037 🧩 App-Configurable Debug Policy + Compatibility                                 |                                                                                                                                                                                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Planned
@@ -381,7 +381,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - Optimizations do not break determinism or compatibility.
 
 ### F-034 🛡️ Cross-Platform Debug Menu Foundation
-- Status: Planned
+- Status: Complete
 - Target window: Week 27-29
 - Tasks: `T-2920, T-2901, T-2902, T-2903`
 - Lifecycle events:
