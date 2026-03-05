@@ -2295,6 +2295,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "macOS-first phase; close with planned reopen for cross-platform expansion"
+        },
+        {
+          "date": "2026-03-05",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "GO in macOS scope; planned reopen remains for multi-platform expansion"
         }
       ]
     },

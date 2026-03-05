@@ -399,6 +399,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 - Lifecycle events:
   - 2026-03-05 active (framework=gateflow_v1) - visual/capture milestone created
   - 2026-03-05 active (framework=gateflow_v1) - macOS-first phase; close with planned reopen for cross-platform expansion
+  - 2026-03-05 closed (framework=gateflow_v1) - GO in macOS scope; planned reopen remains for multi-platform expansion
 - Success criteria:
   - Screenshot and recording artifacts are deterministic with metadata sidecars on macOS.
   - Overlays are non-destructive and toggle cleanly on macOS while non-mac capabilities are explicitly stubbed/declared.
