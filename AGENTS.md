@@ -33,6 +33,28 @@ Before planning or editing code, read:
 5. Milestones may be implementation-complete on branch, but they are not release-complete until the `main` integration gate is satisfied.
 6. Team rule: milestone completion is recognized only after all milestone thread changes are merged to `main`.
 
+## Task Branch Lifecycle (Required)
+1. At milestone start, create the milestone branch from `main`.
+2. Every task must use its own task branch, created from the milestone branch (not from `main`).
+3. Task branch naming:
+   - `codex/t-<task-id-lower>-<short-slug>`
+4. A task is only eligible for `Done` after GateFlow completion and merge of the task branch back into the milestone branch.
+5. Milestone branch is merged into `main` only after milestone Go signal.
+6. Do not delete task branches until milestone is fully approved and merged to `main`.
+7. If milestone is No-Go:
+   - assess failure reasons,
+   - reopen/edit existing tasks or create remediation tasks,
+   - continue from milestone branch with new/reopened task branches.
+
+## Pull Request Format (Required)
+1. Task-level PRs (task branch -> milestone branch):
+   - Title: exact task name.
+   - Description: one sentence per GateFlow step (`Intake` through `Integration Ready`) describing what happened.
+2. Milestone PRs (milestone branch -> `main`):
+   - Title: exact milestone name.
+   - Description: ordered list of included tasks with one-line description per task outcome.
+3. PR descriptions must explicitly note dependencies, evidence links, and any reopen rationale.
+
 ## Task Reporting System (Mandatory)
 1. Task system source files:
    - `ops/planning/agile/tasks_master.json` (active tasks)

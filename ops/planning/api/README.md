@@ -13,6 +13,8 @@ Quick operator reference:
 1. At the beginning of each milestone thread, create/switch to a dedicated milestone branch.
 2. Keep milestone changes on that branch until human-approved integration/merge steps.
 3. Milestone completion is recognized only after milestone thread changes are merged to `main`.
+4. Task implementation should use task branches off the milestone branch, then merge back into milestone branch before task `Done`.
+5. Milestone branch merges to `main` only after Go signal.
 
 ## Endpoints
 

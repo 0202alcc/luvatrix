@@ -71,9 +71,18 @@ A single task ticket should move across the stages below.
 
 ```mermaid
 flowchart TD
-  subgraph TASK["Task GateFlow Lane"]
+  subgraph MILESTONE_GENERATION["Milestone Generation (Top)"]
+    direction TB
+    MG1["Define Milestone Objective + Success Criteria"] --> MG2["Define Closeout Criteria (Quantitative Go/No-Go)"]
+    MG2 --> MG3["Create Milestone in Planning API"]
+    MG3 --> MB0["Create Milestone Branch from main"]
+    MB0 --> MG4["Create First Task Type: [CLOSEOUT HARNESS]"]
+  end
+
+  subgraph TASK_EXECUTION["Task GateFlow Execution (Middle)"]
     direction LR
-    A["Intake"] --> B["Success Criteria Spec"]
+    TB0["Create Task Branch from Milestone Branch"] --> A["Intake"]
+    A --> B["Success Criteria Spec"]
     B --> C["Safety Tests Spec"]
     C --> D["Implementation Tests Spec"]
     D --> E["Edge Case Tests Spec"]
@@ -81,7 +90,9 @@ flowchart TD
     F --> G["Prototype Stage 2+"]
     G --> H["Verification Review"]
     H --> I["Integration Ready"]
-    I --> J["Done"]
+    I --> TP1{"Task PR Merged to Milestone Branch?"}
+    TP1 -->|Yes| J["Done"]
+    TP1 -->|No| X["Blocked"]
     A -.blocked.-> X["Blocked"]
     B -.blocked.-> X
     C -.blocked.-> X
@@ -96,27 +107,29 @@ flowchart TD
     J -.post-merge failure.-> H
   end
 
-  subgraph MILESTONE["Milestone System Lane"]
-    direction LR
-    M1["Milestone Planned"] --> M2["Milestone Active (In Progress)"]
-    M2 --> M3["Milestone Integration Gate"]
-    M3 --> M4["Milestone Complete"]
-    M4 -.new scope/regression.-> M5["Milestone Reopened"]
-    M5 --> M2
-    M2 -.hard blocker.-> M6["Milestone At Risk/Blocked"]
-    M6 --> M2
+  subgraph MILESTONE_CLOSEOUT["Milestone Closeout (Bottom)"]
+    direction TB
+    MC1["Milestone Integration Gate"] --> MC2{"Go/No-Go Decision"}
+    MC2 -->|Go| MP1{"Milestone PR Merged to main?"}
+    MP1 -->|Yes| MC3["Milestone Complete"]
+    MP1 -->|No| MC4["Blocked (Await Milestone PR Merge)"]
+    MC2 -->|No-Go| MC5["Reopen Milestone + Add/Edit Remediation Tasks"]
+    MC5 --> MC1
+    MC3 --> MC6["Delete Task Branches (Post-Merge Cleanup)"]
+    MC4 --> MC1
   end
 
-  J --> M3
-  M3 -.all required task_ids are Done + merged to main + checks pass on main.-> M4
+  MG4 --> TB0
+  J --> MC1
+  MC1 -.all required task_ids Done + merged to main + checks pass + closeout criteria met.-> MC2
 
   classDef task fill:#c7f9cc,stroke:#166534,color:#111827,stroke-width:1px;
   classDef milestone fill:#bfdbfe,stroke:#1e3a8a,color:#111827,stroke-width:1px;
   classDef blocked fill:#fecaca,stroke:#991b1b,color:#111827,stroke-width:1px;
 
-  class A,B,C,D,E,F,G,H,I,J,R task;
-  class M1,M2,M3,M4,M5 milestone;
-  class X,M6 blocked;
+  class A,B,C,D,E,F,G,H,I,J,R,TB0 task;
+  class MG1,MG2,MG3,MB0,MG4,TP1,MC1,MC2,MP1,MC3,MC5,MC6 milestone;
+  class X blocked;
 ```
 
 ## Milestone System in GateFlow
@@ -323,8 +336,19 @@ Each milestone is a container for a group of related tasks. Milestone state and 
 ## Branch + Integration Model
 
 1. Implement milestone work on a milestone branch first.
-2. Merge to `main` only after required checks and reviews pass.
-3. Milestone completion is recognized only after functionality is present and verified on `main`.
+2. Each task runs on a task branch created from the milestone branch.
+3. Task branches merge back into milestone branch after GateFlow completion.
+4. Task `Done` is valid only after task branch is merged into milestone branch plus evidence gates.
+5. Milestone branch merges into `main` only after Go signal and required checks.
+6. Do not delete task branches until milestone merge to `main` is successful.
+7. If No-Go, keep milestone branch active and create/reopen remediation task branches.
+
+### PR Description Rules
+
+1. Task-level PR title: exact task name.
+2. Task-level PR description: one sentence per GateFlow stage (`Intake` to `Integration Ready`).
+3. Milestone PR title: exact milestone name.
+4. Milestone PR description: ordered task list with one-line description per task outcome.
 
 ## Verification and Validation Model
 
