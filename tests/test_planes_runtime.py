@@ -761,6 +761,10 @@ class PlanesRuntimeTests(unittest.TestCase):
                     payload={"x": 20.0, "y": 20.0, "delta_x": -1.0, "delta_y": 0.0},
                 )
             )
+            # Force one compose pass so retained-node reuse is exercised even when
+            # the scroll intent produces no visual delta and would otherwise idle-skip.
+            app.state["force_full_invalidation"] = True
+            app.state["force_full_invalidation_reason"] = "retained_reuse_test"
             app.loop(ctx, 0.016)
             second_by_id = {comp.component_id: comp for comp in ctx.mounted}
 
