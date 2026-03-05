@@ -25,6 +25,16 @@ REQUIRED_INCREMENTAL_TARGETS: dict[str, float] = {
 }
 FULL_PRESENT_PCT_CAP = 15.0
 MAX_CONSECUTIVE_FULL_FRAME_CAP = 8
+REQUIRED_POLICY_VERDICT_FIELDS = (
+    "observed_incremental_pct",
+    "target_incremental_pct",
+    "observed_full_pct",
+    "full_pct_cap",
+    "max_consecutive_full_frame",
+    "consecutive_full_cap",
+    "exception_applied",
+    "pass",
+)
 
 
 def _hash_file(path: Path) -> str:
@@ -339,6 +349,33 @@ def validate(milestone_id: str) -> tuple[bool, list[str]]:
     if isinstance(raw_provenance, dict) and isinstance(summary_provenance, dict):
         if summary_provenance.get("raw_commit_sha") != raw_provenance.get("commit_sha"):
             errors.append("measured summary provenance commit_sha does not match raw artifact provenance")
+
+    policy_verdict = summary.get("policy_verdict", {})
+    if not isinstance(policy_verdict, dict):
+        errors.append("measured summary missing policy_verdict object")
+    else:
+        required_scenarios = policy_verdict.get("required_scenarios")
+        if not isinstance(required_scenarios, list) or not all(isinstance(s, str) for s in required_scenarios):
+            errors.append("measured summary policy_verdict.required_scenarios must be a string list")
+        else:
+            expected = list(REQUIRED_INCREMENTAL_TARGETS.keys())
+            if required_scenarios != expected:
+                errors.append("measured summary policy_verdict.required_scenarios must match required incremental policy set")
+        if not isinstance(policy_verdict.get("pass"), bool):
+            errors.append("measured summary policy_verdict.pass must be boolean")
+        if float(policy_verdict.get("full_pct_cap", -1)) != FULL_PRESENT_PCT_CAP:
+            errors.append("measured summary policy_verdict.full_pct_cap does not match validator cap")
+        if int(policy_verdict.get("consecutive_full_cap", -1)) != MAX_CONSECUTIVE_FULL_FRAME_CAP:
+            errors.append("measured summary policy_verdict.consecutive_full_cap does not match validator cap")
+
+    if isinstance(scenario_metrics, dict):
+        for scenario in REQUIRED_INCREMENTAL_TARGETS:
+            node = scenario_metrics.get(scenario)
+            if not isinstance(node, dict):
+                continue
+            for field in REQUIRED_POLICY_VERDICT_FIELDS:
+                if field not in node:
+                    errors.append(f"{scenario} missing policy verdict field: {field}")
 
     _validate_incremental_policy(raw, summary, errors)
 

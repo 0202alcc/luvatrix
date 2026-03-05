@@ -1,23 +1,23 @@
 {
   "digest_material": {
     "drag": {
-      "event_order_digest": "67fbf115c68efb47cff6a9122c8ed2cbfbf18ba2de11b194132ef71d7cfe6402",
-      "revision_sequence_digest": "1e4b7d4e4243bed4250b5cc5c8b411ec2f43f7fed4b8acf7fba59307c8891833"
+      "event_order_digest": "3da95e26e349f17846b981daae634297d47f26768039fd3df3aabad1ca07c04e",
+      "revision_sequence_digest": "4ffe282073eddef57e377f3d036ebbc16cb9a1af64fbb0d2636996371a03a1a7"
     },
     "idle": {
-      "event_order_digest": "a07b10103b546e374fb83dbc5441a3daeca3b66b44ef1be9a65f63de26ef295a",
-      "revision_sequence_digest": "5f1b892a15d6dd16a925bdf81b3b75c524bf79f3c9508652c2d452416d948e98"
+      "event_order_digest": "6a7577a84b046053b13d29029dbe1337e2b4f02aec6a620f6d071f77d732888b",
+      "revision_sequence_digest": "6edcf1b15cf7b6aabcb52fa8c30329fbe52536bf8794fcf53d807f13fdbfe54b"
     },
     "resize_stress_fullframe_allowed": {
-      "event_order_digest": "5831752db80013198a0b3fb9b2dbece3a5564b0b5f759283407fb17c4604a0c6",
-      "revision_sequence_digest": "4c4bb2bdaf91c36eb07766d327978764d402dfbdf962986eca5702af3024ec14"
+      "event_order_digest": "867fdfd49add777b04464815b9d4f852c39c70c9974a40ec07411670de3e34f5",
+      "revision_sequence_digest": "eea32c75cbf385146db715875f7c4a8662a0aba62dcacc7feae310f35f703f04"
     },
     "scroll": {
-      "event_order_digest": "aa41efea8f2b005139860ea1ff3a421c1296cdabf94f1a9eea9a6e1c15b951d1",
-      "revision_sequence_digest": "95400e97fa215f7a7fc20bd93a39b3e0c7a1d3e260721c298ff7046e14bb40b1"
+      "event_order_digest": "cccee9e64e04fb70ac55d2e4646c61a1ae546cb988cc857dabdded5d895ef795",
+      "revision_sequence_digest": "fbd069f135e2147388360bda5599e10d7d7c1c65ab325bf087d8d9196df268a7"
     }
   },
-  "event_order_digest": "33eed36a9c59b312ec7a099e80ded99082bfbe1099bdd3f573d10c60613fd324",
+  "event_order_digest": "e25fbe0697290bfb5bbcc2b42c2ea8dd94026dccacaf2791318a4272a3bc2ccf",
   "matrix": {
     "height": 720,
     "width": 1280
@@ -25,7 +25,7 @@
   "mismatch_against_seed_baseline": false,
   "provenance": {
     "command": "tools/perf/build_p026_replay_matrix.py",
-    "commit_sha": "7d430db3e9b09d27842ad92587d6b19f1e006d65",
+    "commit_sha": "ede1985e40249113cdba07e807be2bcd5c349e0a",
     "run_counts": {
       "per_seed": 10
     },
@@ -33,9 +33,9 @@
     "seed_list": [
       42
     ],
-    "timestamp_utc": "2026-03-04T06:27:43.822912+00:00"
+    "timestamp_utc": "2026-03-05T04:33:58.000282+00:00"
   },
-  "revision_sequence_digest": "72b87ac47c45e3daef23365f2c63f7c137ffb4068aabd09baeb4dd3807f3a3c2",
+  "revision_sequence_digest": "6e3237eb8d50f4504ab885df5ca822127c797bcfbbd79a5bb10f04fa79ea2c69",
   "run_index": 3,
   "samples": 80,
   "seed": 42,
