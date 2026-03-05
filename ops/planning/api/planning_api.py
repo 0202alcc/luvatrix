@@ -214,6 +214,34 @@ def validate_board_refs(task: dict[str, Any], board_ids: set[str]) -> None:
             raise ApiError(f"task {task.get('id')} references unknown board_ref '{ref}'")
 
 
+def validate_milestone_descriptions(milestone: dict[str, Any]) -> None:
+    mid = milestone.get("id", "<unknown>")
+    descriptions = milestone.get("descriptions")
+    if descriptions is None:
+        return
+    if not isinstance(descriptions, list):
+        raise ApiError(f"milestone {mid} descriptions must be a list of strings")
+    for idx, item in enumerate(descriptions):
+        if not isinstance(item, str) or not item.strip():
+            raise ApiError(f"milestone {mid} descriptions[{idx}] must be a non-empty string")
+
+
+def validate_task_notes(task: dict[str, Any]) -> None:
+    tid = task.get("id", "<unknown>")
+    notes = task.get("notes")
+    if notes is None:
+        return
+    if isinstance(notes, str):
+        if not notes.strip():
+            raise ApiError(f"task {tid} notes string must be non-empty")
+        return
+    if not isinstance(notes, list):
+        raise ApiError(f"task {tid} notes must be a string or list of strings")
+    for idx, item in enumerate(notes):
+        if not isinstance(item, str) or not item.strip():
+            raise ApiError(f"task {tid} notes[{idx}] must be a non-empty string")
+
+
 def validate_dep_id_format(task_id: str, dep: str) -> None:
     if not TASK_ID_RE.match(dep):
         raise ApiError(f"task {task_id} has invalid dependency id format: {dep}")
@@ -617,6 +645,7 @@ def validate_cross_refs(
     for mid in milestones:
         if not MILESTONE_ID_RE.match(mid):
             raise ApiError(f"invalid milestone id format: {mid}")
+        validate_milestone_descriptions(milestones[mid])
 
     validate_board_definitions(boards)
     statuses = allowed_task_statuses(boards)
@@ -635,6 +664,7 @@ def validate_cross_refs(
             raise ApiError(f"task {tid} depends_on must be a list")
         for dep in deps:
             validate_dep_id_format(tid, dep)
+        validate_task_notes(task)
         validate_cost_fields(task)
 
     validate_milestone_task_links(schedule, tasks_master, tasks_archived)
@@ -654,6 +684,8 @@ def create_milestone(schedule: dict[str, Any], body: dict[str, Any], task_ids_al
         raise ApiError(f"milestone already exists: {mid}")
     if body["status"] not in ALLOWED_MILESTONE_STATUS:
         raise ApiError(f"invalid milestone status: {body['status']}")
+    body.setdefault("descriptions", [])
+    validate_milestone_descriptions(body)
     body.setdefault("task_ids", [])
     if not isinstance(body["task_ids"], list):
         raise ApiError("milestone task_ids must be a list")
@@ -678,6 +710,7 @@ def patch_milestone(schedule: dict[str, Any], milestone_id: str, body: dict[str,
         row[k] = v
     if row.get("status") not in ALLOWED_MILESTONE_STATUS:
         raise ApiError(f"invalid milestone status: {row.get('status')}")
+    validate_milestone_descriptions(row)
     row.setdefault("task_ids", [])
     if not isinstance(row.get("task_ids"), list):
         raise ApiError("milestone task_ids must be a list")
@@ -736,6 +769,7 @@ def create_task(
         raise ApiError("depends_on must be a list")
     for dep in deps:
         validate_dep_id_format(tid, dep)
+    validate_task_notes(body)
     normalize_task_cost(body, reestimate=reestimate_cost)
     validate_done_gate_requirements(body, require=body.get("status") == "Done")
 
@@ -791,6 +825,7 @@ def patch_task(
         raise ApiError("depends_on must be a list")
     for dep in row.get("depends_on", []):
         validate_dep_id_format(task_id, dep)
+    validate_task_notes(row)
     if row.get("status") != old_status:
         enforce_gateflow_status_transition(
             task_id,

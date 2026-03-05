@@ -42,7 +42,7 @@ uv run python ops/planning/api/planning_api.py GET /backlog
 
 ```bash
 uv run python ops/planning/api/planning_api.py POST /milestones \
-  --body '{"id":"A-021","emoji":"🧩","name":"Example app project","start_week":13,"end_week":16,"status":"Planned","task_ids":["T-1201"],"lifecycle_events":[{"date":"2026-03-03","event":"active","framework":"gateflow_v1","note":"opened"}]}'
+  --body '{"id":"A-021","emoji":"🧩","name":"Example app project","descriptions":["Initial objective: deliver app-level baseline workflow.","Reopen objective: add remediation scope without changing protocol compatibility."],"start_week":13,"end_week":16,"status":"Planned","task_ids":["T-1201"],"lifecycle_events":[{"date":"2026-03-03","event":"active","framework":"gateflow_v1","note":"opened"}]}'
 ```
 
 Bootstrap milestone (no tasks yet):
@@ -70,7 +70,7 @@ Create:
 
 ```bash
 uv run python ops/planning/api/planning_api.py POST /tasks \
-  --body '{"id":"T-1201","title":"Define success criteria","milestone_id":"A-021","status":"Intake","depends_on":[],"board_refs":["milestone:A-021","team:protocol","specialist:pm"]}'
+  --body '{"id":"T-1201","title":"Define success criteria","milestone_id":"A-021","status":"Intake","depends_on":[],"board_refs":["milestone:A-021","team:protocol","specialist:pm"],"notes":["Architect intent: preserve RenderTarget boundary.","Include deterministic replay evidence commands in acceptance criteria."]}'
 ```
 
 Move status:

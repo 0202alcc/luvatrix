@@ -23,6 +23,7 @@ Quick operator reference:
 - `PATCH /milestones/{id}`
 - `DELETE /milestones/{id}` (`--force` required if active tasks still linked)
 - note: `task_ids` may be omitted or empty at milestone creation; attach tasks later or stage in backlog.
+- optional: `descriptions` (`string[]`) can capture milestone objective snapshots across reopen cycles.
 
 2. Tasks
 - `GET /tasks`
@@ -30,6 +31,7 @@ Quick operator reference:
 - `POST /tasks`
 - `PATCH /tasks/{id}`
 - `DELETE /tasks/{id}` (archives task in `tasks_archived.json`)
+- optional: `notes` (`string | string[]`) can store architect/system handoff details and implementation outlines.
 
 3. Boards
 - `GET /boards`
@@ -64,6 +66,8 @@ Quick operator reference:
 - board references exist in `boards_registry.json`
 - milestone `task_ids` (if populated) all resolve in active or archived task ledgers
 - task dependency IDs are well-formed (`T-###` style)
+- milestone `descriptions` is a list of non-empty strings when present
+- task `notes` is a non-empty string or list of non-empty strings when present
 - backlog item IDs/status/bucket formats and optional references
 4. Prevents unsafe deletes unless force flags are explicit.
 5. On successful `--apply`, automatically regenerates:
@@ -150,7 +154,7 @@ python ops/planning/api/planning_api.py GET /milestones
 2. Add task (dry-run):
 ```bash
 python ops/planning/api/planning_api.py POST /tasks \
-  --body '{"id":"T-1201","title":"Add X","milestone_id":"A-021","status":"Intake","depends_on":[],"board_refs":["milestone:A-021","team:runtime","specialist:development"]}'
+  --body '{"id":"T-1201","title":"Add X","milestone_id":"A-021","status":"Intake","depends_on":[],"board_refs":["milestone:A-021","team:runtime","specialist:development"],"notes":["Architect outline: use adapter boundary only.","No app protocol breaking changes allowed."]}'
 ```
 
 3. Apply edit to task:

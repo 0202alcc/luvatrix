@@ -91,7 +91,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-101 for milestone P-010 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Post artifact pack to mapped channels and pin baselines where allowed."
+      ]
     },
     {
       "id": "T-102",
@@ -119,7 +123,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-102 for milestone P-010 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Configure essential defaults for Carl-bot/sesh/MyRepoBot/Ticket Tool."
+      ]
     },
     {
       "id": "T-103",
@@ -147,7 +155,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-103 for milestone P-010 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Run rollout checker and publish pass report in #iteration-reviews."
+      ]
     },
     {
       "id": "T-201",
@@ -1026,7 +1038,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-301 for milestone R-012 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Collect and classify top swapchain/surface/fence failure modes."
+      ]
     },
     {
       "id": "T-302",
@@ -1054,7 +1070,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-302 for milestone R-012 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Add targeted regression tests for each failure class."
+      ]
     },
     {
       "id": "T-303",
@@ -1082,7 +1102,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-303 for milestone R-012 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Implement resiliency fixes and fallback parity checks."
+      ]
     },
     {
       "id": "T-304",
@@ -1110,7 +1134,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-304 for milestone R-012 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Run stability soak and publish defect burn-down."
+      ]
     },
     {
       "id": "T-401",
@@ -1136,7 +1164,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-401 for milestone P-013 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Define deterministic gate ownership and required pass criteria."
+      ]
     },
     {
       "id": "T-402",
@@ -1164,7 +1196,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-402 for milestone P-013 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Add flaky test quarantine + remediation workflow."
+      ]
     },
     {
       "id": "T-403",
@@ -1192,7 +1228,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-403 for milestone P-013 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Improve smoke signal visibility and artifact links."
+      ]
     },
     {
       "id": "T-501",
@@ -1218,7 +1258,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-501 for milestone F-014 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Define retention policy defaults and rationale."
+      ]
     },
     {
       "id": "T-502",
@@ -1246,7 +1290,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-502 for milestone F-014 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Validate prune/report workflows under realistic load."
+      ]
     },
     {
       "id": "T-503",
@@ -1274,7 +1322,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-503 for milestone F-014 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Publish operational playbook for retention management."
+      ]
     },
     {
       "id": "T-601",
@@ -1300,7 +1352,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-601 for milestone P-015 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Assemble milestone completion evidence packet."
+      ]
     },
     {
       "id": "T-602",
@@ -1328,7 +1384,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-602 for milestone P-015 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Review unresolved risks/defects and required mitigations."
+      ]
     },
     {
       "id": "T-603",
@@ -1356,7 +1416,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-603 for milestone P-015 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Publish go/no-go recommendation with rationale and decision log links."
+      ]
     },
     {
       "id": "T-701",
@@ -1382,7 +1446,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-701 for milestone ARU-016 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Add platform-aware runtime path: macOS windowed + non-macOS headless."
+      ]
     },
     {
       "id": "T-702",
@@ -1410,7 +1478,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-702 for milestone ARU-016 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Keep animation/frame behavior identical across platform paths."
+      ]
     },
     {
       "id": "T-703",
@@ -1438,7 +1510,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-703 for milestone ARU-016 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Add non-macOS system telemetry providers and unavailable fallbacks."
+      ]
     },
     {
       "id": "T-704",
@@ -1467,7 +1543,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-704 for milestone ARU-016 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Update tests/docs and validate no regression in dashboard formatting."
+      ]
     },
     {
       "id": "T-801",
@@ -1493,7 +1573,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-801 for milestone U-021 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Sideways x-axis rule labels for long names with readable wrapping/fallbacks."
+      ]
     },
     {
       "id": "T-802",
@@ -1521,7 +1605,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-802 for milestone U-021 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Bar chart renderer support (static + interactive parity)."
+      ]
     },
     {
       "id": "T-803",
@@ -1549,7 +1637,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-803 for milestone U-021 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Multiple plot support (subplot-like layout orchestration)."
+      ]
     },
     {
       "id": "T-804",
@@ -1583,7 +1675,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 0.85,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-804 for milestone U-017 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Scrolling and viewport controls for dense plot surfaces."
+      ]
     },
     {
       "id": "T-805",
@@ -1617,7 +1713,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 0.85,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-805 for milestone U-017 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Table UI component system (sortable columns, pagination/virtualization, keyboard access)."
+      ]
     },
     {
       "id": "T-821",
@@ -1646,7 +1746,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-821 for milestone U-021 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Dynamic data plotting primitives (incremental redraw windows, axis rescale policy, stream cadence hooks)."
+      ]
     },
     {
       "id": "T-822",
@@ -1674,7 +1778,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-822 for milestone U-021 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Financial visualization profile pack (OHLC/candles/volume overlays) for downstream marketbook rendering."
+      ]
     },
     {
       "id": "T-834",
@@ -1708,7 +1816,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 0.85,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-834 for milestone U-017 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Define and implement native hot-path extraction plan for high-frequency camera/compose operations."
+      ]
     },
     {
       "id": "T-835",
@@ -1743,7 +1855,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 0.85,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-835 for milestone U-017 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Implement CI performance gate pack for camera-scroll, compositor, and frame-budget thresholds."
+      ]
     },
     {
       "id": "T-836",
@@ -1777,7 +1893,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 0.85,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-836 for milestone U-017 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Implement shift-blit camera scroll compose path (translate previous frame + redraw exposed strips only)."
+      ]
     },
     {
       "id": "T-837",
@@ -2000,7 +2120,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-901 for milestone AU-018 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Calendar app component (day/week/month views + event rendering contract)."
+      ]
     },
     {
       "id": "T-902",
@@ -2028,7 +2152,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-902 for milestone AU-018 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Calendar workflow integration with data workspace navigation/state sync."
+      ]
     },
     {
       "id": "T-1001",
@@ -2054,7 +2182,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-1001 for milestone AU-019 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Marketbook schema + ingestion adapter contract."
+      ]
     },
     {
       "id": "T-1002",
@@ -2083,7 +2215,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-1002 for milestone AU-019 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Dedicated dynamic marketbook renderer (depth ladder, spread, imbalance traces)."
+      ]
     },
     {
       "id": "T-1003",
@@ -2111,7 +2247,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-1003 for milestone AU-019 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Streaming update strategy + latency/perf budgets."
+      ]
     },
     {
       "id": "T-1004",
@@ -2139,7 +2279,11 @@
       "cost_bucket": "L",
       "stage_multiplier_applied": 1.0,
       "cost_basis_version": "gateflow_cost_v1",
-      "cost_backfill_estimated": true
+      "cost_backfill_estimated": true,
+      "notes": [
+        "Handoff intent: complete T-1004 for milestone AU-019 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Regression/safety tests and operator docs."
+      ]
     },
     {
       "id": "T-1101",
@@ -5090,6 +5234,10 @@
       "evidence_commands": [
         "uv run pytest tests -k \"closeout and evidence and validator\" -q",
         "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026"
+      ],
+      "notes": [
+        "Handoff intent: complete T-2819 for milestone P-026 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Validator policy hard-gate completion"
       ]
     },
     {
@@ -5116,6 +5264,10 @@
         "uv run python tools/perf/run_suite.py --scenario input_burst --samples 120 --width 1280 --height 720 --seed 1337 --out artifacts/perf/closeout/raw_input_burst_fix.json",
         "uv run python tools/perf/run_suite.py --scenario closeout_required --samples 120 --width 1280 --height 720 --seed 1337 --out artifacts/perf/closeout/raw_closeout_required.json",
         "uv run pytest tests/test_planes_runtime.py -k \"burst or dirty_rect or compose\" -q"
+      ],
+      "notes": [
+        "Handoff intent: complete T-2820 for milestone P-026 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Input burst incremental compose remediation"
       ]
     },
     {
@@ -5143,6 +5295,10 @@
       "evidence_commands": [
         "uv run python tools/perf/build_p026_measured_summary.py --raw artifacts/perf/closeout/raw_closeout_required.json --out artifacts/perf/closeout/measured_summary.json",
         "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026"
+      ],
+      "notes": [
+        "Handoff intent: complete T-2821 for milestone P-026 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Policy verdict embedding in summary artifacts"
       ]
     },
     {
@@ -5172,6 +5328,10 @@
         "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
         "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-026",
         "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "notes": [
+        "Handoff intent: complete T-2822 for milestone P-026 without breaking protocol or determinism constraints.",
+        "Execution outline seed: Final revalidation and packet reconciliation"
       ]
     }
   ]

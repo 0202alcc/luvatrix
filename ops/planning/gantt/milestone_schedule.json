@@ -69,6 +69,9 @@
           "framework": "gateflow_v1",
           "note": "framework migration cycle"
         }
+      ],
+      "descriptions": [
+        "Must comply with first-party Luvatrix App Protocol contracts."
       ]
     },
     {
@@ -92,6 +95,9 @@
           "framework": "gateflow_v1",
           "note": "active milestone in current planning cycle"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Cross-platform full-suite interactive generalization."
       ]
     },
     {
@@ -113,6 +119,9 @@
           "framework": "gateflow_v1",
           "note": "active milestone in current planning cycle"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Data workspace UI (calendar app)."
       ]
     },
     {
@@ -142,6 +151,9 @@
           "framework": "gateflow_v1",
           "note": "integrated dependency path added for U-021 plot module outputs"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Custom marketbook dynamic plotting system (integrated with U-021 plots module)."
       ]
     },
     {
@@ -164,6 +176,9 @@
           "framework": "legacy-kanban",
           "note": "historical completion"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Core package transition and repository cleanup."
       ]
     },
     {
@@ -186,6 +201,9 @@
           "framework": "legacy-kanban",
           "note": "historical completion"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Runtime safety controller and audit pipeline hardening."
       ]
     },
     {
@@ -246,7 +264,10 @@
           "note": "follow-up scope complete; tasks T-2701/T-2702/T-2703 done and merged to main"
         }
       ],
-      "completed_on": "2026-03-03"
+      "completed_on": "2026-03-03",
+      "descriptions": [
+        "Deliver milestone outcome: App protocol docs finalized."
+      ]
     },
     {
       "id": "F-014",
@@ -268,6 +289,9 @@
           "framework": "gateflow_v1",
           "note": "active milestone in current planning cycle"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Audit retention lifecycle."
       ]
     },
     {
@@ -296,6 +320,9 @@
           "framework": "gateflow_v1",
           "note": "completed and verified on main with required checks"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Sensor backend performance modernization."
       ]
     },
     {
@@ -318,6 +345,9 @@
           "framework": "legacy-kanban",
           "note": "historical completion"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Platform variant routing and HDI phase standardization."
       ]
     },
     {
@@ -340,6 +370,9 @@
           "framework": "legacy-kanban",
           "note": "historical completion"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Discord ops consolidation under /discord."
       ]
     },
     {
@@ -362,6 +395,9 @@
           "framework": "gateflow_v1",
           "note": "active milestone in current planning cycle"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Discord governance artifacts and onboarding system."
       ]
     },
     {
@@ -384,6 +420,9 @@
           "framework": "gateflow_v1",
           "note": "active milestone in current planning cycle"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: CI hardening and flaky governance."
       ]
     },
     {
@@ -406,6 +445,9 @@
           "framework": "gateflow_v1",
           "note": "active milestone in current planning cycle"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Production-hardening go/no-go review."
       ]
     },
     {
@@ -434,6 +476,9 @@
           "framework": "gateflow_v1",
           "note": "gateflow compliance audit complete; all P-021 tasks verified done on main"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Performance baseline and telemetry gates."
       ]
     },
     {
@@ -456,6 +501,9 @@
           "framework": "legacy-kanban",
           "note": "historical completion"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: macOS visual runtime foundation merged to main."
       ]
     },
     {
@@ -478,6 +526,9 @@
           "framework": "legacy-kanban",
           "note": "historical completion"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Rendering fallback, smoke docs, and GPU blit path."
       ]
     },
     {
@@ -501,6 +552,9 @@
           "framework": "gateflow_v1",
           "note": "active milestone in current planning cycle"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Vulkan stabilization."
       ]
     },
     {
@@ -524,7 +578,10 @@
           "note": "planned from architect performance directives"
         }
       ],
-      "completed_on": "2026-03-03"
+      "completed_on": "2026-03-03",
+      "descriptions": [
+        "Deliver milestone outcome: Render copy elimination."
+      ]
     },
     {
       "id": "R-023",
@@ -547,7 +604,10 @@
           "note": "planned from architect performance directives"
         }
       ],
-      "completed_on": "2026-03-03"
+      "completed_on": "2026-03-03",
+      "descriptions": [
+        "Deliver milestone outcome: Vulkan transfer path efficiency."
+      ]
     },
     {
       "id": "R-025",
@@ -575,6 +635,9 @@
           "framework": "gateflow_v1",
           "note": "gateflow compliance audit complete; tasks done and verified on main"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Event loop and input scheduling tightening."
       ]
     },
     {
@@ -597,6 +660,9 @@
           "framework": "legacy-kanban",
           "note": "historical completion"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Packaging metadata and Vulkan runtime preflight guidance."
       ]
     },
     {
@@ -619,6 +685,9 @@
           "framework": "legacy-kanban",
           "note": "historical completion"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Plot stabilization and stream simulation integration."
       ]
     },
     {
@@ -670,6 +739,9 @@
           "framework": "gateflow_v1",
           "note": "scope split: plotting work moved into U-021 while UI/UX foundations remain in U-017"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)."
       ]
     },
     {
@@ -693,6 +765,9 @@
           "framework": "gateflow_v1",
           "note": "split from U-017 to isolate plotting stack and integrate with AU-019"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Plots module foundations (labels, bars, subplots, dynamic data, financial visualizations)."
       ]
     },
     {
@@ -715,6 +790,9 @@
           "framework": "legacy-kanban",
           "note": "historical completion"
         }
+      ],
+      "descriptions": [
+        "Deliver milestone outcome: Interactive plot module and UI IR integration."
       ]
     },
     {
@@ -831,7 +909,10 @@
         "T-2821": "Measured summary embeds required per-scenario policy verdict fields and top-level policy_verdict; generation fails on missing verdict inputs.",
         "T-2822": "Final closeout packet/manifest/hash reconciliation completed with scenario verdict table and all validators passing."
       },
-      "completed_on": null
+      "completed_on": null,
+      "descriptions": [
+        "All closeout tasks complete with consolidated evidence package."
+      ]
     }
   ]
 }
