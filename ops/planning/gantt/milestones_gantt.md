@@ -386,10 +386,11 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 - Tasks: `T-2920, T-2901, T-2902, T-2903`
 - Lifecycle events:
   - 2026-03-05 active (framework=gateflow_v1) - debug menu milestone created
+  - 2026-03-05 active (framework=gateflow_v1) - macOS-first phase; close with planned reopen for cross-platform expansion
 - Success criteria:
-  - Menu handling is crash-proof with safe dispatch fallbacks.
-  - Debug capabilities are standardized and unambiguous across platforms.
-  - Platform adapter contract preserves semantic parity on macOS/Windows/Linux.
+  - Menu handling is crash-proof with safe dispatch fallbacks on macOS.
+  - Debug capabilities are standardized and unambiguous with explicit non-mac stub/unsupported capability states.
+  - Milestone Go/No-Go is evaluated in macOS context only for this phase, with reopen intent for broader platform expansion.
 
 ### U-035 🖼️ Visual + Capture Tooling
 - Status: Planned
@@ -397,10 +398,11 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 - Tasks: `T-2921, T-2904, T-2905, T-2906`
 - Lifecycle events:
   - 2026-03-05 active (framework=gateflow_v1) - visual/capture milestone created
+  - 2026-03-05 active (framework=gateflow_v1) - macOS-first phase; close with planned reopen for cross-platform expansion
 - Success criteria:
-  - Screenshot and recording artifacts are deterministic with metadata sidecars.
-  - Overlays are non-destructive and toggle cleanly.
-  - Capture paths respect render-loop budget constraints.
+  - Screenshot and recording artifacts are deterministic with metadata sidecars on macOS.
+  - Overlays are non-destructive and toggle cleanly on macOS while non-mac capabilities are explicitly stubbed/declared.
+  - Milestone Go/No-Go is macOS-context only in this phase, with reopen intent for multi-platform expansion.
 
 ### R-036 🎛️ Replay + Perf Observability
 - Status: Planned
@@ -408,10 +410,11 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 - Tasks: `T-2922, T-2907, T-2908, T-2909`
 - Lifecycle events:
   - 2026-03-05 active (framework=gateflow_v1) - replay/perf milestone created
+  - 2026-03-05 active (framework=gateflow_v1) - macOS-first phase; close with planned reopen for cross-platform expansion
 - Success criteria:
-  - Replay reproduces deterministic ordering digests.
-  - Frame-step/HUD preserve ordering guarantees.
-  - Debug bundles are complete and validator-friendly.
+  - Replay reproduces deterministic ordering digests in macOS scope.
+  - Frame-step/HUD preserve ordering guarantees on macOS with explicit non-mac capability stubs.
+  - Milestone Go/No-Go is macOS-context only in this phase, with reopen intent for broader platform coverage.
 
 ### A-037 🧩 App-Configurable Debug Policy + Compatibility
 - Status: Planned
@@ -419,10 +422,11 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 - Tasks: `T-2923, T-2910`
 - Lifecycle events:
   - 2026-03-05 active (framework=gateflow_v1) - app policy compatibility milestone created
+  - 2026-03-05 active (framework=gateflow_v1) - macOS-first phase; close with planned reopen for cross-platform expansion
 - Success criteria:
-  - Existing apps continue to run unchanged by default.
-  - Manifest-level debug policy is version-gated and safe.
-  - P-026 non-regression expectations hold before default-path switch.
+  - Existing apps continue to run unchanged by default in macOS scope.
+  - Manifest-level debug policy is version-gated/safe and encodes explicit non-mac capability stub behavior.
+  - Milestone Go/No-Go is macOS-context only in this phase, then close with planned reopen for device/software expansion.
 
 ### F-038 🔔 Cross-Platform Notification Protocol + Runtime Adapters
 - Status: Planned

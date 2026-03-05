@@ -5955,7 +5955,8 @@
         "specialist:pm"
       ],
       "notes": [
-        "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for crash-proof debug menu foundation."
+        "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for crash-proof debug menu foundation.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -5971,7 +5972,8 @@
         "specialist:pm"
       ],
       "notes": [
-        "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for screenshot/record/overlay tooling."
+        "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for screenshot/record/overlay tooling.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -5987,7 +5989,8 @@
         "specialist:pm"
       ],
       "notes": [
-        "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for replay/frame-step/HUD/bundle tooling."
+        "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for replay/frame-step/HUD/bundle tooling.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -6003,7 +6006,8 @@
         "specialist:pm"
       ],
       "notes": [
-        "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for manifest policy and compatibility gates."
+        "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for manifest policy and compatibility gates.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -6019,7 +6023,8 @@
         "specialist:safety"
       ],
       "notes": [
-        "All unsupported menu actions must degrade to disabled/noop+warning; no crash path allowed."
+        "All unsupported menu actions must degrade to disabled/noop+warning; no crash path allowed.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -6037,7 +6042,8 @@
         "specialist:architecture"
       ],
       "notes": [
-        "Define canonical debug capability IDs and one-to-one action mapping."
+        "Define canonical debug capability IDs and one-to-one action mapping.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -6055,7 +6061,8 @@
         "specialist:testing"
       ],
       "notes": [
-        "Define semantic parity contract for top-menu behavior across platforms."
+        "Define semantic parity contract for top-menu behavior across platforms.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -6073,7 +6080,8 @@
         "specialist:testing"
       ],
       "notes": [
-        "Metadata sidecar must include route/revision/timestamp/provenance and be emitted atomically with PNG."
+        "Metadata sidecar must include route/revision/timestamp/provenance and be emitted atomically with PNG.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -6092,7 +6100,8 @@
         "specialist:qa"
       ],
       "notes": [
-        "Recording start/stop must not exceed allowed render-loop budget envelopes (P-026 non-regression)."
+        "Recording start/stop must not exceed allowed render-loop budget envelopes (P-026 non-regression).",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -6110,7 +6119,8 @@
         "specialist:qa"
       ],
       "notes": [
-        "Overlay draw order/opacity/toggles must be non-destructive and disable cleanly."
+        "Overlay draw order/opacity/toggles must be non-destructive and disable cleanly.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -6128,7 +6138,8 @@
         "specialist:testing"
       ],
       "notes": [
-        "Seed-pinned replay must reproduce ordering digest; preserve determinism semantics validated in P-026."
+        "Seed-pinned replay must reproduce ordering digest; preserve determinism semantics validated in P-026.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -6147,7 +6158,8 @@
         "specialist:qa"
       ],
       "notes": [
-        "Frame-step state machine must preserve deterministic ordering and non-regression perf telemetry semantics."
+        "Frame-step state machine must preserve deterministic ordering and non-regression perf telemetry semantics.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -6168,7 +6180,8 @@
         "specialist:release"
       ],
       "notes": [
-        "Bundle must include captures, traces, perf, provenance in one-command export."
+        "Bundle must include captures, traces, perf, provenance in one-command export.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {
@@ -6187,7 +6200,8 @@
         "specialist:architecture"
       ],
       "notes": [
-        "Maintain existing app compatibility; default Luvatrix debug root present unless explicitly policy-disabled."
+        "Maintain existing app compatibility; default Luvatrix debug root present unless explicitly policy-disabled.",
+        "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
       ]
     },
     {

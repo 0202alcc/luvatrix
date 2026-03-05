@@ -2176,12 +2176,12 @@
         "T-2903"
       ],
       "descriptions": [
-        "Crash-proof debug menu foundation with standardized capability IDs and platform adapter semantics."
+        "macOS-first debug menu foundation with crash-proof handling, standardized capability IDs, and explicit non-mac capability stubs for cross-platform-safe contracts."
       ],
       "success_criteria": [
-        "Menu handling is crash-proof with safe dispatch fallbacks.",
-        "Debug capabilities are standardized and unambiguous across platforms.",
-        "Platform adapter contract preserves semantic parity on macOS/Windows/Linux."
+        "Menu handling is crash-proof with safe dispatch fallbacks on macOS.",
+        "Debug capabilities are standardized and unambiguous with explicit non-mac stub/unsupported capability states.",
+        "Milestone Go/No-Go is evaluated in macOS context only for this phase, with reopen intent for broader platform expansion."
       ],
       "closeout_criteria": {
         "metric_id": "f-034-closeout-v1",
@@ -2196,12 +2196,14 @@
         "hard_no_go_conditions": [
           "any menu action can crash app process",
           "capability IDs are ambiguous/overlapping",
-          "adapter contract lacks parity guarantees"
+          "adapter contract lacks parity guarantees",
+          "non-mac behavior is undefined instead of explicit stub/capability declaration"
         ],
         "required_evidence": [
           "menu dispatch safety tests",
           "capability schema/tests",
-          "adapter conformance tests"
+          "adapter conformance tests",
+          "macOS-first go/no-go evidence packet with explicit non-mac stub/capability matrix and reopen plan note"
         ],
         "required_commands": [
           "uv run pytest tests -k \"debug_menu_dispatch or debug_capabilities or debug_menu_adapter\" -q",
@@ -2219,6 +2221,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "debug menu milestone created"
+        },
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "macOS-first phase; close with planned reopen for cross-platform expansion"
         }
       ]
     },
@@ -2236,12 +2244,12 @@
         "T-2906"
       ],
       "descriptions": [
-        "Screenshot/record tooling and visual overlays with deterministic metadata and safe runtime behavior."
+        "macOS-first screenshot/record tooling and visual overlays with deterministic metadata; non-mac paths remain explicit stubs/capability-declared for safe expansion."
       ],
       "success_criteria": [
-        "Screenshot and recording artifacts are deterministic with metadata sidecars.",
-        "Overlays are non-destructive and toggle cleanly.",
-        "Capture paths respect render-loop budget constraints."
+        "Screenshot and recording artifacts are deterministic with metadata sidecars on macOS.",
+        "Overlays are non-destructive and toggle cleanly on macOS while non-mac capabilities are explicitly stubbed/declared.",
+        "Milestone Go/No-Go is macOS-context only in this phase, with reopen intent for multi-platform expansion."
       ],
       "closeout_criteria": {
         "metric_id": "u-035-closeout-v1",
@@ -2256,12 +2264,14 @@
         "hard_no_go_conditions": [
           "capture start/stop violates render budget envelope",
           "metadata sidecar missing required provenance fields",
-          "overlay toggles alter app state/render semantics"
+          "overlay toggles alter app state/render semantics",
+          "non-mac behavior is undefined instead of explicit stub/capability declaration"
         ],
         "required_evidence": [
           "screenshot schema tests",
           "recording lifecycle perf tests",
-          "overlay regression snapshots"
+          "overlay regression snapshots",
+          "macOS-first go/no-go evidence packet with explicit non-mac stub/capability matrix and reopen plan note"
         ],
         "required_commands": [
           "uv run pytest tests -k \"debug_screenshot or debug_recording or debug_overlay\" -q",
@@ -2279,6 +2289,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "visual/capture milestone created"
+        },
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "macOS-first phase; close with planned reopen for cross-platform expansion"
         }
       ]
     },
@@ -2296,12 +2312,12 @@
         "T-2909"
       ],
       "descriptions": [
-        "Input replay, frame-step, perf HUD, and exportable debug bundles with deterministic evidence."
+        "macOS-first input replay, frame-step, perf HUD, and exportable debug bundles with deterministic evidence; non-mac kept as explicit capability stubs."
       ],
       "success_criteria": [
-        "Replay reproduces deterministic ordering digests.",
-        "Frame-step/HUD preserve ordering guarantees.",
-        "Debug bundles are complete and validator-friendly."
+        "Replay reproduces deterministic ordering digests in macOS scope.",
+        "Frame-step/HUD preserve ordering guarantees on macOS with explicit non-mac capability stubs.",
+        "Milestone Go/No-Go is macOS-context only in this phase, with reopen intent for broader platform coverage."
       ],
       "closeout_criteria": {
         "metric_id": "r-036-closeout-v1",
@@ -2316,12 +2332,14 @@
         "hard_no_go_conditions": [
           "replay digest mismatch in required seed matrix",
           "frame-step violates deterministic ordering",
-          "bundle export missing required artifact classes"
+          "bundle export missing required artifact classes",
+          "non-mac behavior is undefined instead of explicit stub/capability declaration"
         ],
         "required_evidence": [
           "replay matrix tests",
           "frame-step determinism tests",
-          "bundle validator outputs"
+          "bundle validator outputs",
+          "macOS-first go/no-go evidence packet with explicit non-mac stub/capability matrix and reopen plan note"
         ],
         "required_commands": [
           "uv run pytest tests -k \"debug_replay or debug_frame_step or debug_bundle\" -q",
@@ -2339,6 +2357,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "replay/perf milestone created"
+        },
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "macOS-first phase; close with planned reopen for cross-platform expansion"
         }
       ]
     },
@@ -2354,12 +2378,12 @@
         "T-2910"
       ],
       "descriptions": [
-        "App manifest debug policy controls with backward compatibility and P-026 non-regression gates."
+        "macOS-first app manifest debug policy controls with backward compatibility and P-026 non-regression gates; non-mac policies are explicit capability stubs until expansion."
       ],
       "success_criteria": [
-        "Existing apps continue to run unchanged by default.",
-        "Manifest-level debug policy is version-gated and safe.",
-        "P-026 non-regression expectations hold before default-path switch."
+        "Existing apps continue to run unchanged by default in macOS scope.",
+        "Manifest-level debug policy is version-gated/safe and encodes explicit non-mac capability stub behavior.",
+        "Milestone Go/No-Go is macOS-context only in this phase, then close with planned reopen for device/software expansion."
       ],
       "closeout_criteria": {
         "metric_id": "a-037-closeout-v1",
@@ -2374,12 +2398,14 @@
         "hard_no_go_conditions": [
           "legacy app conformance fails",
           "app override removes mandatory debug fallback without policy approval",
-          "P-026 non-regression gates fail"
+          "P-026 non-regression gates fail",
+          "non-mac behavior is undefined instead of explicit stub/capability declaration"
         ],
         "required_evidence": [
           "manifest schema tests",
           "legacy conformance suite",
-          "p026 non-regression evidence"
+          "p026 non-regression evidence",
+          "macOS-first go/no-go evidence packet with explicit non-mac stub/capability matrix and reopen plan note"
         ],
         "required_commands": [
           "uv run pytest tests -k \"debug_manifest or legacy_debug_conformance\" -q",
@@ -2399,6 +2425,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "app policy compatibility milestone created"
+        },
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "macOS-first phase; close with planned reopen for cross-platform expansion"
         }
       ]
     },
