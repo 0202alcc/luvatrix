@@ -38,6 +38,11 @@ DEFAULT_DEBUG_MENU_ACTIONS: tuple[DebugMenuActionSpec, ...] = (
         label="Toggle Window Recording",
     ),
     DebugMenuActionSpec(
+        menu_id="debug.menu.overlay.toggle",
+        capability_id="debug.overlay.render",
+        label="Toggle Overlay Tooling",
+    ),
+    DebugMenuActionSpec(
         menu_id="debug.menu.replay.start",
         capability_id="debug.replay.start",
         label="Start Replay",
