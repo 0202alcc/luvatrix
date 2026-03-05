@@ -28,10 +28,19 @@ Task chain: `T-2921 -> T-2904 -> T-2905 -> T-2906`
 1. `T-2921` Harness validated against screenshot, recording, and overlay task contract/test coverage.
 
 ## Verification Review
-1. Pending.
+1. `T-2921` Harness evidence commands validated against implemented tests and planning validators.
+2. `T-2904` Screenshot sidecar contract reviewed for deterministic required metadata keys and atomic artifact pairing.
+3. `T-2905` Recording contract reviewed for lifecycle budget envelope evaluation behavior.
+4. `T-2906` Overlay contract reviewed for bounds/dirty-rect validation and non-destructive toggle semantics.
 
 ## Integration Ready
-1. Pending.
+1. `T-2921` Harness and execution board are aligned to milestone closeout criteria.
+2. `T-2904` Screenshot contract APIs/tests/docs are merged to the milestone branch.
+3. `T-2905` Recording contract APIs/tests/docs are merged to the milestone branch.
+4. `T-2906` Overlay contract APIs/tests/docs are merged to the milestone branch.
 
 ## Done
-1. Pending.
+1. `T-2921` Completed closeout harness definitions and linked U-035 command set in docs + execution board.
+2. `T-2904` Completed screenshot metadata sidecar contract with deterministic keys and atomic artifact pairing checks.
+3. `T-2905` Completed recording artifact manifest and lifecycle budget envelope contract with deterministic validation coverage.
+4. `T-2906` Completed overlay bounds/dirty-rect/coordinate contract with non-destructive toggle semantics and explicit non-mac stubs.
