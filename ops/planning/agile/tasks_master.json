@@ -5979,7 +5979,7 @@
       "title": "[CLOSEOUT HARNESS] Define visual/capture closeout metric and evidence harness",
       "task_type": "closeout_harness",
       "milestone_id": "U-035",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:U-035",
@@ -5989,7 +5989,22 @@
       "notes": [
         "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for screenshot/record/overlay tooling.",
         "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1600,
+        "output_tokens": 700,
+        "wall_time_sec": 480,
+        "tool_calls": 10,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2922",
@@ -6130,7 +6145,7 @@
       "title": "Screenshot tool spec + metadata sidecar contract",
       "task_type": "standard",
       "milestone_id": "U-035",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-2902"
       ],
@@ -6142,14 +6157,29 @@
       "notes": [
         "Metadata sidecar must include route/revision/timestamp/provenance and be emitted atomically with PNG.",
         "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 3200,
+        "output_tokens": 1400,
+        "wall_time_sec": 1020,
+        "tool_calls": 22,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2905",
       "title": "Window recording tool spec + artifact contract",
       "task_type": "standard",
       "milestone_id": "U-035",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-2902",
         "T-2904"
@@ -6162,14 +6192,29 @@
       "notes": [
         "Recording start/stop must not exceed allowed render-loop budget envelopes (P-026 non-regression).",
         "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 3000,
+        "output_tokens": 1300,
+        "wall_time_sec": 980,
+        "tool_calls": 20,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2906",
       "title": "Overlay tooling spec (bounds/dirty-rect/coordinates)",
       "task_type": "standard",
       "milestone_id": "U-035",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-2902"
       ],
@@ -6181,7 +6226,22 @@
       "notes": [
         "Overlay draw order/opacity/toggles must be non-destructive and disable cleanly.",
         "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 2900,
+        "output_tokens": 1250,
+        "wall_time_sec": 940,
+        "tool_calls": 19,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2907",
