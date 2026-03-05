@@ -5,7 +5,7 @@ Scope lock: macOS-first only. Non-mac paths must be explicit stubs/capability-de
 Task chain: `T-2920 -> T-2901 -> T-2902 -> T-2903`
 
 ## Intake
-1. `T-2903` Cross-platform menu adapter spec (macOS/Windows/Linux).
+1. None.
 
 ## Success Criteria Spec
 1. `T-2920` Milestone closeout metric contract defined with macOS-context Go/No-Go threshold and explicit non-mac stub declaration requirements.
@@ -37,3 +37,4 @@ Task chain: `T-2920 -> T-2901 -> T-2902 -> T-2903`
 1. `T-2920` Completed closeout harness definitions and linked evidence command set in docs + execution board.
 2. `T-2901` Completed crash-proof dispatch contract with deterministic noop/disabled fallback behavior.
 3. `T-2902` Completed canonical menu-ID to capability-ID one-to-one registry and validation checks.
+4. `T-2903` Completed explicit macOS/Windows/Linux adapter capability matrix with non-mac stub declarations.
