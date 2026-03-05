@@ -2,15 +2,15 @@
   "artifacts": [
     {
       "path": "artifacts/perf/closeout/raw_closeout_required.json",
-      "sha256": "075012048594ba869fc218118059f1869d434c8001e63ef18a813624b9b618fb"
+      "sha256": "ed86560b607189ed63fdaaf46fe583375ae5c9f7c6e271dfcf0a3f5d8d7f33fb"
     },
     {
       "path": "artifacts/perf/closeout/measured_summary.json",
-      "sha256": "c5df1e9901eb2e9ee743987913f184e9862549c34460588731c207bb119c4145"
+      "sha256": "c570664425dd4d6a1dd28d49af5890f1b599f88208f3493c7bdd87ef58637e88"
     },
     {
       "path": "artifacts/perf/closeout/determinism_replay_matrix.json",
-      "sha256": "f5a9a4d2bd437d32a28018a1d9fd88540cc31521992effe55d0de051cd514b55"
+      "sha256": "b5e7204d525d71bf63aff430d7cc25c4eec68b16dbbbfb18230d77a21effe845"
     }
   ]
 }
