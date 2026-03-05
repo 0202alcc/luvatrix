@@ -17,6 +17,15 @@ class DebugMenuActionSpec:
     label: str
 
 
+@dataclass(frozen=True)
+class DebugMenuAdapterSpec:
+    platform: str
+    supported: bool
+    supported_menu_ids: tuple[str, ...]
+    declared_capabilities: tuple[str, ...]
+    unsupported_reason: str | None = None
+
+
 DEFAULT_DEBUG_MENU_ACTIONS: tuple[DebugMenuActionSpec, ...] = (
     DebugMenuActionSpec(
         menu_id="debug.menu.capture.screenshot",
@@ -141,3 +150,44 @@ def _looks_canonical_id(value: str, *, expected_prefix: str) -> bool:
     if ".." in value or value.endswith(".") or value.startswith("."):
         return False
     return all(ch.islower() or ch.isdigit() or ch in {".", "_"} for ch in value)
+
+
+def default_debug_menu_adapter_specs() -> tuple[DebugMenuAdapterSpec, ...]:
+    registry = build_debug_capability_registry()
+    menu_ids = tuple(registry.keys())
+    capabilities = tuple(registry.values())
+    return (
+        DebugMenuAdapterSpec(
+            platform="macos",
+            supported=True,
+            supported_menu_ids=menu_ids,
+            declared_capabilities=capabilities,
+            unsupported_reason=None,
+        ),
+        DebugMenuAdapterSpec(
+            platform="windows",
+            supported=False,
+            supported_menu_ids=(),
+            declared_capabilities=("debug.adapter.windows.stub",),
+            unsupported_reason="macOS-first phase: explicit stub only",
+        ),
+        DebugMenuAdapterSpec(
+            platform="linux",
+            supported=False,
+            supported_menu_ids=(),
+            declared_capabilities=("debug.adapter.linux.stub",),
+            unsupported_reason="macOS-first phase: explicit stub only",
+        ),
+    )
+
+
+def debug_menu_adapter_capability_matrix() -> dict[str, dict[str, object]]:
+    matrix: dict[str, dict[str, object]] = {}
+    for spec in default_debug_menu_adapter_specs():
+        matrix[spec.platform] = {
+            "supported": spec.supported,
+            "supported_menu_ids": list(spec.supported_menu_ids),
+            "declared_capabilities": list(spec.declared_capabilities),
+            "unsupported_reason": spec.unsupported_reason,
+        }
+    return matrix

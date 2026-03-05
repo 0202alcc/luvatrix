@@ -12,10 +12,13 @@ from .app_runtime import (
 from .display_runtime import DisplayRuntime, RenderTick
 from .debug_menu import (
     DEFAULT_DEBUG_MENU_ACTIONS,
+    DebugMenuAdapterSpec,
     DebugMenuActionSpec,
     DebugMenuDispatchResult,
     DebugMenuDispatcher,
     build_debug_capability_registry,
+    debug_menu_adapter_capability_matrix,
+    default_debug_menu_adapter_specs,
     validate_debug_menu_actions,
 )
 from .frame_rate_controller import FrameRateController
@@ -78,8 +81,11 @@ __all__ = [
     "DebugMenuDispatchResult",
     "DebugMenuDispatcher",
     "DebugMenuActionSpec",
+    "DebugMenuAdapterSpec",
     "DEFAULT_DEBUG_MENU_ACTIONS",
     "build_debug_capability_registry",
+    "default_debug_menu_adapter_specs",
+    "debug_menu_adapter_capability_matrix",
     "validate_debug_menu_actions",
     "FrameRateController",
     "Engine",
