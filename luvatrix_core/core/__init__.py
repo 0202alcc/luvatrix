@@ -10,6 +10,17 @@ from .app_runtime import (
     ResolvedAppVariant,
 )
 from .display_runtime import DisplayRuntime, RenderTick
+from .debug_menu import (
+    DEFAULT_DEBUG_MENU_ACTIONS,
+    DebugMenuAdapterSpec,
+    DebugMenuActionSpec,
+    DebugMenuDispatchResult,
+    DebugMenuDispatcher,
+    build_debug_capability_registry,
+    debug_menu_adapter_capability_matrix,
+    default_debug_menu_adapter_specs,
+    validate_debug_menu_actions,
+)
 from .frame_rate_controller import FrameRateController
 from .ui_frame_renderer import MatrixUIFrameRenderer
 from .coordinates import (
@@ -67,6 +78,15 @@ __all__ = [
     "ResolvedAppVariant",
     "JsonlAuditSink",
     "DisplayRuntime",
+    "DebugMenuDispatchResult",
+    "DebugMenuDispatcher",
+    "DebugMenuActionSpec",
+    "DebugMenuAdapterSpec",
+    "DEFAULT_DEBUG_MENU_ACTIONS",
+    "build_debug_capability_registry",
+    "default_debug_menu_adapter_specs",
+    "debug_menu_adapter_capability_matrix",
+    "validate_debug_menu_actions",
     "FrameRateController",
     "Engine",
     "FullRewrite",
