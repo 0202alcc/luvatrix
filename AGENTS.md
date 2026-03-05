@@ -14,11 +14,11 @@ Before planning or editing code, read:
 2. Do not mix unrelated milestone implementation work in the same thread.
 3. At thread start, restate the target milestone ID and task IDs.
 4. At thread start, create or switch to the milestone branch immediately and confirm branch name in the thread.
-5. Recommended branch naming: `codex/m-<milestone-id-lowercase>-<short-slug>` (example: `codex/m-011-planning-api`).
+5. Milestone branch naming is mandatory: `codex/m-<milestone-id-lowercase>` (example: `codex/m-p-026`).
 6. All code and planning changes for that milestone thread must be committed on that milestone branch.
 7. Branch command pattern:
    - `git switch main && git pull`
-   - `git switch -c codex/m-<id>-<slug>`
+   - `git switch -c codex/m-<id-lower>`
 
 ## Milestone Branching and Integration Policy
 1. Each milestone is implemented first on its own branch.
@@ -36,7 +36,7 @@ Before planning or editing code, read:
 ## Task Branch Lifecycle (Required)
 1. At milestone start, create the milestone branch from `main`.
 2. Every task must use its own task branch, created from the milestone branch (not from `main`).
-3. Task branch naming:
+3. Task branch naming is mandatory:
    - `codex/t-<task-id-lower>-<short-slug>`
 4. A task is only eligible for `Done` after GateFlow completion and merge of the task branch back into the milestone branch.
 5. Milestone branch is merged into `main` only after milestone Go signal.
