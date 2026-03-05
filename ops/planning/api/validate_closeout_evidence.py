@@ -14,6 +14,17 @@ from typing import Any
 ROOT = Path(".").resolve()
 PLANNING_ROOT = ROOT / "ops" / "planning"
 CLOSEOUT_ROOT = ROOT / "artifacts" / "perf" / "closeout"
+REQUIRED_INCREMENTAL_TARGETS: dict[str, float] = {
+    "scroll": 95.0,
+    "horizontal_pan": 92.0,
+    "drag_heavy": 85.0,
+    "mixed_burst": 88.0,
+    "sensor_overlay": 90.0,
+    "resize_overlap_incremental_required": 75.0,
+    "input_burst": 85.0,
+}
+FULL_PRESENT_PCT_CAP = 15.0
+MAX_CONSECUTIVE_FULL_FRAME_CAP = 8
 
 
 def _hash_file(path: Path) -> str:
@@ -56,6 +67,167 @@ def _extract_manifest(closeout_md: Path) -> dict[str, str]:
             raise ValueError("manifest artifact entry missing path/sha256")
         out[path] = digest
     return out
+
+
+def _max_consecutive_full_frame(compose_modes: list[Any]) -> int:
+    max_seen = 0
+    current = 0
+    for mode in compose_modes:
+        if str(mode) == "full_frame":
+            current += 1
+            if current > max_seen:
+                max_seen = current
+        else:
+            current = 0
+    return max_seen
+
+
+def _find_exception_node(summary_node: dict[str, Any], raw_node: dict[str, Any], raw_result: dict[str, Any]) -> dict[str, Any] | None:
+    for candidate in (
+        summary_node.get("exception"),
+        summary_node.get("policy_exception"),
+        raw_node.get("exception"),
+        raw_result.get("exception"),
+        raw_result.get("policy_exception"),
+    ):
+        if isinstance(candidate, dict):
+            return candidate
+    return None
+
+
+def _exception_status(exception_node: dict[str, Any] | None) -> tuple[bool, str]:
+    if exception_node is None:
+        return False, "missing"
+    if exception_node.get("approved") is not True:
+        return False, "unapproved"
+    reason = exception_node.get("reason", exception_node.get("rationale", exception_node.get("note")))
+    approver = exception_node.get("approver", exception_node.get("approved_by"))
+    ticket = exception_node.get("ticket", exception_node.get("ticket_id", exception_node.get("incident_id")))
+    missing: list[str] = []
+    if not isinstance(reason, str) or not reason.strip():
+        missing.append("reason")
+    if not isinstance(approver, str) or not approver.strip():
+        missing.append("approver")
+    if not isinstance(ticket, str) or not ticket.strip():
+        missing.append("ticket")
+    if missing:
+        return False, f"incomplete({','.join(missing)})"
+    return True, "approved"
+
+
+def _policy_error(
+    scenario: str,
+    metric: str,
+    observed: Any,
+    policy_field: str,
+    policy_value: float | int,
+    exception_status: str,
+) -> str:
+    return (
+        f"policy fail scenario={scenario} metric={metric} observed={observed} "
+        f"{policy_field}={policy_value} exception={exception_status}"
+    )
+
+
+def _validate_incremental_policy(raw: dict[str, Any], summary: dict[str, Any], errors: list[str]) -> None:
+    raw_scenarios = raw.get("scenarios", {})
+    summary_scenarios = summary.get("scenario_metrics", {})
+    if not isinstance(raw_scenarios, dict):
+        errors.append("raw artifact scenarios must be an object for policy enforcement")
+        return
+    if not isinstance(summary_scenarios, dict):
+        errors.append("measured summary scenario_metrics must be an object for policy enforcement")
+        return
+    summary_policy_exceptions = summary.get("policy_exceptions", {})
+    if not isinstance(summary_policy_exceptions, dict):
+        summary_policy_exceptions = {}
+
+    for scenario, target in REQUIRED_INCREMENTAL_TARGETS.items():
+        raw_node = raw_scenarios.get(scenario)
+        summary_node = summary_scenarios.get(scenario)
+        if not isinstance(raw_node, dict):
+            errors.append(_policy_error(scenario, "incremental_present_pct", "missing", "target_min", target, "missing"))
+            continue
+        if not isinstance(summary_node, dict):
+            summary_node = {}
+        raw_result = raw_node.get("result", {})
+        if not isinstance(raw_result, dict):
+            errors.append(_policy_error(scenario, "incremental_present_pct", "missing", "target_min", target, "missing"))
+            continue
+
+        exception_node = _find_exception_node(summary_node, raw_node, raw_result)
+        if exception_node is None:
+            scoped_exception = summary_policy_exceptions.get(scenario)
+            if isinstance(scoped_exception, dict):
+                exception_node = scoped_exception
+        exception_ok, exception_status = _exception_status(exception_node)
+
+        observed_incremental = raw_result.get("incremental_present_pct")
+        if not isinstance(observed_incremental, (int, float)):
+            errors.append(
+                _policy_error(scenario, "incremental_present_pct", observed_incremental, "target_min", target, exception_status)
+            )
+        elif float(observed_incremental) < float(target) and not exception_ok:
+            errors.append(
+                _policy_error(
+                    scenario,
+                    "incremental_present_pct",
+                    float(observed_incremental),
+                    "target_min",
+                    target,
+                    exception_status,
+                )
+            )
+
+        observed_full = raw_result.get("full_present_pct")
+        if not isinstance(observed_full, (int, float)):
+            errors.append(
+                _policy_error(
+                    scenario,
+                    "full_present_pct",
+                    observed_full,
+                    "cap_max",
+                    FULL_PRESENT_PCT_CAP,
+                    exception_status,
+                )
+            )
+        elif float(observed_full) > FULL_PRESENT_PCT_CAP:
+            errors.append(
+                _policy_error(
+                    scenario,
+                    "full_present_pct",
+                    float(observed_full),
+                    "cap_max",
+                    FULL_PRESENT_PCT_CAP,
+                    exception_status,
+                )
+            )
+
+        compose_modes = raw_result.get("compose_modes")
+        if not isinstance(compose_modes, list):
+            errors.append(
+                _policy_error(
+                    scenario,
+                    "max_consecutive_full_frame_outside_exception",
+                    "missing",
+                    "cap_max",
+                    MAX_CONSECUTIVE_FULL_FRAME_CAP,
+                    exception_status,
+                )
+            )
+            continue
+        observed_max_consecutive = _max_consecutive_full_frame(compose_modes)
+        if observed_max_consecutive > MAX_CONSECUTIVE_FULL_FRAME_CAP:
+            errors.append(
+                _policy_error(
+                    scenario,
+                    "max_consecutive_full_frame_outside_exception",
+                    observed_max_consecutive,
+                    "cap_max",
+                    MAX_CONSECUTIVE_FULL_FRAME_CAP,
+                    exception_status,
+                )
+            )
 
 
 def validate(milestone_id: str) -> tuple[bool, list[str]]:
@@ -167,6 +339,8 @@ def validate(milestone_id: str) -> tuple[bool, list[str]]:
     if isinstance(raw_provenance, dict) and isinstance(summary_provenance, dict):
         if summary_provenance.get("raw_commit_sha") != raw_provenance.get("commit_sha"):
             errors.append("measured summary provenance commit_sha does not match raw artifact provenance")
+
+    _validate_incremental_policy(raw, summary, errors)
 
     determinism = _load_json(CLOSEOUT_ROOT / "determinism_replay_matrix.json")
     if int(determinism.get("seed_count_observed", 0)) < int(determinism.get("seed_count_required", 0)):

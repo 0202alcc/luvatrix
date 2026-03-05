@@ -3,7 +3,7 @@
 Milestone: `P-026` Runtime Performance Hardening Closeout Signoff  
 Epic: `E-2801`  
 Task chain: `T-2801 -> (T-2802, T-2803, T-2804) -> T-2805`  
-Last updated: `2026-03-04` (T-2819..T-2822 planned)
+Last updated: `2026-03-05` (T-2819 moved to Success Criteria Spec)
 
 ## Evidence Integrity Remediation (No-Go Until Provenance PASS)
 1. Scope: reopen closeout execution due to evidence integrity gaps.
@@ -59,10 +59,9 @@ Last updated: `2026-03-04` (T-2819..T-2822 planned)
 
 ## Intake
 1. None.
-2. `T-2819` Validator Policy Hard-Gate Completion (P0).
-3. `T-2820` Input Burst Incremental Compose Remediation (P0).
-4. `T-2821` Policy Verdict Embedding in Summary Artifacts (P1).
-5. `T-2822` Final Revalidation and Packet Reconciliation (P0).
+2. `T-2820` Input Burst Incremental Compose Remediation (P0).
+3. `T-2821` Policy Verdict Embedding in Summary Artifacts (P1).
+4. `T-2822` Final Revalidation and Packet Reconciliation (P0).
 
 ## Success Criteria Spec
 1. `T-2814` Hover transitions invalidate localized old/new component bounds (+ safety margin), not full frame.
@@ -73,17 +72,41 @@ Last updated: `2026-03-04` (T-2819..T-2822 planned)
 6. `T-2816` Explicit resize scenarios split into `resize_stress_fullframe_allowed` and `resize_overlap_incremental_required`.
 7. `T-2816` Resize stress retains measured resize recovery metric.
 8. `T-2816` Resize overlap scenario enforces measured `incremental_present_pct >= 75%`.
+9. `T-2819` Validator enforces required incremental thresholds:
+   - `scroll >= 95`
+   - `horizontal_pan >= 92`
+   - `drag_heavy >= 85`
+   - `mixed_burst >= 88`
+   - `sensor_overlay >= 90`
+   - `resize_overlap_incremental_required >= 75`
+   - `input_burst >= 85`
+10. `T-2819` Validator enforces cap rules for required non-control scenarios:
+   - `full_present_pct <= 15`
+   - `max_consecutive_full_frame_outside_exception <= 8`
+11. `T-2819` Any threshold/cap miss requires approved exception metadata; miss without approved fields fails validation.
+12. `T-2819` Validator failure output must include scenario name, observed value, target/cap, and exception status.
 
 ## Safety Tests Spec
 1. `T-2814` Preserve `RenderTarget`, App protocol/`AppContext`, and `SensorProvider` boundaries; no backend coupling into app logic.
 2. `T-2814` Preserve deterministic behavior and `HDIThread`/`SensorManagerThread` separation.
 3. `T-2815` Preserve same boundaries while removing only safe fallback paths (no interface/contract changes).
 4. `T-2816` Overlap resize measurement avoids app re-init artifacts; `app_reinit_count` remains zero for overlap scenario.
+5. `T-2819` Validator hard-gate changes must be read-only to evidence evaluation paths; no mutation of runtime rendering, protocol, or sensor execution paths.
+6. `T-2819` Preserve architecture boundaries: `RenderTarget` interface unchanged, App protocol + `AppContext` compatibility unchanged, `SensorProvider` contract unchanged, and `HDIThread` / `SensorManagerThread` separation unchanged.
+7. `T-2819` Determinism safety: validator must produce stable pass/fail outcomes for identical evidence payloads and approved exception metadata.
+8. `T-2819` Safety failure mode: any threshold/cap miss without approved exception metadata must hard-fail with explicit scenario-level diagnostics.
 
 ## Implementation Tests Spec
 1. `T-2814` `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "hover or drag or theme or dirty_rect" -q`
 2. `T-2815` `PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "scroll or fractional or diagonal or dirty_rect" -q`
 3. `T-2816` `PYTHONPATH=. uv run pytest tests/test_perf_tools.py -q`
+4. `T-2819` `PYTHONPATH=. uv run pytest tests -k "closeout and evidence and validator" -q`
+5. `T-2819` `PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026`
+6. `T-2819` Add/execute automated validator unit tests that verify:
+   - required scenario threshold enforcement (including `input_burst >= 85`)
+   - cap enforcement (`full_present_pct <= 15`, `max_consecutive_full_frame_outside_exception <= 8`)
+   - exception metadata enforcement on misses
+   - failure output includes scenario, observed value, target/cap, and exception status
 
 ## Edge Case Tests Spec
 1. `T-2814` Theme background delta must force full-frame invalidation as full-surface effect fallback.
@@ -92,11 +115,20 @@ Last updated: `2026-03-04` (T-2819..T-2822 planned)
 4. `T-2815` Bi-axial scroll must use bounded dirty decomposition + corner patch; no unconditional full-frame fallback.
 5. `T-2816` Resize overlap policy check fails if `incremental_present_pct < 75%`.
 6. `T-2816` Resize stress and overlap policy checks are tied to measured artifacts only (no synthetic fallbacks).
+7. `T-2819` Missing required scenario key (including `input_burst`) must fail with scenario-specific missing-threshold diagnostics.
+8. `T-2819` Threshold miss with absent/incomplete exception metadata must fail and mark exception status as unapproved/missing.
+9. `T-2819` Cap miss (`full_present_pct > 15` or `max_consecutive_full_frame_outside_exception > 8`) must fail even when threshold passes.
+10. `T-2819` Approved exception metadata should only suppress the specific failing policy check within allowed exception scope; unrelated failures still fail.
+11. `T-2819` Failure diagnostics must include scenario id, observed value, target/cap value, and exception status deterministically.
 
 ## Prototype Stage 1
 1. `T-2814` Dirty-signature diffing updated to compare against last presented frame state.
 2. `T-2815` Residual-based scroll quantization path added and wired through compose planning.
 3. `T-2816` Added explicit resize scenario constants and closeout-required suite inclusion for overlap policy measurement.
+4. `T-2819` Added required scenario target map and cap constants to `validate_closeout_evidence.py`.
+5. `T-2819` Added scenario-level policy diagnostics formatter including scenario, observed, target/cap, and exception status.
+6. `T-2819` Added prototype policy evaluation over raw scenario metrics (`incremental_present_pct`, `full_present_pct`, compose-mode consecutive full-frame streak).
+7. `T-2819` Added isolated validator policy unit tests for compliant payload, threshold miss/no exception, approved exception, and cap miss cases.
 
 ## Prototype Stage 2+
 1. `T-2814` Scoped hover dirty rects implemented for old/new component bounds with 1px safety margin.
@@ -104,6 +136,9 @@ Last updated: `2026-03-04` (T-2819..T-2822 planned)
 3. `T-2815` Bi-axial strip decomposition with explicit corner patch implemented; drag/press pointer-local dirty patching added for bounded updates.
 4. `T-2816` Overlap scenario now runs resize cadence without app re-init while stress scenario preserves fullframe-allowed re-init path.
 5. `T-2816` Measured summary and strict validator updated for scenario split and overlap `>=75%` hard gate.
+6. `T-2819` Hardened exception metadata intake to support scenario-scoped `policy_exceptions` mapping in measured summary artifacts.
+7. `T-2819` Enforced incomplete-approved exception metadata as a hard failure path with explicit `exception=incomplete(...)` diagnostics.
+8. `T-2819` Added validator tests for missing required scenario coverage and incomplete approved exception metadata.
 
 ## Verification Review
 1. `T-2806` Summary regenerated with `p99` and resize recovery evidence present.
@@ -124,6 +159,12 @@ Last updated: `2026-03-04` (T-2819..T-2822 planned)
    - `PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario closeout_required --samples 120 --width 1280 --height 720 --out artifacts/perf/closeout/raw_closeout_required.json` -> includes `resize_overlap_incremental_required` with `incremental_present_pct=99.16666666666667` and `app_reinit_count=0`.
    - `PYTHONPATH=. uv run python tools/perf/build_p026_measured_summary.py --raw artifacts/perf/closeout/raw_closeout_required.json --out artifacts/perf/closeout/measured_summary.json` -> overlap policy threshold pass (`>=75%`).
    - `PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026` -> `validation: PASS (evidence)`.
+8. `T-2819` Evidence:
+   - `PYTHONPATH=. uv run pytest tests/test_validate_closeout_evidence_validator.py -q` -> pass (`6 passed`).
+   - `uv run pytest tests -k "closeout and evidence and validator" -q` -> fails in current environment during collection (`ModuleNotFoundError` import-path setup issue; unrelated global test collection).
+   - `uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026` -> expected policy fail on current artifacts:
+     - `scenario=input_burst incremental_present_pct observed=83.33333333333333 target_min=85.0 exception=missing`
+     - `scenario=input_burst full_present_pct observed=16.666666666666668 cap_max=15.0 exception=missing`
 1. Unified benchmark threshold gates (task `T-2801` canonical baseline):
 - Frame time latency: `p50 <= 16.7ms`, `p95 <= 25.0ms`, `p99 <= 33.3ms` (interactive mixed-load scenarios).
 - Input-to-present latency: `p95 <= 33.3ms`, `p99 <= 50.0ms` (burst input scenarios).
@@ -192,7 +233,13 @@ Last updated: `2026-03-04` (T-2819..T-2822 planned)
 - Missing or non-reproducible required evidence.
 
 ## Integration Ready
-1. None.
+1. `T-2819` integration gate review executed.
+2. `T-2819` remains blocked from Integration Ready until both required evidence commands pass:
+   - `uv run pytest tests -k "closeout and evidence and validator" -q` must run without collection/import failures.
+   - `uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026` must return `validation: PASS (evidence)`.
+3. Current blocker snapshot:
+   - environment import-path collection failures for broad pytest evidence command
+   - policy failures in current `input_burst` measured evidence (`incremental_present_pct` and `full_present_pct` caps)
 
 ## Done
 1. `T-2801` Done with benchmark closeout telemetry (`input_tokens=12800`, `output_tokens=2600`, `wall_time_sec=1540`, `tool_calls=24`).
@@ -220,4 +267,6 @@ Last updated: `2026-03-04` (T-2819..T-2822 planned)
 23. `T-2818` merged to `main`; required checks on `main` validated before Done transition.
 
 ## Blocked
-1. None.
+1. `T-2819` blocked from `Done`:
+   - current status is `Verification Review` and cannot skip directly to `Done`
+   - required evidence commands not both passing (`pytest` collection/import failures; validator policy fail on `input_burst`)
