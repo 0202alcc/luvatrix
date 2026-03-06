@@ -39,6 +39,15 @@ REQUIRED_PERF_HUD_KEYS: tuple[str, ...] = (
     "ordering_digest",
 )
 
+REQUIRED_BUNDLE_MANIFEST_KEYS: tuple[str, ...] = (
+    "bundle_id",
+    "platform",
+    "exported_at_utc",
+    "provenance_id",
+    "artifact_paths",
+    "artifact_classes",
+)
+
 
 @dataclass(frozen=True)
 class DebugCapturePlatformSpec:
@@ -135,6 +144,13 @@ class PerfHUDSnapshot:
     ordering_digest: str
 
 
+@dataclass(frozen=True)
+class DebugBundleExport:
+    bundle_id: str
+    zip_path: str
+    manifest: dict[str, object]
+
+
 def build_screenshot_sidecar(
     *,
     route: str,
@@ -201,6 +217,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
                 "debug.replay.start",
                 "debug.frame.step",
                 "debug.perf.hud",
+                "debug.bundle.export",
             ),
             unsupported_reason=None,
         ),
@@ -215,6 +232,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
                 "debug.replay.stub",
                 "debug.frame.step.stub",
                 "debug.perf.hud.stub",
+                "debug.bundle.stub",
             ),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
@@ -229,6 +247,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
                 "debug.replay.stub",
                 "debug.frame.step.stub",
                 "debug.perf.hud.stub",
+                "debug.bundle.stub",
             ),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
@@ -466,3 +485,74 @@ def build_perf_hud_snapshot(
         if value is None or (isinstance(value, str) and not value.strip()):
             raise ValueError(f"missing required perf HUD field: {key}")
     return snapshot
+
+
+def build_debug_bundle_manifest(
+    *,
+    bundle_id: str,
+    platform: str,
+    exported_at_utc: str,
+    provenance_id: str,
+    artifact_paths: tuple[str, ...],
+    artifact_classes: tuple[str, ...],
+) -> dict[str, object]:
+    normalized_paths = tuple(path.strip() for path in artifact_paths if path.strip())
+    normalized_classes = tuple(kind.strip() for kind in artifact_classes if kind.strip())
+    manifest: dict[str, object] = {
+        "bundle_id": bundle_id.strip(),
+        "platform": platform.strip(),
+        "exported_at_utc": exported_at_utc.strip(),
+        "provenance_id": provenance_id.strip(),
+        "artifact_paths": list(normalized_paths),
+        "artifact_classes": list(normalized_classes),
+    }
+    for key in REQUIRED_BUNDLE_MANIFEST_KEYS:
+        value = manifest.get(key)
+        if value is None:
+            raise ValueError(f"missing required bundle manifest field: {key}")
+        if isinstance(value, str) and not value.strip():
+            raise ValueError(f"missing required bundle manifest field: {key}")
+        if isinstance(value, list) and not value:
+            raise ValueError(f"missing required bundle manifest field: {key}")
+    return manifest
+
+
+def bundle_has_required_artifact_classes(
+    manifest: dict[str, object],
+    *,
+    required_classes: tuple[str, ...] = ("captures", "replay", "perf", "provenance"),
+) -> bool:
+    classes = manifest.get("artifact_classes")
+    if not isinstance(classes, list):
+        return False
+    declared = {str(item).strip() for item in classes if str(item).strip()}
+    return all(required in declared for required in required_classes)
+
+
+def build_debug_bundle_export(
+    *,
+    bundle_id: str,
+    platform: str,
+    exported_at_utc: str,
+    provenance_id: str,
+    artifact_paths: tuple[str, ...],
+    artifact_classes: tuple[str, ...],
+    output_dir: str = "artifacts/debug_bundles",
+) -> DebugBundleExport:
+    normalized_bundle_id = bundle_id.strip()
+    if not normalized_bundle_id:
+        raise ValueError("bundle_id must be non-empty")
+    manifest = build_debug_bundle_manifest(
+        bundle_id=normalized_bundle_id,
+        platform=platform,
+        exported_at_utc=exported_at_utc,
+        provenance_id=provenance_id,
+        artifact_paths=artifact_paths,
+        artifact_classes=artifact_classes,
+    )
+    zip_path = f"{output_dir.rstrip('/')}/{normalized_bundle_id}.zip"
+    return DebugBundleExport(
+        bundle_id=normalized_bundle_id,
+        zip_path=zip_path,
+        manifest=manifest,
+    )
