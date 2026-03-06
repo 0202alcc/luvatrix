@@ -5,9 +5,8 @@ Scope lock: macOS-first only. Non-mac paths must be explicit stubs/capability-de
 Task chain: `T-2922 -> T-2907 -> T-2908 -> T-2909`
 
 ## Intake
-1. `T-2907` Input monitor + record/replay deterministic contract.
-2. `T-2908` Frame-step + perf HUD contract.
-3. `T-2909` Debug bundle export spec (zip manifest + evidence schema).
+1. `T-2908` Frame-step + perf HUD contract.
+2. `T-2909` Debug bundle export spec (zip manifest + evidence schema).
 
 ## Success Criteria Spec
 1. `T-2922` Milestone closeout metric contract defined with macOS-context Go/No-Go threshold and explicit non-mac stub declaration requirements.
@@ -27,13 +26,14 @@ Task chain: `T-2922 -> T-2907 -> T-2908 -> T-2909`
 1. `T-2922` Execution board + harness spec drafted and linked to milestone closeout criteria.
 
 ## Prototype Stage 2+
-1. None.
+1. `T-2907` Replay contract coverage expanded with deterministic digest comparison path and explicit non-mac replay stub declarations.
 
 ## Verification Review
-1. None.
+1. `T-2907` Replay digest generation and mismatch-path assertions verified via `tests/test_debug_replay.py`.
+2. `T-2907` Platform matrix reviewed for explicit replay stub declarations on non-mac targets.
 
 ## Integration Ready
-1. None.
+1. `T-2907` Replay contract module/tests/docs are ready for milestone branch integration.
 
 ## Done
-1. None.
+1. `T-2907` Completed deterministic replay manifest + digest contract and explicit non-mac replay stub matrix coverage.
