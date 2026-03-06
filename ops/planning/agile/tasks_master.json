@@ -6297,7 +6297,7 @@
       "title": "Frame-step + perf HUD contract",
       "task_type": "standard",
       "milestone_id": "R-036",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-2902",
         "T-2907"
@@ -6310,7 +6310,22 @@
       "notes": [
         "Frame-step state machine must preserve deterministic ordering and non-regression perf telemetry semantics.",
         "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 4300,
+        "output_tokens": 1850,
+        "wall_time_sec": 1260,
+        "tool_calls": 24,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2909",
