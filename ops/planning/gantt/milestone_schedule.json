@@ -2310,7 +2310,7 @@
       "name": "Replay + Perf Observability",
       "start_week": 30,
       "end_week": 33,
-      "status": "Planned",
+      "status": "In Progress",
       "task_ids": [
         "T-2922",
         "T-2907",
