@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 
 
@@ -19,6 +20,15 @@ REQUIRED_RECORDING_MANIFEST_KEYS: tuple[str, ...] = (
     "provenance_id",
     "frame_count",
     "platform",
+)
+
+REQUIRED_REPLAY_MANIFEST_KEYS: tuple[str, ...] = (
+    "session_id",
+    "seed",
+    "platform",
+    "ordering_digest",
+    "event_count",
+    "recorded_at_utc",
 )
 
 
@@ -80,6 +90,25 @@ class OverlayToggleResult:
     content_digest_before: str
     content_digest_after: str
     destructive: bool
+
+
+@dataclass(frozen=True)
+class ReplayInputEvent:
+    sequence: int
+    timestamp_ms: int
+    event_type: str
+    payload_digest: str
+
+
+@dataclass(frozen=True)
+class ReplayContractResult:
+    session_id: str
+    seed: int
+    platform: str
+    event_count: int
+    ordering_digest: str
+    deterministic: bool
+    expected_digest: str | None = None
 
 
 def build_screenshot_sidecar(
@@ -144,6 +173,8 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
                 "debug.capture.screenshot.sidecar",
                 "debug.capture.record",
                 "debug.overlay.render",
+                "debug.replay.record",
+                "debug.replay.start",
             ),
             unsupported_reason=None,
         ),
@@ -155,6 +186,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
                 "debug.capture.screenshot.stub",
                 "debug.capture.record.stub",
                 "debug.overlay.stub",
+                "debug.replay.stub",
             ),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
@@ -166,6 +198,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
                 "debug.capture.screenshot.stub",
                 "debug.capture.record.stub",
                 "debug.overlay.stub",
+                "debug.replay.stub",
             ),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
@@ -299,3 +332,62 @@ def toggle_overlay_non_destructive(
 def _validate_overlay_rect(rect: OverlayRect, *, field_name: str) -> None:
     if rect.width < 0 or rect.height < 0:
         raise ValueError(f"{field_name} width/height must be >= 0")
+
+
+def build_replay_manifest(
+    *,
+    session_id: str,
+    seed: int,
+    platform: str,
+    ordering_digest: str,
+    event_count: int,
+    recorded_at_utc: str,
+) -> dict[str, str | int]:
+    manifest: dict[str, str | int] = {
+        "session_id": session_id.strip(),
+        "seed": int(seed),
+        "platform": platform.strip(),
+        "ordering_digest": ordering_digest.strip(),
+        "event_count": int(event_count),
+        "recorded_at_utc": recorded_at_utc.strip(),
+    }
+    for key in REQUIRED_REPLAY_MANIFEST_KEYS:
+        value = manifest[key]
+        if key in {"seed", "event_count"}:
+            if int(value) < 0:
+                raise ValueError(f"{key} must be >= 0")
+            continue
+        if not str(value).strip():
+            raise ValueError(f"missing required replay manifest field: {key}")
+    return manifest
+
+
+def compute_replay_ordering_digest(events: tuple[ReplayInputEvent, ...]) -> str:
+    if not events:
+        raise ValueError("events must be non-empty")
+    canonical = "|".join(
+        f"{event.sequence}:{event.timestamp_ms}:{event.event_type}:{event.payload_digest}" for event in events
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def evaluate_replay_determinism(
+    *,
+    session_id: str,
+    seed: int,
+    platform: str,
+    events: tuple[ReplayInputEvent, ...],
+    expected_digest: str | None = None,
+) -> ReplayContractResult:
+    digest = compute_replay_ordering_digest(events)
+    expected = expected_digest.strip() if expected_digest else None
+    deterministic = expected is None or digest == expected
+    return ReplayContractResult(
+        session_id=session_id.strip(),
+        seed=int(seed),
+        platform=platform.strip(),
+        event_count=len(events),
+        ordering_digest=digest,
+        deterministic=deterministic,
+        expected_digest=expected,
+    )
