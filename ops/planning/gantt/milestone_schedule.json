@@ -2310,7 +2310,7 @@
       "name": "Replay + Perf Observability",
       "start_week": 30,
       "end_week": 33,
-      "status": "In Progress",
+      "status": "Complete",
       "task_ids": [
         "T-2922",
         "T-2907",
@@ -2369,6 +2369,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "macOS-first phase; close with planned reopen for cross-platform expansion"
+        },
+        {
+          "date": "2026-03-06",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "GO in macOS scope; planned reopen remains for Windows/Linux adapter expansion"
         }
       ]
     },

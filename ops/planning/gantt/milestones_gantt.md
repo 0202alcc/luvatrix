@@ -42,7 +42,7 @@ P-032 🚦 Planes v2 rollout non-regression gates + Go/No-Go closeout           
 R-033 📈 Planes v2 post-foundation performance optimization                            |                                                                                                                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                        | Planned
 F-034 🛡️ Cross-Platform Debug Menu Foundation                                         |                                                                                                                                                                                      =====================                                          | Complete
 U-035 🖼️ Visual + Capture Tooling                                                     |                                                                                                                                                                                             ============================                            | Complete
-R-036 🎛️ Replay + Perf Observability                                                  |                                                                                                                                                                                                           ############################              | In Progress
+R-036 🎛️ Replay + Perf Observability                                                  |                                                                                                                                                                                                           ============================              | Complete
 A-037 🧩 App-Configurable Debug Policy + Compatibility                                 |                                                                                                                                                                                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Planned
 F-038 🔔 Cross-Platform Notification Protocol + Runtime Adapters                       |                                                                                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
 
@@ -406,12 +406,13 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - Milestone Go/No-Go is macOS-context only in this phase, with reopen intent for multi-platform expansion.
 
 ### R-036 🎛️ Replay + Perf Observability
-- Status: In Progress
+- Status: Complete
 - Target window: Week 30-33
 - Tasks: `T-2922, T-2907, T-2908, T-2909`
 - Lifecycle events:
   - 2026-03-05 active (framework=gateflow_v1) - replay/perf milestone created
   - 2026-03-05 active (framework=gateflow_v1) - macOS-first phase; close with planned reopen for cross-platform expansion
+  - 2026-03-06 closed (framework=gateflow_v1) - GO in macOS scope; planned reopen remains for Windows/Linux adapter expansion
 - Success criteria:
   - Replay reproduces deterministic ordering digests in macOS scope.
   - Frame-step/HUD preserve ordering guarantees on macOS with explicit non-mac capability stubs.
