@@ -48,6 +48,11 @@ DEFAULT_DEBUG_MENU_ACTIONS: tuple[DebugMenuActionSpec, ...] = (
         label="Start Replay",
     ),
     DebugMenuActionSpec(
+        menu_id="debug.menu.frame.step",
+        capability_id="debug.frame.step",
+        label="Frame Step",
+    ),
+    DebugMenuActionSpec(
         menu_id="debug.menu.perf.hud.toggle",
         capability_id="debug.perf.hud",
         label="Toggle Perf HUD",
