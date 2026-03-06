@@ -31,6 +31,14 @@ REQUIRED_REPLAY_MANIFEST_KEYS: tuple[str, ...] = (
     "recorded_at_utc",
 )
 
+REQUIRED_PERF_HUD_KEYS: tuple[str, ...] = (
+    "frame_index",
+    "frame_time_ms",
+    "fps",
+    "present_mode",
+    "ordering_digest",
+)
+
 
 @dataclass(frozen=True)
 class DebugCapturePlatformSpec:
@@ -111,6 +119,22 @@ class ReplayContractResult:
     expected_digest: str | None = None
 
 
+@dataclass(frozen=True)
+class FrameStepState:
+    paused: bool
+    frame_index: int
+    last_ordering_digest: str
+
+
+@dataclass(frozen=True)
+class PerfHUDSnapshot:
+    frame_index: int
+    frame_time_ms: float
+    fps: float
+    present_mode: str
+    ordering_digest: str
+
+
 def build_screenshot_sidecar(
     *,
     route: str,
@@ -175,6 +199,8 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
                 "debug.overlay.render",
                 "debug.replay.record",
                 "debug.replay.start",
+                "debug.frame.step",
+                "debug.perf.hud",
             ),
             unsupported_reason=None,
         ),
@@ -187,6 +213,8 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
                 "debug.capture.record.stub",
                 "debug.overlay.stub",
                 "debug.replay.stub",
+                "debug.frame.step.stub",
+                "debug.perf.hud.stub",
             ),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
@@ -199,6 +227,8 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
                 "debug.capture.record.stub",
                 "debug.overlay.stub",
                 "debug.replay.stub",
+                "debug.frame.step.stub",
+                "debug.perf.hud.stub",
             ),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
@@ -391,3 +421,48 @@ def evaluate_replay_determinism(
         deterministic=deterministic,
         expected_digest=expected,
     )
+
+
+def frame_step_advance(state: FrameStepState, *, next_ordering_digest: str) -> FrameStepState:
+    digest = next_ordering_digest.strip()
+    if not digest:
+        raise ValueError("next_ordering_digest must be non-empty")
+    if not state.paused:
+        raise ValueError("frame-step requires paused state")
+    return FrameStepState(
+        paused=True,
+        frame_index=state.frame_index + 1,
+        last_ordering_digest=digest,
+    )
+
+
+def build_perf_hud_snapshot(
+    *,
+    frame_index: int,
+    frame_time_ms: float,
+    present_mode: str,
+    ordering_digest: str,
+) -> dict[str, str | float | int]:
+    if frame_index < 0:
+        raise ValueError("frame_index must be >= 0")
+    frame_time = float(frame_time_ms)
+    if frame_time <= 0:
+        raise ValueError("frame_time_ms must be > 0")
+    digest = ordering_digest.strip()
+    if not digest:
+        raise ValueError("ordering_digest must be non-empty")
+    mode = present_mode.strip()
+    if not mode:
+        raise ValueError("present_mode must be non-empty")
+    snapshot = {
+        "frame_index": int(frame_index),
+        "frame_time_ms": frame_time,
+        "fps": round(1000.0 / frame_time, 3),
+        "present_mode": mode,
+        "ordering_digest": digest,
+    }
+    for key in REQUIRED_PERF_HUD_KEYS:
+        value = snapshot.get(key)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise ValueError(f"missing required perf HUD field: {key}")
+    return snapshot
