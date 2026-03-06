@@ -57,6 +57,11 @@ DEFAULT_DEBUG_MENU_ACTIONS: tuple[DebugMenuActionSpec, ...] = (
         capability_id="debug.perf.hud",
         label="Toggle Perf HUD",
     ),
+    DebugMenuActionSpec(
+        menu_id="debug.menu.bundle.export",
+        capability_id="debug.bundle.export",
+        label="Export Debug Bundle",
+    ),
 )
 
 
