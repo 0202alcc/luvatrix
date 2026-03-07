@@ -12,7 +12,7 @@
 ## Commands in Pack
 
 1. `uv run --with pytest pytest tests -k "debug_manifest or legacy_debug_conformance" -q`
-2. `uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026`
+2. `uv run python ops/ci/p026_non_regression_ci_guard.py`
 3. `uv run python ops/planning/agile/validate_milestone_task_links.py`
 
 ## Verification

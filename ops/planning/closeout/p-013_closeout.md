@@ -16,7 +16,7 @@ Milestone `P-013` delivered CI hardening artifacts for deterministic gate owners
 1. `PYTHONPATH=. uv run --with pytest pytest tests/test_p013_gate_catalog.py tests/test_flaky_quarantine.py tests/test_render_ci_smoke_summary.py tests/test_p013_non_regression_gate.py -q` -> `8 passed`.
 2. `PYTHONPATH=. uv run python ops/ci/verify_p013_gate_catalog.py` -> `PASS`.
 3. `PYTHONPATH=. uv run python ops/ci/flaky_quarantine.py --manifest ops/ci/flaky_quarantine_manifest.json --max-quarantine-days 14` -> `PASS`.
-4. `PYTHONPATH=. uv run python ops/ci/p013_non_regression_gate.py --execute` -> all checks `PASS`, including `validate_closeout_evidence.py --milestone-id P-026`.
+4. `PYTHONPATH=. uv run python ops/ci/p013_non_regression_gate.py --execute` -> all checks `PASS`, including `ops/ci/p026_non_regression_ci_guard.py`.
 5. Task PR merges: #35, #36, #37, #38.
 
 ## Determinism
