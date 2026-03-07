@@ -43,3 +43,17 @@ Trade-offs:
 1. No downstream milestone may alter v1 command names or required subcommands without ADR update.
 2. No profile may alter canonical key ordering, id schema, or done-gate semantics.
 3. Compatibility shims must preserve deterministic response envelopes.
+
+## 6) Implementation Handoff
+
+Downstream implementation teams must consume this packet in the following order:
+1. Command surface (`T-4001`) and schema contract (`T-4002`).
+2. Profile contract (`T-4003`) and policy contract (`T-4004`).
+3. Closeout harness and evidence criteria (`T-4000`, closeout packet).
+
+## 6) Implementation Handoff
+
+Downstream implementation teams must consume this packet in the following order:
+1. Command surface (`T-4001`) and schema contract (`T-4002`).
+2. Profile contract (`T-4003`) and policy contract (`T-4004`).
+3. Closeout harness and evidence criteria (`T-4000`, closeout packet).

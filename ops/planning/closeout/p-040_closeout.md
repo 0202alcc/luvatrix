@@ -59,3 +59,21 @@ Milestone `P-040` locks the standalone GateFlow CLI v1 specification so downstre
 2. Scoring components: `correctness`, `safety`, `compatibility`, `evidence`.
 3. Go threshold: `85`.
 4. Hard no-go conditions: required check failure, closeout validation failure, unresolved high-severity risk without waiver.
+
+## Task PR Evidence
+
+1. `T-4000`: https://github.com/0202alcc/luvatrix/pull/64
+2. `T-4001`: https://github.com/0202alcc/luvatrix/pull/65
+3. `T-4002`: https://github.com/0202alcc/luvatrix/pull/66
+4. `T-4003`: https://github.com/0202alcc/luvatrix/pull/67
+5. `T-4004`: https://github.com/0202alcc/luvatrix/pull/68
+6. `T-4005`: pending merge in task PR.
+
+## Task PR Evidence
+
+1. `T-4000`: https://github.com/0202alcc/luvatrix/pull/64
+2. `T-4001`: https://github.com/0202alcc/luvatrix/pull/65
+3. `T-4002`: https://github.com/0202alcc/luvatrix/pull/66
+4. `T-4003`: https://github.com/0202alcc/luvatrix/pull/67
+5. `T-4004`: https://github.com/0202alcc/luvatrix/pull/68
+6. `T-4005`: pending merge in task PR.
