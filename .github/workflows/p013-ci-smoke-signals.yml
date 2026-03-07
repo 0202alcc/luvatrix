@@ -1,0 +1,48 @@
+name: p013-ci-smoke-signals
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  smoke-signals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync deps
+        run: uv sync
+      - name: Run smoke gate commands
+        run: |
+          mkdir -p artifacts/p013
+          set +e
+          PYTHONPATH=. uv run python ops/ci/verify_p013_gate_catalog.py > artifacts/p013/gateflow-links.txt 2>&1
+          GATE1=$?
+          PYTHONPATH=. uv run python ops/ci/flaky_quarantine.py --manifest ops/ci/flaky_quarantine_manifest.json --max-quarantine-days 14 > artifacts/p013/flaky-quarantine.txt 2>&1
+          GATE2=$?
+          set -e
+          python - "$GATE1" "$GATE2" <<'PY'
+          import json
+          import sys
+          gate1 = int(sys.argv[1])
+          gate2 = int(sys.argv[2])
+          checks = [
+              {"name": "gateflow-links", "status": "PASS" if gate1 == 0 else "FAIL", "artifact": "gateflow-links.txt"},
+              {"name": "flaky-quarantine", "status": "PASS" if gate2 == 0 else "FAIL", "artifact": "flaky-quarantine.txt"},
+          ]
+          with open("artifacts/p013/smoke_index.json", "w", encoding="utf-8") as f:
+              json.dump({"checks": checks}, f, indent=2)
+          PY
+      - name: Render smoke summary
+        run: |
+          PYTHONPATH=. uv run python ops/ci/render_ci_smoke_summary.py \
+            --index artifacts/p013/smoke_index.json \
+            --out artifacts/p013/smoke_summary.md
+      - name: Upload P-013 smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: p013-smoke-artifacts
+          path: artifacts/p013
+      - name: Publish step summary
+        run: cat artifacts/p013/smoke_summary.md >> "$GITHUB_STEP_SUMMARY"
