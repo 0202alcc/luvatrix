@@ -1,0 +1,22 @@
+name: p013-non-regression-gate-pack
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  non-regression-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync deps
+        run: uv sync
+      - name: Run P-013 non-regression gate pack
+        run: PYTHONPATH=. uv run python ops/ci/p013_non_regression_gate.py --execute
+      - name: Upload non-regression summary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: p013-non-regression-gate-pack
+          path: artifacts/p013/non_regression_gate_summary.json

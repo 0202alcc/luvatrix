@@ -36,4 +36,7 @@ Task chain: `T-401 -> (T-402, T-403) -> T-2911`
 2. `T-403` Smoke signal workflow and artifact summary publishing are ready for milestone integration.
 
 ## Done
-1. Pending.
+1. `T-401` Completed deterministic gate ownership contract and validator with test coverage.
+2. `T-402` Completed flaky quarantine manifest, validator, and remediation policy docs.
+3. `T-403` Completed smoke signal summary workflow and artifact-link publishing.
+4. `T-2911` Completed non-regression gate-pack runner + CI workflow, including P-026 evidence enforcement.
