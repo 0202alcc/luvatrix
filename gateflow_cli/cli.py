@@ -6,6 +6,7 @@ from pathlib import Path
 
 from gateflow_cli.api_shim import execute_api
 from gateflow_cli.config import get_config_value, set_config_value, show_config
+from gateflow_cli.policy import PolicyViolation, enforce_protected_branch_write_guard
 from gateflow_cli.render import render_board, render_gantt
 from gateflow_cli.scaffold import doctor_workspace, scaffold_workspace
 from gateflow_cli.resources import ResourceError, create_resource, delete_resource, get_resource, list_resource, update_resource
@@ -76,6 +77,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         return _dispatch(args)
+    except PolicyViolation as exc:
+        print(f"policy error: {exc}")
+        return 3
     except (ResourceError, FileNotFoundError, json.JSONDecodeError, ValueError) as exc:
         print(f"error: {exc}")
         return 2
@@ -100,6 +104,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             print(json.dumps(get_config_value(args.root, args.key), indent=2, sort_keys=True))
             return 0
         if args.config_action == "set":
+            enforce_protected_branch_write_guard(args.root)
             print(set_config_value(args.root, args.key, args.value))
             return 0
         if args.config_action == "show":
@@ -109,6 +114,8 @@ def _dispatch(args: argparse.Namespace) -> int:
 
     if args.command == "api":
         method, endpoint = _resolve_api_method_and_path(args.verb_or_method, args.path)
+        if method in {"POST", "PATCH", "DELETE"}:
+            enforce_protected_branch_write_guard(args.root)
         print(json.dumps(execute_api(method, endpoint, body=args.body, root=args.root), indent=2, sort_keys=True))
         return 0
 
@@ -137,12 +144,15 @@ def _dispatch(args: argparse.Namespace) -> int:
         print(json.dumps(get_resource(workspace, resource, args.item_id), indent=2, sort_keys=True))
         return 0
     if action == "create":
+        enforce_protected_branch_write_guard(args.root)
         print(create_resource(workspace, resource, json.loads(args.body)))
         return 0
     if action == "update":
+        enforce_protected_branch_write_guard(args.root)
         print(update_resource(workspace, resource, args.item_id, json.loads(args.body)))
         return 0
     if action == "delete":
+        enforce_protected_branch_write_guard(args.root)
         print(delete_resource(workspace, resource, args.item_id))
         return 0
     raise ValueError(f"unsupported action: {action}")
