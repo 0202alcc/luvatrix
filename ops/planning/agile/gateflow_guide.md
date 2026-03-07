@@ -76,24 +76,37 @@ flowchart TD
     MG1["Define Milestone Objective + Success Criteria"] --> MG2["Define Closeout Criteria (Quantitative Go/No-Go)"]
     MG2 --> MG2B["Define Milestone CI Required Checks"]
     MG2B --> MG3["Create Milestone in Planning API"]
+    MG2B --> MG2J["JSON OUT: POST /milestones<br/>{id,name,start_week,end_week,status,success_criteria,closeout_criteria,ci_required_checks,task_ids:[]}"]
+    MG2J --> MG3
     MG3 --> MB0["Create Milestone Branch from main"]
     MB0 --> MG4["Create First Task Type: [CLOSEOUT HARNESS]"]
+    MG4 --> MG4J["JSON OUT: POST /tasks<br/>{id,title,task_type:'closeout_harness',milestone_id,status:'Intake',depends_on,board_refs,notes}"]
   end
 
   subgraph TASK_EXECUTION["Task GateFlow Execution (Middle)"]
     direction LR
     TB0["Create Task Branch from Milestone Branch"] --> A["Intake"]
     A --> B["Success Criteria Spec"]
+    A --> AJ["JSON OUT: PATCH /tasks/<id><br/>{status:'Success Criteria Spec'}"]
     B --> C["Safety Tests Spec"]
+    B --> BJ["JSON OUT: PATCH /tasks/<id><br/>{status:'Safety Tests Spec'}"]
     C --> D["Implementation Tests Spec"]
+    C --> CJ["JSON OUT: PATCH /tasks/<id><br/>{status:'Implementation Tests Spec'}"]
     D --> E["Edge Case Tests Spec"]
+    D --> DJ["JSON OUT: PATCH /tasks/<id><br/>{status:'Edge Case Tests Spec'}"]
     E --> F["Prototype Stage 1"]
+    E --> EJ["JSON OUT: PATCH /tasks/<id><br/>{status:'Prototype Stage 1',cost_components?,cost_confidence?}"]
     F --> G["Prototype Stage 2+"]
+    F --> FJ["JSON OUT: PATCH /tasks/<id><br/>{status:'Prototype Stage 2+'}"]
     G --> H["Verification Review"]
+    G --> GJ["JSON OUT: PATCH /tasks/<id><br/>{status:'Verification Review'}"]
     H --> I["Integration Ready"]
+    H --> HJ["JSON OUT: PATCH /tasks/<id><br/>{status:'Integration Ready'}"]
     I --> TP1{"Task PR Merged to Milestone Branch?"}
     TP1 -->|Yes| J["Done"]
+    TP1 -->|Yes| JJ["JSON OUT: PATCH /tasks/<id><br/>{status:'Done',actuals:{input_tokens,output_tokens,wall_time_sec,tool_calls,reopen_count},done_gate:{success_criteria_met,safety_tests_passed,implementation_tests_passed,edge_case_tests_passed,merged_to_main,required_checks_passed_on_main}}"]
     TP1 -->|No| X["Blocked"]
+    TP1 -->|No| XJ["JSON OUT: PATCH /tasks/<id><br/>{status:'Blocked',notes:'blocked reason + owner + dependency path'}"]
     A -.blocked.-> X["Blocked"]
     B -.blocked.-> X
     C -.blocked.-> X
@@ -104,19 +117,25 @@ flowchart TD
     H -.blocked.-> X
     I -.blocked.-> X
     X --> R["Unblock + Re-enter Prior Stage"]
+    X --> RJ["JSON OUT: PATCH /tasks/<id><br/>{status:'<prior stage>',notes:'unblocked + remediation'}"]
     R --> H
     J -.post-merge failure.-> H
+    J -.post-merge failure.-> PJ["JSON OUT: PATCH /tasks/<id><br/>{status:'Verification Review',actuals.reopen_count:+1}<br/>+ POST /backlog {id,title,status:'Open',bucket:'Carryover',task_ref}"]
   end
 
   subgraph MILESTONE_CLOSEOUT["Milestone Closeout (Bottom)"]
     direction TB
     MC1["Milestone Integration Gate"] --> MC2{"Go/No-Go Decision"}
+    MC1 --> MC1J["JSON OUT: closeout packet file<br/>ops/planning/closeout/<milestone-id>_closeout.md"]
     MC2 -->|Go| MP1{"Milestone PR Merged to main?"}
     MP1 -->|Yes| MC7{"Milestone CI Required Checks PASS on main?"}
     MC7 -->|Yes| MC3["Milestone Complete"]
+    MC7 -->|Yes| MC3J["JSON OUT: PATCH /milestones/<id><br/>{status:'Complete',lifecycle_events:+{date,event:'closed',framework,note}}"]
     MC7 -->|No| MC8["Post-merge CI failure procedure: reopen milestone + reopen failed tasks to Verification Review + add incident/remediation tasks"]
+    MC7 -->|No| MC8J["JSON OUT: PATCH /milestones/<id> {status:'In Progress',lifecycle_events:+reopened}<br/>+ PATCH /tasks/<failed> {status:'Verification Review'}"]
     MP1 -->|No| MC4["Blocked (Await Milestone PR Merge)"]
     MC2 -->|No-Go| MC5["Reopen Milestone + Add/Edit Remediation Tasks"]
+    MC2 -->|No-Go| MC5J["JSON OUT: PATCH /milestones/<id><br/>{status:'In Progress',lifecycle_events:+{event:'reopened',note:'no-go remediation'}}"]
     MC5 --> MC1
     MC3 --> MC6["Delete Task Branches (Post-Merge Cleanup)"]
     MC8 --> MC1
