@@ -46,3 +46,14 @@ Required v1 scaffold:
 1. Optional fields must not alter required-field semantics.
 2. Unknown fields in strict mode fail with exit code `2`.
 3. Unknown fields in permissive mode are surfaced as warnings and preserved.
+
+## Canonical Object Key Order (Reference)
+
+1. Milestone object keys:
+  - `id`, `emoji`, `name`, `descriptions`, `start_week`, `end_week`, `status`, `task_ids`, `success_criteria`, `closeout_criteria`, `ci_required_checks`, `lifecycle_events`
+2. Task object keys:
+  - `id`, `title`, `task_type`, `milestone_id`, `status`, `depends_on`, `board_refs`, `notes`, `actuals`, `done_gate`
+
+## Canonicalization Rule
+
+All ledgers MUST pass a normalize-then-serialize pipeline before write, and all commands that mutate ledgers MUST write canonicalized output.
