@@ -6384,7 +6384,7 @@
       "title": "App manifest debug policy + backward compatibility path",
       "task_type": "standard",
       "milestone_id": "A-037",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2902",
         "T-2903"
