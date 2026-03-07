@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any
 
+from gateflow_cli.config import get_config_value, set_config_value, show_config
 from gateflow_cli.scaffold import doctor_workspace, scaffold_workspace
 from gateflow_cli.resources import ResourceError, create_resource, delete_resource, get_resource, list_resource, update_resource
 from gateflow_cli.workspace import GateflowWorkspace
@@ -22,6 +22,15 @@ def build_parser() -> argparse.ArgumentParser:
     scaffold_p = init_sub.add_parser("scaffold")
     scaffold_p.add_argument("--profile", choices=["minimal", "discord", "enterprise"], default="minimal")
     init_sub.add_parser("doctor")
+
+    config_p = sub.add_parser("config")
+    config_sub = config_p.add_subparsers(dest="config_action", required=True)
+    config_get = config_sub.add_parser("get")
+    config_get.add_argument("key")
+    config_set = config_sub.add_parser("set")
+    config_set.add_argument("key")
+    config_set.add_argument("value")
+    config_sub.add_parser("show")
 
     for resource in RESOURCES:
         rs = sub.add_parser(resource)
@@ -70,25 +79,36 @@ def _dispatch(args: argparse.Namespace) -> int:
             return 0
         raise ValueError(f"unsupported init action: {args.init_action}")
 
+    if args.command == "config":
+        if args.config_action == "get":
+            print(json.dumps(get_config_value(args.root, args.key), indent=2, sort_keys=True))
+            return 0
+        if args.config_action == "set":
+            print(set_config_value(args.root, args.key, args.value))
+            return 0
+        if args.config_action == "show":
+            print(json.dumps(show_config(args.root), indent=2, sort_keys=True))
+            return 0
+        raise ValueError(f"unsupported config action: {args.config_action}")
+
     workspace = GateflowWorkspace(args.root)
     resource = args.command
     action = args.action
-    payload = vars(args)
 
     if action == "list":
         print(json.dumps(list_resource(workspace, resource), indent=2, sort_keys=True))
         return 0
     if action == "get":
-        print(json.dumps(get_resource(workspace, resource, payload["item_id"]), indent=2, sort_keys=True))
+        print(json.dumps(get_resource(workspace, resource, args.item_id), indent=2, sort_keys=True))
         return 0
     if action == "create":
-        print(create_resource(workspace, resource, json.loads(payload["body"])))
+        print(create_resource(workspace, resource, json.loads(args.body)))
         return 0
     if action == "update":
-        print(update_resource(workspace, resource, payload["item_id"], json.loads(payload["body"])))
+        print(update_resource(workspace, resource, args.item_id, json.loads(args.body)))
         return 0
     if action == "delete":
-        print(delete_resource(workspace, resource, payload["item_id"]))
+        print(delete_resource(workspace, resource, args.item_id))
         return 0
     raise ValueError(f"unsupported action: {action}")
 
