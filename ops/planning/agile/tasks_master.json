@@ -1171,7 +1171,7 @@
       "title": "Define deterministic gate ownership and required pass criteria.",
       "epic_id": "E-401",
       "milestone_id": "P-013",
-      "status": "Backlog",
+      "status": "Integration Ready",
       "depends_on": [],
       "board_refs": [
         "milestone:P-013",
@@ -1186,9 +1186,9 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 41.25,
-      "cost_bucket": "L",
-      "stage_multiplier_applied": 1.0,
+      "cost_score": 9.97,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.7,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
       "notes": [
@@ -1202,7 +1202,7 @@
       "title": "Add flaky test quarantine + remediation workflow.",
       "epic_id": "E-401",
       "milestone_id": "P-013",
-      "status": "Backlog",
+      "status": "Integration Ready",
       "depends_on": [
         "T-401"
       ],
@@ -1219,9 +1219,9 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 43.85,
-      "cost_bucket": "L",
-      "stage_multiplier_applied": 1.0,
+      "cost_score": 10.61,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.7,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
       "notes": [
@@ -1235,7 +1235,7 @@
       "title": "Improve smoke signal visibility and artifact links.",
       "epic_id": "E-401",
       "milestone_id": "P-013",
-      "status": "Backlog",
+      "status": "Integration Ready",
       "depends_on": [
         "T-401"
       ],
@@ -1252,9 +1252,9 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 43.85,
-      "cost_bucket": "L",
-      "stage_multiplier_applied": 1.0,
+      "cost_score": 10.61,
+      "cost_bucket": "S",
+      "stage_multiplier_applied": 0.7,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
       "notes": [
@@ -6419,7 +6419,7 @@
       "title": "Conformance + non-regression gate pack (incl. P-026 guarantees)",
       "task_type": "standard",
       "milestone_id": "P-013",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [
         "T-2901",
         "T-2902",
