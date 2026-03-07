@@ -504,6 +504,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 - Tasks: `T-4100, T-4101, T-4102, T-4103, T-4104, T-4105`
 - Lifecycle events:
   - 2026-03-07 active (framework=gateflow_v1) - gateflow productization roadmap milestone created
+  - 2026-03-07 closed (framework=gateflow_v1) - core domain extraction complete and merged to main
 - Success criteria:
   - Existing planning workflows keep behavior parity under refactored service architecture.
   - Domain extraction supports configurable storage root and renderer adapters.

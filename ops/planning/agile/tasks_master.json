@@ -7899,7 +7899,7 @@
       "title": "[CLOSEOUT HARNESS] Define F-042 closeout metric + evidence harness",
       "task_type": "closeout_harness",
       "milestone_id": "F-042",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:F-042",
@@ -7908,7 +7908,22 @@
       ],
       "notes": [
         "Define closeout/evidence contract for CLI surface and init scaffolding."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 520,
+        "output_tokens": 380,
+        "wall_time_sec": 240,
+        "tool_calls": 6,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4201",
