@@ -515,6 +515,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 - Tasks: `T-4200, T-4201, T-4202, T-4203, T-4204, T-4205`
 - Lifecycle events:
   - 2026-03-07 active (framework=gateflow_v1) - gateflow productization roadmap milestone created
+  - 2026-03-07 closed (framework=gateflow_v1) - cli surface, init scaffolding, overlays, config, and api shim merged to main
 - Success criteria:
   - Fresh repo initialization and resource CRUD works in dry-run/apply mode.
   - Config commands and profile overlays behave deterministically.
