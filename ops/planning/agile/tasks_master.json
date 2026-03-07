@@ -7504,7 +7504,7 @@
       "title": "[CLOSEOUT HARNESS] Define P-040 closeout metric + evidence harness",
       "task_type": "closeout_harness",
       "milestone_id": "P-040",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:P-040",
@@ -7513,14 +7513,29 @@
       ],
       "notes": [
         "Define closeout scoring and evidence contract for P-040 specification lock."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1320,
+        "output_tokens": 340,
+        "wall_time_sec": 755,
+        "tool_calls": 15,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4001",
       "title": "Define v1 GateFlow CLI command matrix",
       "task_type": "standard",
       "milestone_id": "P-040",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4000"
       ],
@@ -7531,14 +7546,29 @@
       ],
       "notes": [
         "Cover init/resources/validate/render/config/api-shim command contract."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1440,
+        "output_tokens": 380,
+        "wall_time_sec": 810,
+        "tool_calls": 16,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4002",
       "title": "Freeze `.gateflow/` canonical JSON schema + deterministic formatting rules",
       "task_type": "standard",
       "milestone_id": "P-040",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4001"
       ],
@@ -7549,14 +7579,29 @@
       ],
       "notes": [
         "Define canonical ledgers and formatting invariants for stable diffs."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1560,
+        "output_tokens": 420,
+        "wall_time_sec": 865,
+        "tool_calls": 17,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4003",
       "title": "Define profile contract (minimal/discord/enterprise) and scaffold boundaries",
       "task_type": "standard",
       "milestone_id": "P-040",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4002"
       ],
@@ -7567,14 +7612,29 @@
       ],
       "notes": [
         "Specify profile overlays and core-vs-optional template boundaries."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1680,
+        "output_tokens": 460,
+        "wall_time_sec": 920,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4004",
       "title": "Define policy contract (protected branch, done-gate, harness-warning mode)",
       "task_type": "standard",
       "milestone_id": "P-040",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4002"
       ],
@@ -7585,14 +7645,29 @@
       ],
       "notes": [
         "Document branch guard, telemetry done-gate, and harness warning semantics."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1800,
+        "output_tokens": 500,
+        "wall_time_sec": 975,
+        "tool_calls": 19,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4005",
       "title": "Publish v1 ADR/spec packet",
       "task_type": "standard",
       "milestone_id": "P-040",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4003",
         "T-4004"
@@ -7604,7 +7679,22 @@
       ],
       "notes": [
         "Publish decision-complete packet with examples and acceptance criteria."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1920,
+        "output_tokens": 540,
+        "wall_time_sec": 1030,
+        "tool_calls": 20,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4100",
