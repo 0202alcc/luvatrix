@@ -65,6 +65,16 @@ class AppUIRenderer(Protocol):
 
 
 @dataclass(frozen=True)
+class AppDebugPolicy:
+    schema_version: int = 1
+    enable_default_debug_root: bool = True
+    disable_debug_root_approval: str | None = None
+    non_macos_behavior: Literal["explicit_stub"] = "explicit_stub"
+    non_macos_stub_capability: str = "debug.policy.non_macos.stub"
+    non_macos_unsupported_reason: str = "macOS-first phase: explicit stub only"
+
+
+@dataclass(frozen=True)
 class AppManifest:
     app_id: str
     protocol_version: str
@@ -78,6 +88,7 @@ class AppManifest:
     process_command: list[str] = field(default_factory=list)
     min_runtime_protocol_version: str | None = None
     max_runtime_protocol_version: str | None = None
+    debug_policy: AppDebugPolicy = field(default_factory=AppDebugPolicy)
 
 
 @dataclass(frozen=True)
@@ -436,6 +447,7 @@ class AppRuntime:
         )
         runtime_raw = raw.get("runtime", {})
         runtime_kind, runtime_transport, process_command = _coerce_runtime_config(runtime_raw)
+        debug_policy = _coerce_debug_policy(raw.get("debug_policy", None))
         manifest = AppManifest(
             app_id=app_id,
             protocol_version=protocol_version,
@@ -449,6 +461,7 @@ class AppRuntime:
             process_command=process_command,
             min_runtime_protocol_version=min_runtime_protocol_version,
             max_runtime_protocol_version=max_runtime_protocol_version,
+            debug_policy=debug_policy,
         )
         self._validate_manifest(manifest)
         return manifest
@@ -538,6 +551,32 @@ class AppRuntime:
             coordinate_frames=CoordinateFrameRegistry(width=self._matrix.width, height=self._matrix.height),
         )
 
+    def resolve_debug_policy_profile(self, manifest: AppManifest) -> dict[str, object]:
+        policy = manifest.debug_policy
+        if self._host_os != "macos":
+            return {
+                "supported": False,
+                "enable_default_debug_root": False,
+                "declared_capabilities": [policy.non_macos_stub_capability],
+                "unsupported_reason": policy.non_macos_unsupported_reason,
+                "host_os": self._host_os,
+            }
+        if not policy.enable_default_debug_root:
+            return {
+                "supported": False,
+                "enable_default_debug_root": False,
+                "declared_capabilities": [],
+                "unsupported_reason": "disabled by manifest debug_policy with explicit approval",
+                "host_os": self._host_os,
+            }
+        return {
+            "supported": True,
+            "enable_default_debug_root": True,
+            "declared_capabilities": ["debug.root.default"],
+            "unsupported_reason": None,
+            "host_os": self._host_os,
+        }
+
     def load_lifecycle(self, app_dir: Path, entrypoint: str) -> AppLifecycle:
         module_name, symbol_name = _parse_entrypoint(entrypoint)
         module = _load_module_from_app_dir(app_dir, module_name)
@@ -622,6 +661,17 @@ class AppRuntime:
             raise ValueError("runtime.kind=process requires runtime.command")
         if manifest.runtime_transport != "stdio_jsonl":
             raise ValueError(f"unsupported runtime transport: {manifest.runtime_transport}")
+        if manifest.debug_policy.schema_version != 1:
+            raise ValueError("debug_policy.schema_version must be 1")
+        if manifest.debug_policy.non_macos_behavior != "explicit_stub":
+            raise ValueError("debug_policy.non_macos_behavior must be explicit_stub")
+        if (
+            not manifest.debug_policy.enable_default_debug_root
+            and not (manifest.debug_policy.disable_debug_root_approval or "").strip()
+        ):
+            raise ValueError(
+                "debug_policy.disable_debug_root_approval is required when enable_default_debug_root=false"
+            )
 
     def _audit_capability(self, action: str, capability: str) -> None:
         if self._capability_audit_logger is None:
@@ -675,6 +725,54 @@ def _coerce_runtime_config(value: object) -> tuple[Literal["python_inproc", "pro
             raise ValueError("runtime.command entries must be non-empty strings")
         command.append(item)
     return (raw_kind, raw_transport, command)
+
+
+def _coerce_debug_policy(value: object) -> AppDebugPolicy:
+    if value is None:
+        return AppDebugPolicy()
+    if not isinstance(value, dict):
+        raise ValueError("debug_policy must be a table/object")
+
+    schema_version = value.get("schema_version", 1)
+    if not isinstance(schema_version, int):
+        raise ValueError("debug_policy.schema_version must be an integer")
+
+    enable_default_debug_root = value.get("enable_default_debug_root", True)
+    if not isinstance(enable_default_debug_root, bool):
+        raise ValueError("debug_policy.enable_default_debug_root must be a boolean")
+
+    disable_debug_root_approval = _coerce_optional_str(
+        value.get("disable_debug_root_approval"),
+        "debug_policy.disable_debug_root_approval",
+    )
+
+    non_macos_behavior = _coerce_optional_str(
+        value.get("non_macos_behavior"),
+        "debug_policy.non_macos_behavior",
+    ) or "explicit_stub"
+    if non_macos_behavior != "explicit_stub":
+        raise ValueError("debug_policy.non_macos_behavior must be explicit_stub")
+
+    non_macos_stub_capability = _coerce_optional_str(
+        value.get("non_macos_stub_capability"),
+        "debug_policy.non_macos_stub_capability",
+    ) or "debug.policy.non_macos.stub"
+    if not non_macos_stub_capability.startswith("debug.") or ".stub" not in non_macos_stub_capability:
+        raise ValueError("debug_policy.non_macos_stub_capability must be a debug.* stub capability")
+
+    non_macos_unsupported_reason = _coerce_optional_str(
+        value.get("non_macos_unsupported_reason"),
+        "debug_policy.non_macos_unsupported_reason",
+    ) or "macOS-first phase: explicit stub only"
+
+    return AppDebugPolicy(
+        schema_version=schema_version,
+        enable_default_debug_root=enable_default_debug_root,
+        disable_debug_root_approval=disable_debug_root_approval,
+        non_macos_behavior=non_macos_behavior,
+        non_macos_stub_capability=non_macos_stub_capability,
+        non_macos_unsupported_reason=non_macos_unsupported_reason,
+    )
 
 
 def _coerce_variants(value: object) -> list[AppVariant]:
