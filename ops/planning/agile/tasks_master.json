@@ -6859,7 +6859,7 @@
       "title": "Manifest policy integration in live macOS path",
       "task_type": "standard",
       "milestone_id": "R-039",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-3202"
       ],
@@ -6870,7 +6870,22 @@
       ],
       "notes": [
         "Enforce debug_policy enable/disable semantics in app launch path while preserving legacy defaults and approval-token behavior."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 2300,
+        "output_tokens": 1600,
+        "wall_time_sec": 920,
+        "tool_calls": 19,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-3204",
