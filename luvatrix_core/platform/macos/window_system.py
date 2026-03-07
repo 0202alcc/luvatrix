@@ -213,22 +213,46 @@ class AppKitWindowSystem:
             section_menu.addItem_(item)
 
 
+_MENU_ACTION_TARGET_CLASS_NAME = "_LuvatrixDebugMenuTarget"
+_MENU_ACTION_TARGET_CLASS: type[object] | None = None
+
+
+def _resolve_menu_action_target_class() -> type[object] | None:
+    global _MENU_ACTION_TARGET_CLASS
+    if _MENU_ACTION_TARGET_CLASS is not None:
+        return _MENU_ACTION_TARGET_CLASS
+    try:
+        from Foundation import NSObject  # type: ignore
+    except Exception:
+        return None
+    try:
+        import objc  # type: ignore
+
+        existing = objc.lookUpClass(_MENU_ACTION_TARGET_CLASS_NAME)
+        if existing is not None:
+            _MENU_ACTION_TARGET_CLASS = existing
+            return existing
+    except Exception:
+        pass
+    dynamic = type(
+        _MENU_ACTION_TARGET_CLASS_NAME,
+        (NSObject,),
+        {
+            "initWithCallback_actionId_": _MenuActionTarget.initWithCallback_actionId_,
+            "onMenuAction_": _MenuActionTarget.onMenuAction_,
+        },
+    )
+    _MENU_ACTION_TARGET_CLASS = dynamic
+    return dynamic
+
+
 class _MenuActionTarget:
     @classmethod
     def alloc(cls):
-        try:
-            from Foundation import NSObject  # type: ignore
-        except Exception:
+        target_cls = _resolve_menu_action_target_class()
+        if target_cls is None:
             return cls()
-        dynamic = type(
-            "_LuvatrixDebugMenuTarget",
-            (NSObject,),
-            {
-                "initWithCallback_actionId_": cls.initWithCallback_actionId_,
-                "onMenuAction_": cls.onMenuAction_,
-            },
-        )
-        return dynamic.alloc()
+        return target_cls.alloc()
 
     def initWithCallback_actionId_(self, callback, action_id):
         self._callback = callback
