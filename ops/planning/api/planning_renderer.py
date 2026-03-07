@@ -25,14 +25,6 @@ class SubprocessPlanningRenderer:
                 "--out",
                 str(paths.gantt_md_path),
             ],
-            [
-                sys.executable,
-                "ops/discord/scripts/generate_gantt_png.py",
-                "--schedule",
-                str(paths.schedule_path),
-                "--out",
-                str(paths.gantt_png_path),
-            ],
         ]
         for cmd in commands:
             subprocess.run(cmd, check=True, cwd=paths.repo_root)

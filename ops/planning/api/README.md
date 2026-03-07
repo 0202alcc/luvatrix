@@ -96,7 +96,7 @@ python ops/planning/api/planning_api.py GET /milestones --root /tmp/luvatrix-sna
 4. Prevents unsafe deletes unless force flags are explicit.
 5. On successful `--apply`, automatically regenerates:
 - `ops/planning/gantt/milestones_gantt.md`
-- `ops/planning/gantt/milestones_gantt.png`
+- `ops/planning/gantt/milestones_gantt.md` (text-only v1 artifact)
 6. Task statuses are validated against framework template status columns (GateFlow default) plus legacy compatibility statuses.
 7. Optional task cost model is supported (`gateflow_cost_v1`) with:
 - `cost_components` (`0..100` each)

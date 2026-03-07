@@ -10,7 +10,7 @@ not Discord-specific.
 - `milestone_schedule.json.milestone_id_schema` (lettered milestone naming taxonomy)
 - `milestone_id_migration.md` (legacy `H/M` IDs to lettered schema mapping)
 - `milestones_gantt.md` (consolidated generated markdown: chart + milestone detail sections)
-- `milestones_gantt.png` (generated visual chart)
+- `milestones_gantt.md` (generated text chart for v1)
 
 2. `agile/`
 - `tasks_master.json` (canonical task source-of-truth across all boards)
