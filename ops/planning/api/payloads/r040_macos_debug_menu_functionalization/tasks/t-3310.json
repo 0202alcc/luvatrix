@@ -1,0 +1,18 @@
+{
+  "id": "T-3310",
+  "title": "Rollback/kill-switch hardening + final closeout packet",
+  "task_type": "standard",
+  "milestone_id": "R-040",
+  "status": "Intake",
+  "depends_on": [
+    "T-3309"
+  ],
+  "board_refs": [
+    "milestone:R-040",
+    "team:platform-ci",
+    "specialist:release"
+  ],
+  "notes": [
+    "Harden kill-switch path and finalize closeout packet with full required command bundle outputs."
+  ]
+}

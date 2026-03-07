@@ -1,0 +1,19 @@
+{
+  "id": "T-3302",
+  "title": "Implement real recording start/stop pipeline",
+  "task_type": "standard",
+  "milestone_id": "R-040",
+  "status": "Intake",
+  "depends_on": [
+    "T-3300",
+    "T-3301"
+  ],
+  "board_refs": [
+    "milestone:R-040",
+    "team:runtime",
+    "specialist:development"
+  ],
+  "notes": [
+    "Wire recording toggle to real lifecycle manager with idempotent start/stop and budget tracking."
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "T-3301",
+  "title": "Implement real screenshot action pipeline",
+  "task_type": "standard",
+  "milestone_id": "R-040",
+  "status": "Intake",
+  "depends_on": [
+    "T-3300"
+  ],
+  "board_refs": [
+    "milestone:R-040",
+    "team:runtime",
+    "specialist:development"
+  ],
+  "notes": [
+    "Wire Capture Screenshot to real PNG+metadata pipeline with atomic write and failure-safe handling."
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "actions": [
+    "debug.menu.capture.screenshot",
+    "debug.menu.capture.record.toggle",
+    "debug.menu.overlay.toggle",
+    "debug.menu.replay.start",
+    "debug.menu.frame.step",
+    "debug.menu.perf.hud.toggle",
+    "debug.menu.bundle.export"
+  ],
+  "app_id": "examples.input_sensor_logger",
+  "menu_wiring_enabled": true,
+  "profile": {
+    "declared_capabilities": [
+      "debug.root.default"
+    ],
+    "enable_default_debug_root": true,
+    "host_os": "macos",
+    "supported": true,
+    "unsupported_reason": null
+  }
+}

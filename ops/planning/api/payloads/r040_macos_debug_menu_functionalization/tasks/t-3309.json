@@ -1,0 +1,18 @@
+{
+  "id": "T-3309",
+  "title": "E2E macOS example-app menu functional smoke harness",
+  "task_type": "standard",
+  "milestone_id": "R-040",
+  "status": "Intake",
+  "depends_on": [
+    "T-3308"
+  ],
+  "board_refs": [
+    "milestone:R-040",
+    "team:platform-ci",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Exercise functional menu actions across required example apps and emit reproducible evidence manifest/logs."
+  ]
+}

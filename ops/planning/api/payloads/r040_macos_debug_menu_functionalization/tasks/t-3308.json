@@ -1,0 +1,24 @@
+{
+  "id": "T-3308",
+  "title": "Integrate menu action-state updates (enabled/disabled reflects runtime state)",
+  "task_type": "standard",
+  "milestone_id": "R-040",
+  "status": "Intake",
+  "depends_on": [
+    "T-3301",
+    "T-3302",
+    "T-3303",
+    "T-3304",
+    "T-3305",
+    "T-3306",
+    "T-3307"
+  ],
+  "board_refs": [
+    "milestone:R-040",
+    "team:runtime",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Sync menu item enable/disable states to real runtime capability/state to avoid stale enabled actions."
+  ]
+}

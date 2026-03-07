@@ -1,0 +1,18 @@
+{
+  "id": "T-3304",
+  "title": "Implement replay start action (seed/session-based)",
+  "task_type": "standard",
+  "milestone_id": "R-040",
+  "status": "Intake",
+  "depends_on": [
+    "T-3300"
+  ],
+  "board_refs": [
+    "milestone:R-040",
+    "team:runtime",
+    "specialist:development"
+  ],
+  "notes": [
+    "Wire Start Replay to real replay session path with digest logging and safe invalid-input handling."
+  ]
+}

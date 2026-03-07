@@ -7127,6 +7127,212 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       }
+    },
+    {
+      "id": "T-3300",
+      "title": "[CLOSEOUT HARNESS] Define R-040 closeout metric + evidence contract",
+      "task_type": "closeout_harness",
+      "milestone_id": "R-040",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:R-040",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Define quantitative closeout harness and evidence contract for R-040 full-action functionalization."
+      ]
+    },
+    {
+      "id": "T-3301",
+      "title": "Implement real screenshot action pipeline",
+      "task_type": "standard",
+      "milestone_id": "R-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-3300"
+      ],
+      "board_refs": [
+        "milestone:R-040",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "notes": [
+        "Wire Capture Screenshot to real PNG+metadata pipeline with atomic write and failure-safe handling."
+      ]
+    },
+    {
+      "id": "T-3302",
+      "title": "Implement real recording start/stop pipeline",
+      "task_type": "standard",
+      "milestone_id": "R-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-3300",
+        "T-3301"
+      ],
+      "board_refs": [
+        "milestone:R-040",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "notes": [
+        "Wire recording toggle to real lifecycle manager with idempotent start/stop and budget tracking."
+      ]
+    },
+    {
+      "id": "T-3303",
+      "title": "Implement overlay runtime toggles (bounds/dirty-rect/coordinates)",
+      "task_type": "standard",
+      "milestone_id": "R-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-3300"
+      ],
+      "board_refs": [
+        "milestone:R-040",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Make overlay toggles control real visual overlays without destructive base-content effects."
+      ]
+    },
+    {
+      "id": "T-3304",
+      "title": "Implement replay start action (seed/session-based)",
+      "task_type": "standard",
+      "milestone_id": "R-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-3300"
+      ],
+      "board_refs": [
+        "milestone:R-040",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "notes": [
+        "Wire Start Replay to real replay session path with digest logging and safe invalid-input handling."
+      ]
+    },
+    {
+      "id": "T-3305",
+      "title": "Implement frame-step action + paused-state controls",
+      "task_type": "standard",
+      "milestone_id": "R-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-3304"
+      ],
+      "board_refs": [
+        "milestone:R-040",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Implement paused-state frame-step behavior with deterministic ordering continuity checks."
+      ]
+    },
+    {
+      "id": "T-3306",
+      "title": "Implement perf HUD toggle + runtime metric surface",
+      "task_type": "standard",
+      "milestone_id": "R-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-3300"
+      ],
+      "board_refs": [
+        "milestone:R-040",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "notes": [
+        "Wire perf HUD menu action to real HUD runtime surface with required metric fields."
+      ]
+    },
+    {
+      "id": "T-3307",
+      "title": "Implement debug bundle export action (captures/replay/perf/provenance)",
+      "task_type": "standard",
+      "milestone_id": "R-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-3301",
+        "T-3302",
+        "T-3304",
+        "T-3306"
+      ],
+      "board_refs": [
+        "milestone:R-040",
+        "team:runtime",
+        "specialist:release"
+      ],
+      "notes": [
+        "Wire Export Debug Bundle to real zip/manifest builder with required artifact classes and deterministic naming."
+      ]
+    },
+    {
+      "id": "T-3308",
+      "title": "Integrate menu action-state updates (enabled/disabled reflects runtime state)",
+      "task_type": "standard",
+      "milestone_id": "R-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-3301",
+        "T-3302",
+        "T-3303",
+        "T-3304",
+        "T-3305",
+        "T-3306",
+        "T-3307"
+      ],
+      "board_refs": [
+        "milestone:R-040",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Sync menu item enable/disable states to real runtime capability/state to avoid stale enabled actions."
+      ]
+    },
+    {
+      "id": "T-3309",
+      "title": "E2E macOS example-app menu functional smoke harness",
+      "task_type": "standard",
+      "milestone_id": "R-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-3308"
+      ],
+      "board_refs": [
+        "milestone:R-040",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Exercise functional menu actions across required example apps and emit reproducible evidence manifest/logs."
+      ]
+    },
+    {
+      "id": "T-3310",
+      "title": "Rollback/kill-switch hardening + final closeout packet",
+      "task_type": "standard",
+      "milestone_id": "R-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-3309"
+      ],
+      "board_refs": [
+        "milestone:R-040",
+        "team:platform-ci",
+        "specialist:release"
+      ],
+      "notes": [
+        "Harden kill-switch path and finalize closeout packet with full required command bundle outputs."
+      ]
     }
   ]
 }

@@ -1,0 +1,146 @@
+[luvatrix] Vulkan preflight notice:
+Vulkan loader (libvulkan.1.dylib) was not found.
+Install Vulkan SDK / MoltenVK, then restart your shell.
+Typical macOS options:
+  1) Install LunarG Vulkan SDK
+  2) Or install MoltenVK + Vulkan loader via Homebrew
+Then ensure VULKAN_SDK is exported if your setup requires it.
+[luvatrix] Falling back to layer-blit mode if Vulkan cannot initialize.
+[logger-app] init
+[logger-app] sensors=['thermal.temperature', 'power.voltage_current']
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 903.92578125, 'y': 171.9375}
+[sensor] type=thermal.temperature status=UNAVAILABLE value=None unit=None
+[sensor] type=power.voltage_current status=UNAVAILABLE value=None unit=None
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 899.6328125, 'y': 176.2265625}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 899.6328125, 'y': 176.2265625}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 899.6328125, 'y': 176.2265625}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 899.6328125, 'y': 176.2265625}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 899.6328125, 'y': 176.2265625}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 899.6328125, 'y': 176.2265625}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 899.6328125, 'y': 176.2265625}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 899.6328125, 'y': 176.2265625}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 907.71875, 'y': 178.61328125}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 925.140625, 'y': 182.921875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 950.4140625, 'y': 189.42578125}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1022.765625, 'y': 213.4921875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1164.203125, 'y': 272.45703125}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1224.09765625, 'y': 298.46484375}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1267.79296875, 'y': 316.6484375}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1316.60546875, 'y': 331.9453125}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1338.3046875, 'y': 336.0546875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1347.82421875, 'y': 336.0546875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1355.12109375, 'y': 336.0546875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1357.98828125, 'y': 335.02734375}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1358.7265625, 'y': 328.35546875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1351.71875, 'y': 318.1328125}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1341.16796875, 'y': 303.859375}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1324.02734375, 'y': 265.01953125}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1320.359375, 'y': 210.30859375}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1326.42578125, 'y': 135.66796875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1349.98828125, 'y': 66.91015625}
+[sensor] type=thermal.temperature status=UNAVAILABLE value=None unit=None
+[sensor] type=power.voltage_current status=UNAVAILABLE value=None unit=None
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1391.203125, 'y': 0.0}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1448.5234375, 'y': 0.0}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1496.08984375, 'y': 0.0}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1536.26953125, 'y': 0.0}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1569.140625, 'y': 0.0}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1598.10546875, 'y': 0.0}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1625.74609375, 'y': 0.0}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1655.56640625, 'y': 0.0}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1672.4765625, 'y': 0.0}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={'x': 1677.9609375, 'y': 0.0}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[sensor] type=thermal.temperature status=UNAVAILABLE value=None unit=None
+[sensor] type=power.voltage_current status=UNAVAILABLE value=None unit=None
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=NOT_DETECTED payload={}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1663.046875, 'y': 67.49609375}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1573.53125, 'y': 50.0390625}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1499.1171875, 'y': 47.66796875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[sensor] type=thermal.temperature status=UNAVAILABLE value=None unit=None
+[sensor] type=power.voltage_current status=UNAVAILABLE value=None unit=None
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[sensor] type=thermal.temperature status=UNAVAILABLE value=None unit=None
+[sensor] type=power.voltage_current status=UNAVAILABLE value=None unit=None
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[hdi] device=mouse type=pointer_move status=OK payload={'x': 1456.140625, 'y': 51.046875}
+[logger-app] stop
+run complete: ticks=120 frames=1 stopped_by_target_close=False stopped_by_energy_safety=False
+
+app protocol_version=1 is deprecated
+Python Vulkan bindings not available. Install with `pip install "luvatrix[vulkan]"` (or `pip install vulkan`) and ensure MoltenVK runtime is installed. Running in temporary layer-blit mode. (Cannot find Vulkan SDK version. Please ensure that it is installed and that the <sdk_root>/<version>/lib/ folder is in the library path)
+macOS present path active: fallback_clean

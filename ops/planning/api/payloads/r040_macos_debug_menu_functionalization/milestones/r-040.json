@@ -1,0 +1,68 @@
+{
+  "id": "R-040",
+  "emoji": "\ud83e\uddf0",
+  "name": "macOS Debug Menu Functionalization (Full Actions)",
+  "descriptions": [
+    "Convert currently exposed macOS Debug menu actions from safe stubs into real runtime functionality while preserving crash safety, determinism, and compatibility."
+  ],
+  "start_week": 40,
+  "end_week": 44,
+  "status": "Planned",
+  "task_ids": [],
+  "success_criteria": [
+    "All seven Debug menu actions perform real runtime behavior on macOS.",
+    "No menu click path can crash process.",
+    "Default app compatibility behavior remains unchanged without explicit policy changes.",
+    "Determinism signals are preserved for replay/step/export actions.",
+    "Artifact-producing actions generate valid outputs with required metadata.",
+    "E2E smoke on at least two example apps passes with reproducible artifact manifest.",
+    "Rollback switch disables functional wiring cleanly."
+  ],
+  "closeout_criteria": {
+    "metric_id": "r-040-closeout-v1",
+    "metric_description": "R-040 full-action macOS debug menu go/no-go score.",
+    "score_formula": "0.20*action_functionality + 0.20*crash_safety + 0.20*determinism + 0.20*artifact_validity + 0.10*e2e_smoke + 0.10*rollback_safety",
+    "score_components": [
+      "action_functionality",
+      "crash_safety",
+      "determinism",
+      "artifact_validity",
+      "e2e_smoke",
+      "rollback_safety"
+    ],
+    "go_threshold": 90,
+    "hard_no_go_conditions": [
+      "any debug action remains stub/no-op without explicit capability-disabled rationale",
+      "any menu click can crash process",
+      "determinism digest/provenance checks fail for replay/step/export",
+      "rollback kill-switch fails to disable functional wiring safely"
+    ],
+    "required_evidence": [
+      "ops/planning/closeout/r-040_closeout.md",
+      "functional smoke manifest from ops/ci/r040_macos_debug_menu_functional_smoke.py",
+      "artifact manifests for screenshot/recording/bundle outputs"
+    ],
+    "required_commands": [
+      "PYTHONPATH=. uv run --with pytest pytest tests -k \"debug_screenshot or debug_recording or debug_overlay or debug_replay or debug_frame_step or debug_bundle or macos_menu_integration\" -q",
+      "PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render macos --ticks 120",
+      "PYTHONPATH=. uv run python main.py run-app examples/app_protocol/input_sensor_logger --render macos --ticks 120",
+      "PYTHONPATH=. uv run python ops/ci/r040_macos_debug_menu_functional_smoke.py",
+      "PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py",
+      "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-040"
+    ],
+    "rubric_version": "closeout_rubric_v1"
+  },
+  "ci_required_checks": [
+    "PYTHONPATH=. uv run --with pytest pytest tests -k \"debug_screenshot or debug_recording or debug_overlay or debug_replay or debug_frame_step or debug_bundle or macos_menu_integration\" -q",
+    "PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py",
+    "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-040"
+  ],
+  "lifecycle_events": [
+    {
+      "date": "2026-03-07",
+      "event": "active",
+      "framework": "gateflow_v1",
+      "note": "milestone created from architect packet"
+    }
+  ]
+}
