@@ -17,8 +17,8 @@ Framework: `gateflow_v1`
 - `Prototype Stage 1`: none
 - `Prototype Stage 2+`: none
 - `Verification Review`: none
-- `Integration Ready`: `T-4304`
-- `Done`: `T-4300`, `T-4301`, `T-4302`, `T-4303`
+- `Integration Ready`: none
+- `Done`: `T-4300`, `T-4301`, `T-4302`, `T-4303`, `T-4304`
 - `Blocked`: none
 
 ## Evidence Plan

@@ -3,12 +3,15 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Any
 
 from gateflow_cli.api_shim import execute_api
 from gateflow_cli.config import get_config_value, set_config_value, show_config
+from gateflow_cli.policy import PolicyViolation, enforce_protected_branch_write_guard
 from gateflow_cli.render import render_board, render_gantt
 from gateflow_cli.scaffold import doctor_workspace, scaffold_workspace
 from gateflow_cli.resources import ResourceError, create_resource, delete_resource, get_resource, list_resource, update_resource
+from gateflow_cli.validate import ValidationCommandError, run_validation
 from gateflow_cli.workspace import GateflowWorkspace
 
 RESOURCES = ("milestones", "tasks", "boards", "frameworks", "backlog")
@@ -17,6 +20,7 @@ RESOURCES = ("milestones", "tasks", "boards", "frameworks", "backlog")
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="gateflow")
     parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--json-errors", action="store_true", help="Emit machine-readable error payloads.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     init_p = sub.add_parser("init")
@@ -33,6 +37,12 @@ def build_parser() -> argparse.ArgumentParser:
     config_set.add_argument("key")
     config_set.add_argument("value")
     config_sub.add_parser("show")
+
+    validate_p = sub.add_parser("validate")
+    validate_sub = validate_p.add_subparsers(dest="validate_action", required=True)
+    validate_sub.add_parser("links")
+    validate_sub.add_parser("closeout")
+    validate_sub.add_parser("all")
 
     api_p = sub.add_parser("api")
     api_p.add_argument("verb_or_method")
@@ -76,11 +86,17 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         return _dispatch(args)
+    except ValidationCommandError as exc:
+        _emit_error(json_mode=args.json_errors, error_type="validation", exit_code=2, message=str(exc), errors=exc.errors)
+        return 2
+    except PolicyViolation as exc:
+        _emit_error(json_mode=args.json_errors, error_type="policy", exit_code=3, message=str(exc), errors=[str(exc)])
+        return 3
     except (ResourceError, FileNotFoundError, json.JSONDecodeError, ValueError) as exc:
-        print(f"error: {exc}")
+        _emit_error(json_mode=args.json_errors, error_type="validation", exit_code=2, message=str(exc), errors=[str(exc)])
         return 2
     except Exception as exc:  # pragma: no cover - defensive contract
-        print(f"internal error: {exc}")
+        _emit_error(json_mode=args.json_errors, error_type="internal", exit_code=4, message=str(exc), errors=[str(exc)])
         return 4
 
 
@@ -100,6 +116,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             print(json.dumps(get_config_value(args.root, args.key), indent=2, sort_keys=True))
             return 0
         if args.config_action == "set":
+            enforce_protected_branch_write_guard(args.root)
             print(set_config_value(args.root, args.key, args.value))
             return 0
         if args.config_action == "show":
@@ -109,8 +126,17 @@ def _dispatch(args: argparse.Namespace) -> int:
 
     if args.command == "api":
         method, endpoint = _resolve_api_method_and_path(args.verb_or_method, args.path)
+        if method in {"POST", "PATCH", "DELETE"}:
+            enforce_protected_branch_write_guard(args.root)
         print(json.dumps(execute_api(method, endpoint, body=args.body, root=args.root), indent=2, sort_keys=True))
         return 0
+
+    if args.command == "validate":
+        ok, errors = run_validation(args.root, args.validate_action)
+        if ok:
+            print(f"validation: PASS ({args.validate_action})")
+            return 0
+        raise ValidationCommandError(args.validate_action, errors)
 
     if args.command == "render":
         workspace = GateflowWorkspace(args.root)
@@ -137,12 +163,15 @@ def _dispatch(args: argparse.Namespace) -> int:
         print(json.dumps(get_resource(workspace, resource, args.item_id), indent=2, sort_keys=True))
         return 0
     if action == "create":
+        enforce_protected_branch_write_guard(args.root)
         print(create_resource(workspace, resource, json.loads(args.body)))
         return 0
     if action == "update":
+        enforce_protected_branch_write_guard(args.root)
         print(update_resource(workspace, resource, args.item_id, json.loads(args.body)))
         return 0
     if action == "delete":
+        enforce_protected_branch_write_guard(args.root)
         print(delete_resource(workspace, resource, args.item_id))
         return 0
     raise ValueError(f"unsupported action: {action}")
@@ -155,6 +184,28 @@ def _resolve_api_method_and_path(verb_or_method: str, path: str | None) -> tuple
     if method in {"GET", "POST", "PATCH", "DELETE"}:
         return method, path
     raise ValueError(f"unsupported api method: {verb_or_method}")
+
+
+def _emit_error(
+    *,
+    json_mode: bool,
+    error_type: str,
+    exit_code: int,
+    message: str,
+    errors: list[str],
+) -> None:
+    if json_mode:
+        payload: dict[str, Any] = {
+            "ok": False,
+            "error_type": error_type,
+            "exit_code": exit_code,
+            "message": message,
+            "errors": errors,
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    prefix = "internal error" if error_type == "internal" else f"{error_type} error"
+    print(f"{prefix}: {message}")
 
 
 if __name__ == "__main__":  # pragma: no cover

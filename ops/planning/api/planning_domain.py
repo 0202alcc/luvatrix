@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import datetime as dt
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -87,6 +88,8 @@ REQUIRED_CLOSEOUT_SECTIONS = [
 ]
 ALLOWED_TASK_TYPES = {"standard", "closeout_harness"}
 CLOSEOUT_HARNESS_TITLE_PREFIX = "[CLOSEOUT HARNESS]"
+HARNESS_FIRST_POLICY_ENV = "PLANNING_API_HARNESS_FIRST_MODE"
+HARNESS_FIRST_POLICY_MODES = {"warn", "strict"}
 
 
 class ApiError(RuntimeError):
@@ -265,14 +268,14 @@ def enforce_closeout_harness_first(
     *,
     milestone_id: str,
     candidate_task_type: str,
-) -> None:
+) -> str | None:
     milestone = next((m for m in schedule.get("milestones", []) if m.get("id") == milestone_id), None)
     if milestone is None:
         raise ApiError(f"unknown milestone_id: {milestone_id}")
 
     # Legacy milestones without closeout_criteria are exempt.
     if "closeout_criteria" not in milestone:
-        return
+        return None
 
     linked_active = [t for t in tasks_master.get("tasks", []) if t.get("milestone_id") == milestone_id]
     linked_archived = [t for t in tasks_archived.get("tasks", []) if t.get("milestone_id") == milestone_id]
@@ -280,10 +283,25 @@ def enforce_closeout_harness_first(
     has_harness = any(t.get("task_type", "standard") == "closeout_harness" for t in linked_all)
 
     # Enforce only for new milestone task streams: no tasks exist yet.
-    if not linked_all and candidate_task_type != "closeout_harness":
+    if linked_all or candidate_task_type == "closeout_harness" or has_harness:
+        return None
+
+    message = (
+        f"milestone {milestone_id} requires a closeout harness task before other task types"
+    )
+    mode = resolve_harness_first_policy_mode()
+    if mode == "strict":
+        raise ApiError(message)
+    return f"{message} (warning mode: {mode}; set {HARNESS_FIRST_POLICY_ENV}=strict to enforce)"
+
+
+def resolve_harness_first_policy_mode() -> str:
+    mode = os.getenv(HARNESS_FIRST_POLICY_ENV, "warn").strip().lower()
+    if mode not in HARNESS_FIRST_POLICY_MODES:
         raise ApiError(
-            f"milestone {milestone_id} requires a closeout harness task before other task types"
+            f"invalid {HARNESS_FIRST_POLICY_ENV}={mode!r}; expected one of: {', '.join(sorted(HARNESS_FIRST_POLICY_MODES))}"
         )
+    return mode
 
 
 def validate_dep_id_format(task_id: str, dep: str) -> None:
@@ -850,7 +868,7 @@ def create_task(
     if body["milestone_id"] not in milestone_ids:
         raise ApiError(f"unknown milestone_id: {body['milestone_id']}")
     normalize_task_type_and_title(body)
-    enforce_closeout_harness_first(
+    harness_warning = enforce_closeout_harness_first(
         schedule,
         tasks_master,
         tasks_archived,
@@ -885,7 +903,10 @@ def create_task(
     milestone = next(m for m in schedule["milestones"] if m["id"] == body["milestone_id"])
     if tid not in milestone["task_ids"]:
         milestone["task_ids"].append(tid)
-    return f"created task {tid}"
+    summary = f"created task {tid}"
+    if harness_warning:
+        summary = f"{summary} | warning: {harness_warning}"
+    return summary
 
 
 def patch_task(
@@ -916,7 +937,7 @@ def patch_task(
     milestone_ids = {m["id"] for m in schedule.get("milestones", [])}
     if row.get("milestone_id") not in milestone_ids:
         raise ApiError(f"unknown milestone_id: {row.get('milestone_id')}")
-    enforce_closeout_harness_first(
+    harness_warning = enforce_closeout_harness_first(
         schedule,
         tasks_master,
         tasks_archived,
@@ -959,7 +980,10 @@ def patch_task(
         new_m = next(m for m in schedule["milestones"] if m["id"] == new_mid)
         if task_id not in new_m["task_ids"]:
             new_m["task_ids"].append(task_id)
-    return f"updated task {task_id}"
+    summary = f"updated task {task_id}"
+    if harness_warning:
+        summary = f"{summary} | warning: {harness_warning}"
+    return summary
 
 
 def delete_task(

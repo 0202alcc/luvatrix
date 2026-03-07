@@ -8263,7 +8263,7 @@
       "title": "[CLOSEOUT HARNESS] Define P-044 closeout metric + evidence harness",
       "task_type": "closeout_harness",
       "milestone_id": "P-044",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:P-044",
@@ -8272,14 +8272,29 @@
       ],
       "notes": [
         "Define closeout/evidence contract for policy and validation hardening."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 900,
+        "wall_time_sec": 300,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4401",
       "title": "Enforce configurable protected-branch write guard",
       "task_type": "standard",
       "milestone_id": "P-044",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4400",
         "T-4204"
@@ -8291,14 +8306,29 @@
       ],
       "notes": [
         "Block apply writes when current branch != configured protected_branch."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 900,
+        "wall_time_sec": 300,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4402",
       "title": "Preserve and harden GateFlow stage transition + done-gate validations",
       "task_type": "standard",
       "milestone_id": "P-044",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4400"
       ],
@@ -8309,14 +8339,29 @@
       ],
       "notes": [
         "Maintain existing quality bar with deterministic validation outputs."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 900,
+        "wall_time_sec": 300,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4403",
       "title": "Implement harness-first warning mode with configurable escalation path",
       "task_type": "standard",
       "milestone_id": "P-044",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4400"
       ],
@@ -8327,14 +8372,29 @@
       ],
       "notes": [
         "Make harness sequencing warning-level in v1 with future error-mode config."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 900,
+        "wall_time_sec": 300,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4404",
       "title": "Consolidate validate commands (`links`, `closeout`, `all`)",
       "task_type": "standard",
       "milestone_id": "P-044",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4402"
       ],
@@ -8345,14 +8405,29 @@
       ],
       "notes": [
         "Unify validator entrypoints and reporting surface."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 900,
+        "wall_time_sec": 300,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4405",
       "title": "Add machine-readable error outputs and strict exit-code matrix",
       "task_type": "standard",
       "milestone_id": "P-044",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4401",
         "T-4402",
@@ -8365,7 +8440,22 @@
       ],
       "notes": [
         "Guarantee deterministic non-zero codes with parseable failure details."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 900,
+        "wall_time_sec": 300,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4500",
