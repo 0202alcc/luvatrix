@@ -2,19 +2,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import ctypes
+import json
 import logging
 import os
+from pathlib import Path
 import time
 from typing import Any
 
 import torch
 
+from luvatrix_core.core.debug_menu import (
+    DEFAULT_DEBUG_MENU_ACTIONS,
+    DebugMenuDispatcher,
+    DebugMenuDispatchResult,
+)
 from ..frame_pipeline import prepare_frame_for_extent
 from ..vulkan_scaling import RenderScaleController, compute_blit_rect
 from ..vulkan_compat import SwapchainOutOfDateError, VulkanKHRCompatMixin, decode_vk_string
 from luvatrix_core.perf.copy_telemetry import add_copy_telemetry
 from .vulkan_presenter import VulkanContext
-from .window_system import AppKitWindowSystem, MacOSWindowHandle, MacOSWindowSystem
+from .window_system import (
+    AppKitWindowSystem,
+    MacOSDebugMenuAction,
+    MacOSMenuConfig,
+    MacOSWindowHandle,
+    MacOSWindowSystem,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -91,6 +104,13 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._fallback_image_view = None
         self._fallback_replaced_content_layer = False
         self._active_present_path: str | None = None
+        self._debug_menu_dispatcher = DebugMenuDispatcher(warning_sink=self._on_debug_menu_warning)
+        self._debug_menu_profile: dict[str, object] = {}
+        self._debug_menu_app_id = "unknown"
+        self._debug_menu_artifact_dir = Path("artifacts/debug_menu/runtime")
+        self._debug_menu_events_path = self._debug_menu_artifact_dir / "events.jsonl"
+        self._debug_menu_enabled = True
+        self._debug_menu_audit: list[str] = []
         self._render_scale_controller = RenderScaleController.from_env()
         self._render_scale_levels: tuple[float, ...] = self._render_scale_controller.levels
         self._render_scale_fixed: float | None = self._render_scale_controller.fixed_scale
@@ -101,6 +121,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._render_scale_cooldown_frames = self._render_scale_controller.cooldown_frames
         if self.window_system is None:
             self.window_system = AppKitWindowSystem()
+        self._register_debug_menu_handlers()
 
     def initialize(self, width: int, height: int, title: str) -> VulkanContext:
         if self._initialized:
@@ -185,13 +206,45 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
 
     def _create_window(self, width: int, height: int, title: str) -> None:
         assert self.window_system is not None
+        menu_config = self._build_menu_config(title)
         self._window_handle = self.window_system.create_window(
             width,
             height,
             title,
             use_metal_layer=True,
             preserve_aspect_ratio=self.preserve_aspect_ratio,
+            menu_config=menu_config,
         )
+
+    def configure_debug_menu(
+        self,
+        *,
+        app_id: str,
+        profile: dict[str, object],
+        artifact_dir: str | Path = "artifacts/debug_menu/runtime",
+    ) -> None:
+        self._debug_menu_app_id = app_id
+        self._debug_menu_profile = dict(profile)
+        self._debug_menu_artifact_dir = Path(artifact_dir)
+        self._debug_menu_events_path = self._debug_menu_artifact_dir / "events.jsonl"
+        self._debug_menu_enabled = os.getenv("LUVATRIX_MACOS_DEBUG_MENU_WIRING", "1").strip() != "0"
+        self._write_debug_menu_manifest()
+
+    def dispatch_debug_menu_action(self, action_id: str) -> DebugMenuDispatchResult:
+        context = {
+            "app_id": self._debug_menu_app_id,
+            "profile": dict(self._debug_menu_profile),
+            "menu_wiring_enabled": self._debug_menu_enabled,
+        }
+        result = self._debug_menu_dispatcher.dispatch(action_id, context)
+        self._append_debug_menu_event(
+            {
+                "action_id": result.action_id,
+                "status": result.status,
+                "warning": result.warning,
+            }
+        )
+        return result
 
     def _create_vulkan_instance(self) -> None:
         if self._vk is None:
@@ -1329,6 +1382,78 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             return
         self._active_present_path = path
         LOGGER.warning("macOS present path active: %s", path)
+
+    def _register_debug_menu_handlers(self) -> None:
+        for spec in DEFAULT_DEBUG_MENU_ACTIONS:
+            self._debug_menu_dispatcher.register(
+                spec.menu_id,
+                self._make_debug_handler(spec.menu_id),
+                is_enabled=lambda ctx, action_id=spec.menu_id: self._is_debug_action_enabled(action_id, ctx),
+            )
+
+    def _is_debug_action_enabled(self, action_id: str, context: dict[str, object]) -> bool:
+        if not context.get("menu_wiring_enabled", True):
+            return False
+        profile = context.get("profile")
+        if not isinstance(profile, dict):
+            return False
+        return bool(profile.get("supported", False)) and bool(profile.get("enable_default_debug_root", False))
+
+    def _make_debug_handler(self, action_id: str):
+        def _handler(_context: dict[str, object]) -> None:
+            self._append_debug_menu_event(
+                {
+                    "action_id": action_id,
+                    "status": "HANDLER_EXECUTED",
+                    "app_id": self._debug_menu_app_id,
+                }
+            )
+
+        return _handler
+
+    def _build_menu_config(self, title: str) -> MacOSMenuConfig:
+        def _on_action(action_id: str) -> None:
+            self.dispatch_debug_menu_action(action_id)
+
+        enabled = bool(self._debug_menu_profile.get("supported", False)) and bool(
+            self._debug_menu_profile.get("enable_default_debug_root", False)
+        )
+        if not self._debug_menu_enabled:
+            enabled = False
+        actions = tuple(
+            MacOSDebugMenuAction(
+                action_id=spec.menu_id,
+                label=spec.label,
+                enabled=enabled,
+            )
+            for spec in DEFAULT_DEBUG_MENU_ACTIONS
+        )
+        return MacOSMenuConfig(
+            app_title=title,
+            debug_actions=actions,
+            on_debug_action=_on_action,
+        )
+
+    def _write_debug_menu_manifest(self) -> None:
+        self._debug_menu_artifact_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = self._debug_menu_artifact_dir / "manifest.json"
+        payload = {
+            "app_id": self._debug_menu_app_id,
+            "menu_wiring_enabled": self._debug_menu_enabled,
+            "profile": dict(self._debug_menu_profile),
+            "actions": [spec.menu_id for spec in DEFAULT_DEBUG_MENU_ACTIONS],
+        }
+        manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    def _append_debug_menu_event(self, payload: dict[str, object]) -> None:
+        self._debug_menu_artifact_dir.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(payload, sort_keys=True) + "\n"
+        with self._debug_menu_events_path.open("a", encoding="utf-8") as f:
+            f.write(line)
+
+    def _on_debug_menu_warning(self, message: str) -> None:
+        self._debug_menu_audit.append(message)
+        self._append_debug_menu_event({"status": "WARNING", "warning": message})
 
     def _effective_render_scale(self) -> float:
         self._sync_render_scale_attrs_to_controller()

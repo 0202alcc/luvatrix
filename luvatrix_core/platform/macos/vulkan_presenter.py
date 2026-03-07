@@ -41,6 +41,12 @@ class MacOSVulkanBackend(Protocol):
     def should_close(self) -> bool:
         ...
 
+    def configure_debug_menu(self, *, app_id: str, profile: dict[str, object], artifact_dir: str) -> None:
+        ...
+
+    def dispatch_debug_menu_action(self, action_id: str):
+        ...
+
 
 class StubMacOSVulkanBackend:
     def initialize(self, width: int, height: int, title: str) -> VulkanContext:
@@ -162,6 +168,17 @@ class MacOSVulkanPresenter:
             if self._state != PresenterState.READY:
                 return False
             return self.backend.should_close()
+
+    def configure_debug_menu(self, *, app_id: str, profile: dict[str, object], artifact_dir: str = "artifacts/debug_menu/runtime") -> None:
+        with self._lock:
+            if hasattr(self.backend, "configure_debug_menu"):
+                self.backend.configure_debug_menu(app_id=app_id, profile=profile, artifact_dir=artifact_dir)
+
+    def dispatch_debug_menu_action(self, action_id: str):
+        with self._lock:
+            if hasattr(self.backend, "dispatch_debug_menu_action"):
+                return self.backend.dispatch_debug_menu_action(action_id)
+            raise RuntimeError("backend does not support debug menu dispatch")
 
     def _validate_dimensions(self, width: int, height: int) -> None:
         if width <= 0 or height <= 0:
