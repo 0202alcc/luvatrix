@@ -7930,7 +7930,7 @@
       "title": "Add resource-first command layer on extracted services",
       "task_type": "standard",
       "milestone_id": "F-042",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4200",
         "T-4105"
@@ -7942,7 +7942,22 @@
       ],
       "notes": [
         "Implement milestones/tasks/boards/frameworks/backlog command groups."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1900,
+        "output_tokens": 1300,
+        "wall_time_sec": 980,
+        "tool_calls": 24,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4202",
