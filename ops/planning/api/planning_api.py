@@ -121,7 +121,7 @@ def main() -> int:
         storage.write_state(state)
         renderer.regenerate_gantt_artifacts(paths)
         print("write: ok")
-        print(f"regenerated: {paths.gantt_md_path}, {paths.gantt_png_path}")
+        print(f"regenerated: {paths.gantt_md_path}")
     else:
         print("write: skipped (use --apply)")
     return 0
