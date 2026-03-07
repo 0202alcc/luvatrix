@@ -14,6 +14,9 @@
 - `T-3206`: Done.
 
 ## Evidence
+- Bootstrap standard:
+  - `uv sync --extra macos --extra vulkan`
+  - Result: pending final rerun capture during `T-3213` closeout revalidation.
 - Test selector:
   - `PYTHONPATH=. uv run --with pytest pytest tests -k "debug_menu_dispatch or debug_manifest_policy or macos_menu_integration" -q`
   - Result: `13 passed, 420 deselected`
