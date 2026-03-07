@@ -41,10 +41,10 @@ Name: `macOS Debug Menu Runtime Wiring (E2E)`
 - [ ]
 
 ## Done
-- [x] `T-3290` `T-3201` `T-3202` `T-3203` `T-3204` `T-3205` `T-3206`
+- [x] `T-3290` `T-3201` `T-3202` `T-3203` `T-3204` `T-3205` `T-3206` `T-3210` `T-3211` `T-3212` `T-3213`
 
 ## Blocked
-- [x] Live macOS run-app verification blocked in current environment by missing AppKit/PyObjC runtime.
+- [ ] Live macOS run-app verification blocked in current environment by missing AppKit/PyObjC runtime.
 
 ## Verification Command Order
 1. `uv sync --extra macos --extra vulkan`
