@@ -47,3 +47,14 @@ Boundaries:
 2. `gateflow init --profile discord` creates base + discord overlay config.
 3. `gateflow init --profile enterprise` creates base + enterprise overlay config.
 4. Re-running `init` is idempotent and deterministic under same profile.
+
+## Profile Selection Contract
+
+1. Profile is immutable for a scaffold root unless explicit migration command is used.
+2. `discord` and `enterprise` overlays may be combined only through additive keys under profile namespace.
+3. `minimal` remains required compatibility baseline for all future profiles.
+
+## Migration Boundary
+
+1. Upgrading profile level must preserve existing canonical ledgers without lossy transforms.
+2. Downgrading from `enterprise` to `minimal` is allowed only when enterprise-only keys are removed or mapped deterministically.
