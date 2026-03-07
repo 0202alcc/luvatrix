@@ -45,7 +45,7 @@ U-035 🖼️ Visual + Capture Tooling                                          
 R-036 🎛️ Replay + Perf Observability                                                  |                                                                                                                                                                                                           ============================                                          | Complete
 A-037 🧩 App-Configurable Debug Policy + Compatibility                                 |                                                                                                                                                                                                                         ============================                            | Complete
 F-038 🔔 Cross-Platform Notification Protocol + Runtime Adapters                       |                                                                                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                                                         | Planned
-R-039 🍎 macOS Debug Menu Runtime Wiring (E2E)                                         |                                                                                                                                                                                                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Planned
+R-039 🍎 macOS Debug Menu Runtime Wiring (E2E)                                         |                                                                                                                                                                                                                                                     ############################| In Progress
 
 Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 ```
@@ -449,11 +449,12 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - Adapters preserve protocol/runtime modular boundary with deterministic safety.
 
 ### R-039 🍎 macOS Debug Menu Runtime Wiring (E2E)
-- Status: Planned
+- Status: In Progress
 - Target window: Week 36-39
 - Tasks: `T-3290, T-3201, T-3202, T-3203, T-3204, T-3205, T-3206`
 - Lifecycle events:
   - 2026-03-07 active (framework=gateflow_v1) - milestone created from architect packet
+  - 2026-03-07 no-go (framework=gateflow_v1) - live macOS run-app verification blocked in current environment (AppKit/PyObjC unavailable)
 - Success criteria:
   - Clicking default macOS top-menu actions never crashes.
   - Debug menu actions are functional in a live example app session.

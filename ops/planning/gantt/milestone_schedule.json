@@ -2537,7 +2537,7 @@
       ],
       "start_week": 36,
       "end_week": 39,
-      "status": "Planned",
+      "status": "In Progress",
       "task_ids": [
         "T-3290",
         "T-3201",
@@ -2598,6 +2598,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "milestone created from architect packet"
+        },
+        {
+          "date": "2026-03-07",
+          "event": "no-go",
+          "framework": "gateflow_v1",
+          "note": "live macOS run-app verification blocked in current environment (AppKit/PyObjC unavailable)"
         }
       ]
     }
