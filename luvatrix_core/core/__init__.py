@@ -1,6 +1,7 @@
 from .audit import JsonlAuditSink, SQLiteAuditSink
 from .app_runtime import (
     APP_PROTOCOL_VERSION,
+    AppDebugPolicy,
     AppContext,
     AppLifecycle,
     AppManifest,
@@ -90,6 +91,7 @@ from .window_matrix import (
 __all__ = [
     "CallBlitEvent",
     "APP_PROTOCOL_VERSION",
+    "AppDebugPolicy",
     "AppContext",
     "AppLifecycle",
     "AppManifest",
