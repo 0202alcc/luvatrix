@@ -8063,7 +8063,7 @@
       "title": "Preserve temporary `api METHOD /resource` compatibility shim",
       "task_type": "standard",
       "milestone_id": "F-042",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4201"
       ],
@@ -8074,7 +8074,22 @@
       ],
       "notes": [
         "Maintain endpoint-style compatibility for migration period."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1600,
+        "output_tokens": 1100,
+        "wall_time_sec": 810,
+        "tool_calls": 19,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4300",
