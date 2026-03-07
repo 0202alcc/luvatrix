@@ -45,3 +45,16 @@ Behavior:
 1. Policy evaluation order: branch guard -> done gate -> harness checks.
 2. Stable error ordering by policy id.
 3. No hidden environment-dependent defaults.
+
+## Protected Branch Defaults (v1)
+
+1. Default protected branch set: `main`.
+2. Optional protected branches: regex list under policy config.
+3. Any protected-branch violation must emit policy id `POLICY_PROTECTED_BRANCH`.
+
+## Harness Warning Output Schema
+
+1. `severity`: `warning|error`
+2. `policy_id`: stable string id
+3. `message`: deterministic user-facing message
+4. `hint`: deterministic remediation hint
