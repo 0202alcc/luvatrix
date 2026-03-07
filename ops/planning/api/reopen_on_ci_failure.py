@@ -5,28 +5,12 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import json
 import subprocess
-from pathlib import Path
 from typing import Any
 
-
-ROOT = Path("ops/planning")
-SCHEDULE_PATH = ROOT / "gantt/milestone_schedule.json"
-TASKS_MASTER_PATH = ROOT / "agile/tasks_master.json"
-BACKLOG_PATH = ROOT / "agile/backlog_misc.json"
-GANTT_MD_PATH = ROOT / "gantt/milestones_gantt.md"
-GANTT_PNG_PATH = ROOT / "gantt/milestones_gantt.png"
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def write_json(path: Path, payload: dict[str, Any]) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(path)
+from planning_paths import PlanningPathResolver
+from planning_renderer import SubprocessPlanningRenderer
+from planning_storage import JsonPlanningStorage
 
 
 def current_git_branch() -> str:
@@ -37,29 +21,6 @@ def current_git_branch() -> str:
         text=True,
     )
     return proc.stdout.strip()
-
-
-def regenerate_gantt_artifacts() -> None:
-    commands = [
-        [
-            "python",
-            "ops/discord/scripts/generate_gantt_markdown.py",
-            "--schedule",
-            str(SCHEDULE_PATH),
-            "--out",
-            str(GANTT_MD_PATH),
-        ],
-        [
-            "python",
-            "ops/discord/scripts/generate_gantt_png.py",
-            "--schedule",
-            str(SCHEDULE_PATH),
-            "--out",
-            str(GANTT_PNG_PATH),
-        ],
-    ]
-    for cmd in commands:
-        subprocess.run(cmd, check=True, cwd=Path.cwd())
 
 
 def next_backlog_id(backlog: dict[str, Any]) -> str:
@@ -81,11 +42,16 @@ def main() -> int:
     parser.add_argument("--check-id", required=True, help="CI check/run identifier")
     parser.add_argument("--summary", required=True, help="Short failure summary")
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--root", default=".")
     args = parser.parse_args()
 
-    schedule = load_json(SCHEDULE_PATH)
-    tasks_master = load_json(TASKS_MASTER_PATH)
-    backlog = load_json(BACKLOG_PATH)
+    paths = PlanningPathResolver(args.root).resolve()
+    storage = JsonPlanningStorage(paths)
+    renderer = SubprocessPlanningRenderer()
+    state = storage.load_state()
+    schedule = state.schedule
+    tasks_master = state.tasks_master
+    backlog = state.backlog
 
     rows = {t["id"]: t for t in tasks_master.get("tasks", [])}
     if args.task_id not in rows:
@@ -150,12 +116,10 @@ def main() -> int:
         print(f"error: --apply is restricted to main branch (current={branch})")
         return 2
 
-    write_json(SCHEDULE_PATH, schedule)
-    write_json(TASKS_MASTER_PATH, tasks_master)
-    write_json(BACKLOG_PATH, backlog)
-    regenerate_gantt_artifacts()
+    storage.write_state(state)
+    renderer.regenerate_gantt_artifacts(paths)
     print("write: ok")
-    print(f"regenerated: {GANTT_MD_PATH}, {GANTT_PNG_PATH}")
+    print(f"regenerated: {paths.gantt_md_path}, {paths.gantt_png_path}")
     return 0
 
 
