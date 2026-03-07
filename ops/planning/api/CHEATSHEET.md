@@ -10,7 +10,9 @@ Fast command reference for milestone/task/board/backlog operations.
 4. API `--apply` auto-regenerates:
 - `ops/planning/gantt/milestones_gantt.md`
 - `ops/planning/gantt/milestones_gantt.png`
-5. GateFlow guardrails:
+5. Optional path override:
+- append `--root <repo-root>` to run against a non-default checkout/snapshot
+6. GateFlow guardrails:
 - no stage skipping
 - backward stage moves require `--force-with-reason`
 - WIP limits enforced from `ops/planning/agile/boards_registry.json` (`wip_limits`)
