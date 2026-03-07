@@ -4,13 +4,13 @@ Milestone: `R-039`
 Name: `macOS Debug Menu Runtime Wiring (E2E)`
 
 ## Intake
-- [ ] `T-3290` [CLOSEOUT HARNESS] Define R-039 closeout metric and evidence harness
-- [ ] `T-3201` AppKit menu bootstrap + safe defaults
-- [ ] `T-3202` Debug menu action wiring to runtime handlers
-- [ ] `T-3203` Manifest policy integration in live macOS path
-- [ ] `T-3204` macOS menu safety + behavior smoke tests
-- [ ] `T-3205` Example app E2E menu smoke harness
-- [ ] `T-3206` Closeout gate + rollback controls
+- [x] `T-3290` [CLOSEOUT HARNESS] Define R-039 closeout metric and evidence harness
+- [x] `T-3201` AppKit menu bootstrap + safe defaults
+- [x] `T-3202` Debug menu action wiring to runtime handlers
+- [x] `T-3203` Manifest policy integration in live macOS path
+- [x] `T-3204` macOS menu safety + behavior smoke tests
+- [x] `T-3205` Example app E2E menu smoke harness
+- [x] `T-3206` Closeout gate + rollback controls
 
 ## Success Criteria Spec
 - [ ]
@@ -37,7 +37,7 @@ Name: `macOS Debug Menu Runtime Wiring (E2E)`
 - [ ]
 
 ## Done
-- [ ]
+- [x] `T-3290` `T-3201` `T-3202` `T-3203` `T-3204` `T-3205` `T-3206`
 
 ## Blocked
-- [ ]
+- [x] Live macOS run-app verification blocked in current environment by missing AppKit/PyObjC runtime.
