@@ -73,3 +73,33 @@ This contract freezes the v1 command matrix for standalone GateFlow CLI:
 1. No plugin runtime.
 2. No remote state backend.
 3. No implicit migration side-effects during validation.
+
+## Required Subcommand Matrix (Normative)
+
+1. `init`: `scaffold`, `doctor`
+2. `resources`: `list`, `show`, `check`
+3. `validate`: `all`, `schema`, `links`, `closeout`
+4. `render`: `gantt`, `board`, `summary`
+5. `config`: `get`, `set`, `show`
+6. `api`: `get`, `post`, `patch`, `delete`
+
+## Acceptance Checklist
+
+1. Command families are fixed for v1 and cannot be renamed without ADR update.
+2. Each command family defines deterministic output or deterministic exit behavior.
+3. `api` shim parity remains explicitly bounded to planning-api style endpoint invocation.
+
+## Required Subcommand Matrix (Normative)
+
+1. `init`: `scaffold`, `doctor`
+2. `resources`: `list`, `show`, `check`
+3. `validate`: `all`, `schema`, `links`, `closeout`
+4. `render`: `gantt`, `board`, `summary`
+5. `config`: `get`, `set`, `show`
+6. `api`: `get`, `post`, `patch`, `delete`
+
+## Acceptance Checklist
+
+1. Command families are fixed for v1 and cannot be renamed without ADR update.
+2. Each command family defines deterministic output or deterministic exit behavior.
+3. `api` shim parity remains explicitly bounded to planning-api style endpoint invocation.
