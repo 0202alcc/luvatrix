@@ -28,5 +28,8 @@ dev = [
   "matplotlib>=3.10.8",
 ]
 
+[project.scripts]
+gateflow = "gateflow_cli.cli:main"
+
 [tool.setuptools.packages.find]
-include = ["luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
+include = ["gateflow_cli*", "luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
