@@ -2527,6 +2527,79 @@
           "note": "opened from architect packet"
         }
       ]
+    },
+    {
+      "id": "R-039",
+      "emoji": "\ud83c\udf4e",
+      "name": "macOS Debug Menu Runtime Wiring (E2E)",
+      "descriptions": [
+        "Wire existing debug contracts into live AppKit menu behavior for macOS example apps with crash-safe dispatch, policy enforcement, and deterministic smoke evidence."
+      ],
+      "start_week": 36,
+      "end_week": 39,
+      "status": "Planned",
+      "task_ids": [
+        "T-3290",
+        "T-3201",
+        "T-3202",
+        "T-3203",
+        "T-3204",
+        "T-3205",
+        "T-3206"
+      ],
+      "success_criteria": [
+        "Clicking default macOS top-menu actions never crashes.",
+        "Debug menu actions are functional in a live example app session.",
+        "Legacy apps without debug policy block behave unchanged.",
+        "debug_policy controls are enforced in live runtime path.",
+        "End-to-end smoke run produces deterministic evidence (logs + capture artifacts).",
+        "Rollback flag can disable new wiring safely."
+      ],
+      "closeout_criteria": {
+        "metric_id": "r-039-closeout-v1",
+        "metric_description": "macOS menu wiring stability/compatibility go-no-go score.",
+        "score_formula": "0.30*menu_safety + 0.20*action_mapping + 0.20*policy_compat + 0.20*e2e_smoke + 0.10*rollback_safety",
+        "score_components": [
+          "menu_safety",
+          "action_mapping",
+          "policy_compat",
+          "e2e_smoke",
+          "rollback_safety"
+        ],
+        "go_threshold": 88,
+        "hard_no_go_conditions": [
+          "any menu click path can crash process",
+          "ambiguous capability-to-action mapping",
+          "legacy behavior regression when debug policy is absent",
+          "rollback flag cannot safely disable wiring"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-039_closeout.md",
+          "menu integration test output",
+          "example app smoke logs and artifact manifest"
+        ],
+        "required_commands": [
+          "uv run --with pytest pytest tests -k \"debug_menu_dispatch or debug_manifest_policy or macos_menu_integration\" -q",
+          "PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render macos --ticks 120",
+          "PYTHONPATH=. uv run python main.py run-app examples/app_protocol/input_sensor_logger --render macos --ticks 120",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py",
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-039"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run --with pytest pytest tests -k \"debug_menu_dispatch or debug_manifest_policy or macos_menu_integration\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-039"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "milestone created from architect packet"
+        }
+      ]
     }
   ]
 }

@@ -1,0 +1,18 @@
+{
+  "id": "T-3202",
+  "title": "Debug menu action wiring to runtime handlers",
+  "task_type": "standard",
+  "milestone_id": "R-039",
+  "status": "Intake",
+  "depends_on": [
+    "T-3201"
+  ],
+  "board_refs": [
+    "milestone:R-039",
+    "team:runtime",
+    "specialist:architecture"
+  ],
+  "notes": [
+    "Map debug.menu actions to screenshot/recording/overlay/replay/frame-step/perf-hud/bundle services with one-to-one capability/action IDs."
+  ]
+}

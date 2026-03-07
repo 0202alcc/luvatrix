@@ -6756,6 +6756,130 @@
       ],
       "milestone_id": "F-038",
       "status": "Intake"
+    },
+    {
+      "id": "T-3290",
+      "title": "[CLOSEOUT HARNESS] Define R-039 closeout metric and evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "R-039",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:R-039",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Translate packet success criteria and verification commands into quantitative go/no-go evidence harness for macOS runtime wiring."
+      ]
+    },
+    {
+      "id": "T-3201",
+      "title": "AppKit menu bootstrap + safe defaults",
+      "task_type": "standard",
+      "milestone_id": "R-039",
+      "status": "Intake",
+      "depends_on": [
+        "T-3290"
+      ],
+      "board_refs": [
+        "milestone:R-039",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "notes": [
+        "Build menu tree (Luvatrix/File/Edit/View/Debug/Window/Help) with crash-safe dispatch and deterministic noop/disabled outcomes for unsupported actions."
+      ]
+    },
+    {
+      "id": "T-3202",
+      "title": "Debug menu action wiring to runtime handlers",
+      "task_type": "standard",
+      "milestone_id": "R-039",
+      "status": "Intake",
+      "depends_on": [
+        "T-3201"
+      ],
+      "board_refs": [
+        "milestone:R-039",
+        "team:runtime",
+        "specialist:architecture"
+      ],
+      "notes": [
+        "Map debug.menu actions to screenshot/recording/overlay/replay/frame-step/perf-hud/bundle services with one-to-one capability/action IDs."
+      ]
+    },
+    {
+      "id": "T-3203",
+      "title": "Manifest policy integration in live macOS path",
+      "task_type": "standard",
+      "milestone_id": "R-039",
+      "status": "Intake",
+      "depends_on": [
+        "T-3202"
+      ],
+      "board_refs": [
+        "milestone:R-039",
+        "team:protocol",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Enforce debug_policy enable/disable semantics in app launch path while preserving legacy defaults and approval-token behavior."
+      ]
+    },
+    {
+      "id": "T-3204",
+      "title": "macOS menu safety + behavior smoke tests",
+      "task_type": "standard",
+      "milestone_id": "R-039",
+      "status": "Intake",
+      "depends_on": [
+        "T-3203"
+      ],
+      "board_refs": [
+        "milestone:R-039",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Add integration tests for menu creation/dispatch/policy gating including unsupported action handling and deterministic pass-fail logs."
+      ]
+    },
+    {
+      "id": "T-3205",
+      "title": "Example app E2E menu smoke harness",
+      "task_type": "standard",
+      "milestone_id": "R-039",
+      "status": "Intake",
+      "depends_on": [
+        "T-3204"
+      ],
+      "board_refs": [
+        "milestone:R-039",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Run macOS render smoke over example apps and verify deterministic logs/artifacts proving live menu action behavior."
+      ]
+    },
+    {
+      "id": "T-3206",
+      "title": "Closeout gate + rollback controls",
+      "task_type": "standard",
+      "milestone_id": "R-039",
+      "status": "Intake",
+      "depends_on": [
+        "T-3205"
+      ],
+      "board_refs": [
+        "milestone:R-039",
+        "team:platform-ci",
+        "specialist:release"
+      ],
+      "notes": [
+        "Add feature flag and emergency disable path; complete closeout evidence packet and go/no-go evaluation."
+      ]
     }
   ]
 }
