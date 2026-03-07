@@ -6762,7 +6762,7 @@
       "title": "[CLOSEOUT HARNESS] Define R-039 closeout metric and evidence harness",
       "task_type": "closeout_harness",
       "milestone_id": "R-039",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:R-039",
@@ -6771,7 +6771,22 @@
       ],
       "notes": [
         "Translate packet success criteria and verification commands into quantitative go/no-go evidence harness for macOS runtime wiring."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 900,
+        "wall_time_sec": 480,
+        "tool_calls": 12,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-3201",
