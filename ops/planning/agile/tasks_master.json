@@ -7701,7 +7701,7 @@
       "title": "[CLOSEOUT HARNESS] Define F-041 closeout metric + evidence harness",
       "task_type": "closeout_harness",
       "milestone_id": "F-041",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:F-041",
@@ -7710,14 +7710,29 @@
       ],
       "notes": [
         "Define closeout/evidence contract for core domain extraction."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 1600,
+        "wall_time_sec": 600,
+        "tool_calls": 12,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4101",
       "title": "Extract planning domain services from planning_api.py",
       "task_type": "standard",
       "milestone_id": "F-041",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4100",
         "T-4005"
@@ -7729,14 +7744,29 @@
       ],
       "notes": [
         "Extract milestone/task/board/framework/backlog service modules with behavior parity."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 1600,
+        "wall_time_sec": 600,
+        "tool_calls": 12,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4102",
       "title": "Introduce storage-root abstraction and path resolver",
       "task_type": "standard",
       "milestone_id": "F-041",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4101"
       ],
@@ -7747,14 +7777,29 @@
       ],
       "notes": [
         "Remove hardcoded ops/planning paths and support configurable root."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 1600,
+        "wall_time_sec": 600,
+        "tool_calls": 12,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4103",
       "title": "Replace direct renderer script coupling with render interface abstraction",
       "task_type": "standard",
       "milestone_id": "F-041",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4101"
       ],
@@ -7765,14 +7810,29 @@
       ],
       "notes": [
         "Abstract render path from command-level script invocations."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 1600,
+        "wall_time_sec": 600,
+        "tool_calls": 12,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4104",
       "title": "Preserve endpoint-flow behavior parity under refactor",
       "task_type": "standard",
       "milestone_id": "F-041",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4102",
         "T-4103"
@@ -7784,14 +7844,29 @@
       ],
       "notes": [
         "Regression-check endpoint behavior against baseline."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 1600,
+        "wall_time_sec": 600,
+        "tool_calls": 12,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4105",
       "title": "Add regression suite for extraction parity",
       "task_type": "standard",
       "milestone_id": "F-041",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4104"
       ],
@@ -7802,7 +7877,22 @@
       ],
       "notes": [
         "Prove no behavior drift under refactored architecture."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1200,
+        "output_tokens": 1600,
+        "wall_time_sec": 600,
+        "tool_calls": 12,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4200",
