@@ -4,12 +4,7 @@ Milestone: `F-041`
 Name: `Luvatrix Refactor: Core Domain Extraction`
 
 ## Intake
-- [ ] `T-4100` [CLOSEOUT HARNESS] Define F-041 closeout metric + evidence harness
-- [ ] `T-4101` Extract planning domain services from planning_api.py
-- [ ] `T-4102` Introduce storage-root abstraction and path resolver
-- [ ] `T-4103` Replace renderer coupling with interface abstraction
-- [ ] `T-4104` Preserve endpoint-style behavior compatibility after refactor
-- [ ] `T-4105` Add regression tests to prove no behavior drift
+- (empty)
 
 ## Success Criteria Spec
 - (empty)
@@ -36,7 +31,12 @@ Name: `Luvatrix Refactor: Core Domain Extraction`
 - (empty)
 
 ## Done
-- (empty)
+- [x] `T-4100` [CLOSEOUT HARNESS] Define F-041 closeout metric + evidence harness
+- [x] `T-4101` Extract planning domain services from planning_api.py
+- [x] `T-4102` Introduce storage-root abstraction and path resolver
+- [x] `T-4103` Replace renderer coupling with interface abstraction
+- [x] `T-4104` Preserve endpoint-style behavior compatibility after refactor
+- [x] `T-4105` Add regression tests to prove no behavior drift
 
 ## Blocked
 - (empty)
