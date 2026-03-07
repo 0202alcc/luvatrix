@@ -9,7 +9,7 @@ Framework: `gateflow_v1`
 `T-4300 -> (T-4301 + T-4302) -> (T-4303 + T-4304)`
 
 ## Current Placement
-- `Intake`: `T-4304`
+- `Intake`: none
 - `Success Criteria Spec`: none
 - `Safety Tests Spec`: none
 - `Implementation Tests Spec`: none
@@ -17,8 +17,8 @@ Framework: `gateflow_v1`
 - `Prototype Stage 1`: none
 - `Prototype Stage 2+`: none
 - `Verification Review`: none
-- `Integration Ready`: `T-4303`
-- `Done`: `T-4300`, `T-4301`, `T-4302`
+- `Integration Ready`: `T-4304`
+- `Done`: `T-4300`, `T-4301`, `T-4302`, `T-4303`
 - `Blocked`: none
 
 ## Evidence Plan
