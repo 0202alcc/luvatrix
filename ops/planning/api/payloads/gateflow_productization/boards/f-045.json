@@ -1,0 +1,13 @@
+{
+  "id": "milestone:F-045",
+  "title": "F-045 Extract to Dedicated gateflow Repo",
+  "type": "milestone",
+  "framework_template": "gateflow_v1",
+  "source_filter": {
+    "milestone_id": "F-045"
+  },
+  "discord": {
+    "channel": "#milestone-f-045-board",
+    "threads_enabled": true
+  }
+}

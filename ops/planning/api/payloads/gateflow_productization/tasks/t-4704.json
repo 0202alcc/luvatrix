@@ -1,0 +1,19 @@
+{
+  "id": "T-4704",
+  "title": "Run full planning workflow dry-run in Luvatrix via standalone gateflow",
+  "task_type": "standard",
+  "milestone_id": "P-047",
+  "status": "Intake",
+  "depends_on": [
+    "T-4702",
+    "T-4703"
+  ],
+  "board_refs": [
+    "milestone:P-047",
+    "team:platform-ci",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Prove end-to-end operational continuity after adoption."
+  ]
+}

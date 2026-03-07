@@ -1,0 +1,16 @@
+{
+  "id": "T-4200",
+  "title": "[CLOSEOUT HARNESS] Define F-042 closeout metric + evidence harness",
+  "task_type": "closeout_harness",
+  "milestone_id": "F-042",
+  "status": "Intake",
+  "depends_on": [],
+  "board_refs": [
+    "milestone:F-042",
+    "team:platform-ci",
+    "specialist:pm"
+  ],
+  "notes": [
+    "Define closeout/evidence contract for CLI surface and init scaffolding."
+  ]
+}

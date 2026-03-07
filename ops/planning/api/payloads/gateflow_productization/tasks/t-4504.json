@@ -1,0 +1,18 @@
+{
+  "id": "T-4504",
+  "title": "Port test fixtures and integration suites to standalone repo",
+  "task_type": "standard",
+  "milestone_id": "F-045",
+  "status": "Intake",
+  "depends_on": [
+    "T-4502"
+  ],
+  "board_refs": [
+    "milestone:F-045",
+    "team:platform-ci",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Preserve parity coverage in standalone environment."
+  ]
+}

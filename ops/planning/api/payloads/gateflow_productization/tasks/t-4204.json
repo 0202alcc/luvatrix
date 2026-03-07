@@ -1,0 +1,18 @@
+{
+  "id": "T-4204",
+  "title": "Implement config commands for protected_branch/defaults/render settings",
+  "task_type": "standard",
+  "milestone_id": "F-042",
+  "status": "Intake",
+  "depends_on": [
+    "T-4202"
+  ],
+  "board_refs": [
+    "milestone:F-042",
+    "team:protocol",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Add config get/set and validation semantics."
+  ]
+}

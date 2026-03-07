@@ -648,6 +648,110 @@
         "channel": "#milestone-r-040-board",
         "threads_enabled": true
       }
+    },
+    {
+      "id": "milestone:P-040",
+      "title": "P-040 Program Setup and Spec Lock",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "P-040"
+      },
+      "discord": {
+        "channel": "#milestone-p-040-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:F-041",
+      "title": "F-041 Luvatrix Refactor: Core Domain Extraction",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "F-041"
+      },
+      "discord": {
+        "channel": "#milestone-f-041-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:F-042",
+      "title": "F-042 Luvatrix Refactor: CLI Surface and Init Scaffolding",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "F-042"
+      },
+      "discord": {
+        "channel": "#milestone-f-042-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:U-043",
+      "title": "U-043 Rendering v1 (Text-Only)",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "U-043"
+      },
+      "discord": {
+        "channel": "#milestone-u-043-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:P-044",
+      "title": "P-044 Policy/Validation Hardening",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "P-044"
+      },
+      "discord": {
+        "channel": "#milestone-p-044-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:F-045",
+      "title": "F-045 Extract to Dedicated gateflow Repo",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "F-045"
+      },
+      "discord": {
+        "channel": "#milestone-f-045-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:F-046",
+      "title": "F-046 Migration Tooling (import-luvatrix)",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "F-046"
+      },
+      "discord": {
+        "channel": "#milestone-f-046-board",
+        "threads_enabled": true
+      }
+    },
+    {
+      "id": "milestone:P-047",
+      "title": "P-047 Luvatrix Adoption + Deprecation",
+      "type": "milestone",
+      "framework_template": "gateflow_v1",
+      "source_filter": {
+        "milestone_id": "P-047"
+      },
+      "discord": {
+        "channel": "#milestone-p-047-board",
+        "threads_enabled": true
+      }
     }
   ]
 }

@@ -1,0 +1,56 @@
+{
+  "id": "P-040",
+  "emoji": "\ud83e\udded",
+  "name": "Program Setup and Spec Lock",
+  "descriptions": [
+    "Lock v1 command contract and data contract for GateFlow standalone CLI.",
+    "Freeze `.gateflow/` canonical schema and profile boundaries before refactor starts."
+  ],
+  "start_week": 45,
+  "end_week": 46,
+  "status": "Planned",
+  "task_ids": [],
+  "success_criteria": [
+    "Decision-complete command matrix, schema contract, and policy contract approved.",
+    "Spec packet is implementation-ready for downstream milestones."
+  ],
+  "closeout_criteria": {
+    "metric_id": "p-040-closeout-v1",
+    "metric_description": "P-040 go/no-go closeout metric.",
+    "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)",
+    "score_components": [
+      "correctness",
+      "safety",
+      "compatibility",
+      "evidence"
+    ],
+    "go_threshold": 85,
+    "hard_no_go_conditions": [
+      "required checks fail on main",
+      "closeout packet validation fails",
+      "unresolved high-severity risk without accepted waiver"
+    ],
+    "required_evidence": [
+      "ops/planning/closeout/p-040_closeout.md",
+      "validator outputs",
+      "task-level evidence links"
+    ],
+    "required_commands": [
+      "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-040",
+      "uv run python ops/planning/agile/validate_milestone_task_links.py"
+    ],
+    "rubric_version": "closeout_rubric_v1"
+  },
+  "ci_required_checks": [
+    "uv run python ops/planning/agile/validate_milestone_task_links.py",
+    "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-040"
+  ],
+  "lifecycle_events": [
+    {
+      "date": "2026-03-07",
+      "event": "active",
+      "framework": "gateflow_v1",
+      "note": "gateflow productization roadmap milestone created"
+    }
+  ]
+}

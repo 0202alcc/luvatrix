@@ -1,0 +1,19 @@
+{
+  "id": "T-4401",
+  "title": "Enforce configurable protected-branch write guard",
+  "task_type": "standard",
+  "milestone_id": "P-044",
+  "status": "Intake",
+  "depends_on": [
+    "T-4400",
+    "T-4204"
+  ],
+  "board_refs": [
+    "milestone:P-044",
+    "team:platform-ci",
+    "specialist:development"
+  ],
+  "notes": [
+    "Block apply writes when current branch != configured protected_branch."
+  ]
+}

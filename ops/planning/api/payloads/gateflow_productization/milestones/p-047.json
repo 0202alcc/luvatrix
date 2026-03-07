@@ -1,0 +1,56 @@
+{
+  "id": "P-047",
+  "emoji": "\ud83d\ude9a",
+  "name": "Luvatrix Adoption + Deprecation",
+  "descriptions": [
+    "Adopt standalone gateflow CLI in Luvatrix with wrappers and deprecation notices.",
+    "Keep planning continuity while shifting operational commands."
+  ],
+  "start_week": 60,
+  "end_week": 61,
+  "status": "Planned",
+  "task_ids": [],
+  "success_criteria": [
+    "Luvatrix planning operations run end-to-end through standalone gateflow tooling.",
+    "Legacy entrypoints are deprecated with clear migration guidance."
+  ],
+  "closeout_criteria": {
+    "metric_id": "p-047-closeout-v1",
+    "metric_description": "P-047 go/no-go closeout metric.",
+    "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)",
+    "score_components": [
+      "correctness",
+      "safety",
+      "compatibility",
+      "evidence"
+    ],
+    "go_threshold": 85,
+    "hard_no_go_conditions": [
+      "required checks fail on main",
+      "closeout packet validation fails",
+      "unresolved high-severity risk without accepted waiver"
+    ],
+    "required_evidence": [
+      "ops/planning/closeout/p-047_closeout.md",
+      "validator outputs",
+      "task-level evidence links"
+    ],
+    "required_commands": [
+      "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-047",
+      "uv run python ops/planning/agile/validate_milestone_task_links.py"
+    ],
+    "rubric_version": "closeout_rubric_v1"
+  },
+  "ci_required_checks": [
+    "uv run python ops/planning/agile/validate_milestone_task_links.py",
+    "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-047"
+  ],
+  "lifecycle_events": [
+    {
+      "date": "2026-03-07",
+      "event": "active",
+      "framework": "gateflow_v1",
+      "note": "gateflow productization roadmap milestone created"
+    }
+  ]
+}

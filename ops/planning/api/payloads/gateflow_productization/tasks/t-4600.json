@@ -1,0 +1,16 @@
+{
+  "id": "T-4600",
+  "title": "[CLOSEOUT HARNESS] Define F-046 closeout metric + evidence harness",
+  "task_type": "closeout_harness",
+  "milestone_id": "F-046",
+  "status": "Intake",
+  "depends_on": [],
+  "board_refs": [
+    "milestone:F-046",
+    "team:platform-ci",
+    "specialist:pm"
+  ],
+  "notes": [
+    "Define closeout/evidence contract for migration tooling."
+  ]
+}

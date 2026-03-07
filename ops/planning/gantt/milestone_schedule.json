@@ -2690,6 +2690,507 @@
           "note": "milestone created from architect packet"
         }
       ]
+    },
+    {
+      "id": "P-040",
+      "emoji": "\ud83e\udded",
+      "name": "Program Setup and Spec Lock",
+      "descriptions": [
+        "Lock v1 command contract and data contract for GateFlow standalone CLI.",
+        "Freeze `.gateflow/` canonical schema and profile boundaries before refactor starts."
+      ],
+      "start_week": 45,
+      "end_week": 46,
+      "status": "Planned",
+      "task_ids": [
+        "T-4000",
+        "T-4001",
+        "T-4002",
+        "T-4003",
+        "T-4004",
+        "T-4005"
+      ],
+      "success_criteria": [
+        "Decision-complete command matrix, schema contract, and policy contract approved.",
+        "Spec packet is implementation-ready for downstream milestones."
+      ],
+      "closeout_criteria": {
+        "metric_id": "p-040-closeout-v1",
+        "metric_description": "P-040 go/no-go closeout metric.",
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-040_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-040",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-040"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        }
+      ]
+    },
+    {
+      "id": "F-041",
+      "emoji": "\ud83e\uddf1",
+      "name": "Luvatrix Refactor: Core Domain Extraction",
+      "descriptions": [
+        "Decouple planning domain services from hardcoded `ops/planning/*` paths.",
+        "Introduce storage-root abstraction and renderer interface seams."
+      ],
+      "start_week": 47,
+      "end_week": 49,
+      "status": "Planned",
+      "task_ids": [
+        "T-4100",
+        "T-4101",
+        "T-4102",
+        "T-4103",
+        "T-4104",
+        "T-4105"
+      ],
+      "success_criteria": [
+        "Existing planning workflows keep behavior parity under refactored service architecture.",
+        "Domain extraction supports configurable storage root and renderer adapters."
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-041-closeout-v1",
+        "metric_description": "F-041 go/no-go closeout metric.",
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-041_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-041",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-041"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        }
+      ]
+    },
+    {
+      "id": "F-042",
+      "emoji": "\ud83d\udee0\ufe0f",
+      "name": "Luvatrix Refactor: CLI Surface and Init Scaffolding",
+      "descriptions": [
+        "Implement resource-first CLI and `gateflow init` scaffold on extracted services.",
+        "Preserve endpoint compatibility via temporary `api METHOD /resource` shim."
+      ],
+      "start_week": 50,
+      "end_week": 52,
+      "status": "Planned",
+      "task_ids": [
+        "T-4200",
+        "T-4201",
+        "T-4202",
+        "T-4203",
+        "T-4204",
+        "T-4205"
+      ],
+      "success_criteria": [
+        "Fresh repo initialization and resource CRUD works in dry-run/apply mode.",
+        "Config commands and profile overlays behave deterministically."
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-042-closeout-v1",
+        "metric_description": "F-042 go/no-go closeout metric.",
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-042_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-042",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-042"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        }
+      ]
+    },
+    {
+      "id": "U-043",
+      "emoji": "\ud83d\udcdd",
+      "name": "Rendering v1 (Text-Only)",
+      "descriptions": [
+        "Replace generation path with markdown/ascii rendering only for v1.",
+        "Remove PNG/matplotlib dependency from v1 execution path."
+      ],
+      "start_week": 50,
+      "end_week": 52,
+      "status": "Planned",
+      "task_ids": [
+        "T-4300",
+        "T-4301",
+        "T-4302",
+        "T-4303",
+        "T-4304"
+      ],
+      "success_criteria": [
+        "Deterministic md/ascii render outputs are test-verified.",
+        "No PNG generation path is required for v1 completion."
+      ],
+      "closeout_criteria": {
+        "metric_id": "u-043-closeout-v1",
+        "metric_description": "U-043 go/no-go closeout metric.",
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/u-043_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-043",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-043"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        }
+      ]
+    },
+    {
+      "id": "P-044",
+      "emoji": "\ud83d\udee1\ufe0f",
+      "name": "Policy/Validation Hardening",
+      "descriptions": [
+        "Preserve GateFlow quality checks with configurable branch guard and validation surfaces.",
+        "Move closeout harness policy to warning-level for v1 with future escalation option."
+      ],
+      "start_week": 53,
+      "end_week": 54,
+      "status": "Planned",
+      "task_ids": [
+        "T-4400",
+        "T-4401",
+        "T-4402",
+        "T-4403",
+        "T-4404",
+        "T-4405"
+      ],
+      "success_criteria": [
+        "Policy checks produce clear pass/fail outcomes and machine-readable errors.",
+        "Validation command suite is consolidated and test-covered."
+      ],
+      "closeout_criteria": {
+        "metric_id": "p-044-closeout-v1",
+        "metric_description": "P-044 go/no-go closeout metric.",
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-044_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-044",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-044"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        }
+      ]
+    },
+    {
+      "id": "F-045",
+      "emoji": "\ud83d\udce6",
+      "name": "Extract to Dedicated gateflow Repo",
+      "descriptions": [
+        "Move stabilized modules into standalone `gateflow` package/repo.",
+        "Provide install path and pre-release distribution docs."
+      ],
+      "start_week": 55,
+      "end_week": 57,
+      "status": "Planned",
+      "task_ids": [
+        "T-4500",
+        "T-4501",
+        "T-4502",
+        "T-4503",
+        "T-4504",
+        "T-4505"
+      ],
+      "success_criteria": [
+        "Standalone CLI installs and runs full command surface locally.",
+        "Test fixtures and integration suites are portable in new repo."
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-045-closeout-v1",
+        "metric_description": "F-045 go/no-go closeout metric.",
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-045_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-045",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-045"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        }
+      ]
+    },
+    {
+      "id": "F-046",
+      "emoji": "\ud83d\udd04",
+      "name": "Migration Tooling (import-luvatrix)",
+      "descriptions": [
+        "Implement deterministic migration from `ops/planning/*` to `.gateflow/*`.",
+        "Add mismatch reporting and remediation guidance."
+      ],
+      "start_week": 58,
+      "end_week": 59,
+      "status": "Planned",
+      "task_ids": [
+        "T-4600",
+        "T-4601",
+        "T-4602",
+        "T-4603",
+        "T-4604"
+      ],
+      "success_criteria": [
+        "Luvatrix data imports without manual edits and validates cleanly.",
+        "Migration drift report is deterministic and actionable."
+      ],
+      "closeout_criteria": {
+        "metric_id": "f-046-closeout-v1",
+        "metric_description": "F-046 go/no-go closeout metric.",
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-046_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-046",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-046"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        }
+      ]
+    },
+    {
+      "id": "P-047",
+      "emoji": "\ud83d\ude9a",
+      "name": "Luvatrix Adoption + Deprecation",
+      "descriptions": [
+        "Adopt standalone gateflow CLI in Luvatrix with wrappers and deprecation notices.",
+        "Keep planning continuity while shifting operational commands."
+      ],
+      "start_week": 60,
+      "end_week": 61,
+      "status": "Planned",
+      "task_ids": [
+        "T-4700",
+        "T-4701",
+        "T-4702",
+        "T-4703",
+        "T-4704"
+      ],
+      "success_criteria": [
+        "Luvatrix planning operations run end-to-end through standalone gateflow tooling.",
+        "Legacy entrypoints are deprecated with clear migration guidance."
+      ],
+      "closeout_criteria": {
+        "metric_id": "p-047-closeout-v1",
+        "metric_description": "P-047 go/no-go closeout metric.",
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-047_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-047",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-047"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        }
+      ]
     }
   ]
 }

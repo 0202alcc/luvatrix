@@ -7498,6 +7498,816 @@
         "merged_to_main": true,
         "required_checks_passed_on_main": true
       }
+    },
+    {
+      "id": "T-4000",
+      "title": "[CLOSEOUT HARNESS] Define P-040 closeout metric + evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "P-040",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:P-040",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Define closeout scoring and evidence contract for P-040 specification lock."
+      ]
+    },
+    {
+      "id": "T-4001",
+      "title": "Define v1 GateFlow CLI command matrix",
+      "task_type": "standard",
+      "milestone_id": "P-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-4000"
+      ],
+      "board_refs": [
+        "milestone:P-040",
+        "team:protocol",
+        "specialist:architecture"
+      ],
+      "notes": [
+        "Cover init/resources/validate/render/config/api-shim command contract."
+      ]
+    },
+    {
+      "id": "T-4002",
+      "title": "Freeze `.gateflow/` canonical JSON schema + deterministic formatting rules",
+      "task_type": "standard",
+      "milestone_id": "P-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-4001"
+      ],
+      "board_refs": [
+        "milestone:P-040",
+        "team:protocol",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Define canonical ledgers and formatting invariants for stable diffs."
+      ]
+    },
+    {
+      "id": "T-4003",
+      "title": "Define profile contract (minimal/discord/enterprise) and scaffold boundaries",
+      "task_type": "standard",
+      "milestone_id": "P-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-4002"
+      ],
+      "board_refs": [
+        "milestone:P-040",
+        "team:protocol",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Specify profile overlays and core-vs-optional template boundaries."
+      ]
+    },
+    {
+      "id": "T-4004",
+      "title": "Define policy contract (protected branch, done-gate, harness-warning mode)",
+      "task_type": "standard",
+      "milestone_id": "P-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-4002"
+      ],
+      "board_refs": [
+        "milestone:P-040",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Document branch guard, telemetry done-gate, and harness warning semantics."
+      ]
+    },
+    {
+      "id": "T-4005",
+      "title": "Publish v1 ADR/spec packet",
+      "task_type": "standard",
+      "milestone_id": "P-040",
+      "status": "Intake",
+      "depends_on": [
+        "T-4003",
+        "T-4004"
+      ],
+      "board_refs": [
+        "milestone:P-040",
+        "team:protocol",
+        "specialist:release"
+      ],
+      "notes": [
+        "Publish decision-complete packet with examples and acceptance criteria."
+      ]
+    },
+    {
+      "id": "T-4100",
+      "title": "[CLOSEOUT HARNESS] Define F-041 closeout metric + evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "F-041",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:F-041",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Define closeout/evidence contract for core domain extraction."
+      ]
+    },
+    {
+      "id": "T-4101",
+      "title": "Extract planning domain services from planning_api.py",
+      "task_type": "standard",
+      "milestone_id": "F-041",
+      "status": "Intake",
+      "depends_on": [
+        "T-4100",
+        "T-4005"
+      ],
+      "board_refs": [
+        "milestone:F-041",
+        "team:protocol",
+        "specialist:development"
+      ],
+      "notes": [
+        "Extract milestone/task/board/framework/backlog service modules with behavior parity."
+      ]
+    },
+    {
+      "id": "T-4102",
+      "title": "Introduce storage-root abstraction and path resolver",
+      "task_type": "standard",
+      "milestone_id": "F-041",
+      "status": "Intake",
+      "depends_on": [
+        "T-4101"
+      ],
+      "board_refs": [
+        "milestone:F-041",
+        "team:protocol",
+        "specialist:development"
+      ],
+      "notes": [
+        "Remove hardcoded ops/planning paths and support configurable root."
+      ]
+    },
+    {
+      "id": "T-4103",
+      "title": "Replace direct renderer script coupling with render interface abstraction",
+      "task_type": "standard",
+      "milestone_id": "F-041",
+      "status": "Intake",
+      "depends_on": [
+        "T-4101"
+      ],
+      "board_refs": [
+        "milestone:F-041",
+        "team:protocol",
+        "specialist:architecture"
+      ],
+      "notes": [
+        "Abstract render path from command-level script invocations."
+      ]
+    },
+    {
+      "id": "T-4104",
+      "title": "Preserve endpoint-flow behavior parity under refactor",
+      "task_type": "standard",
+      "milestone_id": "F-041",
+      "status": "Intake",
+      "depends_on": [
+        "T-4102",
+        "T-4103"
+      ],
+      "board_refs": [
+        "milestone:F-041",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Regression-check endpoint behavior against baseline."
+      ]
+    },
+    {
+      "id": "T-4105",
+      "title": "Add regression suite for extraction parity",
+      "task_type": "standard",
+      "milestone_id": "F-041",
+      "status": "Intake",
+      "depends_on": [
+        "T-4104"
+      ],
+      "board_refs": [
+        "milestone:F-041",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Prove no behavior drift under refactored architecture."
+      ]
+    },
+    {
+      "id": "T-4200",
+      "title": "[CLOSEOUT HARNESS] Define F-042 closeout metric + evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "F-042",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:F-042",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Define closeout/evidence contract for CLI surface and init scaffolding."
+      ]
+    },
+    {
+      "id": "T-4201",
+      "title": "Add resource-first command layer on extracted services",
+      "task_type": "standard",
+      "milestone_id": "F-042",
+      "status": "Intake",
+      "depends_on": [
+        "T-4200",
+        "T-4105"
+      ],
+      "board_refs": [
+        "milestone:F-042",
+        "team:protocol",
+        "specialist:development"
+      ],
+      "notes": [
+        "Implement milestones/tasks/boards/frameworks/backlog command groups."
+      ]
+    },
+    {
+      "id": "T-4202",
+      "title": "Implement `gateflow init` core scaffold for `.gateflow/`",
+      "task_type": "standard",
+      "milestone_id": "F-042",
+      "status": "Intake",
+      "depends_on": [
+        "T-4201"
+      ],
+      "board_refs": [
+        "milestone:F-042",
+        "team:protocol",
+        "specialist:development"
+      ],
+      "notes": [
+        "Create canonical scaffold and idempotent init behavior."
+      ]
+    },
+    {
+      "id": "T-4203",
+      "title": "Implement optional profile overlays for init",
+      "task_type": "standard",
+      "milestone_id": "F-042",
+      "status": "Intake",
+      "depends_on": [
+        "T-4202"
+      ],
+      "board_refs": [
+        "milestone:F-042",
+        "team:protocol",
+        "specialist:architecture"
+      ],
+      "notes": [
+        "Support minimal/discord/enterprise overlays without mutating core contract."
+      ]
+    },
+    {
+      "id": "T-4204",
+      "title": "Implement config commands for protected_branch/defaults/render settings",
+      "task_type": "standard",
+      "milestone_id": "F-042",
+      "status": "Intake",
+      "depends_on": [
+        "T-4202"
+      ],
+      "board_refs": [
+        "milestone:F-042",
+        "team:protocol",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Add config get/set and validation semantics."
+      ]
+    },
+    {
+      "id": "T-4205",
+      "title": "Preserve temporary `api METHOD /resource` compatibility shim",
+      "task_type": "standard",
+      "milestone_id": "F-042",
+      "status": "Intake",
+      "depends_on": [
+        "T-4201"
+      ],
+      "board_refs": [
+        "milestone:F-042",
+        "team:protocol",
+        "specialist:development"
+      ],
+      "notes": [
+        "Maintain endpoint-style compatibility for migration period."
+      ]
+    },
+    {
+      "id": "T-4300",
+      "title": "[CLOSEOUT HARNESS] Define U-043 closeout metric + evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "U-043",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:U-043",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Define closeout/evidence contract for text-only rendering milestone."
+      ]
+    },
+    {
+      "id": "T-4301",
+      "title": "Implement `render gantt --format md|ascii`",
+      "task_type": "standard",
+      "milestone_id": "U-043",
+      "status": "Intake",
+      "depends_on": [
+        "T-4300",
+        "T-4201"
+      ],
+      "board_refs": [
+        "milestone:U-043",
+        "team:rendering",
+        "specialist:development"
+      ],
+      "notes": [
+        "Provide deterministic markdown/ascii gantt rendering outputs."
+      ]
+    },
+    {
+      "id": "T-4302",
+      "title": "Implement `render board --format md|ascii`",
+      "task_type": "standard",
+      "milestone_id": "U-043",
+      "status": "Intake",
+      "depends_on": [
+        "T-4300",
+        "T-4201"
+      ],
+      "board_refs": [
+        "milestone:U-043",
+        "team:rendering",
+        "specialist:development"
+      ],
+      "notes": [
+        "Provide deterministic markdown/ascii board rendering outputs."
+      ]
+    },
+    {
+      "id": "T-4303",
+      "title": "Remove PNG dependency/path from v1 execution and CI expectations",
+      "task_type": "standard",
+      "milestone_id": "U-043",
+      "status": "Intake",
+      "depends_on": [
+        "T-4301",
+        "T-4302"
+      ],
+      "board_refs": [
+        "milestone:U-043",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Disable PNG runtime path and adjust CI checks accordingly for v1."
+      ]
+    },
+    {
+      "id": "T-4304",
+      "title": "Add deterministic snapshot tests for text render outputs",
+      "task_type": "standard",
+      "milestone_id": "U-043",
+      "status": "Intake",
+      "depends_on": [
+        "T-4301",
+        "T-4302"
+      ],
+      "board_refs": [
+        "milestone:U-043",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Establish stable snapshots for md/ascii render artifacts."
+      ]
+    },
+    {
+      "id": "T-4400",
+      "title": "[CLOSEOUT HARNESS] Define P-044 closeout metric + evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "P-044",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:P-044",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Define closeout/evidence contract for policy and validation hardening."
+      ]
+    },
+    {
+      "id": "T-4401",
+      "title": "Enforce configurable protected-branch write guard",
+      "task_type": "standard",
+      "milestone_id": "P-044",
+      "status": "Intake",
+      "depends_on": [
+        "T-4400",
+        "T-4204"
+      ],
+      "board_refs": [
+        "milestone:P-044",
+        "team:platform-ci",
+        "specialist:development"
+      ],
+      "notes": [
+        "Block apply writes when current branch != configured protected_branch."
+      ]
+    },
+    {
+      "id": "T-4402",
+      "title": "Preserve and harden GateFlow stage transition + done-gate validations",
+      "task_type": "standard",
+      "milestone_id": "P-044",
+      "status": "Intake",
+      "depends_on": [
+        "T-4400"
+      ],
+      "board_refs": [
+        "milestone:P-044",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Maintain existing quality bar with deterministic validation outputs."
+      ]
+    },
+    {
+      "id": "T-4403",
+      "title": "Implement harness-first warning mode with configurable escalation path",
+      "task_type": "standard",
+      "milestone_id": "P-044",
+      "status": "Intake",
+      "depends_on": [
+        "T-4400"
+      ],
+      "board_refs": [
+        "milestone:P-044",
+        "team:platform-ci",
+        "specialist:development"
+      ],
+      "notes": [
+        "Make harness sequencing warning-level in v1 with future error-mode config."
+      ]
+    },
+    {
+      "id": "T-4404",
+      "title": "Consolidate validate commands (`links`, `closeout`, `all`)",
+      "task_type": "standard",
+      "milestone_id": "P-044",
+      "status": "Intake",
+      "depends_on": [
+        "T-4402"
+      ],
+      "board_refs": [
+        "milestone:P-044",
+        "team:platform-ci",
+        "specialist:development"
+      ],
+      "notes": [
+        "Unify validator entrypoints and reporting surface."
+      ]
+    },
+    {
+      "id": "T-4405",
+      "title": "Add machine-readable error outputs and strict exit-code matrix",
+      "task_type": "standard",
+      "milestone_id": "P-044",
+      "status": "Intake",
+      "depends_on": [
+        "T-4401",
+        "T-4402",
+        "T-4404"
+      ],
+      "board_refs": [
+        "milestone:P-044",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Guarantee deterministic non-zero codes with parseable failure details."
+      ]
+    },
+    {
+      "id": "T-4500",
+      "title": "[CLOSEOUT HARNESS] Define F-045 closeout metric + evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "F-045",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:F-045",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Define closeout/evidence contract for standalone repo extraction."
+      ]
+    },
+    {
+      "id": "T-4501",
+      "title": "Create standalone `gateflow` repo skeleton/package",
+      "task_type": "standard",
+      "milestone_id": "F-045",
+      "status": "Intake",
+      "depends_on": [
+        "T-4500",
+        "T-4405"
+      ],
+      "board_refs": [
+        "milestone:F-045",
+        "team:protocol",
+        "specialist:development"
+      ],
+      "notes": [
+        "Initialize package layout and project metadata for standalone CLI tool."
+      ]
+    },
+    {
+      "id": "T-4502",
+      "title": "Move refactored modules + CLI entrypoint into standalone repo",
+      "task_type": "standard",
+      "milestone_id": "F-045",
+      "status": "Intake",
+      "depends_on": [
+        "T-4501"
+      ],
+      "board_refs": [
+        "milestone:F-045",
+        "team:protocol",
+        "specialist:development"
+      ],
+      "notes": [
+        "Port core modules and command entrypoint from Luvatrix refactor."
+      ]
+    },
+    {
+      "id": "T-4503",
+      "title": "Add packaging/install path (`uvx gateflow`, future `pipx`)",
+      "task_type": "standard",
+      "milestone_id": "F-045",
+      "status": "Intake",
+      "depends_on": [
+        "T-4502"
+      ],
+      "board_refs": [
+        "milestone:F-045",
+        "team:platform-ci",
+        "specialist:release"
+      ],
+      "notes": [
+        "Provide install docs and executable entrypoint semantics."
+      ]
+    },
+    {
+      "id": "T-4504",
+      "title": "Port test fixtures and integration suites to standalone repo",
+      "task_type": "standard",
+      "milestone_id": "F-045",
+      "status": "Intake",
+      "depends_on": [
+        "T-4502"
+      ],
+      "board_refs": [
+        "milestone:F-045",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Preserve parity coverage in standalone environment."
+      ]
+    },
+    {
+      "id": "T-4505",
+      "title": "Publish pre-release tag + install documentation",
+      "task_type": "standard",
+      "milestone_id": "F-045",
+      "status": "Intake",
+      "depends_on": [
+        "T-4503",
+        "T-4504"
+      ],
+      "board_refs": [
+        "milestone:F-045",
+        "team:platform-ci",
+        "specialist:release"
+      ],
+      "notes": [
+        "Create pre-release package/version and usage docs."
+      ]
+    },
+    {
+      "id": "T-4600",
+      "title": "[CLOSEOUT HARNESS] Define F-046 closeout metric + evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "F-046",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:F-046",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Define closeout/evidence contract for migration tooling."
+      ]
+    },
+    {
+      "id": "T-4601",
+      "title": "Implement `gateflow import-luvatrix --path <repo>`",
+      "task_type": "standard",
+      "milestone_id": "F-046",
+      "status": "Intake",
+      "depends_on": [
+        "T-4600",
+        "T-4505"
+      ],
+      "board_refs": [
+        "milestone:F-046",
+        "team:protocol",
+        "specialist:development"
+      ],
+      "notes": [
+        "Implement deterministic import path from ops/planning to .gateflow."
+      ]
+    },
+    {
+      "id": "T-4602",
+      "title": "Map milestone/task/board/backlog/closeout semantics exactly",
+      "task_type": "standard",
+      "milestone_id": "F-046",
+      "status": "Intake",
+      "depends_on": [
+        "T-4601"
+      ],
+      "board_refs": [
+        "milestone:F-046",
+        "team:protocol",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Ensure imported objects preserve identifiers, links, lifecycle semantics."
+      ]
+    },
+    {
+      "id": "T-4603",
+      "title": "Validate post-import with `gateflow validate all`",
+      "task_type": "standard",
+      "milestone_id": "F-046",
+      "status": "Intake",
+      "depends_on": [
+        "T-4602"
+      ],
+      "board_refs": [
+        "milestone:F-046",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Add integration validations proving import integrity."
+      ]
+    },
+    {
+      "id": "T-4604",
+      "title": "Add deterministic drift report + explicit remediation output",
+      "task_type": "standard",
+      "milestone_id": "F-046",
+      "status": "Intake",
+      "depends_on": [
+        "T-4603"
+      ],
+      "board_refs": [
+        "milestone:F-046",
+        "team:platform-ci",
+        "specialist:release"
+      ],
+      "notes": [
+        "Emit actionable mismatch reports for migration remediation."
+      ]
+    },
+    {
+      "id": "T-4700",
+      "title": "[CLOSEOUT HARNESS] Define P-047 closeout metric + evidence harness",
+      "task_type": "closeout_harness",
+      "milestone_id": "P-047",
+      "status": "Intake",
+      "depends_on": [],
+      "board_refs": [
+        "milestone:P-047",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "notes": [
+        "Define closeout/evidence contract for Luvatrix adoption + deprecation."
+      ]
+    },
+    {
+      "id": "T-4701",
+      "title": "Add Luvatrix wrappers that call installed gateflow CLI",
+      "task_type": "standard",
+      "milestone_id": "P-047",
+      "status": "Intake",
+      "depends_on": [
+        "T-4700",
+        "T-4604"
+      ],
+      "board_refs": [
+        "milestone:P-047",
+        "team:protocol",
+        "specialist:development"
+      ],
+      "notes": [
+        "Bridge existing workflows to standalone gateflow commands."
+      ]
+    },
+    {
+      "id": "T-4702",
+      "title": "Deprecate legacy endpoint script with migration notices",
+      "task_type": "standard",
+      "milestone_id": "P-047",
+      "status": "Intake",
+      "depends_on": [
+        "T-4701"
+      ],
+      "board_refs": [
+        "milestone:P-047",
+        "team:protocol",
+        "specialist:release"
+      ],
+      "notes": [
+        "Add explicit deprecation messaging and migration path references."
+      ]
+    },
+    {
+      "id": "T-4703",
+      "title": "Update AGENTS/docs/cheatsheet to standalone command paths",
+      "task_type": "standard",
+      "milestone_id": "P-047",
+      "status": "Intake",
+      "depends_on": [
+        "T-4701"
+      ],
+      "board_refs": [
+        "milestone:P-047",
+        "team:protocol",
+        "specialist:release"
+      ],
+      "notes": [
+        "Revise operator docs and agent onboarding command guidance."
+      ]
+    },
+    {
+      "id": "T-4704",
+      "title": "Run full planning workflow dry-run in Luvatrix via standalone gateflow",
+      "task_type": "standard",
+      "milestone_id": "P-047",
+      "status": "Intake",
+      "depends_on": [
+        "T-4702",
+        "T-4703"
+      ],
+      "board_refs": [
+        "milestone:P-047",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "notes": [
+        "Prove end-to-end operational continuity after adoption."
+      ]
     }
   ]
 }

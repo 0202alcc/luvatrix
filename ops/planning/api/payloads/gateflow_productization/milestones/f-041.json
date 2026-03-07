@@ -1,0 +1,56 @@
+{
+  "id": "F-041",
+  "emoji": "\ud83e\uddf1",
+  "name": "Luvatrix Refactor: Core Domain Extraction",
+  "descriptions": [
+    "Decouple planning domain services from hardcoded `ops/planning/*` paths.",
+    "Introduce storage-root abstraction and renderer interface seams."
+  ],
+  "start_week": 47,
+  "end_week": 49,
+  "status": "Planned",
+  "task_ids": [],
+  "success_criteria": [
+    "Existing planning workflows keep behavior parity under refactored service architecture.",
+    "Domain extraction supports configurable storage root and renderer adapters."
+  ],
+  "closeout_criteria": {
+    "metric_id": "f-041-closeout-v1",
+    "metric_description": "F-041 go/no-go closeout metric.",
+    "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)",
+    "score_components": [
+      "correctness",
+      "safety",
+      "compatibility",
+      "evidence"
+    ],
+    "go_threshold": 85,
+    "hard_no_go_conditions": [
+      "required checks fail on main",
+      "closeout packet validation fails",
+      "unresolved high-severity risk without accepted waiver"
+    ],
+    "required_evidence": [
+      "ops/planning/closeout/f-041_closeout.md",
+      "validator outputs",
+      "task-level evidence links"
+    ],
+    "required_commands": [
+      "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-041",
+      "uv run python ops/planning/agile/validate_milestone_task_links.py"
+    ],
+    "rubric_version": "closeout_rubric_v1"
+  },
+  "ci_required_checks": [
+    "uv run python ops/planning/agile/validate_milestone_task_links.py",
+    "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-041"
+  ],
+  "lifecycle_events": [
+    {
+      "date": "2026-03-07",
+      "event": "active",
+      "framework": "gateflow_v1",
+      "note": "gateflow productization roadmap milestone created"
+    }
+  ]
+}

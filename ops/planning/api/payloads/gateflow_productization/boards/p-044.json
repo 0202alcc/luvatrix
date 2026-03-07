@@ -1,0 +1,13 @@
+{
+  "id": "milestone:P-044",
+  "title": "P-044 Policy/Validation Hardening",
+  "type": "milestone",
+  "framework_template": "gateflow_v1",
+  "source_filter": {
+    "milestone_id": "P-044"
+  },
+  "discord": {
+    "channel": "#milestone-p-044-board",
+    "threads_enabled": true
+  }
+}

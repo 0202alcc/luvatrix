@@ -1,0 +1,18 @@
+{
+  "id": "T-4105",
+  "title": "Add regression suite for extraction parity",
+  "task_type": "standard",
+  "milestone_id": "F-041",
+  "status": "Intake",
+  "depends_on": [
+    "T-4104"
+  ],
+  "board_refs": [
+    "milestone:F-041",
+    "team:platform-ci",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Prove no behavior drift under refactored architecture."
+  ]
+}

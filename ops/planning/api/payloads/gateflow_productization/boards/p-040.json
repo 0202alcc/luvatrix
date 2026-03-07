@@ -1,0 +1,13 @@
+{
+  "id": "milestone:P-040",
+  "title": "P-040 Program Setup and Spec Lock",
+  "type": "milestone",
+  "framework_template": "gateflow_v1",
+  "source_filter": {
+    "milestone_id": "P-040"
+  },
+  "discord": {
+    "channel": "#milestone-p-040-board",
+    "threads_enabled": true
+  }
+}

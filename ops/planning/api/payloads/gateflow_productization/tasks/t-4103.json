@@ -1,0 +1,18 @@
+{
+  "id": "T-4103",
+  "title": "Replace direct renderer script coupling with render interface abstraction",
+  "task_type": "standard",
+  "milestone_id": "F-041",
+  "status": "Intake",
+  "depends_on": [
+    "T-4101"
+  ],
+  "board_refs": [
+    "milestone:F-041",
+    "team:protocol",
+    "specialist:architecture"
+  ],
+  "notes": [
+    "Abstract render path from command-level script invocations."
+  ]
+}

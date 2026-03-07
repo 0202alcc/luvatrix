@@ -1,0 +1,18 @@
+{
+  "id": "T-4003",
+  "title": "Define profile contract (minimal/discord/enterprise) and scaffold boundaries",
+  "task_type": "standard",
+  "milestone_id": "P-040",
+  "status": "Intake",
+  "depends_on": [
+    "T-4002"
+  ],
+  "board_refs": [
+    "milestone:P-040",
+    "team:protocol",
+    "specialist:pm"
+  ],
+  "notes": [
+    "Specify profile overlays and core-vs-optional template boundaries."
+  ]
+}

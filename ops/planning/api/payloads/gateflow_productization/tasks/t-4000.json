@@ -1,0 +1,16 @@
+{
+  "id": "T-4000",
+  "title": "[CLOSEOUT HARNESS] Define P-040 closeout metric + evidence harness",
+  "task_type": "closeout_harness",
+  "milestone_id": "P-040",
+  "status": "Intake",
+  "depends_on": [],
+  "board_refs": [
+    "milestone:P-040",
+    "team:platform-ci",
+    "specialist:pm"
+  ],
+  "notes": [
+    "Define closeout scoring and evidence contract for P-040 specification lock."
+  ]
+}

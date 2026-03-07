@@ -1,0 +1,20 @@
+{
+  "id": "T-4405",
+  "title": "Add machine-readable error outputs and strict exit-code matrix",
+  "task_type": "standard",
+  "milestone_id": "P-044",
+  "status": "Intake",
+  "depends_on": [
+    "T-4401",
+    "T-4402",
+    "T-4404"
+  ],
+  "board_refs": [
+    "milestone:P-044",
+    "team:platform-ci",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Guarantee deterministic non-zero codes with parseable failure details."
+  ]
+}

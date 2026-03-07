@@ -1,0 +1,21 @@
+{
+  "coordinate_space": "window_px",
+  "dirty_rects": [
+    {
+      "height": 240,
+      "width": 320,
+      "x": 128,
+      "y": 96
+    }
+  ],
+  "enabled": true,
+  "overlay_id": "runtime.debug.overlay",
+  "toggle": {
+    "content_digest_after": "frame-unavailable",
+    "content_digest_before": "frame-unavailable",
+    "destructive": false,
+    "next_enabled": true,
+    "overlay_id": "runtime.debug.overlay",
+    "previous_enabled": false
+  }
+}

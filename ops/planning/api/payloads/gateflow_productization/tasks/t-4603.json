@@ -1,0 +1,18 @@
+{
+  "id": "T-4603",
+  "title": "Validate post-import with `gateflow validate all`",
+  "task_type": "standard",
+  "milestone_id": "F-046",
+  "status": "Intake",
+  "depends_on": [
+    "T-4602"
+  ],
+  "board_refs": [
+    "milestone:F-046",
+    "team:platform-ci",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Add integration validations proving import integrity."
+  ]
+}

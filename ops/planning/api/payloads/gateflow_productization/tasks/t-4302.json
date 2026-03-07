@@ -1,0 +1,19 @@
+{
+  "id": "T-4302",
+  "title": "Implement `render board --format md|ascii`",
+  "task_type": "standard",
+  "milestone_id": "U-043",
+  "status": "Intake",
+  "depends_on": [
+    "T-4300",
+    "T-4201"
+  ],
+  "board_refs": [
+    "milestone:U-043",
+    "team:rendering",
+    "specialist:development"
+  ],
+  "notes": [
+    "Provide deterministic markdown/ascii board rendering outputs."
+  ]
+}

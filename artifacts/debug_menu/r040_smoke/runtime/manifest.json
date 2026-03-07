@@ -17,7 +17,7 @@
     "debug.menu.perf.hud.toggle",
     "debug.menu.bundle.export"
   ],
-  "app_id": "examples.input_sensor_logger",
+  "app_id": "r040.smoke",
   "functional_wiring_enabled": true,
   "menu_wiring_enabled": true,
   "profile": {
@@ -26,7 +26,6 @@
     ],
     "enable_default_debug_root": true,
     "host_os": "macos",
-    "supported": true,
-    "unsupported_reason": null
+    "supported": true
   }
 }
