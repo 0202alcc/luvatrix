@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from gateflow_cli.api_shim import execute_api
 from gateflow_cli.config import get_config_value, set_config_value, show_config
 from gateflow_cli.scaffold import doctor_workspace, scaffold_workspace
 from gateflow_cli.resources import ResourceError, create_resource, delete_resource, get_resource, list_resource, update_resource
@@ -31,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     config_set.add_argument("key")
     config_set.add_argument("value")
     config_sub.add_parser("show")
+
+    api_p = sub.add_parser("api")
+    api_p.add_argument("verb_or_method")
+    api_p.add_argument("path", nargs="?")
+    api_p.add_argument("--body")
 
     for resource in RESOURCES:
         rs = sub.add_parser(resource)
@@ -91,6 +97,11 @@ def _dispatch(args: argparse.Namespace) -> int:
             return 0
         raise ValueError(f"unsupported config action: {args.config_action}")
 
+    if args.command == "api":
+        method, endpoint = _resolve_api_method_and_path(args.verb_or_method, args.path)
+        print(json.dumps(execute_api(method, endpoint, body=args.body, root=args.root), indent=2, sort_keys=True))
+        return 0
+
     workspace = GateflowWorkspace(args.root)
     resource = args.command
     action = args.action
@@ -111,6 +122,15 @@ def _dispatch(args: argparse.Namespace) -> int:
         print(delete_resource(workspace, resource, args.item_id))
         return 0
     raise ValueError(f"unsupported action: {action}")
+
+
+def _resolve_api_method_and_path(verb_or_method: str, path: str | None) -> tuple[str, str]:
+    method = verb_or_method.upper()
+    if path is None:
+        raise ValueError("api requires METHOD and /resource path")
+    if method in {"GET", "POST", "PATCH", "DELETE"}:
+        return method, path
+    raise ValueError(f"unsupported api method: {verb_or_method}")
 
 
 if __name__ == "__main__":  # pragma: no cover
