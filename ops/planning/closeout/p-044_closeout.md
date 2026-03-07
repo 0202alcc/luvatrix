@@ -17,7 +17,7 @@ P-044 hardens GateFlow policy and validation behavior for branch-protected write
   - `T-4403`: https://github.com/0202alcc/luvatrix/pull/94
   - `T-4404`: https://github.com/0202alcc/luvatrix/pull/95
   - `T-4405`: https://github.com/0202alcc/luvatrix/pull/96
-- Milestone PR: pending.
+- Milestone PR: merged to `main` (status reconciled with task done-gates and milestone completion record).
 - Required checks:
   - `PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py`
   - `PYTHONPATH=. uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-044`
