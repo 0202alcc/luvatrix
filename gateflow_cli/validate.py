@@ -16,6 +16,13 @@ REQUIRED_CLOSEOUT_SECTIONS = [
 ]
 
 
+class ValidationCommandError(ValueError):
+    def __init__(self, mode: str, errors: list[str]) -> None:
+        self.mode = mode
+        self.errors = list(errors)
+        super().__init__(f"validation failed ({mode})")
+
+
 def validate_links(root: Path) -> list[str]:
     gateflow = root / ".gateflow"
     milestones = read_json(gateflow / "milestones.json").get("items", [])

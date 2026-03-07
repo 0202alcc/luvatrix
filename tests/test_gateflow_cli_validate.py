@@ -36,6 +36,7 @@ def test_validate_links_passes_for_consistent_references(tmp_path: Path, capsys)
 
 def test_validate_links_fails_when_milestone_task_missing(tmp_path: Path, capsys) -> None:
     _seed(tmp_path)
+    _ = capsys.readouterr()
     gateflow = tmp_path / ".gateflow"
     _write_json(
         gateflow / "milestones.json",
@@ -43,8 +44,11 @@ def test_validate_links_fails_when_milestone_task_missing(tmp_path: Path, capsys
     )
     _write_json(gateflow / "tasks.json", {"items": [], "updated_at": "2026-03-07", "version": "gateflow_v1"})
 
-    assert main(["--root", str(tmp_path), "validate", "links"]) == 2
-    assert "missing task T-4400" in capsys.readouterr().out
+    assert main(["--root", str(tmp_path), "--json-errors", "validate", "links"]) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["error_type"] == "validation"
+    assert payload["exit_code"] == 2
+    assert any("missing task T-4400" in item for item in payload["errors"])
 
 
 def test_validate_closeout_passes_for_required_sections(tmp_path: Path, capsys) -> None:
@@ -81,6 +85,7 @@ def test_validate_closeout_passes_for_required_sections(tmp_path: Path, capsys) 
 
 def test_validate_all_aggregates_links_and_closeout(tmp_path: Path, capsys) -> None:
     _seed(tmp_path)
+    _ = capsys.readouterr()
     gateflow = tmp_path / ".gateflow"
     _write_json(
         gateflow / "milestones.json",
@@ -99,5 +104,8 @@ def test_validate_all_aggregates_links_and_closeout(tmp_path: Path, capsys) -> N
         },
     )
     # Missing packet should fail closeout lane in validate all.
-    assert main(["--root", str(tmp_path), "validate", "all"]) == 2
-    assert "validation: FAIL (all)" in capsys.readouterr().out
+    assert main(["--root", str(tmp_path), "--json-errors", "validate", "all"]) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["error_type"] == "validation"
+    assert payload["exit_code"] == 2
+    assert any("missing closeout packet" in item for item in payload["errors"])
