@@ -6991,7 +6991,7 @@
       "title": "ObjC menu target lifecycle collision fix",
       "task_type": "standard",
       "milestone_id": "R-039",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-3201"
       ],
@@ -7004,14 +7004,29 @@
         "Implement single-registration/cached ObjC target class pattern in macOS window/menu runtime to prevent class redefinition collisions.",
         "Preserve existing crash-safe dispatch semantics and unsupported-action deterministic noop/disabled behavior.",
         "Expected files: luvatrix_core/platform/macos/window_system.py, tests/test_debug_menu_adapter.py, tests/test_macos_menu_integration.py."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 6200,
+        "output_tokens": 1450,
+        "wall_time_sec": 900,
+        "tool_calls": 22,
+        "reopen_count": 1
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-3211",
       "title": "R-039 macOS smoke preflight + structured manifest",
       "task_type": "standard",
       "milestone_id": "R-039",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-3205"
       ],
@@ -7024,14 +7039,29 @@
         "Add deterministic preflight checks in ops/ci/r039_macos_menu_smoke.py for AppKit/PyObjC, Quartz/QuartzCore, and optional Vulkan loader status handling.",
         "Emit structured prereq manifest output and deterministic failure surface instead of traceback-only failures.",
         "Expected files: ops/ci/r039_macos_menu_smoke.py, tests/test_macos_menu_integration.py, artifacts/r039 preflight output contract."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 6200,
+        "output_tokens": 1450,
+        "wall_time_sec": 900,
+        "tool_calls": 22,
+        "reopen_count": 1
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-3212",
       "title": "R-039 environment bootstrap and runbook standardization",
       "task_type": "standard",
       "milestone_id": "R-039",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-3211"
       ],
@@ -7044,14 +7074,29 @@
         "Standardize R-039 runtime setup with uv sync --extra macos --extra vulkan and document ordered verification flow.",
         "Update closeout/runbook guidance so local and CI runs follow same preflight then smoke command sequence.",
         "Expected files: ops/planning/closeout/r-039_closeout.md, docs/debug_menu_adapter_spec.md, ops/planning/agile/m039_execution_board.md."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 6200,
+        "output_tokens": 1450,
+        "wall_time_sec": 900,
+        "tool_calls": 22,
+        "reopen_count": 1
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-3213",
       "title": "R-039 full revalidation and closeout packet refresh",
       "task_type": "standard",
       "milestone_id": "R-039",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-3210",
         "T-3211",
@@ -7066,7 +7111,22 @@
         "Execute full required R-039 command bundle, capture deterministic evidence artifacts, and refresh closeout packet for re-review.",
         "Required commands: pytest debug_menu_dispatch/debug_manifest_policy/macos_menu_integration, both macOS run-app smokes, validate_milestone_task_links, validate_closeout_packet.",
         "No-Go remains if any command fails, evidence is incomplete, or compatibility/determinism/rollback gates are unresolved."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 6200,
+        "output_tokens": 1450,
+        "wall_time_sec": 900,
+        "tool_calls": 22,
+        "reopen_count": 1
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     }
   ]
 }
