@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -35,7 +36,31 @@ def _seed_planning_tree(root: Path) -> None:
                     "rubric_version": "closeout_rubric_v1",
                 },
                 "ci_required_checks": ["uv run python ops/planning/agile/validate_milestone_task_links.py"],
-            }
+            },
+            {
+                "id": "P-044",
+                "name": "Policy/Validation Hardening",
+                "emoji": "🛡️",
+                "start_week": 1,
+                "end_week": 1,
+                "status": "Planned",
+                "task_ids": [],
+                "success_criteria": ["policy checks pass"],
+                "closeout_criteria": {
+                    "metric_id": "p-044-closeout-v1",
+                    "metric_description": "desc",
+                    "score_formula": "weighted_sum",
+                    "score_components": ["correctness"],
+                    "go_threshold": 85,
+                    "hard_no_go_conditions": ["none"],
+                    "required_evidence": ["ops/planning/closeout/p-044_closeout.md"],
+                    "required_commands": [
+                        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-044"
+                    ],
+                    "rubric_version": "closeout_rubric_v1",
+                },
+                "ci_required_checks": ["uv run python ops/planning/agile/validate_milestone_task_links.py"],
+            },
         ]
     }
     tasks_master = {
@@ -83,7 +108,14 @@ def _seed_planning_tree(root: Path) -> None:
                 "type": "execution",
                 "source_filter": {"milestone_id": "F-041"},
                 "framework_template": "gateflow_v1",
-            }
+            },
+            {
+                "id": "milestone:P-044",
+                "title": "P-044",
+                "type": "execution",
+                "source_filter": {"milestone_id": "P-044"},
+                "framework_template": "gateflow_v1",
+            },
         ],
     }
     backlog = {"items": []}
@@ -107,10 +139,27 @@ def _seed_planning_tree(root: Path) -> None:
         ),
         encoding="utf-8",
     )
+    (planning / "closeout" / "p-044_closeout.md").write_text(
+        "\n".join(
+            [
+                "# Objective Summary",
+                "# Task Final States",
+                "# Evidence",
+                "# Determinism",
+                "# Protocol Compatibility",
+                "# Modularity",
+                "# Residual Risks",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
 
-def _run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+def _run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    merged_env = dict(os.environ)
+    if env:
+        merged_env.update(env)
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=merged_env)
 
 
 def test_planning_api_get_with_root_reads_custom_tree(tmp_path: Path) -> None:
@@ -169,3 +218,44 @@ def test_validate_closeout_packet_supports_root(tmp_path: Path) -> None:
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "validation: PASS" in proc.stdout
+
+
+def test_harness_first_is_warning_by_default(tmp_path: Path) -> None:
+    _seed_planning_tree(tmp_path)
+    proc = _run(
+        [
+            sys.executable,
+            "ops/planning/api/planning_api.py",
+            "POST",
+            "/tasks",
+            "--body",
+            '{"id":"T-4401","title":"test","milestone_id":"P-044","status":"Intake","depends_on":[],"board_refs":["milestone:P-044"]}',
+            "--root",
+            str(tmp_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert "warning mode: warn" in proc.stdout
+
+
+def test_harness_first_can_escalate_to_strict(tmp_path: Path) -> None:
+    _seed_planning_tree(tmp_path)
+    proc = _run(
+        [
+            sys.executable,
+            "ops/planning/api/planning_api.py",
+            "POST",
+            "/tasks",
+            "--body",
+            '{"id":"T-4401","title":"test","milestone_id":"P-044","status":"Intake","depends_on":[],"board_refs":["milestone:P-044"]}',
+            "--root",
+            str(tmp_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={"PLANNING_API_HARNESS_FIRST_MODE": "strict"},
+    )
+
+    assert proc.returncode == 2
+    assert "requires a closeout harness task" in proc.stderr
