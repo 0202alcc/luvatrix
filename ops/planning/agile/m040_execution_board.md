@@ -8,7 +8,7 @@ Framework: `gateflow_v1`
 - [x] `T-3300` [CLOSEOUT HARNESS] Define R-040 closeout metric + evidence contract
 - [x] `T-3301` Implement real screenshot action pipeline
 - [x] `T-3302` Implement real recording start/stop pipeline
-- [ ] `T-3303` Implement overlay runtime toggles (bounds/dirty-rect/coordinates)
+- [x] `T-3303` Implement overlay runtime toggles (bounds/dirty-rect/coordinates)
 - [ ] `T-3304` Implement replay start action (seed/session-based)
 - [ ] `T-3305` Implement frame-step action + paused-state controls
 - [ ] `T-3306` Implement perf HUD toggle + runtime metric surface
