@@ -19,6 +19,19 @@ def render_gantt(workspace: GateflowWorkspace, *, out_path: Path | None, fmt: st
     return text
 
 
+def render_board(workspace: GateflowWorkspace, *, out_path: Path | None, fmt: str | None) -> str:
+    resolved = _resolve_format(workspace.root, fmt)
+    if resolved not in {"ascii", "md"}:
+        raise ValueError("render format must be 'md' or 'ascii'")
+
+    tasks = sorted(workspace.list_items("tasks"), key=lambda row: str(row.get("id", "")))
+    text = _render_board_markdown(tasks) if resolved == "md" else _render_board_ascii(tasks)
+    if out_path is not None:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(text, encoding="utf-8")
+    return text
+
+
 def _resolve_format(root: Path, fmt: str | None) -> str:
     if fmt:
         return fmt
@@ -82,3 +95,44 @@ def _render_gantt_markdown(rows: list[dict]) -> str:
             + " |"
         )
     return "\n".join(lines) + "\n"
+
+
+def _render_board_ascii(tasks: list[dict]) -> str:
+    by_status = _tasks_by_status(tasks)
+    lines: list[str] = []
+    for status in sorted(by_status):
+        lines.append(f"[{status}]")
+        rows = by_status[status]
+        if not rows:
+            lines.append("  - (empty)")
+        else:
+            for row in rows:
+                lines.append(f"  - {row.get('id', '-')}: {row.get('title', '-')}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _render_board_markdown(tasks: list[dict]) -> str:
+    by_status = _tasks_by_status(tasks)
+    lines = [
+        "| Status | Tasks |",
+        "| --- | --- |",
+    ]
+    for status in sorted(by_status):
+        rows = by_status[status]
+        if rows:
+            packed = "<br>".join(f"{row.get('id', '-')}: {row.get('title', '-')}" for row in rows)
+        else:
+            packed = "(empty)"
+        lines.append(f"| {status} | {packed} |")
+    return "\n".join(lines) + "\n"
+
+
+def _tasks_by_status(tasks: list[dict]) -> dict[str, list[dict]]:
+    by_status: dict[str, list[dict]] = {}
+    for row in tasks:
+        status = str(row.get("status", "Intake"))
+        by_status.setdefault(status, []).append(row)
+    for status_rows in by_status.values():
+        status_rows.sort(key=lambda row: str(row.get("id", "")))
+    return by_status

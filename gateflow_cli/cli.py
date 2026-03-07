@@ -6,7 +6,7 @@ from pathlib import Path
 
 from gateflow_cli.api_shim import execute_api
 from gateflow_cli.config import get_config_value, set_config_value, show_config
-from gateflow_cli.render import render_gantt
+from gateflow_cli.render import render_board, render_gantt
 from gateflow_cli.scaffold import doctor_workspace, scaffold_workspace
 from gateflow_cli.resources import ResourceError, create_resource, delete_resource, get_resource, list_resource, update_resource
 from gateflow_cli.workspace import GateflowWorkspace
@@ -44,6 +44,9 @@ def build_parser() -> argparse.ArgumentParser:
     gantt_p = render_sub.add_parser("gantt")
     gantt_p.add_argument("--format", choices=["md", "ascii"])
     gantt_p.add_argument("--out", type=Path)
+    board_p = render_sub.add_parser("board")
+    board_p.add_argument("--format", choices=["md", "ascii"])
+    board_p.add_argument("--out", type=Path)
 
     for resource in RESOURCES:
         rs = sub.add_parser(resource)
@@ -113,6 +116,11 @@ def _dispatch(args: argparse.Namespace) -> int:
         workspace = GateflowWorkspace(args.root)
         if args.render_action == "gantt":
             output = render_gantt(workspace, out_path=args.out, fmt=args.format)
+            if args.out is None:
+                print(output, end="")
+            return 0
+        if args.render_action == "board":
+            output = render_board(workspace, out_path=args.out, fmt=args.format)
             if args.out is None:
                 print(output, end="")
             return 0
