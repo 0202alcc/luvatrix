@@ -164,6 +164,11 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 - Tasks: `T-401, T-402, T-403, T-2911`
 - Lifecycle events:
   - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
+- Success criteria:
+  - Deterministic CI gate ownership is documented with explicit per-gate owners, pass criteria, and escalation path for failures.
+  - Flaky-test governance includes quarantine labels/manifest, remediation SLA, and CI checks that prevent stale quarantines from persisting.
+  - Smoke and non-regression gate outputs publish artifact links and summary signals so milestone/task closeout evidence is reproducible.
+  - P-026 non-regression guarantees are encoded as required verification commands and pass in milestone evidence.
 
 ### P-015 🚀 Production-hardening go/no-go review
 - Status: Planned

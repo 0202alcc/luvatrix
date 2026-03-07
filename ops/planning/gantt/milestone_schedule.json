@@ -826,6 +826,12 @@
       "ci_required_checks": [
         "uv run python ops/planning/agile/validate_milestone_task_links.py",
         "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-013"
+      ],
+      "success_criteria": [
+        "Deterministic CI gate ownership is documented with explicit per-gate owners, pass criteria, and escalation path for failures.",
+        "Flaky-test governance includes quarantine labels/manifest, remediation SLA, and CI checks that prevent stale quarantines from persisting.",
+        "Smoke and non-regression gate outputs publish artifact links and summary signals so milestone/task closeout evidence is reproducible.",
+        "P-026 non-regression guarantees are encoded as required verification commands and pass in milestone evidence."
       ]
     },
     {
