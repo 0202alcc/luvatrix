@@ -10,7 +10,7 @@ Framework: `gateflow_v1`
 - [x] `T-3302` Implement real recording start/stop pipeline
 - [x] `T-3303` Implement overlay runtime toggles (bounds/dirty-rect/coordinates)
 - [x] `T-3304` Implement replay start action (seed/session-based)
-- [ ] `T-3305` Implement frame-step action + paused-state controls
+- [x] `T-3305` Implement frame-step action + paused-state controls
 - [ ] `T-3306` Implement perf HUD toggle + runtime metric surface
 - [ ] `T-3307` Implement debug bundle export action (captures/replay/perf/provenance)
 - [ ] `T-3308` Integrate menu action-state updates (enabled/disabled reflects runtime state)
