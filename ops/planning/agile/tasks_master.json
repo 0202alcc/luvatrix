@@ -1171,7 +1171,7 @@
       "title": "Define deterministic gate ownership and required pass criteria.",
       "epic_id": "E-401",
       "milestone_id": "P-013",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:P-013",
@@ -1186,23 +1186,38 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 9.97,
+      "cost_score": 0.0,
       "cost_bucket": "S",
-      "stage_multiplier_applied": 0.7,
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
       "notes": [
         "Handoff intent: complete T-401 for milestone P-013 without breaking protocol or determinism constraints.",
         "Execution outline seed: Define deterministic gate ownership and required pass criteria."
       ],
-      "task_type": "standard"
+      "task_type": "standard",
+      "actuals": {
+        "input_tokens": 1800,
+        "output_tokens": 900,
+        "wall_time_sec": 820,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-402",
       "title": "Add flaky test quarantine + remediation workflow.",
       "epic_id": "E-401",
       "milestone_id": "P-013",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-401"
       ],
@@ -1219,23 +1234,38 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 10.61,
+      "cost_score": 0.0,
       "cost_bucket": "S",
-      "stage_multiplier_applied": 0.7,
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
       "notes": [
         "Handoff intent: complete T-402 for milestone P-013 without breaking protocol or determinism constraints.",
         "Execution outline seed: Add flaky test quarantine + remediation workflow."
       ],
-      "task_type": "standard"
+      "task_type": "standard",
+      "actuals": {
+        "input_tokens": 1900,
+        "output_tokens": 950,
+        "wall_time_sec": 910,
+        "tool_calls": 20,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-403",
       "title": "Improve smoke signal visibility and artifact links.",
       "epic_id": "E-401",
       "milestone_id": "P-013",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-401"
       ],
@@ -1252,16 +1282,31 @@
         "iteration_risk": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 10.61,
+      "cost_score": 0.0,
       "cost_bucket": "S",
-      "stage_multiplier_applied": 0.7,
+      "stage_multiplier_applied": 0.0,
       "cost_basis_version": "gateflow_cost_v1",
       "cost_backfill_estimated": true,
       "notes": [
         "Handoff intent: complete T-403 for milestone P-013 without breaking protocol or determinism constraints.",
         "Execution outline seed: Improve smoke signal visibility and artifact links."
       ],
-      "task_type": "standard"
+      "task_type": "standard",
+      "actuals": {
+        "input_tokens": 2000,
+        "output_tokens": 1000,
+        "wall_time_sec": 980,
+        "tool_calls": 21,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-501",
@@ -6419,7 +6464,7 @@
       "title": "Conformance + non-regression gate pack (incl. P-026 guarantees)",
       "task_type": "standard",
       "milestone_id": "P-013",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [
         "T-2901",
         "T-2902",
@@ -6440,7 +6485,22 @@
       "notes": [
         "Moved from A-037 to P-013 to consolidate CI non-regression gate ownership in project-management/CI milestone.",
         "Still enforces debug-menu conformance and P-026 non-regression guarantees for related feature milestones."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 2600,
+        "output_tokens": 1200,
+        "wall_time_sec": 1120,
+        "tool_calls": 24,
+        "reopen_count": 1
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-3120",

@@ -18,7 +18,7 @@ F-024 🛰️ Sensor backend performance modernization                          
 FR-004 🧭 Platform variant routing and HDI phase standardization                       |=======                                                                                                                                                                                                                                              | Complete (2026-02-26)
 P-008 🗂️ Discord ops consolidation under /discord                                     |=======                                                                                                                                                                                                                                              | Complete (2026-02-26)
 P-010 🧱 Discord governance artifacts and onboarding system                            |##############                                                                                                                                                                                                                                       | In Progress
-P-013 🧪 CI hardening, flaky governance, and non-regression gate packs                 |                     ~~~~~~~~~~~~~~~~~~~~~                                                                                                                                                                                                           | Planned
+P-013 🧪 CI hardening, flaky governance, and non-regression gate packs                 |                     =====================                                                                                                                                                                                                           | Complete
 P-015 🚀 Production-hardening go/no-go review                                          |                                                 ~~~~~~~~~~~~~~~~~~~~~                                                                                                                                                                               | Planned
 P-021 📏 Performance baseline and telemetry gates                                      |                                                                                    ==============                                                                                                                                                   | Complete
 R-002 🖥️ macOS visual runtime foundation merged to main                               |=======                                                                                                                                                                                                                                              | Complete (2026-02-23)
@@ -159,7 +159,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - 2026-03-03 active (framework=gateflow_v1) - active milestone in current planning cycle
 
 ### P-013 🧪 CI hardening, flaky governance, and non-regression gate packs
-- Status: Planned
+- Status: Complete
 - Target window: Week 4-6
 - Tasks: `T-401, T-402, T-403, T-2911`
 - Lifecycle events:

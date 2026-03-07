@@ -777,7 +777,7 @@
       "name": "CI hardening, flaky governance, and non-regression gate packs",
       "start_week": 4,
       "end_week": 6,
-      "status": "Planned",
+      "status": "Complete",
       "task_ids": [
         "T-401",
         "T-402",
