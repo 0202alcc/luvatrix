@@ -31,7 +31,18 @@ def _seed_workspace(root: Path) -> None:
             "version": "gateflow_v1",
         },
     )
-    for name in ("tasks", "boards", "backlog"):
+    _write_json(
+        gateflow / "tasks.json",
+        {
+            "items": [
+                {"id": "T-4303", "title": "Remove PNG path", "status": "Intake"},
+                {"id": "T-4301", "title": "Render gantt md|ascii", "status": "Done"},
+                {"id": "T-4302", "title": "Render board md|ascii", "status": "In Progress"},
+            ],
+            "version": "gateflow_v1",
+        },
+    )
+    for name in ("boards", "backlog"):
         _write_json(gateflow / f"{name}.json", {"items": [], "version": "gateflow_v1"})
 
 
@@ -60,3 +71,21 @@ def test_render_gantt_uses_config_default_format(tmp_path: Path, capsys) -> None
     assert main(["--root", str(tmp_path), "render", "gantt"]) == 0
     out = capsys.readouterr().out
     assert out.startswith("| ID | Name | Status | Start Week | End Week | Task Count |")
+
+
+def test_render_board_markdown_outputs_grouped_rows(tmp_path: Path, capsys) -> None:
+    _seed_workspace(tmp_path)
+    assert main(["--root", str(tmp_path), "render", "board", "--format", "md"]) == 0
+    out = capsys.readouterr().out
+    assert "| Status | Tasks |" in out
+    assert "| Done | T-4301: Render gantt md|ascii |" in out
+    assert "| In Progress | T-4302: Render board md|ascii |" in out
+
+
+def test_render_board_ascii_writes_file(tmp_path: Path) -> None:
+    _seed_workspace(tmp_path)
+    out_path = tmp_path / "artifacts" / "board.txt"
+    assert main(["--root", str(tmp_path), "render", "board", "--format", "ascii", "--out", str(out_path)]) == 0
+    text = out_path.read_text(encoding="utf-8")
+    assert "[Done]" in text
+    assert "T-4301: Render gantt md|ascii" in text
