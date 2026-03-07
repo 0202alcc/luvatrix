@@ -9,7 +9,7 @@ Fast command reference for milestone/task/board/backlog operations.
 3. Run `--apply` only on `main` (`main:/ops/planning/*` is source of truth).
 4. API `--apply` auto-regenerates:
 - `ops/planning/gantt/milestones_gantt.md`
-- `ops/planning/gantt/milestones_gantt.png`
+- `ops/planning/gantt/milestones_gantt.md` (text-only v1 artifact)
 5. Optional path override:
 - append `--root <repo-root>` to run against a non-default checkout/snapshot
 6. GateFlow guardrails:

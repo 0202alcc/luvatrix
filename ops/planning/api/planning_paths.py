@@ -14,7 +14,6 @@ class PlanningPaths:
     boards_path: Path
     backlog_path: Path
     gantt_md_path: Path
-    gantt_png_path: Path
     closeout_dir: Path
 
 
@@ -36,6 +35,5 @@ class PlanningPathResolver:
             boards_path=planning_root / "agile" / "boards_registry.json",
             backlog_path=planning_root / "agile" / "backlog_misc.json",
             gantt_md_path=planning_root / "gantt" / "milestones_gantt.md",
-            gantt_png_path=planning_root / "gantt" / "milestones_gantt.png",
             closeout_dir=planning_root / "closeout",
         )
