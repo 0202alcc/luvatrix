@@ -24,13 +24,14 @@ Task chain: `T-401 -> (T-402, T-403) -> T-2911`
 1. `T-401` Added `ops/ci/p013_gate_catalog.json` and validator script to codify gate ownership.
 
 ## Prototype Stage 2+
-1. Pending.
+1. `T-402` Added flaky quarantine manifest contract and deterministic validator (`ops/ci/flaky_quarantine.py`).
 
 ## Verification Review
-1. Pending.
+1. `T-402` `PYTHONPATH=. uv run --with pytest pytest tests/test_flaky_quarantine.py -q`
+2. `T-402` `PYTHONPATH=. uv run python ops/ci/flaky_quarantine.py --manifest ops/ci/flaky_quarantine_manifest.json --max-quarantine-days 14`
 
 ## Integration Ready
-1. Pending.
+1. `T-402` Flaky quarantine governance artifacts are ready for milestone integration.
 
 ## Done
 1. Pending.
