@@ -3,7 +3,10 @@ from __future__ import annotations
 import unittest
 
 import torch
-from matplotlib import font_manager
+try:
+    from matplotlib import font_manager
+except ModuleNotFoundError:  # pragma: no cover - environment-dependent optional dependency
+    font_manager = None
 
 from luvatrix_core.core.app_runtime import AppContext
 from luvatrix_core.core.sensor_manager import SensorSample
@@ -143,6 +146,8 @@ class MatrixUIFrameRendererTests(unittest.TestCase):
         self.assertGreater(int(frame[:, :, :3].sum().item()), 0)
 
     def test_text_file_font_support(self) -> None:
+        if font_manager is None:
+            self.skipTest("matplotlib is not installed")
         renderer = MatrixUIFrameRenderer()
         from luvatrix_ui.component_schema import DisplayableArea
         from luvatrix_ui.text.renderer import TextMeasureRequest
