@@ -451,7 +451,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 ### R-039 🍎 macOS Debug Menu Runtime Wiring (E2E)
 - Status: In Progress
 - Target window: Week 36-39
-- Tasks: `T-3290, T-3201, T-3202, T-3203, T-3204, T-3205, T-3206`
+- Tasks: `T-3290, T-3201, T-3202, T-3203, T-3204, T-3205, T-3206, T-3210, T-3211, T-3212, T-3213`
 - Lifecycle events:
   - 2026-03-07 active (framework=gateflow_v1) - milestone created from architect packet
   - 2026-03-07 no-go (framework=gateflow_v1) - live macOS run-app verification blocked in current environment (AppKit/PyObjC unavailable)

@@ -1,0 +1,20 @@
+{
+  "id": "T-3211",
+  "title": "R-039 macOS smoke preflight + structured manifest",
+  "task_type": "standard",
+  "milestone_id": "R-039",
+  "status": "Intake",
+  "depends_on": [
+    "T-3205"
+  ],
+  "board_refs": [
+    "milestone:R-039",
+    "team:platform-ci",
+    "specialist:qa"
+  ],
+  "notes": [
+    "Add deterministic preflight checks in ops/ci/r039_macos_menu_smoke.py for AppKit/PyObjC, Quartz/QuartzCore, and optional Vulkan loader status handling.",
+    "Emit structured prereq manifest output and deterministic failure surface instead of traceback-only failures.",
+    "Expected files: ops/ci/r039_macos_menu_smoke.py, tests/test_macos_menu_integration.py, artifacts/r039 preflight output contract."
+  ]
+}

@@ -2545,7 +2545,11 @@
         "T-3203",
         "T-3204",
         "T-3205",
-        "T-3206"
+        "T-3206",
+        "T-3210",
+        "T-3211",
+        "T-3212",
+        "T-3213"
       ],
       "success_criteria": [
         "Clicking default macOS top-menu actions never crashes.",

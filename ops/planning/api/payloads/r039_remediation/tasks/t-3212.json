@@ -1,0 +1,20 @@
+{
+  "id": "T-3212",
+  "title": "R-039 environment bootstrap and runbook standardization",
+  "task_type": "standard",
+  "milestone_id": "R-039",
+  "status": "Intake",
+  "depends_on": [
+    "T-3211"
+  ],
+  "board_refs": [
+    "milestone:R-039",
+    "team:platform-ci",
+    "specialist:release"
+  ],
+  "notes": [
+    "Standardize R-039 runtime setup with uv sync --extra macos --extra vulkan and document ordered verification flow.",
+    "Update closeout/runbook guidance so local and CI runs follow same preflight then smoke command sequence.",
+    "Expected files: ops/planning/closeout/r-039_closeout.md, docs/debug_menu_adapter_spec.md, ops/planning/agile/m039_execution_board.md."
+  ]
+}

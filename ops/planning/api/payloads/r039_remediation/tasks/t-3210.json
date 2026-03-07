@@ -1,0 +1,20 @@
+{
+  "id": "T-3210",
+  "title": "ObjC menu target lifecycle collision fix",
+  "task_type": "standard",
+  "milestone_id": "R-039",
+  "status": "Intake",
+  "depends_on": [
+    "T-3201"
+  ],
+  "board_refs": [
+    "milestone:R-039",
+    "team:runtime",
+    "specialist:development"
+  ],
+  "notes": [
+    "Implement single-registration/cached ObjC target class pattern in macOS window/menu runtime to prevent class redefinition collisions.",
+    "Preserve existing crash-safe dispatch semantics and unsupported-action deterministic noop/disabled behavior.",
+    "Expected files: luvatrix_core/platform/macos/window_system.py, tests/test_debug_menu_adapter.py, tests/test_macos_menu_integration.py."
+  ]
+}

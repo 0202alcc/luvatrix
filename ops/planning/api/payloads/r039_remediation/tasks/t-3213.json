@@ -1,0 +1,22 @@
+{
+  "id": "T-3213",
+  "title": "R-039 full revalidation and closeout packet refresh",
+  "task_type": "standard",
+  "milestone_id": "R-039",
+  "status": "Intake",
+  "depends_on": [
+    "T-3210",
+    "T-3211",
+    "T-3212"
+  ],
+  "board_refs": [
+    "milestone:R-039",
+    "team:platform-ci",
+    "specialist:release"
+  ],
+  "notes": [
+    "Execute full required R-039 command bundle, capture deterministic evidence artifacts, and refresh closeout packet for re-review.",
+    "Required commands: pytest debug_menu_dispatch/debug_manifest_policy/macos_menu_integration, both macOS run-app smokes, validate_milestone_task_links, validate_closeout_packet.",
+    "No-Go remains if any command fails, evidence is incomplete, or compatibility/determinism/rollback gates are unresolved."
+  ]
+}
