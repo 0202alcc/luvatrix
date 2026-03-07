@@ -29,9 +29,11 @@ Task chain: `T-401 -> (T-402, T-403) -> T-2911`
 ## Verification Review
 1. `T-402` `PYTHONPATH=. uv run --with pytest pytest tests/test_flaky_quarantine.py -q`
 2. `T-402` `PYTHONPATH=. uv run python ops/ci/flaky_quarantine.py --manifest ops/ci/flaky_quarantine_manifest.json --max-quarantine-days 14`
+3. `T-403` `PYTHONPATH=. uv run --with pytest pytest tests/test_render_ci_smoke_summary.py -q`
 
 ## Integration Ready
 1. `T-402` Flaky quarantine governance artifacts are ready for milestone integration.
+2. `T-403` Smoke signal workflow and artifact summary publishing are ready for milestone integration.
 
 ## Done
 1. Pending.
