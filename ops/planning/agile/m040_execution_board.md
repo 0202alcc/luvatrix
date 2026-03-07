@@ -1,48 +1,28 @@
-# R-040 Execution Board
+# P-040 Execution Board
 
-Milestone: `R-040`  
-Name: `macOS Debug Menu Functionalization (Full Actions)`  
+Milestone: `P-040`
+Name: `Program Setup and Spec Lock`
+Branch: `codex/m-p-040-program-setup-spec-lock`
 Framework: `gateflow_v1`
 
-## Intake
-- [x] `T-3300` [CLOSEOUT HARNESS] Define R-040 closeout metric + evidence contract
-- [x] `T-3301` Implement real screenshot action pipeline
-- [x] `T-3302` Implement real recording start/stop pipeline
-- [x] `T-3303` Implement overlay runtime toggles (bounds/dirty-rect/coordinates)
-- [x] `T-3304` Implement replay start action (seed/session-based)
-- [x] `T-3305` Implement frame-step action + paused-state controls
-- [x] `T-3306` Implement perf HUD toggle + runtime metric surface
-- [x] `T-3307` Implement debug bundle export action (captures/replay/perf/provenance)
-- [x] `T-3308` Integrate menu action-state updates (enabled/disabled reflects runtime state)
-- [x] `T-3309` E2E macOS example-app menu functional smoke harness
-- [x] `T-3310` Rollback/kill-switch hardening + final closeout packet
+## Task Chain
+`T-4000 -> T-4001 -> T-4002 -> (T-4003 + T-4004) -> T-4005`
 
-## Success Criteria Spec
-- [x] No menu action remains stubbed on macOS for supported policy.
+## Current Placement
+- `Intake`: `T-4000`, `T-4001`, `T-4002`, `T-4003`, `T-4004`, `T-4005`
+- `Success Criteria Spec`: none
+- `Safety Tests Spec`: none
+- `Implementation Tests Spec`: none
+- `Edge Case Tests Spec`: none
+- `Prototype Stage 1`: none
+- `Prototype Stage 2+`: none
+- `Verification Review`: none
+- `Integration Ready`: none
+- `Done`: none
+- `Blocked`: none
 
-## Safety Tests Spec
-- [x] No action dispatch can crash process; handler exceptions degrade to warning/noop.
-
-## Implementation Tests Spec
-- [x] Debug action functional pytest selection passes.
-
-## Edge Case Tests Spec
-- [x] Rollback and policy-disabled paths return deterministic `DISABLED`.
-
-## Prototype Stage 1
-- [x] Runtime handler wiring merged.
-
-## Prototype Stage 2+
-- [x] Action-state synchronization + functional smoke harness merged.
-
-## Verification Review
-- [x] Required command bundle executed with artifact evidence.
-
-## Integration Ready
-- [x] Milestone branch includes all task merges and closeout packet.
-
-## Done
-- [ ] Milestone PR merged to `main` with required checks passing (pending).
-
-## Blocked
-- [ ] None.
+## Evidence Plan
+1. `uv run python ops/planning/agile/validate_milestone_task_links.py`
+2. `uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-040`
+3. Task PR links `T-4000..T-4005` merged into milestone branch.
+4. Milestone PR merged to `main` with required checks passing.
