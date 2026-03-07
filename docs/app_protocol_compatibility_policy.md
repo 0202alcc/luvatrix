@@ -209,3 +209,12 @@ PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "incremental_present 
 PYTHONPATH=. uv run pytest tests/test_sensor_manager.py tests/test_app_runtime.py -k "sensor"
 PYTHONPATH=. uv run pytest tests/test_macos_vulkan_backend.py -k "persistent_map or transient_mode_maps_each_frame or upload_image_reuse or swapchain_invalidation"
 ```
+
+Debug manifest policy compatibility checks (A-037):
+
+```bash
+uv run pytest tests -k "debug_manifest or legacy_debug_conformance" -q
+```
+
+Reference contract:
+1. `docs/debug_manifest_policy_contract.md`
