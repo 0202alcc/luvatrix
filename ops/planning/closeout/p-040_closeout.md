@@ -45,3 +45,17 @@ Milestone `P-040` locks the standalone GateFlow CLI v1 specification so downstre
 
 1. Runtime conformance remains dependent on downstream implementation milestones.
 2. Any scope extension beyond v1 boundaries requires ADR amendment before implementation.
+
+## Closeout Harness Metric
+
+1. Metric id: `p-040-closeout-v1`.
+2. Scoring components: `correctness`, `safety`, `compatibility`, `evidence`.
+3. Go threshold: `85`.
+4. Hard no-go conditions: required check failure, closeout validation failure, unresolved high-severity risk without waiver.
+
+## Closeout Harness Metric
+
+1. Metric id: `p-040-closeout-v1`.
+2. Scoring components: `correctness`, `safety`, `compatibility`, `evidence`.
+3. Go threshold: `85`.
+4. Hard no-go conditions: required check failure, closeout validation failure, unresolved high-severity risk without waiver.
