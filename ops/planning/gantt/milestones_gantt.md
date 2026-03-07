@@ -43,7 +43,7 @@ R-033 📈 Planes v2 post-foundation performance optimization                   
 F-034 🛡️ Cross-Platform Debug Menu Foundation                                         |                                                                                                                                                                                      =====================                                          | Complete
 U-035 🖼️ Visual + Capture Tooling                                                     |                                                                                                                                                                                             ============================                            | Complete
 R-036 🎛️ Replay + Perf Observability                                                  |                                                                                                                                                                                                           ============================              | Complete
-A-037 🧩 App-Configurable Debug Policy + Compatibility                                 |                                                                                                                                                                                                                         ############################| In Progress
+A-037 🧩 App-Configurable Debug Policy + Compatibility                                 |                                                                                                                                                                                                                         ============================| Complete
 F-038 🔔 Cross-Platform Notification Protocol + Runtime Adapters                       |                                                                                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                             | Planned
 
 Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
@@ -419,12 +419,13 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - Milestone Go/No-Go is macOS-context only in this phase, with reopen intent for broader platform coverage.
 
 ### A-037 🧩 App-Configurable Debug Policy + Compatibility
-- Status: In Progress
+- Status: Complete
 - Target window: Week 32-35
 - Tasks: `T-2923, T-2910`
 - Lifecycle events:
   - 2026-03-05 active (framework=gateflow_v1) - app policy compatibility milestone created
   - 2026-03-05 active (framework=gateflow_v1) - macOS-first phase; close with planned reopen for cross-platform expansion
+  - 2026-03-06 closed (framework=gateflow_v1) - GO in macOS scope; planned reopen remains for Windows/Linux/device expansion
 - Success criteria:
   - Existing apps continue to run unchanged by default in macOS scope.
   - Manifest-level debug policy is version-gated/safe and encodes explicit non-mac capability stub behavior.

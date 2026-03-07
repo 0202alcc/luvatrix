@@ -2384,7 +2384,7 @@
       "name": "App-Configurable Debug Policy + Compatibility",
       "start_week": 32,
       "end_week": 35,
-      "status": "In Progress",
+      "status": "Complete",
       "task_ids": [
         "T-2923",
         "T-2910"
@@ -2443,6 +2443,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "macOS-first phase; close with planned reopen for cross-platform expansion"
+        },
+        {
+          "date": "2026-03-06",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "GO in macOS scope; planned reopen remains for Windows/Linux/device expansion"
         }
       ]
     },
