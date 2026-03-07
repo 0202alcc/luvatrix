@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 from .base import DisplayFrame, RenderTarget
@@ -14,6 +15,9 @@ class VulkanPresenter(Protocol):
         ...
 
     def shutdown(self) -> None:
+        ...
+
+    def configure_debug_menu(self, *, app_id: str, profile: dict[str, object], artifact_dir: str) -> None:
         ...
 
 
@@ -51,3 +55,17 @@ class VulkanTarget(RenderTarget):
         if hasattr(self.presenter, "should_close"):
             return bool(self.presenter.should_close())
         return False
+
+    def configure_debug_menu(
+        self,
+        *,
+        app_id: str,
+        profile: dict[str, object],
+        artifact_dir: str | Path = "artifacts/debug_menu/runtime",
+    ) -> None:
+        if hasattr(self.presenter, "configure_debug_menu"):
+            self.presenter.configure_debug_menu(
+                app_id=app_id,
+                profile=profile,
+                artifact_dir=str(artifact_dir),
+            )

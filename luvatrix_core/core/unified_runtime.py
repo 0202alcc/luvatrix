@@ -69,8 +69,10 @@ class UnifiedRuntime:
         rate = FrameRateController(target_fps=target_fps, present_fps=present_fps)
         app_path = Path(app_dir).resolve()
         manifest = self._app_runtime.load_manifest(app_path)
+        debug_policy_profile = self._app_runtime.resolve_debug_policy_profile(manifest)
         granted = self._app_runtime.resolve_capabilities(manifest)
         ctx = self._app_runtime.build_context(granted_capabilities=granted)
+        self._configure_target_debug_menu(manifest.app_id, debug_policy_profile)
         resolved = self._app_runtime.resolve_variant(app_path, manifest)
         if manifest.runtime_kind == "process":
             lifecycle = ProcessLifecycleClient(
@@ -154,3 +156,13 @@ class UnifiedRuntime:
         for cap, sensor_type in mapping.items():
             if cap in granted_capabilities:
                 sensor_manager.set_sensor_enabled(sensor_type, True, actor="unified_runtime")
+
+    def _configure_target_debug_menu(self, app_id: str, profile: dict[str, object]) -> None:
+        configure = getattr(self._target, "configure_debug_menu", None)
+        if configure is None or not callable(configure):
+            return
+        configure(
+            app_id=app_id,
+            profile=profile,
+            artifact_dir="artifacts/debug_menu/runtime",
+        )
