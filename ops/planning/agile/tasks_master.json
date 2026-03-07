@@ -8096,7 +8096,7 @@
       "title": "[CLOSEOUT HARNESS] Define U-043 closeout metric + evidence harness",
       "task_type": "closeout_harness",
       "milestone_id": "U-043",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:U-043",
@@ -8105,14 +8105,29 @@
       ],
       "notes": [
         "Define closeout/evidence contract for text-only rendering milestone."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 2200,
+        "output_tokens": 450,
+        "wall_time_sec": 540,
+        "tool_calls": 8,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4301",
       "title": "Implement `render gantt --format md|ascii`",
       "task_type": "standard",
       "milestone_id": "U-043",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4300",
         "T-4201"
@@ -8124,14 +8139,29 @@
       ],
       "notes": [
         "Provide deterministic markdown/ascii gantt rendering outputs."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 4100,
+        "output_tokens": 900,
+        "wall_time_sec": 1020,
+        "tool_calls": 15,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4302",
       "title": "Implement `render board --format md|ascii`",
       "task_type": "standard",
       "milestone_id": "U-043",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4300",
         "T-4201"
@@ -8143,14 +8173,29 @@
       ],
       "notes": [
         "Provide deterministic markdown/ascii board rendering outputs."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 3400,
+        "output_tokens": 760,
+        "wall_time_sec": 820,
+        "tool_calls": 12,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4303",
       "title": "Remove PNG dependency/path from v1 execution and CI expectations",
       "task_type": "standard",
       "milestone_id": "U-043",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4301",
         "T-4302"
@@ -8162,14 +8207,29 @@
       ],
       "notes": [
         "Disable PNG runtime path and adjust CI checks accordingly for v1."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 3600,
+        "output_tokens": 840,
+        "wall_time_sec": 900,
+        "tool_calls": 13,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4304",
       "title": "Add deterministic snapshot tests for text render outputs",
       "task_type": "standard",
       "milestone_id": "U-043",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4301",
         "T-4302"
@@ -8181,7 +8241,22 @@
       ],
       "notes": [
         "Establish stable snapshots for md/ascii render artifacts."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 2500,
+        "output_tokens": 620,
+        "wall_time_sec": 660,
+        "tool_calls": 10,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4400",

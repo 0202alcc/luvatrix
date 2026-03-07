@@ -2908,7 +2908,7 @@
       ],
       "start_week": 50,
       "end_week": 52,
-      "status": "Planned",
+      "status": "In Progress",
       "task_ids": [
         "T-4300",
         "T-4301",
