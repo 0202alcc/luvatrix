@@ -5,23 +5,24 @@
 
 # Task Final States
 - `T-4200` Done.
-- `T-4201` In Progress.
-- `T-4202` In Progress.
-- `T-4203` In Progress.
-- `T-4204` In Progress.
-- `T-4205` In Progress.
+- `T-4201` Done.
+- `T-4202` Done.
+- `T-4203` Done.
+- `T-4204` Done.
+- `T-4205` Done.
 
 # Evidence
 - Task PRs:
-  - `T-4200`: pending
-  - `T-4201`: pending
-  - `T-4202`: pending
-  - `T-4203`: pending
-  - `T-4204`: pending
-  - `T-4205`: pending
+  - `T-4200`: https://github.com/0202alcc/luvatrix/pull/78
+  - `T-4201`: https://github.com/0202alcc/luvatrix/pull/79
+  - `T-4202`: https://github.com/0202alcc/luvatrix/pull/80
+  - `T-4203`: https://github.com/0202alcc/luvatrix/pull/81
+  - `T-4204`: https://github.com/0202alcc/luvatrix/pull/82
+  - `T-4205`: https://github.com/0202alcc/luvatrix/pull/83
 - Validation commands:
-  - `PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py` -> pending
-  - `PYTHONPATH=. uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-042` -> pending
+  - `PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py` -> PASS
+  - `PYTHONPATH=. uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-042` -> PASS
+  - `PYTHONPATH=. uv run --with pytest pytest tests/test_gateflow_cli_init.py tests/test_gateflow_cli_resources.py tests/test_gateflow_cli_config.py tests/test_gateflow_cli_api_shim.py -q` -> `15 passed`
 
 # Determinism
 - CLI writes canonical UTF-8 JSON with stable key ordering and a single trailing newline.

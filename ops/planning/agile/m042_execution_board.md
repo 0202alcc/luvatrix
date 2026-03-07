@@ -5,11 +5,7 @@ Name: `Luvatrix Refactor: CLI Surface and Init Scaffolding`
 Framework: `gateflow_v1`
 
 ## Intake
-- [ ] `T-4201` Add resource-first command layer on extracted services
-- [ ] `T-4202` Implement `gateflow init` core scaffold for `.gateflow/`
-- [ ] `T-4203` Implement optional profile overlays for init
-- [ ] `T-4204` Implement config commands for protected_branch/defaults/render settings
-- [ ] `T-4205` Preserve temporary `api METHOD /resource` compatibility shim
+- (empty)
 
 ## Success Criteria Spec
 - (empty)
@@ -37,6 +33,11 @@ Framework: `gateflow_v1`
 
 ## Done
 - [x] `T-4200` [CLOSEOUT HARNESS] Define F-042 closeout metric + evidence harness
+- [x] `T-4201` Add resource-first command layer on extracted services
+- [x] `T-4202` Implement `gateflow init` core scaffold for `.gateflow/`
+- [x] `T-4203` Implement optional profile overlays for init
+- [x] `T-4204` Implement config commands for protected_branch/defaults/render settings
+- [x] `T-4205` Preserve temporary `api METHOD /resource` compatibility shim
 
 ## Blocked
 - (empty)
