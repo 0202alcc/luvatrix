@@ -52,3 +52,20 @@ def test_init_preserves_existing_ledger_items(tmp_path: Path) -> None:
     assert main(["--root", str(tmp_path), "init", "scaffold", "--profile", "minimal"]) == 0
     payload = _load(gateflow / "tasks.json")
     assert payload["items"] == [{"id": "T-1"}]
+
+
+def test_discord_profile_adds_overlay_namespace(tmp_path: Path) -> None:
+    assert main(["--root", str(tmp_path), "init", "scaffold", "--profile", "discord"]) == 0
+    config = _load(tmp_path / ".gateflow" / "config.json")
+    assert config["overlays"] == ["discord"]
+    assert "discord" in config["profiles"]
+
+
+def test_enterprise_overlay_is_additive_and_applies_strict_defaults(tmp_path: Path) -> None:
+    assert main(["--root", str(tmp_path), "init", "scaffold", "--profile", "discord"]) == 0
+    assert main(["--root", str(tmp_path), "init", "scaffold", "--profile", "enterprise"]) == 0
+
+    config = _load(tmp_path / ".gateflow" / "config.json")
+    assert config["overlays"] == ["discord", "enterprise"]
+    assert config["defaults"]["warning_mode"] == "strict"
+    assert "release" in config["policy"]["protected_branches"]
