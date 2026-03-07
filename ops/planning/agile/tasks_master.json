@@ -7997,7 +7997,7 @@
       "title": "Implement optional profile overlays for init",
       "task_type": "standard",
       "milestone_id": "F-042",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4202"
       ],
@@ -8008,7 +8008,22 @@
       ],
       "notes": [
         "Support minimal/discord/enterprise overlays without mutating core contract."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1400,
+        "output_tokens": 950,
+        "wall_time_sec": 700,
+        "tool_calls": 16,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4204",
