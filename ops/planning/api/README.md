@@ -60,6 +60,20 @@ Quick operator reference:
 - `PATCH /backlog/{id}`
 - `DELETE /backlog/{id}`
 
+## Root-Scoped Operation
+
+All planning API tools now support an optional `--root <repo-root>` override.
+
+- default behavior is unchanged (`--root .`)
+- endpoint-style method/path semantics are unchanged
+- use this to run dry-runs/validation against alternate repo snapshots
+
+Example:
+
+```bash
+python ops/planning/api/planning_api.py GET /milestones --root /tmp/luvatrix-snapshot
+```
+
 ## Safety guarantees
 
 1. Dry-run by default (`--apply` required to write).
