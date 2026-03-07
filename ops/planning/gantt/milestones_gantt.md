@@ -46,7 +46,7 @@ R-036 🎛️ Replay + Perf Observability                                       
 A-037 🧩 App-Configurable Debug Policy + Compatibility                                 |                                                                                                                                                                                                                         ============================                                                               | Complete
 F-038 🔔 Cross-Platform Notification Protocol + Runtime Adapters                       |                                                                                                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                                                                                                            | Planned
 R-039 🍎 macOS Debug Menu Runtime Wiring (E2E)                                         |                                                                                                                                                                                                                                                     ============================                                   | Complete
-R-040 🧰 macOS Debug Menu Functionalization (Full Actions)                             |                                                                                                                                                                                                                                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Planned
+R-040 🧰 macOS Debug Menu Functionalization (Full Actions)                             |                                                                                                                                                                                                                                                                                 ===================================| Complete
 
 Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 ```
@@ -465,7 +465,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - Rollback flag can disable new wiring safely.
 
 ### R-040 🧰 macOS Debug Menu Functionalization (Full Actions)
-- Status: Planned
+- Status: Complete
 - Target window: Week 40-44
 - Tasks: `T-3300, T-3301, T-3302, T-3303, T-3304, T-3305, T-3306, T-3307, T-3308, T-3309, T-3310`
 - Lifecycle events:

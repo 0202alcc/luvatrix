@@ -2620,7 +2620,7 @@
       ],
       "start_week": 40,
       "end_week": 44,
-      "status": "Planned",
+      "status": "Complete",
       "task_ids": [
         "T-3300",
         "T-3301",
