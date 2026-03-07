@@ -10,6 +10,7 @@ from gateflow_cli.policy import PolicyViolation, enforce_protected_branch_write_
 from gateflow_cli.render import render_board, render_gantt
 from gateflow_cli.scaffold import doctor_workspace, scaffold_workspace
 from gateflow_cli.resources import ResourceError, create_resource, delete_resource, get_resource, list_resource, update_resource
+from gateflow_cli.validate import run_validation
 from gateflow_cli.workspace import GateflowWorkspace
 
 RESOURCES = ("milestones", "tasks", "boards", "frameworks", "backlog")
@@ -34,6 +35,12 @@ def build_parser() -> argparse.ArgumentParser:
     config_set.add_argument("key")
     config_set.add_argument("value")
     config_sub.add_parser("show")
+
+    validate_p = sub.add_parser("validate")
+    validate_sub = validate_p.add_subparsers(dest="validate_action", required=True)
+    validate_sub.add_parser("links")
+    validate_sub.add_parser("closeout")
+    validate_sub.add_parser("all")
 
     api_p = sub.add_parser("api")
     api_p.add_argument("verb_or_method")
@@ -118,6 +125,16 @@ def _dispatch(args: argparse.Namespace) -> int:
             enforce_protected_branch_write_guard(args.root)
         print(json.dumps(execute_api(method, endpoint, body=args.body, root=args.root), indent=2, sort_keys=True))
         return 0
+
+    if args.command == "validate":
+        ok, errors = run_validation(args.root, args.validate_action)
+        if ok:
+            print(f"validation: PASS ({args.validate_action})")
+            return 0
+        print(f"validation: FAIL ({args.validate_action})")
+        for error in errors:
+            print(f"- {error}")
+        return 2
 
     if args.command == "render":
         workspace = GateflowWorkspace(args.root)
