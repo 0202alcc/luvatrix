@@ -6043,7 +6043,7 @@
       "title": "[CLOSEOUT HARNESS] Define app policy compatibility closeout metric and evidence harness",
       "task_type": "closeout_harness",
       "milestone_id": "A-037",
-      "status": "Intake",
+      "status": "Integration Ready",
       "depends_on": [],
       "board_refs": [
         "milestone:A-037",

@@ -2384,7 +2384,7 @@
       "name": "App-Configurable Debug Policy + Compatibility",
       "start_week": 32,
       "end_week": 35,
-      "status": "Planned",
+      "status": "In Progress",
       "task_ids": [
         "T-2923",
         "T-2910"
