@@ -65,6 +65,42 @@ class MacOSMenuIntegrationTests(unittest.TestCase):
             backend.configure_debug_menu(app_id="examples.app", profile=self._profile(), artifact_dir=out)
             result = backend.dispatch_debug_menu_action("debug.menu.capture.screenshot")
             self.assertEqual(result.status, "EXECUTED")
+            events = (out / "events.jsonl").read_text(encoding="utf-8").splitlines()
+            self.assertTrue(any("capture_id" in line for line in events))
+            captures = out / "captures"
+            pngs = list(captures.glob("*.png"))
+            self.assertTrue(pngs)
+
+    def test_recording_toggle_is_idempotent_start_stop(self) -> None:
+        backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "debug_menu"
+            backend.configure_debug_menu(app_id="examples.app", profile=self._profile(), artifact_dir=out)
+            start_result = backend.dispatch_debug_menu_action("debug.menu.capture.record.toggle")
+            stop_result = backend.dispatch_debug_menu_action("debug.menu.capture.record.toggle")
+            self.assertEqual(start_result.status, "EXECUTED")
+            self.assertEqual(stop_result.status, "EXECUTED")
+            manifests = list((out / "recordings").glob("*.json"))
+            self.assertTrue(manifests)
+
+    def test_frame_step_requires_replay_start_then_bundle_exports(self) -> None:
+        backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "debug_menu"
+            backend.configure_debug_menu(app_id="examples.app", profile=self._profile(), artifact_dir=out)
+            frame_step_before = backend.dispatch_debug_menu_action("debug.menu.frame.step")
+            self.assertEqual(frame_step_before.status, "DISABLED")
+
+            backend.dispatch_debug_menu_action("debug.menu.capture.screenshot")
+            backend.dispatch_debug_menu_action("debug.menu.replay.start")
+            backend.dispatch_debug_menu_action("debug.menu.perf.hud.toggle")
+            frame_step_after = backend.dispatch_debug_menu_action("debug.menu.frame.step")
+            self.assertEqual(frame_step_after.status, "EXECUTED")
+
+            bundle = backend.dispatch_debug_menu_action("debug.menu.bundle.export")
+            self.assertEqual(bundle.status, "EXECUTED")
+            bundles = list((out / "bundles").glob("*.zip"))
+            self.assertTrue(bundles)
 
     def test_dispatch_is_disabled_when_policy_disabled(self) -> None:
         backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
@@ -93,3 +129,19 @@ class MacOSMenuIntegrationTests(unittest.TestCase):
                 os.environ.pop("LUVATRIX_MACOS_DEBUG_MENU_WIRING", None)
             else:
                 os.environ["LUVATRIX_MACOS_DEBUG_MENU_WIRING"] = old
+
+    def test_functional_kill_switch_disables_actions(self) -> None:
+        backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+        old = os.environ.get("LUVATRIX_MACOS_DEBUG_MENU_FUNCTIONAL_ACTIONS")
+        os.environ["LUVATRIX_MACOS_DEBUG_MENU_FUNCTIONAL_ACTIONS"] = "0"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp) / "debug_menu"
+                backend.configure_debug_menu(app_id="examples.app", profile=self._profile(), artifact_dir=out)
+                result = backend.dispatch_debug_menu_action("debug.menu.capture.screenshot")
+                self.assertEqual(result.status, "DISABLED")
+        finally:
+            if old is None:
+                os.environ.pop("LUVATRIX_MACOS_DEBUG_MENU_FUNCTIONAL_ACTIONS", None)
+            else:
+                os.environ["LUVATRIX_MACOS_DEBUG_MENU_FUNCTIONAL_ACTIONS"] = old
