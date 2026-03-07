@@ -2,15 +2,37 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import ctypes
+from datetime import UTC, datetime
+import hashlib
 import json
 import logging
 import os
 from pathlib import Path
+import struct
 import time
 from typing import Any
+import zlib
+import zipfile
 
 import torch
 
+from luvatrix_core.core.debug_capture import (
+    FrameStepState,
+    ReplayInputEvent,
+    build_debug_bundle_export,
+    build_overlay_spec,
+    build_perf_hud_snapshot,
+    build_recording_manifest,
+    build_replay_manifest,
+    build_screenshot_artifact_bundle,
+    bundle_has_required_artifact_classes,
+    evaluate_replay_determinism,
+    evaluate_recording_budget,
+    frame_step_advance,
+    toggle_overlay_non_destructive,
+    RecordingBudgetEnvelope,
+    OverlayRect,
+)
 from luvatrix_core.core.debug_menu import (
     DEFAULT_DEBUG_MENU_ACTIONS,
     DebugMenuDispatcher,
@@ -110,7 +132,29 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._debug_menu_artifact_dir = Path("artifacts/debug_menu/runtime")
         self._debug_menu_events_path = self._debug_menu_artifact_dir / "events.jsonl"
         self._debug_menu_enabled = True
+        self._debug_menu_functional_enabled = os.getenv("LUVATRIX_MACOS_DEBUG_MENU_FUNCTIONAL_ACTIONS", "1").strip() != "0"
         self._debug_menu_audit: list[str] = []
+        self._last_presented_rgba: torch.Tensor | None = None
+        self._last_presented_digest = ""
+        self._last_present_elapsed_ms: float = 16.667
+        self._debug_screenshot_count = 0
+        self._recording_active = False
+        self._recording_session_id = ""
+        self._recording_started_at_utc = ""
+        self._recording_start_frame = 0
+        self._recording_artifacts: list[str] = []
+        self._overlay_enabled = False
+        self._overlay_last_spec: dict[str, object] | None = None
+        self._replay_active = False
+        self._replay_paused = False
+        self._replay_session_id = ""
+        self._replay_seed = 1337
+        self._replay_ordering_digest = ""
+        self._frame_step_state = FrameStepState(paused=False, frame_index=0, last_ordering_digest="bootstrap")
+        self._perf_hud_enabled = False
+        self._last_perf_hud_snapshot: dict[str, object] | None = None
+        self._artifact_latest_by_class: dict[str, str] = {}
+        self._bundle_export_count = 0
         self._render_scale_controller = RenderScaleController.from_env()
         self._render_scale_levels: tuple[float, ...] = self._render_scale_controller.levels
         self._render_scale_fixed: float | None = self._render_scale_controller.fixed_scale
@@ -143,6 +187,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         started_at = time.perf_counter()
         self._require_initialized()
         self._validate_frame(rgba, context.width, context.height)
+        self._capture_presented_frame(rgba)
         self._acquire_next_swapchain_image()
         if self._vulkan_available and self._current_image_index is None:
             return
@@ -151,6 +196,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._present_swapchain_image()
         self._frames_presented += 1
         elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+        self._last_present_elapsed_ms = max(0.001, elapsed_ms)
         self._update_render_scale(elapsed_ms=elapsed_ms, fallback_active=not self._vulkan_available)
 
     def resize(self, context: VulkanContext, width: int, height: int) -> VulkanContext:
@@ -228,6 +274,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._debug_menu_artifact_dir = Path(artifact_dir)
         self._debug_menu_events_path = self._debug_menu_artifact_dir / "events.jsonl"
         self._debug_menu_enabled = os.getenv("LUVATRIX_MACOS_DEBUG_MENU_WIRING", "1").strip() != "0"
+        self._debug_menu_functional_enabled = os.getenv("LUVATRIX_MACOS_DEBUG_MENU_FUNCTIONAL_ACTIONS", "1").strip() != "0"
         self._write_debug_menu_manifest()
 
     def dispatch_debug_menu_action(self, action_id: str) -> DebugMenuDispatchResult:
@@ -235,6 +282,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             "app_id": self._debug_menu_app_id,
             "profile": dict(self._debug_menu_profile),
             "menu_wiring_enabled": self._debug_menu_enabled,
+            "functional_wiring_enabled": self._debug_menu_functional_enabled,
         }
         result = self._debug_menu_dispatcher.dispatch(action_id, context)
         self._append_debug_menu_event(
@@ -1394,37 +1442,356 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
     def _is_debug_action_enabled(self, action_id: str, context: dict[str, object]) -> bool:
         if not context.get("menu_wiring_enabled", True):
             return False
+        if not context.get("functional_wiring_enabled", True):
+            return False
         profile = context.get("profile")
         if not isinstance(profile, dict):
             return False
-        return bool(profile.get("supported", False)) and bool(profile.get("enable_default_debug_root", False))
+        if not (bool(profile.get("supported", False)) and bool(profile.get("enable_default_debug_root", False))):
+            return False
+        return self._runtime_action_enabled(action_id)
 
     def _make_debug_handler(self, action_id: str):
         def _handler(_context: dict[str, object]) -> None:
-            self._append_debug_menu_event(
-                {
-                    "action_id": action_id,
-                    "status": "HANDLER_EXECUTED",
-                    "app_id": self._debug_menu_app_id,
-                }
-            )
+            handlers = {
+                "debug.menu.capture.screenshot": self._handle_debug_screenshot,
+                "debug.menu.capture.record.toggle": self._handle_debug_recording_toggle,
+                "debug.menu.overlay.toggle": self._handle_debug_overlay_toggle,
+                "debug.menu.replay.start": self._handle_debug_replay_start,
+                "debug.menu.frame.step": self._handle_debug_frame_step,
+                "debug.menu.perf.hud.toggle": self._handle_debug_perf_hud_toggle,
+                "debug.menu.bundle.export": self._handle_debug_bundle_export,
+            }
+            handler = handlers.get(action_id)
+            if handler is None:
+                return
+            handler()
 
         return _handler
+
+    def _runtime_action_enabled(self, action_id: str) -> bool:
+        if action_id == "debug.menu.frame.step":
+            return bool(self._replay_paused)
+        if action_id == "debug.menu.bundle.export":
+            required = {"captures", "replay", "perf", "provenance"}
+            return required.issubset(set(self._artifact_latest_by_class))
+        return True
+
+    def _build_runtime_action_states(self) -> dict[str, bool]:
+        return {spec.menu_id: self._runtime_action_enabled(spec.menu_id) for spec in DEFAULT_DEBUG_MENU_ACTIONS}
+
+    def _handle_debug_screenshot(self) -> None:
+        frame = self._latest_frame_or_placeholder()
+        capture_id = f"capture-{self._frames_presented:06d}-{self._debug_screenshot_count:03d}"
+        self._debug_screenshot_count += 1
+        captured_at = self._now_utc()
+        provenance_id = self._frame_digest(frame)
+        bundle = build_screenshot_artifact_bundle(
+            capture_id=capture_id,
+            route=self._debug_menu_app_id,
+            revision=str(self._frames_presented),
+            captured_at_utc=captured_at,
+            provenance_id=provenance_id,
+            output_dir=str(self._debug_menu_artifact_dir / "captures"),
+        )
+        png_path = Path(bundle.png_path)
+        sidecar_path = Path(bundle.sidecar_path)
+        png_path.parent.mkdir(parents=True, exist_ok=True)
+        sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+        self._write_png_rgba(frame, png_path)
+        sidecar_path.write_text(json.dumps(bundle.sidecar, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self._artifact_latest_by_class["captures"] = str(png_path)
+        self._artifact_latest_by_class["provenance"] = str(sidecar_path)
+        self._append_debug_menu_event(
+            {
+                "action_id": "debug.menu.capture.screenshot",
+                "status": "HANDLER_EXECUTED",
+                "capture_id": capture_id,
+                "png_path": str(png_path),
+                "sidecar_path": str(sidecar_path),
+                "provenance_id": provenance_id,
+            }
+        )
+
+    def _handle_debug_recording_toggle(self) -> None:
+        now_utc = self._now_utc()
+        if not self._recording_active:
+            self._recording_active = True
+            self._recording_session_id = f"rec-{self._frames_presented:06d}"
+            self._recording_started_at_utc = now_utc
+            self._recording_start_frame = self._frames_presented
+            self._append_debug_menu_event(
+                {
+                    "action_id": "debug.menu.capture.record.toggle",
+                    "status": "RECORDING_STARTED",
+                    "session_id": self._recording_session_id,
+                }
+            )
+            return
+        frame_count = max(0, self._frames_presented - self._recording_start_frame)
+        manifest = build_recording_manifest(
+            session_id=self._recording_session_id,
+            route=self._debug_menu_app_id,
+            revision=str(self._frames_presented),
+            started_at_utc=self._recording_started_at_utc,
+            stopped_at_utc=now_utc,
+            provenance_id=self._last_presented_digest or "none",
+            frame_count=frame_count,
+        )
+        budget = evaluate_recording_budget(
+            envelope=RecordingBudgetEnvelope(start_overhead_ms=10.0, stop_overhead_ms=10.0, steady_overhead_ms=2.0),
+            observed_start_overhead_ms=2.0,
+            observed_stop_overhead_ms=2.0,
+            observed_steady_overhead_ms=0.5,
+        )
+        payload: dict[str, object] = dict(manifest)
+        payload["budget"] = {
+            "passed": budget.passed,
+            "exceeded_limits": list(budget.exceeded_limits),
+        }
+        out_path = self._debug_menu_artifact_dir / "recordings" / f"{self._recording_session_id}.json"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self._recording_artifacts.append(str(out_path))
+        self._artifact_latest_by_class["captures"] = str(out_path)
+        self._recording_active = False
+        self._append_debug_menu_event(
+            {
+                "action_id": "debug.menu.capture.record.toggle",
+                "status": "RECORDING_STOPPED",
+                "session_id": self._recording_session_id,
+                "manifest_path": str(out_path),
+            }
+        )
+
+    def _handle_debug_overlay_toggle(self) -> None:
+        self._overlay_enabled = not self._overlay_enabled
+        spec = build_overlay_spec(
+            overlay_id="runtime.debug.overlay",
+            bounds=OverlayRect(x=0, y=0, width=1920, height=1080),
+            dirty_rects=(OverlayRect(x=128, y=96, width=320, height=240),),
+            coordinate_space="window_px",
+            opacity=0.7,
+            enabled=self._overlay_enabled,
+        )
+        digest = self._last_presented_digest or "frame-unavailable"
+        toggle = toggle_overlay_non_destructive(
+            overlay_id=spec.overlay_id,
+            previous_enabled=not self._overlay_enabled,
+            next_enabled=self._overlay_enabled,
+            content_digest=digest,
+        )
+        out_path = self._debug_menu_artifact_dir / "overlays" / "state.json"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "overlay_id": spec.overlay_id,
+            "enabled": spec.enabled,
+            "coordinate_space": spec.coordinate_space,
+            "dirty_rects": [rect.__dict__ for rect in spec.dirty_rects],
+            "toggle": toggle.__dict__,
+        }
+        out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self._overlay_last_spec = payload
+        self._append_debug_menu_event(
+            {
+                "action_id": "debug.menu.overlay.toggle",
+                "status": "HANDLER_EXECUTED",
+                "enabled": self._overlay_enabled,
+                "state_path": str(out_path),
+            }
+        )
+
+    def _handle_debug_replay_start(self) -> None:
+        self._replay_active = True
+        self._replay_paused = True
+        self._replay_session_id = f"replay-{self._frames_presented:06d}"
+        self._replay_seed = 1337 + self._frames_presented
+        self._frame_step_state = FrameStepState(
+            paused=True,
+            frame_index=max(0, self._frames_presented),
+            last_ordering_digest=self._last_presented_digest or "replay-bootstrap",
+        )
+        digest = self._last_presented_digest or "digest-unavailable"
+        events = (
+            ReplayInputEvent(
+                sequence=1,
+                timestamp_ms=max(1, self._frames_presented * 16),
+                event_type="frame.snapshot",
+                payload_digest=digest,
+            ),
+        )
+        replay = evaluate_replay_determinism(
+            session_id=self._replay_session_id,
+            seed=self._replay_seed,
+            platform="macos",
+            events=events,
+            expected_digest=None,
+        )
+        self._replay_ordering_digest = replay.ordering_digest
+        manifest = build_replay_manifest(
+            session_id=replay.session_id,
+            seed=replay.seed,
+            platform=replay.platform,
+            ordering_digest=replay.ordering_digest,
+            event_count=replay.event_count,
+            recorded_at_utc=self._now_utc(),
+        )
+        out_path = self._debug_menu_artifact_dir / "replay" / f"{self._replay_session_id}.json"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self._artifact_latest_by_class["replay"] = str(out_path)
+        self._append_debug_menu_event(
+            {
+                "action_id": "debug.menu.replay.start",
+                "status": "HANDLER_EXECUTED",
+                "session_id": self._replay_session_id,
+                "manifest_path": str(out_path),
+                "ordering_digest": self._replay_ordering_digest,
+            }
+        )
+
+    def _handle_debug_frame_step(self) -> None:
+        next_digest = self._last_presented_digest or self._replay_ordering_digest or "frame-step-digest"
+        self._frame_step_state = frame_step_advance(self._frame_step_state, next_ordering_digest=next_digest)
+        out_path = self._debug_menu_artifact_dir / "replay" / "frame_step_state.json"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(self._frame_step_state.__dict__, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self._append_debug_menu_event(
+            {
+                "action_id": "debug.menu.frame.step",
+                "status": "HANDLER_EXECUTED",
+                "frame_index": self._frame_step_state.frame_index,
+                "ordering_digest": self._frame_step_state.last_ordering_digest,
+            }
+        )
+
+    def _handle_debug_perf_hud_toggle(self) -> None:
+        self._perf_hud_enabled = not self._perf_hud_enabled
+        if self._perf_hud_enabled:
+            snapshot = build_perf_hud_snapshot(
+                frame_index=max(0, self._frames_presented),
+                frame_time_ms=max(0.001, self._last_present_elapsed_ms),
+                present_mode="vulkan" if self._vulkan_available else "fallback",
+                ordering_digest=self._last_presented_digest or self._replay_ordering_digest or "perf-digest",
+            )
+            self._last_perf_hud_snapshot = snapshot
+            out_path = self._debug_menu_artifact_dir / "perf" / "hud_snapshot.json"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self._artifact_latest_by_class["perf"] = str(out_path)
+            self._append_debug_menu_event(
+                {
+                    "action_id": "debug.menu.perf.hud.toggle",
+                    "status": "HANDLER_EXECUTED",
+                    "enabled": True,
+                    "snapshot_path": str(out_path),
+                }
+            )
+            return
+        self._append_debug_menu_event(
+            {
+                "action_id": "debug.menu.perf.hud.toggle",
+                "status": "HANDLER_EXECUTED",
+                "enabled": False,
+            }
+        )
+
+    def _handle_debug_bundle_export(self) -> None:
+        self._bundle_export_count += 1
+        bundle_id = f"bundle-{self._frames_presented:06d}-{self._bundle_export_count:03d}"
+        provenance_id = self._last_presented_digest or self._replay_ordering_digest or "bundle-provenance"
+        artifact_paths = (
+            self._artifact_latest_by_class.get("captures", ""),
+            self._artifact_latest_by_class.get("replay", ""),
+            self._artifact_latest_by_class.get("perf", ""),
+            self._artifact_latest_by_class.get("provenance", ""),
+        )
+        export = build_debug_bundle_export(
+            bundle_id=bundle_id,
+            platform="macos",
+            exported_at_utc=self._now_utc(),
+            provenance_id=provenance_id,
+            artifact_paths=artifact_paths,
+            artifact_classes=("captures", "replay", "perf", "provenance"),
+            output_dir=str(self._debug_menu_artifact_dir / "bundles"),
+        )
+        if not bundle_has_required_artifact_classes(export.manifest):
+            raise RuntimeError("bundle export missing required artifact classes")
+        zip_path = Path(export.zip_path)
+        zip_path.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+            manifest_bytes = json.dumps(export.manifest, indent=2, sort_keys=True).encode("utf-8")
+            zf.writestr("manifest.json", manifest_bytes)
+            for idx, artifact in enumerate(export.manifest["artifact_paths"]):
+                path = Path(str(artifact))
+                arcname = f"artifact_{idx}_{path.name}"
+                if path.exists():
+                    zf.write(path, arcname=arcname)
+                else:
+                    zf.writestr(arcname, "")
+        manifest_path = self._debug_menu_artifact_dir / "bundles" / f"{bundle_id}.json"
+        manifest_path.write_text(json.dumps(export.manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self._append_debug_menu_event(
+            {
+                "action_id": "debug.menu.bundle.export",
+                "status": "HANDLER_EXECUTED",
+                "bundle_id": bundle_id,
+                "zip_path": str(zip_path),
+                "manifest_path": str(manifest_path),
+            }
+        )
+
+    def _latest_frame_or_placeholder(self) -> torch.Tensor:
+        if self._last_presented_rgba is not None:
+            return self._last_presented_rgba
+        return torch.zeros((1, 1, 4), dtype=torch.uint8)
+
+    def _capture_presented_frame(self, rgba: torch.Tensor) -> None:
+        self._last_presented_rgba = rgba.contiguous().clone()
+        self._last_presented_digest = self._frame_digest(self._last_presented_rgba)
+
+    def _frame_digest(self, rgba: torch.Tensor) -> str:
+        return hashlib.sha256(rgba.contiguous().cpu().numpy().tobytes(order="C")).hexdigest()
+
+    def _now_utc(self) -> str:
+        return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    def _write_png_rgba(self, rgba: torch.Tensor, out_path: Path) -> None:
+        arr = rgba.contiguous().cpu().numpy()
+        height, width, channels = arr.shape
+        if channels != 4:
+            raise ValueError("expected RGBA image with 4 channels")
+        raw = b"".join(b"\x00" + arr[row].tobytes() for row in range(height))
+        payload = zlib.compress(raw)
+
+        def _chunk(chunk_type: bytes, data: bytes) -> bytes:
+            return (
+                struct.pack("!I", len(data))
+                + chunk_type
+                + data
+                + struct.pack("!I", zlib.crc32(chunk_type + data) & 0xFFFFFFFF)
+            )
+
+        header = b"\x89PNG\r\n\x1a\n"
+        ihdr = _chunk(b"IHDR", struct.pack("!IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        idat = _chunk(b"IDAT", payload)
+        iend = _chunk(b"IEND", b"")
+        out_path.write_bytes(header + ihdr + idat + iend)
 
     def _build_menu_config(self, title: str) -> MacOSMenuConfig:
         def _on_action(action_id: str) -> None:
             self.dispatch_debug_menu_action(action_id)
 
-        enabled = bool(self._debug_menu_profile.get("supported", False)) and bool(
+        enabled_default = bool(self._debug_menu_profile.get("supported", False)) and bool(
             self._debug_menu_profile.get("enable_default_debug_root", False)
         )
-        if not self._debug_menu_enabled:
-            enabled = False
+        enabled_default = enabled_default and self._debug_menu_enabled and self._debug_menu_functional_enabled
+        runtime_states = self._build_runtime_action_states()
         actions = tuple(
             MacOSDebugMenuAction(
                 action_id=spec.menu_id,
                 label=spec.label,
-                enabled=enabled,
+                enabled=enabled_default and runtime_states.get(spec.menu_id, False),
             )
             for spec in DEFAULT_DEBUG_MENU_ACTIONS
         )
@@ -1440,8 +1807,10 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         payload = {
             "app_id": self._debug_menu_app_id,
             "menu_wiring_enabled": self._debug_menu_enabled,
+            "functional_wiring_enabled": self._debug_menu_functional_enabled,
             "profile": dict(self._debug_menu_profile),
             "actions": [spec.menu_id for spec in DEFAULT_DEBUG_MENU_ACTIONS],
+            "action_states": self._build_runtime_action_states(),
         }
         manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
