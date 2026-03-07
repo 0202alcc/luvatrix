@@ -6043,7 +6043,7 @@
       "title": "[CLOSEOUT HARNESS] Define app policy compatibility closeout metric and evidence harness",
       "task_type": "closeout_harness",
       "milestone_id": "A-037",
-      "status": "Integration Ready",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:A-037",
@@ -6053,7 +6053,22 @@
       "notes": [
         "[CLOSEOUT HARNESS] Quantitative go/no-go criteria for manifest policy and compatibility gates.",
         "Phase policy: macOS-first cut. Non-mac adapters/paths must be explicit stubs/capability-declared (not implicit/undefined) to keep contract cross-platform-safe. Milestone closeout is Go/No-Go in macOS context only, with planned reopen for expanded platform support."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 1500,
+        "output_tokens": 620,
+        "wall_time_sec": 420,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-2901",
