@@ -2839,7 +2839,7 @@
       ],
       "start_week": 50,
       "end_week": 52,
-      "status": "Planned",
+      "status": "Complete",
       "task_ids": [
         "T-4200",
         "T-4201",
