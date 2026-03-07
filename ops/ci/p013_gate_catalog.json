@@ -1,0 +1,29 @@
+{
+  "milestone_id": "P-013",
+  "version": "1",
+  "gates": [
+    {
+      "id": "gateflow-links",
+      "owner": "team:platform-ci",
+      "required_command": "PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py",
+      "pass_criteria": "validation: PASS"
+    },
+    {
+      "id": "closeout-packet",
+      "owner": "team:release",
+      "required_command": "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-013",
+      "pass_criteria": "validation: PASS"
+    },
+    {
+      "id": "non-regression-p026",
+      "owner": "team:platform-ci",
+      "required_command": "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+      "pass_criteria": "validation: PASS (evidence)"
+    }
+  ],
+  "escalation_path": [
+    "open incident in backlog_misc.json with source_milestone_id=P-013",
+    "reopen failed task to Verification Review via reopen_on_ci_failure.py",
+    "assign remediation owner in execution board before next gate run"
+  ]
+}
