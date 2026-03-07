@@ -1,0 +1,171 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+def _seed_planning_tree(root: Path) -> None:
+    planning = root / "ops" / "planning"
+    (planning / "gantt").mkdir(parents=True, exist_ok=True)
+    (planning / "agile").mkdir(parents=True, exist_ok=True)
+    (planning / "closeout").mkdir(parents=True, exist_ok=True)
+
+    schedule = {
+        "milestones": [
+            {
+                "id": "F-041",
+                "name": "Core Domain Extraction",
+                "emoji": "🧱",
+                "start_week": 1,
+                "end_week": 1,
+                "status": "In Progress",
+                "task_ids": ["T-4101"],
+                "success_criteria": ["Parity"],
+                "closeout_criteria": {
+                    "metric_id": "f-041-closeout-v1",
+                    "metric_description": "desc",
+                    "score_formula": "weighted_sum",
+                    "score_components": ["correctness"],
+                    "go_threshold": 85,
+                    "hard_no_go_conditions": ["none"],
+                    "required_evidence": ["ops/planning/closeout/f-041_closeout.md"],
+                    "required_commands": ["uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-041"],
+                    "rubric_version": "closeout_rubric_v1",
+                },
+                "ci_required_checks": ["uv run python ops/planning/agile/validate_milestone_task_links.py"],
+            }
+        ]
+    }
+    tasks_master = {
+        "tasks": [
+            {
+                "id": "T-4101",
+                "title": "Extract planning domain services",
+                "milestone_id": "F-041",
+                "status": "Intake",
+                "depends_on": [],
+                "board_refs": ["milestone:F-041"],
+            }
+        ]
+    }
+    tasks_archived = {"tasks": []}
+    boards = {
+        "board_types": {"execution": {"description": "Milestone execution board"}},
+        "framework_templates": {
+            "gateflow_v1": {
+                "description": "GateFlow",
+                "status_columns": [
+                    "Intake",
+                    "Success Criteria Spec",
+                    "Safety Tests Spec",
+                    "Implementation Tests Spec",
+                    "Edge Case Tests Spec",
+                    "Prototype Stage 1",
+                    "Prototype Stage 2+",
+                    "Verification Review",
+                    "Integration Ready",
+                    "Done",
+                    "Blocked",
+                ],
+                "wip_limits": {"Prototype Combined": 2, "Verification Review": 1},
+            }
+        },
+        "default_framework_template": "gateflow_v1",
+        "render_defaults": {
+            "status_columns": ["Backlog", "Ready", "In Progress", "Review", "Done", "Blocked"]
+        },
+        "boards": [
+            {
+                "id": "milestone:F-041",
+                "title": "F-041",
+                "type": "execution",
+                "source_filter": {"milestone_id": "F-041"},
+                "framework_template": "gateflow_v1",
+            }
+        ],
+    }
+    backlog = {"items": []}
+
+    (planning / "gantt" / "milestone_schedule.json").write_text(json.dumps(schedule), encoding="utf-8")
+    (planning / "agile" / "tasks_master.json").write_text(json.dumps(tasks_master), encoding="utf-8")
+    (planning / "agile" / "tasks_archived.json").write_text(json.dumps(tasks_archived), encoding="utf-8")
+    (planning / "agile" / "boards_registry.json").write_text(json.dumps(boards), encoding="utf-8")
+    (planning / "agile" / "backlog_misc.json").write_text(json.dumps(backlog), encoding="utf-8")
+    (planning / "closeout" / "f-041_closeout.md").write_text(
+        "\n".join(
+            [
+                "# Objective Summary",
+                "# Task Final States",
+                "# Evidence",
+                "# Determinism",
+                "# Protocol Compatibility",
+                "# Modularity",
+                "# Residual Risks",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def _run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+
+
+def test_planning_api_get_with_root_reads_custom_tree(tmp_path: Path) -> None:
+    _seed_planning_tree(tmp_path)
+    proc = _run(
+        [
+            sys.executable,
+            "ops/planning/api/planning_api.py",
+            "GET",
+            "/milestones/F-041",
+            "--root",
+            str(tmp_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["id"] == "F-041"
+    assert payload["task_ids"] == ["T-4101"]
+
+
+def test_planning_api_rejects_gateflow_stage_skips(tmp_path: Path) -> None:
+    _seed_planning_tree(tmp_path)
+    proc = _run(
+        [
+            sys.executable,
+            "ops/planning/api/planning_api.py",
+            "PATCH",
+            "/tasks/T-4101",
+            "--body",
+            '{"status":"Prototype Stage 1"}',
+            "--root",
+            str(tmp_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+    )
+
+    assert proc.returncode == 2
+    assert "cannot skip GateFlow stages" in proc.stderr
+
+
+def test_validate_closeout_packet_supports_root(tmp_path: Path) -> None:
+    _seed_planning_tree(tmp_path)
+    proc = _run(
+        [
+            sys.executable,
+            "ops/planning/api/validate_closeout_packet.py",
+            "--milestone-id",
+            "F-041",
+            "--root",
+            str(tmp_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "validation: PASS" in proc.stdout
