@@ -19,3 +19,8 @@ wheels/
 
 # Generated perf artifacts (ephemeral)
 artifacts/perf/.generated/
+
+# Local transient runtime/test caches
+.font-cache/
+.mpl-cache/
+tmp/

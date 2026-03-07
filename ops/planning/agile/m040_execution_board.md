@@ -9,7 +9,7 @@ Framework: `gateflow_v1`
 `T-4000 -> T-4001 -> T-4002 -> (T-4003 + T-4004) -> T-4005`
 
 ## Current Placement
-- `Intake`: `T-4000`, `T-4001`, `T-4002`, `T-4003`, `T-4004`, `T-4005`
+- `Intake`: none
 - `Success Criteria Spec`: none
 - `Safety Tests Spec`: none
 - `Implementation Tests Spec`: none
@@ -18,11 +18,11 @@ Framework: `gateflow_v1`
 - `Prototype Stage 2+`: none
 - `Verification Review`: none
 - `Integration Ready`: none
-- `Done`: none
+- `Done`: `T-4000`, `T-4001`, `T-4002`, `T-4003`, `T-4004`, `T-4005`
 - `Blocked`: none
 
 ## Evidence Plan
 1. `uv run python ops/planning/agile/validate_milestone_task_links.py`
 2. `uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-040`
-3. Task PR links `T-4000..T-4005` merged into milestone branch.
-4. Milestone PR merged to `main` with required checks passing.
+3. Task PR links `T-4000..T-4005` completed and reconciled in closeout packet.
+4. Milestone merged to `main` with required checks passing.
