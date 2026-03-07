@@ -6,7 +6,7 @@ Framework: `gateflow_v1`
 
 ## Intake
 - [x] `T-3300` [CLOSEOUT HARNESS] Define R-040 closeout metric + evidence contract
-- [ ] `T-3301` Implement real screenshot action pipeline
+- [x] `T-3301` Implement real screenshot action pipeline
 - [ ] `T-3302` Implement real recording start/stop pipeline
 - [ ] `T-3303` Implement overlay runtime toggles (bounds/dirty-rect/coordinates)
 - [ ] `T-3304` Implement replay start action (seed/session-based)
