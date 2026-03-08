@@ -6,6 +6,7 @@ Name: **Planes v2 Schema + Cross-File Validator Layer**
 ## GateFlow Columns
 
 ### Intake
+- _None_
 
 ### Success Criteria Spec
 - _None_
@@ -26,11 +27,11 @@ Name: **Planes v2 Schema + Cross-File Validator Layer**
 - _None_
 
 ### Verification Review
-- [ ] Training evidence matrix completed (project id, commands, deterministic artifacts, per-scope verdicts)
+- [x] Training evidence matrix completed (project id, commands, deterministic artifacts, per-scope verdicts)
 - _None_
 
 ### Integration Ready
-- [ ] Training Go blockers reviewed and clear (or explicitly waived)
+- [x] Training Go blockers reviewed and clear (or explicitly waived)
 
 ### Done
 - `T-3420` [CLOSEOUT HARNESS] Define F-028 validator closeout metric and evidence harness
