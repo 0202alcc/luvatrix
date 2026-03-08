@@ -140,6 +140,58 @@ def render_diagnostics(result: ValidationResult) -> tuple[str, ...]:
     )
 
 
+def validate_visual_evidence_manifest(manifest: dict[str, Any], *, strict: bool = True) -> ValidationResult:
+    diagnostics: list[ValidationDiagnostic] = []
+    if not isinstance(manifest, dict):
+        raise PlanesValidationError("visual evidence manifest must be an object")
+
+    entries = manifest.get("entries")
+    if not isinstance(entries, list) or not entries:
+        diagnostics.append(
+            ValidationDiagnostic(
+                level="error",
+                code="evidence.entries.required",
+                message="entries must be a non-empty list",
+                path="entries",
+            )
+        )
+    else:
+        for idx, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                diagnostics.append(
+                    ValidationDiagnostic(
+                        level="error",
+                        code="evidence.entry.object",
+                        message="entry must be an object",
+                        path=f"entries[{idx}]",
+                    )
+                )
+                continue
+            _require_non_empty_str(entry.get("commit_sha"), f"entries[{idx}].commit_sha", diagnostics)
+            _require_non_empty_str(entry.get("command"), f"entries[{idx}].command", diagnostics)
+            _require_non_empty_str(entry.get("timestamp"), f"entries[{idx}].timestamp", diagnostics)
+            _require_non_empty_str(entry.get("scenario"), f"entries[{idx}].scenario", diagnostics)
+            if not isinstance(entry.get("seed"), int):
+                diagnostics.append(
+                    ValidationDiagnostic(
+                        level="error",
+                        code="evidence.entry.seed",
+                        message="seed must be an integer",
+                        path=f"entries[{idx}].seed",
+                    )
+                )
+            _require_non_empty_str(entry.get("artifact_path"), f"entries[{idx}].artifact_path", diagnostics)
+            _require_non_empty_str(entry.get("artifact_digest"), f"entries[{idx}].artifact_digest", diagnostics)
+            _require_non_empty_str(entry.get("sidecar_path"), f"entries[{idx}].sidecar_path", diagnostics)
+            _require_non_empty_str(entry.get("sidecar_digest"), f"entries[{idx}].sidecar_digest", diagnostics)
+
+    has_error = any(d.level == "error" for d in diagnostics)
+    if strict and has_error:
+        first = next(d for d in diagnostics if d.level == "error")
+        raise PlanesValidationError(f"{first.code}: {first.message} ({first.path})")
+    return ValidationResult(valid=not has_error, diagnostics=tuple(sorted(diagnostics, key=lambda d: (d.path, d.code))))
+
+
 def _validate_named_refs(items: list[dict[str, Any]], label: str, diagnostics: list[ValidationDiagnostic]) -> None:
     if not isinstance(items, list):
         diagnostics.append(
