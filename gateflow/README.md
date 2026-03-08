@@ -38,8 +38,11 @@ The standalone CLI exposes the extracted command groups:
 - `validate`
 - `api`
 - `render`
+- `import-luvatrix`
 - `milestones`
 - `tasks`
 - `boards`
 - `frameworks`
 - `backlog`
+
+`import-luvatrix` supports `--check` to emit deterministic drift output and non-zero exit when `.gateflow/*` diverges from `ops/planning/*`.
