@@ -4,15 +4,18 @@ Fast command reference for milestone/task/board/backlog operations.
 
 ## 0) Safe defaults
 
-1. Dry-run first (no `--apply`).
-2. Re-run with `--apply` once output looks correct.
-3. Run `--apply` only on `main` (`main:/ops/planning/*` is source of truth).
-4. API `--apply` auto-regenerates:
+1. Preferred command path is standalone `gateflow`:
+- `uv run gateflow --root <repo> ...` (Luvatrix wrapper)
+- `uvx --from ./gateflow gateflow --root <repo> ...` (direct standalone)
+2. Dry-run first when using legacy `planning_api.py` (`--apply` omitted).
+3. Re-run with `--apply` once output looks correct.
+4. Run `--apply` only on `main` (`main:/ops/planning/*` is source of truth).
+5. Legacy API `--apply` auto-regenerates:
 - `ops/planning/gantt/milestones_gantt.md`
 - `ops/planning/gantt/milestones_gantt.md` (text-only v1 artifact)
-5. Optional path override:
+6. Optional path override:
 - append `--root <repo-root>` to run against a non-default checkout/snapshot
-6. GateFlow guardrails:
+7. GateFlow guardrails:
 - no stage skipping
 - backward stage moves require `--force-with-reason`
 - WIP limits enforced from `ops/planning/agile/boards_registry.json` (`wip_limits`)
@@ -33,11 +36,17 @@ Letter taxonomy:
 ## 2) Read state
 
 ```bash
+uv run gateflow --root . api GET /milestones
+uv run gateflow --root . api GET /tasks
+uv run gateflow --root . api GET /boards
+uv run gateflow --root . api GET /frameworks
+uv run gateflow --root . api GET /backlog
+```
+
+Legacy compatibility path (deprecated):
+
+```bash
 uv run python ops/planning/api/planning_api.py GET /milestones
-uv run python ops/planning/api/planning_api.py GET /tasks
-uv run python ops/planning/api/planning_api.py GET /boards
-uv run python ops/planning/api/planning_api.py GET /frameworks
-uv run python ops/planning/api/planning_api.py GET /backlog
 ```
 
 ## 3) Create milestone + board (GateFlow)

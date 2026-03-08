@@ -62,7 +62,7 @@ Before planning or editing code, read:
    - `ops/planning/agile/backlog_misc.json` (misc backlog: carryover/unscoped/unattached)
    - `ops/planning/agile/boards_registry.json` (board definitions and formatting config)
    - `ops/planning/gantt/milestone_schedule.json` (milestones + `task_ids`)
-2. Use `ops/planning/api/planning_api.py` for milestone/task CRUD instead of manual JSON edits whenever possible.
+2. Use standalone `gateflow` command paths for milestone/task CRUD (`uv run gateflow --root <repo> api ...`) instead of manual JSON edits whenever possible.
 3. Every milestone must have a `task_ids` list (empty allowed for bootstrap/split states).
 4. Milestones should include `descriptions` (`string[]`) to record objective snapshots (especially across reopen cycles).
 5. New milestones must include non-empty `success_criteria` and `closeout_criteria` (quantitative Go/No-Go metric contract).
@@ -73,7 +73,7 @@ Before planning or editing code, read:
 9. Tasks should include `notes` (`string | string[]`) for architect/system handoff context and implementation outline details.
 10. Validate links with:
    - `uv run python ops/planning/agile/validate_milestone_task_links.py`
-11. On successful `planning_api.py --apply`, Gantt markdown and PNG are regenerated automatically.
+11. On successful planning writes (`gateflow api ...` or legacy `planning_api.py --apply`), Gantt markdown and PNG are regenerated automatically.
 12. Agile framework default is `Luvatrix GateFlow (gateflow_v1)` defined in `ops/planning/agile/boards_registry.json`.
 13. Milestone IDs use lettered schema: `<1-3 letters>-<3 digits>` where letters map to:
    - `A` app projects, `R` rendering backend, `F` first-party protocols/systems, `U` UI/UX tools, `P` project management, `X` other.
@@ -88,9 +88,9 @@ Before planning or editing code, read:
 18. Milestone CI profile:
    - `ci_required_checks` must list required commands/check suites for milestone gate and post-merge validation.
 
-## Planning API Usage (Required Flow)
-1. Always run API calls in dry-run first (no `--apply`).
-2. Re-run with `--apply` only after dry-run output is correct.
+## Planning Command Usage (Required Flow)
+1. Primary command path is standalone `gateflow` (for example: `uv run gateflow --root <repo> api GET /milestones`).
+2. Use legacy `planning_api.py` for dry-run/write-guard workflows that still require `--apply` semantics.
 3. `planning_api.py --apply` is restricted to `main` only (global source of truth protection).
 4. Use API endpoints for planning changes:
    - `/milestones` for milestone create/update/delete
@@ -107,7 +107,7 @@ Before planning or editing code, read:
 
 ## Planning Sync SOP (Across Branches)
 1. `main:/ops/planning/*` is the only canonical planning source of truth.
-2. Milestone branches may run planning API in dry-run mode for checks/previews.
+2. Milestone branches may run standalone `gateflow` reads and legacy planning API dry-run mode for checks/previews.
 3. All planning writes (`--apply`) must be executed on `main`.
 4. Workflow:
    - perform implementation on milestone branch,
@@ -177,7 +177,7 @@ Before planning or editing code, read:
    - `cost_components` (`context_load`, `reasoning_depth`, `code_edit_surface`, `validation_scope`, `iteration_risk`)
    - `cost_confidence` (`0..1`)
 2. Re-estimate before build stages using API:
-   - `uv run python ops/planning/api/planning_api.py PATCH /tasks/<task_id> --body '{...}' --reestimate-cost`
+   - `uv run python ops/planning/api/planning_api.py PATCH /tasks/<task_id> --body '{...}' --reestimate-cost` (legacy compatibility path)
 3. API auto-derives:
    - `cost_score` (`0..100`)
    - `cost_bucket` (`S|M|L|XL|XXL`)
