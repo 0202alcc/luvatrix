@@ -6,7 +6,6 @@ Name: **Planes v2 Schema + Cross-File Validator Layer**
 ## GateFlow Columns
 
 ### Intake
-- `T-3427` Add validator checks for required visual evidence artifacts
 
 ### Success Criteria Spec
 - _None_
@@ -39,6 +38,7 @@ Name: **Planes v2 Schema + Cross-File Validator Layer**
 - `T-3404` Implement cross-file invariant validator for manifest/plane/route/frame references
 - `T-3405` Define strict vs permissive mode policy and diagnostics contract
 - `T-3426` Define Planes v2 visual evidence schema + manifest contract
+- `T-3427` Add validator checks for required visual evidence artifacts
 
 ### Blocked
 - _None_

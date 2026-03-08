@@ -6687,6 +6687,13 @@
       "title": "Define Planes v2 visual evidence schema + manifest contract"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-028",
         "team:platform-ci",
@@ -6696,13 +6703,26 @@
         "T-3426",
         "T-3404"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO candidate: required visual evidence artifact matrix checks now enforced with strict validator failures.",
+        "received": true,
+        "received_at": "2026-03-08T21:30:25+00:00"
+      },
       "id": "T-3427",
       "milestone_id": "F-028",
       "notes": [
         "Validator must fail when required visual evidence artifacts are missing, invalid, or non-deterministic.",
         "Enforce artifact matrix coverage for screenshot, recording, replay digest, frame-step/perf HUD snapshots, and debug bundle manifest."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Add validator checks for required visual evidence artifacts"
     },
