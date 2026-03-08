@@ -27,6 +27,7 @@ from planning_storage import JsonPlanningStorage
 
 DEPRECATION_NOTICE = (
     "DEPRECATION: ops/planning/api/planning_api.py is a legacy compatibility endpoint.\n"
+    "Sunset date: 2026-06-30 (path planned for removal after migration window).\n"
     "Migrate to standalone commands:\n"
     "  - uvx --from ./gateflow gateflow --root <repo> api <METHOD> <PATH>\n"
     "  - uvx --from ./gateflow gateflow --root <repo> tasks update <TASK_ID> --body '{...}'\n"

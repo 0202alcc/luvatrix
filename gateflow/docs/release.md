@@ -1,10 +1,11 @@
-# Pre-Release Notes: `v0.1.0a1`
+# Pre-Release Notes: `v0.1.0a2`
 
 ## Scope
 
 - Extracted standalone `gateflow` package skeleton and full CLI module surface.
 - Added install paths for `uvx` and future `pipx` usage.
 - Ported CLI tests and snapshot fixtures into package-local test suite.
+- Added post-P047 hardening: wrapper deprecation path, continuity CI gate, and cleanup of legacy in-repo CLI internals.
 
 ## Publish Checklist
 
@@ -18,14 +19,14 @@ uv run --with build python -m build
 2. Smoke run from built wheel:
 
 ```bash
-UV_CACHE_DIR=../.uv-cache UV_TOOL_DIR=./.uv-tools uvx --from dist/gateflow-0.1.0a1-py3-none-any.whl gateflow --help
+UV_CACHE_DIR=../.uv-cache UV_TOOL_DIR=./.uv-tools uvx --from dist/gateflow-0.1.0a2-py3-none-any.whl gateflow --help
 ```
 
 3. Push Git tag:
 
 ```bash
-git tag -a gateflow-v0.1.0a1 -m "gateflow pre-release v0.1.0a1"
-git push origin gateflow-v0.1.0a1
+git tag -a gateflow-v0.1.0a2 -m "gateflow pre-release v0.1.0a2"
+git push origin gateflow-v0.1.0a2
 ```
 
 4. Publish install docs from:

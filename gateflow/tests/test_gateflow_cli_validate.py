@@ -109,3 +109,43 @@ def test_validate_all_aggregates_links_and_closeout(tmp_path: Path, capsys) -> N
     assert payload["error_type"] == "validation"
     assert payload["exit_code"] == 2
     assert any("missing closeout packet" in item for item in payload["errors"])
+
+
+def test_validate_all_passes_when_links_and_closeout_are_present(tmp_path: Path, capsys) -> None:
+    _seed(tmp_path)
+    _ = capsys.readouterr()
+    gateflow = tmp_path / ".gateflow"
+    _write_json(
+        gateflow / "milestones.json",
+        {
+            "items": [{"id": "P-044", "status": "Complete", "task_ids": ["T-4400"]}],
+            "updated_at": "2026-03-08",
+            "version": "gateflow_v1",
+        },
+    )
+    _write_json(
+        gateflow / "tasks.json",
+        {
+            "items": [{"id": "T-4400", "milestone_id": "P-044", "depends_on": []}],
+            "updated_at": "2026-03-08",
+            "version": "gateflow_v1",
+        },
+    )
+    (gateflow / "closeout" / "p-044_closeout.md").write_text(
+        "\n".join(
+            [
+                "# Objective Summary",
+                "# Task Final States",
+                "# Evidence",
+                "# Determinism",
+                "# Protocol Compatibility",
+                "# Modularity",
+                "# Residual Risks",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert main(["--root", str(tmp_path), "validate", "all"]) == 0
+    assert "validation: PASS (all)" in capsys.readouterr().out
