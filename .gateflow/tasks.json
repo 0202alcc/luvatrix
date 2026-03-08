@@ -6420,6 +6420,13 @@
       "title": "Implement parity suite for monolith vs split canonical equivalence"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:RF-030",
         "team:runtime",
@@ -6429,12 +6436,25 @@
         "T-3407",
         "T-3408"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: Runtime canonical-IR-only ingestion path validated and non-canonical direct paths remain disabled.",
+        "received": true,
+        "received_at": "2026-03-08T22:22:47+00:00"
+      },
       "id": "T-3410",
       "milestone_id": "RF-030",
       "notes": [
         "Remove/disable any runtime path that consumes non-canonical IR structures directly."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Integrate runtime to consume canonical IR only"
     },
