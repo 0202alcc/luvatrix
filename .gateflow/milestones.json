@@ -1,0 +1,3293 @@
+{
+  "baseline_start_date": "2026-02-23",
+  "items": [
+    {
+      "ci_required_checks": [
+        "uv run pytest tests -k \"debug_manifest or legacy_debug_conformance\" -q",
+        "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 90,
+        "hard_no_go_conditions": [
+          "legacy app conformance fails",
+          "app override removes mandatory debug fallback without policy approval",
+          "P-026 non-regression gates fail",
+          "non-mac behavior is undefined instead of explicit stub/capability declaration"
+        ],
+        "metric_description": "Compatibility-safe debug policy rollout score.",
+        "metric_id": "a-037-closeout-v1",
+        "required_commands": [
+          "uv run pytest tests -k \"debug_manifest or legacy_debug_conformance\" -q",
+          "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "manifest schema tests",
+          "legacy conformance suite",
+          "p026 non-regression evidence",
+          "macOS-first go/no-go evidence packet with explicit non-mac stub/capability matrix and reopen plan note"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "legacy_compat",
+          "policy_correctness",
+          "p026_non_regression"
+        ],
+        "score_formula": "0.4*legacy_compat + 0.3*policy_correctness + 0.3*p026_non_regression"
+      },
+      "descriptions": [
+        "macOS-first app manifest debug policy controls with backward compatibility and P-026 non-regression gates; non-mac policies are explicit capability stubs until expansion."
+      ],
+      "emoji": "\ud83e\udde9",
+      "end_week": 35,
+      "id": "A-037",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "app policy compatibility milestone created"
+        },
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "macOS-first phase; close with planned reopen for cross-platform expansion"
+        },
+        {
+          "date": "2026-03-06",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "GO in macOS scope; planned reopen remains for Windows/Linux/device expansion"
+        }
+      ],
+      "name": "App-Configurable Debug Policy + Compatibility",
+      "start_week": 32,
+      "status": "Complete",
+      "success_criteria": [
+        "Existing apps continue to run unchanged by default in macOS scope.",
+        "Manifest-level debug policy is version-gated/safe and encodes explicit non-mac capability stub behavior.",
+        "Milestone Go/No-Go is macOS-context only in this phase, then close with planned reopen for device/software expansion."
+      ],
+      "task_ids": [
+        "T-2923",
+        "T-2910"
+      ]
+    },
+    {
+      "acceptance_checks": {
+        "T-1101": "Schema contract includes milestone/task/dependency/owner fields with strict status validation; tests prove canonical parse/load and first-party type export.",
+        "T-1102": "Gantt renderer produces deterministic axis/status/dependency output with collapsed/expanded lanes and is callable from first-party planning modules.",
+        "T-1103": "Agile renderer produces deterministic board columns/swimlanes/blocker views and has no third-party UI runtime dependency.",
+        "T-1104": "Filtering/zoom/scroll/click-through interactions are deterministic, clamped, and compatible with first-party planning state types.",
+        "T-1105": "Export adapters produce ASCII/Markdown/PNG artifacts and Discord payload manifests from first-party planning models.",
+        "T-1106": "Validation suite enforces dependency integrity and render consistency; App Protocol compliance evidence is required to clear completion."
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id APU-020"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone APU-020.",
+        "metric_id": "apu-020-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id APU-020",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/apu-020_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Must comply with first-party Luvatrix App Protocol contracts."
+      ],
+      "emoji": "\ud83e\udded",
+      "end_week": 13,
+      "id": "APU-020",
+      "legacy_id": "M-011",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-28",
+          "event": "closed",
+          "framework": "kanban_v1",
+          "note": "initial sprint closure"
+        },
+        {
+          "date": "2026-03-01",
+          "event": "reopened",
+          "framework": "kanban_v1",
+          "note": "reopened for additional compliance work"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "framework migration cycle"
+        }
+      ],
+      "name": "Native Gantt + Agile visualization in Luvatrix",
+      "start_week": 10,
+      "status": "Complete",
+      "success_criteria": [
+        "Must comply with first-party Luvatrix App Protocol contracts.",
+        "Schema, renderer, interaction, export, and validation flows must remain first-party module driven and deterministic.",
+        "Do not mark complete without task-level App Protocol compliance evidence plus passing test/demo evidence."
+      ],
+      "task_ids": [
+        "T-1101",
+        "T-1102",
+        "T-1103",
+        "T-1104",
+        "T-1105",
+        "T-1106",
+        "T-1107",
+        "T-1108",
+        "T-1109",
+        "T-1110",
+        "T-1111",
+        "T-1112",
+        "T-1113"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id ARU-016"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone ARU-016.",
+        "metric_id": "aru-016-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id ARU-016",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/aru-016_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Deliver milestone outcome: Cross-platform full-suite interactive generalization."
+      ],
+      "emoji": "\ud83c\udf10",
+      "end_week": 4,
+      "id": "ARU-016",
+      "legacy_id": "M-007",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ],
+      "name": "Cross-platform full-suite interactive generalization",
+      "start_week": 1,
+      "status": "In Progress",
+      "task_ids": [
+        "T-701",
+        "T-702",
+        "T-703",
+        "T-704"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id AU-018"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone AU-018.",
+        "metric_id": "au-018-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id AU-018",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/au-018_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Deliver milestone outcome: Data workspace UI (calendar app)."
+      ],
+      "emoji": "\ud83d\uddd3\ufe0f",
+      "end_week": 9,
+      "id": "AU-018",
+      "legacy_id": "M-009",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ],
+      "name": "Data workspace UI (calendar app)",
+      "start_week": 8,
+      "status": "Planned",
+      "task_ids": [
+        "T-901",
+        "T-902"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id AU-019"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone AU-019.",
+        "metric_id": "au-019-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id AU-019",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/au-019_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Deliver milestone outcome: Custom marketbook dynamic plotting system (integrated with U-021 plots module)."
+      ],
+      "emoji": "\ud83d\udcc8",
+      "end_week": 12,
+      "id": "AU-019",
+      "legacy_id": "M-010",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "integrated dependency path added for U-021 plot module outputs"
+        }
+      ],
+      "name": "Custom marketbook dynamic plotting system (built on U-021 plot foundations)",
+      "start_week": 9,
+      "status": "Planned",
+      "task_ids": [
+        "T-1001",
+        "T-1002",
+        "T-1004"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-001"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone F-001.",
+        "metric_id": "f-001-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-001",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-001_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "completed_on": "2026-02-23",
+      "descriptions": [
+        "Deliver milestone outcome: Core package transition and repository cleanup."
+      ],
+      "emoji": "\ud83e\uddec",
+      "end_week": 1,
+      "id": "F-001",
+      "legacy_id": "H-001",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-23",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ],
+      "name": "Core package transition and repository cleanup",
+      "start_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H001-01",
+        "A-H001-02"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-003"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone F-003.",
+        "metric_id": "f-003-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-003",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-003_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "completed_on": "2026-02-24",
+      "descriptions": [
+        "Deliver milestone outcome: Runtime safety controller and audit pipeline hardening."
+      ],
+      "emoji": "\u26a1",
+      "end_week": 1,
+      "id": "F-003",
+      "legacy_id": "H-003",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-24",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ],
+      "name": "Runtime safety controller and audit pipeline hardening",
+      "start_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H003-01",
+        "A-H003-02"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-011"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone F-011.",
+        "metric_id": "f-011-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-011",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-011_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "completed_on": "2026-03-03",
+      "descriptions": [
+        "Deliver milestone outcome: App protocol docs finalized."
+      ],
+      "emoji": "\ud83d\udcdc",
+      "end_week": 3,
+      "id": "F-011",
+      "legacy_id": "M-002",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "closed",
+          "framework": "kanban_v1",
+          "note": "documentation sprint closed"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "reopened for GateFlow-aligned continuation"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "performance follow-up scope opened for incremental present and sensor/runtime semantics"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "follow-up scope complete; tasks T-2701/T-2702/T-2703 done and merged to main"
+        }
+      ],
+      "name": "App protocol docs finalized",
+      "start_week": 2,
+      "status": "Complete",
+      "task_ids": [
+        "T-201",
+        "T-202",
+        "T-203",
+        "T-204",
+        "T-205",
+        "T-206",
+        "T-207",
+        "T-208",
+        "T-209",
+        "T-210",
+        "T-211",
+        "T-212",
+        "T-213",
+        "T-214",
+        "T-215",
+        "T-216",
+        "T-217",
+        "T-218",
+        "T-219",
+        "T-2701",
+        "T-2702",
+        "T-2703"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-014"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone F-014.",
+        "metric_id": "f-014-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-014",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-014_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Deliver milestone outcome: Audit retention lifecycle."
+      ],
+      "emoji": "\ud83d\udee1\ufe0f",
+      "end_week": 7,
+      "id": "F-014",
+      "legacy_id": "M-005",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ],
+      "name": "Audit retention lifecycle",
+      "start_week": 5,
+      "status": "Planned",
+      "task_ids": [
+        "T-501",
+        "T-502",
+        "T-503"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-024"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone F-024.",
+        "metric_id": "f-024-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-024",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-024_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Deliver milestone outcome: Sensor backend performance modernization."
+      ],
+      "emoji": "\ud83d\udef0\ufe0f",
+      "end_week": 17,
+      "id": "F-024",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "planned from architect performance directives"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "completed and verified on main with required checks"
+        }
+      ],
+      "name": "Sensor backend performance modernization",
+      "start_week": 14,
+      "status": "Complete",
+      "task_ids": [
+        "T-2501",
+        "T-2502",
+        "T-2503",
+        "T-2504"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run pytest tests -k \"planes_v2_spec or planes_v2_contract\" -q",
+        "uv run --with pytest pytest tests -k \"planes_v2 and (debug_screenshot or debug_recording or debug_overlay or debug_replay or debug_frame_step or debug_bundle)\" -q",
+        "PYTHONPATH=. uv run python ops/ci/r040_macos_debug_menu_functional_smoke.py"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "missing canonical basis alias policy",
+          "missing deterministic runtime rule definitions",
+          "missing milestone ci_required_checks"
+        ],
+        "metric_description": "Foundation spec completeness + determinism policy readiness score.",
+        "metric_id": "f-027-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "spec docs",
+          "planning task evidence",
+          "validator outputs",
+          "artifact_manifest.json with deterministic provenance fields",
+          "screenshots with sidecars",
+          "recording manifests",
+          "replay manifests and digest outputs",
+          "frame-step and perf HUD snapshots",
+          "debug bundle export manifest"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "spec_completeness",
+          "determinism_coverage",
+          "ci_closeout_readiness"
+        ],
+        "score_formula": "0.4*spec_completeness + 0.3*determinism_coverage + 0.3*ci_closeout_readiness"
+      },
+      "descriptions": [
+        "Productize Planes v2 split-file protocol with canonical basis and deterministic rules while preserving app API compatibility."
+      ],
+      "emoji": "\ud83e\uddf1",
+      "end_week": 17,
+      "id": "F-027",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "milestone created for planes v2 foundation"
+        }
+      ],
+      "name": "Planes v2 Protocol Foundation + File Layout Spec",
+      "start_week": 15,
+      "status": "Planned",
+      "success_criteria": [
+        "Split-file contract and canonical basis rules are frozen and documented.",
+        "Deterministic runtime rules are explicitly specified and testable.",
+        "Milestone CI profile and closeout scoring criteria are defined before implementation."
+      ],
+      "task_ids": [
+        "T-3400",
+        "T-3401",
+        "T-3402"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run pytest tests -k \"planes_schema_validation or planes_cross_file_invariants\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run --with pytest pytest tests -k \"planes_v2 and (debug_screenshot or debug_recording or debug_overlay or debug_replay or debug_frame_step or debug_bundle)\" -q",
+        "PYTHONPATH=. uv run python ops/ci/r040_macos_debug_menu_functional_smoke.py"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "any listed invariant lacks failing test",
+          "strict mode allows invalid cross-file state"
+        ],
+        "metric_description": "Validator coverage + strictness completeness score.",
+        "metric_id": "f-028-closeout-v1",
+        "required_commands": [
+          "uv run pytest tests -k \"planes_schema_validation or planes_cross_file_invariants\" -q"
+        ],
+        "required_evidence": [
+          "validator tests",
+          "fixture set",
+          "closeout packet",
+          "artifact_manifest.json with deterministic provenance fields",
+          "screenshots with sidecars",
+          "recording manifests",
+          "replay manifests and digest outputs",
+          "frame-step and perf HUD snapshots",
+          "debug bundle export manifest"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "invariant_coverage",
+          "strict_mode_enforcement",
+          "diagnostic_quality"
+        ],
+        "score_formula": "0.5*invariant_coverage + 0.3*strict_mode_enforcement + 0.2*diagnostic_quality"
+      },
+      "descriptions": [
+        "Implement strict schema and cross-file invariant validators for split-file Planes v2."
+      ],
+      "emoji": "\u2705",
+      "end_week": 18,
+      "id": "F-028",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "validator milestone staged"
+        }
+      ],
+      "name": "Planes v2 Schema + Cross-File Validator Layer",
+      "start_week": 16,
+      "status": "Planned",
+      "success_criteria": [
+        "All schema files validate deterministically.",
+        "All required cross-file invariants enforced in strict mode with explicit permissive policy boundaries."
+      ],
+      "task_ids": [
+        "T-3420",
+        "T-3403",
+        "T-3404",
+        "T-3405",
+        "T-3426",
+        "T-3427"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run pytest tests -k \"legacy_planes_conformance or planes_monolith_adapter or z_index_alias\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run --with pytest pytest tests -k \"planes_v2 and (debug_screenshot or debug_recording or debug_overlay or debug_replay or debug_frame_step or debug_bundle)\" -q",
+        "PYTHONPATH=. uv run python ops/ci/r040_macos_debug_menu_functional_smoke.py"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 86,
+        "hard_no_go_conditions": [
+          "legacy conformance fails on required app set",
+          "forced rewrite required for existing apps"
+        ],
+        "metric_description": "Compatibility + migration safety score.",
+        "metric_id": "f-031-closeout-v1",
+        "required_commands": [
+          "uv run pytest tests -k \"legacy_planes_conformance or planes_monolith_adapter or z_index_alias\" -q"
+        ],
+        "required_evidence": [
+          "conformance suite output",
+          "adapter parity tests",
+          "migration docs",
+          "artifact_manifest.json with deterministic provenance fields",
+          "screenshots with sidecars",
+          "recording manifests",
+          "replay manifests and digest outputs",
+          "frame-step and perf HUD snapshots",
+          "debug bundle export manifest"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "legacy_conformance",
+          "compatibility_stability",
+          "migration_readiness"
+        ],
+        "score_formula": "0.5*legacy_conformance + 0.3*compatibility_stability + 0.2*migration_readiness"
+      },
+      "descriptions": [
+        "Preserve existing app behavior through monolith adapter and controlled migration to canonical k_hat ordering semantics."
+      ],
+      "emoji": "\ud83d\udd01",
+      "end_week": 23,
+      "id": "F-031",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "compatibility milestone staged"
+        }
+      ],
+      "name": "Planes v2 Backward-Compat Adapter + Migration Tooling",
+      "start_week": 20,
+      "status": "Planned",
+      "success_criteria": [
+        "Legacy apps run through adapter with no forced rewrites.",
+        "z_index_alias compatibility preserved during migration to k_hat_index canonical order."
+      ],
+      "task_ids": [
+        "T-3423",
+        "T-3413",
+        "T-3414",
+        "T-3415"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run pytest tests -k \"debug_menu_dispatch or debug_capabilities or debug_menu_adapter\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 88,
+        "hard_no_go_conditions": [
+          "any menu action can crash app process",
+          "capability IDs are ambiguous/overlapping",
+          "adapter contract lacks parity guarantees",
+          "non-mac behavior is undefined instead of explicit stub/capability declaration"
+        ],
+        "metric_description": "Debug menu foundation stability and standardization score.",
+        "metric_id": "f-034-closeout-v1",
+        "required_commands": [
+          "uv run pytest tests -k \"debug_menu_dispatch or debug_capabilities or debug_menu_adapter\" -q",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "menu dispatch safety tests",
+          "capability schema/tests",
+          "adapter conformance tests",
+          "macOS-first go/no-go evidence packet with explicit non-mac stub/capability matrix and reopen plan note"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "menu_safety",
+          "capability_standardization",
+          "adapter_parity"
+        ],
+        "score_formula": "0.4*menu_safety + 0.3*capability_standardization + 0.3*adapter_parity"
+      },
+      "descriptions": [
+        "macOS-first debug menu foundation with crash-proof handling, standardized capability IDs, and explicit non-mac capability stubs for cross-platform-safe contracts."
+      ],
+      "emoji": "\ud83d\udee1\ufe0f",
+      "end_week": 29,
+      "id": "F-034",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "debug menu milestone created"
+        },
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "macOS-first phase; close with planned reopen for cross-platform expansion"
+        }
+      ],
+      "name": "Cross-Platform Debug Menu Foundation",
+      "start_week": 27,
+      "status": "Complete",
+      "success_criteria": [
+        "Menu handling is crash-proof with safe dispatch fallbacks on macOS.",
+        "Debug capabilities are standardized and unambiguous with explicit non-mac stub/unsupported capability states.",
+        "Milestone Go/No-Go is evaluated in macOS context only for this phase, with reopen intent for broader platform expansion."
+      ],
+      "task_ids": [
+        "T-2920",
+        "T-2901",
+        "T-2902",
+        "T-2903"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-038"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "determinism regression detected",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go score for cross-platform notification protocol rollout.",
+        "metric_id": "f-038-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-038",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-038_closeout.md",
+          "conformance test outputs",
+          "determinism replay outputs"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "api_compatibility",
+          "determinism_safety",
+          "adapter_conformance",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(api_compatibility,determinism_safety,adapter_conformance,evidence_integrity)"
+      },
+      "descriptions": [
+        "Ship unified notify.send/cancel/capabilities across macOS/Windows/Linux/Web with strict compatibility and deterministic behavior preservation."
+      ],
+      "emoji": "\ud83d\udd14",
+      "end_week": 24,
+      "id": "F-038",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "opened from architect packet"
+        }
+      ],
+      "name": "Cross-Platform Notification Protocol + Runtime Adapters",
+      "start_week": 20,
+      "status": "Planned",
+      "success_criteria": [
+        "Unified versioned API exists: notify.send/cancel/capabilities.",
+        "Existing apps remain behaviorally compatible when notifications are unused.",
+        "Adapters preserve protocol/runtime modular boundary with deterministic safety."
+      ],
+      "task_ids": [
+        "T-3120",
+        "T-3101",
+        "T-3102",
+        "T-3103",
+        "T-3104",
+        "T-3105",
+        "T-3106",
+        "T-3107",
+        "T-3108",
+        "T-3109",
+        "T-3110",
+        "T-3111",
+        "T-3112"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-041"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "F-041 go/no-go closeout metric.",
+        "metric_id": "f-041-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-041",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-041_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Decouple planning domain services from hardcoded `ops/planning/*` paths.",
+        "Introduce storage-root abstraction and renderer interface seams."
+      ],
+      "emoji": "\ud83e\uddf1",
+      "end_week": 49,
+      "id": "F-041",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        },
+        {
+          "date": "2026-03-07",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "core domain extraction complete and merged to main"
+        }
+      ],
+      "name": "Luvatrix Refactor: Core Domain Extraction",
+      "start_week": 47,
+      "status": "Complete",
+      "success_criteria": [
+        "Existing planning workflows keep behavior parity under refactored service architecture.",
+        "Domain extraction supports configurable storage root and renderer adapters."
+      ],
+      "task_ids": [
+        "T-4100",
+        "T-4101",
+        "T-4102",
+        "T-4103",
+        "T-4104",
+        "T-4105"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-042"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "F-042 go/no-go closeout metric.",
+        "metric_id": "f-042-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-042",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-042_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Implement resource-first CLI and `gateflow init` scaffold on extracted services.",
+        "Preserve endpoint compatibility via temporary `api METHOD /resource` shim."
+      ],
+      "emoji": "\ud83d\udee0\ufe0f",
+      "end_week": 52,
+      "id": "F-042",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        },
+        {
+          "date": "2026-03-07",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "cli surface, init scaffolding, overlays, config, and api shim merged to main"
+        }
+      ],
+      "name": "Luvatrix Refactor: CLI Surface and Init Scaffolding",
+      "start_week": 50,
+      "status": "Complete",
+      "success_criteria": [
+        "Fresh repo initialization and resource CRUD works in dry-run/apply mode.",
+        "Config commands and profile overlays behave deterministically."
+      ],
+      "task_ids": [
+        "T-4200",
+        "T-4201",
+        "T-4202",
+        "T-4203",
+        "T-4204",
+        "T-4205"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-045"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "F-045 go/no-go closeout metric.",
+        "metric_id": "f-045-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-045",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-045_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Move stabilized modules into standalone `gateflow` package/repo.",
+        "Provide install path and pre-release distribution docs."
+      ],
+      "emoji": "\ud83d\udce6",
+      "end_week": 57,
+      "id": "F-045",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        },
+        {
+          "date": "2026-03-08",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "milestone merged to main with required checks passing"
+        }
+      ],
+      "name": "Extract to Dedicated gateflow Repo",
+      "start_week": 55,
+      "status": "Complete",
+      "success_criteria": [
+        "Standalone CLI installs and runs full command surface locally.",
+        "Test fixtures and integration suites are portable in new repo."
+      ],
+      "task_ids": [
+        "T-4500",
+        "T-4501",
+        "T-4502",
+        "T-4503",
+        "T-4504",
+        "T-4505"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-046"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "F-046 go/no-go closeout metric.",
+        "metric_id": "f-046-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id F-046",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/f-046_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Implement deterministic migration from `ops/planning/*` to `.gateflow/*`.",
+        "Add mismatch reporting and remediation guidance."
+      ],
+      "emoji": "\ud83d\udd04",
+      "end_week": 59,
+      "id": "F-046",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        },
+        {
+          "date": "2026-03-08",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "milestone merged to main with required checks passing"
+        }
+      ],
+      "name": "Migration Tooling (import-luvatrix)",
+      "start_week": 58,
+      "status": "Complete",
+      "success_criteria": [
+        "Luvatrix data imports without manual edits and validates cleanly.",
+        "Migration drift report is deterministic and actionable."
+      ],
+      "task_ids": [
+        "T-4600",
+        "T-4601",
+        "T-4602",
+        "T-4603",
+        "T-4604"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id FR-004"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone FR-004.",
+        "metric_id": "fr-004-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id FR-004",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/fr-004_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "completed_on": "2026-02-26",
+      "descriptions": [
+        "Deliver milestone outcome: Platform variant routing and HDI phase standardization."
+      ],
+      "emoji": "\ud83e\udded",
+      "end_week": 1,
+      "id": "FR-004",
+      "legacy_id": "H-004",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-26",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ],
+      "name": "Platform variant routing and HDI phase standardization",
+      "start_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H004-01",
+        "A-H004-02"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-008"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone P-008.",
+        "metric_id": "p-008-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-008",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-008_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "completed_on": "2026-02-26",
+      "descriptions": [
+        "Deliver milestone outcome: Discord ops consolidation under /discord."
+      ],
+      "emoji": "\ud83d\uddc2\ufe0f",
+      "end_week": 1,
+      "id": "P-008",
+      "legacy_id": "H-008",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-26",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ],
+      "name": "Discord ops consolidation under /discord",
+      "start_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H008-01",
+        "A-H008-02"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-010"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone P-010.",
+        "metric_id": "p-010-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-010",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-010_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Deliver milestone outcome: Discord governance artifacts and onboarding system."
+      ],
+      "emoji": "\ud83e\uddf1",
+      "end_week": 2,
+      "id": "P-010",
+      "legacy_id": "M-001",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ],
+      "name": "Discord governance artifacts and onboarding system",
+      "start_week": 1,
+      "status": "In Progress",
+      "task_ids": [
+        "T-101",
+        "T-102",
+        "T-103"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-013"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone P-013.",
+        "metric_id": "p-013-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-013",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-013_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Owns deterministic gate ownership plus feature-specific non-regression conformance packs feeding milestone closeouts."
+      ],
+      "emoji": "\ud83e\uddea",
+      "end_week": 6,
+      "id": "P-013",
+      "legacy_id": "M-004",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ],
+      "name": "CI hardening, flaky governance, and non-regression gate packs",
+      "start_week": 4,
+      "status": "Complete",
+      "success_criteria": [
+        "Deterministic CI gate ownership is documented with explicit per-gate owners, pass criteria, and escalation path for failures.",
+        "Flaky-test governance includes quarantine labels/manifest, remediation SLA, and CI checks that prevent stale quarantines from persisting.",
+        "Smoke and non-regression gate outputs publish artifact links and summary signals so milestone/task closeout evidence is reproducible.",
+        "P-026 non-regression guarantees are encoded as required verification commands and pass in milestone evidence."
+      ],
+      "task_ids": [
+        "T-401",
+        "T-402",
+        "T-403",
+        "T-2911"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-015"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone P-015.",
+        "metric_id": "p-015-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-015",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-015_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Deliver milestone outcome: Production-hardening go/no-go review."
+      ],
+      "emoji": "\ud83d\ude80",
+      "end_week": 10,
+      "id": "P-015",
+      "legacy_id": "M-006",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ],
+      "name": "Production-hardening go/no-go review",
+      "start_week": 8,
+      "status": "Planned",
+      "task_ids": [
+        "T-601",
+        "T-602",
+        "T-603"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-021"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone P-021.",
+        "metric_id": "p-021-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-021",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-021_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Deliver milestone outcome: Performance baseline and telemetry gates."
+      ],
+      "emoji": "\ud83d\udccf",
+      "end_week": 14,
+      "id": "P-021",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "performance modernization baseline kickoff"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "gateflow compliance audit complete; all P-021 tasks verified done on main"
+        }
+      ],
+      "name": "Performance baseline and telemetry gates",
+      "start_week": 13,
+      "status": "Complete",
+      "task_ids": [
+        "T-2101",
+        "T-2102",
+        "T-2103",
+        "T-2104"
+      ]
+    },
+    {
+      "acceptance_checks": {
+        "T-2801": "Unified benchmark matrix with deterministic seeds and adjusted thresholds (input p95<=33.3ms, p99<=50ms, incremental>=90%, resize recovery<=1.0s) emits per-scenario verdicts.",
+        "T-2802": "Vulkan decision is DEFERRED_WITH_GUARDRAILS with normative text, disallowed wording controls, fallback parity evidence, and boundary integrity proof.",
+        "T-2803": "Snapshot immutability and revisioned-read invariants are specified and validated with zero-mismatch determinism replay requirements.",
+        "T-2804": "Incremental-present scenario targets/caps are met, or approved exceptions are documented within hard caps and artifact checks pass.",
+        "T-2805": "Final evidence packet reconciles board/task/artifact state and passes architecture Go/No-Go checklist without unresolved blockers.",
+        "T-2814": "Dirty-region invalidation refinement removes blanket full-frame fallback on hover/theme/no-delta paths while preserving visual integrity and hit-test/z-order correctness.",
+        "T-2815": "Subpixel and bi-axial compose support eliminates unconditional full-frame fallback where safe and achieves horizontal_pan>=92% and drag_heavy>=85% measured incremental rates.",
+        "T-2816": "Resize policies split into stability-focused fullframe-allowed stress scenario and overlap incremental-required scenario with >=75% target and measured recovery retained.",
+        "T-2817": "Strict evidence validator hard-fails scenario-level misses without approved exceptions and enforces non-control full-frame <=15% plus consecutive full-frame <=8 outside exception windows.",
+        "T-2818": "Determinism replay matrix uses seed-fidelity inputs with per-seed trace provenance, distinct cross-seed fingerprints, and zero per-seed mismatch regressions.",
+        "T-2819": "Validator enforces all required scenario thresholds/caps (including input_burst) with exception metadata requirements and explicit scenario-level failure output.",
+        "T-2820": "Input burst compose path remediation achieves incremental>=85, full<=15, max consecutive full-frame<=8 without regressions in other required scenarios.",
+        "T-2821": "Measured summary embeds required per-scenario policy verdict fields and top-level policy_verdict; generation fails on missing verdict inputs.",
+        "T-2822": "Final closeout packet/manifest/hash reconciliation completed with scenario verdict table and all validators passing."
+      },
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-026"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "any required scenario below incremental target without approved exception metadata",
+          "full_present_pct cap violation in required non-control scenario",
+          "determinism digest or invariant mismatch in required scenarios",
+          "validate_closeout_evidence.py fails",
+          "validate_closeout_packet.py fails",
+          "unresolved high-severity blocker in closeout packet"
+        ],
+        "metric_description": "Runtime performance hardening closeout score with scenario-level policy hard-gates.",
+        "metric_id": "p-026-closeout-v3",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-026",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "artifacts/perf/closeout/raw_closeout_required.json",
+          "artifacts/perf/closeout/measured_summary.json",
+          "artifacts/perf/closeout/determinism_replay_matrix.json",
+          "artifacts/perf/closeout/manifest.json",
+          "ops/planning/closeout/p-026_closeout.md"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "perf_latency_thresholds",
+          "incremental_present_required_scenarios",
+          "determinism_replay_matrix",
+          "boundary_contract_preservation",
+          "evidence_provenance_validation"
+        ],
+        "score_formula": "gated_weighted_sum(perf_latency,incremental_policy,determinism,boundary_integrity,evidence_provenance)"
+      },
+      "completed_on": "2026-03-05",
+      "descriptions": [
+        "All closeout tasks complete with consolidated evidence package."
+      ],
+      "emoji": "\u2705",
+      "end_week": 14,
+      "id": "P-026",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "closeout signoff milestone created from architecture/system no-go review"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "architect decision package imported: Vulkan deferred with guardrails; thresholds/invariants/exit gates finalized"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "strict evidence validator failed; remediation set opened for p99/resize/determinism/incremental coverage gaps"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "strict evidence remediation complete; tasks T-2806..T-2809 done; validators pass"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "evidence integrity remediation cycle opened: provenance-only evidence required (T-2810..T-2813)"
+        },
+        {
+          "date": "2026-03-04",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "provenance-backed evidence remediation complete; T-2810..T-2813 done; validators pass"
+        },
+        {
+          "date": "2026-03-04",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "incremental-present remediation cycle opened; provenance pass alone is insufficient for Go"
+        },
+        {
+          "date": "2026-03-04",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "incremental target remediation complete; T-2814..T-2818 done; scenario-level gates satisfied"
+        },
+        {
+          "date": "2026-03-04",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "final policy-gate remediation opened: input_burst threshold/cap and validator hard-gate completion required for Go"
+        }
+      ],
+      "name": "Runtime Performance Hardening Closeout Signoff",
+      "start_week": 11,
+      "status": "Complete",
+      "success_criteria": [
+        "All closeout tasks complete with consolidated evidence package.",
+        "Boundary contracts are re-validated: RenderTarget, SensorProvider, HDIThread/SensorManagerThread separation, and protocol/AppContext compatibility.",
+        "Determinism and compatibility checks pass under a unified reproducible benchmark protocol.",
+        "Incremental-present required scenario targets are met in measured raw artifacts: scroll>=95%, horizontal_pan>=92%, drag_heavy>=85%, mixed_burst>=88%, sensor_overlay>=90%, resize_overlap_incremental_required>=75% (or formally excepted under cap policy).",
+        "Evidence validator enforces scenario-level target hard-gates and exception-cap policy; closeout cannot pass via aggregate-only summaries.",
+        "Final architecture closeout can issue Go confidence >= 0.85.",
+        "input_burst incremental_present_pct must be >=85 with full_present_pct<=15 and max_consecutive_full_frame_outside_exception<=8.",
+        "strict evidence validator must hard-fail scenario-level target/cap misses unless approved exception metadata is present.",
+        "summary artifacts must embed per-scenario policy verdicts and top-level policy_verdict before closeout pass."
+      ],
+      "task_ids": [
+        "T-2801",
+        "T-2802",
+        "T-2803",
+        "T-2804",
+        "T-2805",
+        "T-2806",
+        "T-2807",
+        "T-2808",
+        "T-2809",
+        "T-2810",
+        "T-2811",
+        "T-2812",
+        "T-2813",
+        "T-2814",
+        "T-2815",
+        "T-2816",
+        "T-2817",
+        "T-2818",
+        "T-2819",
+        "T-2820",
+        "T-2821",
+        "T-2822"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-032",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run pytest tests -k \"planes_v2_flags or planes_v2_rollout\" -q",
+        "uv run --with pytest pytest tests -k \"planes_v2 and (debug_screenshot or debug_recording or debug_overlay or debug_replay or debug_frame_step or debug_bundle)\" -q",
+        "PYTHONPATH=. uv run python ops/ci/r040_macos_debug_menu_functional_smoke.py"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 90,
+        "hard_no_go_conditions": [
+          "required rollout flags missing",
+          "closeout packet invalid",
+          "P-026 non-regression gate fails"
+        ],
+        "metric_description": "Rollout gate and closeout evidence score.",
+        "metric_id": "p-032-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-032",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "closeout packet",
+          "validator outputs",
+          "rollout logs",
+          "artifact_manifest.json with deterministic provenance fields",
+          "screenshots with sidecars",
+          "recording manifests",
+          "replay manifests and digest outputs",
+          "frame-step and perf HUD snapshots",
+          "debug bundle export manifest"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "rollout_gate_pass",
+          "evidence_integrity",
+          "compatibility_non_regression"
+        ],
+        "score_formula": "0.4*rollout_gate_pass + 0.3*evidence_integrity + 0.3*compatibility_non_regression"
+      },
+      "descriptions": [
+        "Rollout controls, P-026 non-regression evidence gate, and final go/no-go closeout packet for Planes v2 switchover."
+      ],
+      "emoji": "\ud83d\udea6",
+      "end_week": 24,
+      "id": "P-032",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "rollout milestone staged"
+        }
+      ],
+      "name": "Planes v2 rollout non-regression gates + Go/No-Go closeout",
+      "start_week": 22,
+      "status": "Planned",
+      "success_criteria": [
+        "Feature flags and rollback points defined and tested.",
+        "Go/No-Go closeout is evidence-backed and reproducible."
+      ],
+      "task_ids": [
+        "T-3424",
+        "T-3416",
+        "T-3417",
+        "T-3418"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-040"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "P-040 go/no-go closeout metric.",
+        "metric_id": "p-040-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-040",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-040_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Lock v1 command contract and data contract for GateFlow standalone CLI.",
+        "Freeze `.gateflow/` canonical schema and profile boundaries before refactor starts."
+      ],
+      "emoji": "\ud83e\udded",
+      "end_week": 46,
+      "id": "P-040",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        },
+        {
+          "date": "2026-03-07",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "spec lock complete and merged to main"
+        }
+      ],
+      "name": "Program Setup and Spec Lock",
+      "start_week": 45,
+      "status": "Complete",
+      "success_criteria": [
+        "Decision-complete command matrix, schema contract, and policy contract approved.",
+        "Spec packet is implementation-ready for downstream milestones."
+      ],
+      "task_ids": [
+        "T-4000",
+        "T-4001",
+        "T-4002",
+        "T-4003",
+        "T-4004",
+        "T-4005"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-044"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "P-044 go/no-go closeout metric.",
+        "metric_id": "p-044-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-044",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-044_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Preserve GateFlow quality checks with configurable branch guard and validation surfaces.",
+        "Move closeout harness policy to warning-level for v1 with future escalation option."
+      ],
+      "emoji": "\ud83d\udee1\ufe0f",
+      "end_week": 54,
+      "id": "P-044",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        }
+      ],
+      "name": "Policy/Validation Hardening",
+      "start_week": 53,
+      "status": "Complete",
+      "success_criteria": [
+        "Policy checks produce clear pass/fail outcomes and machine-readable errors.",
+        "Validation command suite is consolidated and test-covered."
+      ],
+      "task_ids": [
+        "T-4400",
+        "T-4401",
+        "T-4402",
+        "T-4403",
+        "T-4404",
+        "T-4405"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-047"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "P-047 go/no-go closeout metric.",
+        "metric_id": "p-047-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-047",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/p-047_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Adopt standalone gateflow CLI in Luvatrix with wrappers and deprecation notices.",
+        "Keep planning continuity while shifting operational commands."
+      ],
+      "emoji": "\ud83d\ude9a",
+      "end_week": 61,
+      "id": "P-047",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        }
+      ],
+      "name": "Luvatrix Adoption + Deprecation",
+      "start_week": 60,
+      "status": "Planned",
+      "success_criteria": [
+        "Luvatrix planning operations run end-to-end through standalone gateflow tooling.",
+        "Legacy entrypoints are deprecated with clear migration guidance."
+      ],
+      "task_ids": [
+        "T-4700",
+        "T-4701",
+        "T-4702",
+        "T-4703",
+        "T-4704"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-002"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone R-002.",
+        "metric_id": "r-002-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-002",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-002_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "completed_on": "2026-02-23",
+      "descriptions": [
+        "Deliver milestone outcome: macOS visual runtime foundation merged to main."
+      ],
+      "emoji": "\ud83d\udda5\ufe0f",
+      "end_week": 1,
+      "id": "R-002",
+      "legacy_id": "H-002",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-23",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ],
+      "name": "macOS visual runtime foundation merged to main",
+      "start_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H002-01",
+        "A-H002-02"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-005"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone R-005.",
+        "metric_id": "r-005-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-005",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-005_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "completed_on": "2026-02-26",
+      "descriptions": [
+        "Deliver milestone outcome: Rendering fallback, smoke docs, and GPU blit path."
+      ],
+      "emoji": "\ud83c\udfaf",
+      "end_week": 1,
+      "id": "R-005",
+      "legacy_id": "H-005",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-26",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ],
+      "name": "Rendering fallback, smoke docs, and GPU blit path",
+      "start_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H005-01",
+        "A-H005-02"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-012"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone R-012.",
+        "metric_id": "r-012-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-012",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-012_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Deliver milestone outcome: Vulkan stabilization."
+      ],
+      "emoji": "\ud83c\udfae",
+      "end_week": 6,
+      "id": "R-012",
+      "legacy_id": "M-003",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "active milestone in current planning cycle"
+        }
+      ],
+      "name": "Vulkan stabilization",
+      "start_week": 3,
+      "status": "Planned",
+      "task_ids": [
+        "T-301",
+        "T-302",
+        "T-303",
+        "T-304"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-022"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone R-022.",
+        "metric_id": "r-022-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-022",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-022_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "completed_on": "2026-03-03",
+      "descriptions": [
+        "Deliver milestone outcome: Render copy elimination."
+      ],
+      "emoji": "\ud83e\uddec",
+      "end_week": 16,
+      "id": "R-022",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "planned from architect performance directives"
+        }
+      ],
+      "name": "Render copy elimination",
+      "start_week": 13,
+      "status": "Complete",
+      "task_ids": [
+        "T-2201",
+        "T-2202",
+        "T-2203",
+        "T-2204"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-023"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone R-023.",
+        "metric_id": "r-023-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-023",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-023_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "completed_on": "2026-03-03",
+      "descriptions": [
+        "Deliver milestone outcome: Vulkan transfer path efficiency."
+      ],
+      "emoji": "\ud83d\ude9a",
+      "end_week": 17,
+      "id": "R-023",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "planned from architect performance directives"
+        }
+      ],
+      "name": "Vulkan transfer path efficiency",
+      "start_week": 14,
+      "status": "Complete",
+      "task_ids": [
+        "T-2401",
+        "T-2402",
+        "T-2403",
+        "T-2404"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-025"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone R-025.",
+        "metric_id": "r-025-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-025",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-025_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Deliver milestone outcome: Event loop and input scheduling tightening."
+      ],
+      "emoji": "\ud83c\udf9b\ufe0f",
+      "end_week": 16,
+      "id": "R-025",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "planned from architect performance directives"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "gateflow compliance audit complete; tasks done and verified on main"
+        }
+      ],
+      "name": "Event loop and input scheduling tightening",
+      "start_week": 13,
+      "status": "Complete",
+      "task_ids": [
+        "T-2601",
+        "T-2602",
+        "T-2603",
+        "T-2604"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+        "uv run pytest tests -k \"planes_v2_perf or p026_non_regression\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run --with pytest pytest tests -k \"planes_v2 and (debug_screenshot or debug_recording or debug_overlay or debug_replay or debug_frame_step or debug_bundle)\" -q",
+        "PYTHONPATH=. uv run python ops/ci/r040_macos_debug_menu_functional_smoke.py"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 88,
+        "hard_no_go_conditions": [
+          "incremental-present cap regressions relative to P-026",
+          "determinism replay mismatch"
+        ],
+        "metric_description": "Post-foundation performance non-regression score.",
+        "metric_id": "r-033-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
+          "uv run pytest tests -k \"planes_v2_perf\" -q"
+        ],
+        "required_evidence": [
+          "perf artifacts",
+          "p026 validator outputs",
+          "closeout packet",
+          "artifact_manifest.json with deterministic provenance fields",
+          "screenshots with sidecars",
+          "recording manifests",
+          "replay manifests and digest outputs",
+          "frame-step and perf HUD snapshots",
+          "debug bundle export manifest"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "p026_non_regression",
+          "perf_improvement",
+          "determinism_stability"
+        ],
+        "score_formula": "0.5*p026_non_regression + 0.3*perf_improvement + 0.2*determinism_stability"
+      },
+      "descriptions": [
+        "Optimization-only phase after rollout gates pass; focuses on throughput and latency improvements under determinism/compatibility guardrails."
+      ],
+      "emoji": "\ud83d\udcc8",
+      "end_week": 27,
+      "id": "R-033",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "perf follow-up milestone staged"
+        }
+      ],
+      "name": "Planes v2 post-foundation performance optimization",
+      "start_week": 24,
+      "status": "Planned",
+      "success_criteria": [
+        "P-026 envelopes are preserved or explicitly re-baselined with evidence.",
+        "Optimizations do not break determinism or compatibility."
+      ],
+      "task_ids": [
+        "T-3425",
+        "T-3419"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run pytest tests -k \"debug_replay or debug_frame_step or debug_bundle\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 89,
+        "hard_no_go_conditions": [
+          "replay digest mismatch in required seed matrix",
+          "frame-step violates deterministic ordering",
+          "bundle export missing required artifact classes",
+          "non-mac behavior is undefined instead of explicit stub/capability declaration"
+        ],
+        "metric_description": "Replay/HUD/bundle determinism and observability score.",
+        "metric_id": "r-036-closeout-v1",
+        "required_commands": [
+          "uv run pytest tests -k \"debug_replay or debug_frame_step or debug_bundle\" -q",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "replay matrix tests",
+          "frame-step determinism tests",
+          "bundle validator outputs",
+          "macOS-first go/no-go evidence packet with explicit non-mac stub/capability matrix and reopen plan note"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "replay_determinism",
+          "frame_step_safety",
+          "bundle_completeness"
+        ],
+        "score_formula": "0.4*replay_determinism + 0.25*frame_step_safety + 0.35*bundle_completeness"
+      },
+      "descriptions": [
+        "macOS-first input replay, frame-step, perf HUD, and exportable debug bundles with deterministic evidence; non-mac kept as explicit capability stubs."
+      ],
+      "emoji": "\ud83c\udf9b\ufe0f",
+      "end_week": 33,
+      "id": "R-036",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "replay/perf milestone created"
+        },
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "macOS-first phase; close with planned reopen for cross-platform expansion"
+        },
+        {
+          "date": "2026-03-06",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "GO in macOS scope; planned reopen remains for Windows/Linux adapter expansion"
+        }
+      ],
+      "name": "Replay + Perf Observability",
+      "start_week": 30,
+      "status": "Complete",
+      "success_criteria": [
+        "Replay reproduces deterministic ordering digests in macOS scope.",
+        "Frame-step/HUD preserve ordering guarantees on macOS with explicit non-mac capability stubs.",
+        "Milestone Go/No-Go is macOS-context only in this phase, with reopen intent for broader platform coverage."
+      ],
+      "task_ids": [
+        "T-2922",
+        "T-2907",
+        "T-2908",
+        "T-2909"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run --with pytest pytest tests -k \"debug_menu_dispatch or debug_manifest_policy or macos_menu_integration\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-039"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 88,
+        "hard_no_go_conditions": [
+          "any menu click path can crash process",
+          "ambiguous capability-to-action mapping",
+          "legacy behavior regression when debug policy is absent",
+          "rollback flag cannot safely disable wiring"
+        ],
+        "metric_description": "macOS menu wiring stability/compatibility go-no-go score.",
+        "metric_id": "r-039-closeout-v1",
+        "required_commands": [
+          "uv run --with pytest pytest tests -k \"debug_menu_dispatch or debug_manifest_policy or macos_menu_integration\" -q",
+          "PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render macos --ticks 120",
+          "PYTHONPATH=. uv run python main.py run-app examples/app_protocol/input_sensor_logger --render macos --ticks 120",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py",
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-039"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-039_closeout.md",
+          "menu integration test output",
+          "example app smoke logs and artifact manifest"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "menu_safety",
+          "action_mapping",
+          "policy_compat",
+          "e2e_smoke",
+          "rollback_safety"
+        ],
+        "score_formula": "0.30*menu_safety + 0.20*action_mapping + 0.20*policy_compat + 0.20*e2e_smoke + 0.10*rollback_safety"
+      },
+      "descriptions": [
+        "Wire existing debug contracts into live AppKit menu behavior for macOS example apps with crash-safe dispatch, policy enforcement, and deterministic smoke evidence."
+      ],
+      "emoji": "\ud83c\udf4e",
+      "end_week": 39,
+      "id": "R-039",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "milestone created from architect packet"
+        },
+        {
+          "date": "2026-03-07",
+          "event": "no-go",
+          "framework": "gateflow_v1",
+          "note": "live macOS run-app verification blocked in current environment (AppKit/PyObjC unavailable)"
+        }
+      ],
+      "name": "macOS Debug Menu Runtime Wiring (E2E)",
+      "start_week": 36,
+      "status": "Complete",
+      "success_criteria": [
+        "Clicking default macOS top-menu actions never crashes.",
+        "Debug menu actions are functional in a live example app session.",
+        "Legacy apps without debug policy block behave unchanged.",
+        "debug_policy controls are enforced in live runtime path.",
+        "End-to-end smoke run produces deterministic evidence (logs + capture artifacts).",
+        "Rollback flag can disable new wiring safely."
+      ],
+      "task_ids": [
+        "T-3290",
+        "T-3201",
+        "T-3202",
+        "T-3203",
+        "T-3204",
+        "T-3205",
+        "T-3206",
+        "T-3210",
+        "T-3211",
+        "T-3212",
+        "T-3213"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "PYTHONPATH=. uv run --with pytest pytest tests -k \"debug_screenshot or debug_recording or debug_overlay or debug_replay or debug_frame_step or debug_bundle or macos_menu_integration\" -q",
+        "PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-040"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 90,
+        "hard_no_go_conditions": [
+          "any debug action remains stub/no-op without explicit capability-disabled rationale",
+          "any menu click can crash process",
+          "determinism digest/provenance checks fail for replay/step/export",
+          "rollback kill-switch fails to disable functional wiring safely"
+        ],
+        "metric_description": "R-040 full-action macOS debug menu go/no-go score.",
+        "metric_id": "r-040-closeout-v1",
+        "required_commands": [
+          "PYTHONPATH=. uv run --with pytest pytest tests -k \"debug_screenshot or debug_recording or debug_overlay or debug_replay or debug_frame_step or debug_bundle or macos_menu_integration\" -q",
+          "PYTHONPATH=. uv run python main.py run-app examples/app_protocol/planes_v2_poc --render macos --ticks 120",
+          "PYTHONPATH=. uv run python main.py run-app examples/app_protocol/input_sensor_logger --render macos --ticks 120",
+          "PYTHONPATH=. uv run python ops/ci/r040_macos_debug_menu_functional_smoke.py",
+          "PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py",
+          "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-040"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/r-040_closeout.md",
+          "functional smoke manifest from ops/ci/r040_macos_debug_menu_functional_smoke.py",
+          "artifact manifests for screenshot/recording/bundle outputs"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "action_functionality",
+          "crash_safety",
+          "determinism",
+          "artifact_validity",
+          "e2e_smoke",
+          "rollback_safety"
+        ],
+        "score_formula": "0.20*action_functionality + 0.20*crash_safety + 0.20*determinism + 0.20*artifact_validity + 0.10*e2e_smoke + 0.10*rollback_safety"
+      },
+      "descriptions": [
+        "Convert currently exposed macOS Debug menu actions from safe stubs into real runtime functionality while preserving crash safety, determinism, and compatibility."
+      ],
+      "emoji": "\ud83e\uddf0",
+      "end_week": 44,
+      "id": "R-040",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "milestone created from architect packet"
+        }
+      ],
+      "name": "macOS Debug Menu Functionalization (Full Actions)",
+      "start_week": 40,
+      "status": "Complete",
+      "success_criteria": [
+        "All seven Debug menu actions perform real runtime behavior on macOS.",
+        "No menu click path can crash process.",
+        "Default app compatibility behavior remains unchanged without explicit policy changes.",
+        "Determinism signals are preserved for replay/step/export actions.",
+        "Artifact-producing actions generate valid outputs with required metadata.",
+        "E2E smoke on at least two example apps passes with reproducible artifact manifest.",
+        "Rollback switch disables functional wiring cleanly."
+      ],
+      "task_ids": [
+        "T-3300",
+        "T-3301",
+        "T-3302",
+        "T-3303",
+        "T-3304",
+        "T-3305",
+        "T-3306",
+        "T-3307",
+        "T-3308",
+        "T-3309",
+        "T-3310"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id RF-009"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone RF-009.",
+        "metric_id": "rf-009-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id RF-009",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/rf-009_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "completed_on": "2026-02-27",
+      "descriptions": [
+        "Deliver milestone outcome: Packaging metadata and Vulkan runtime preflight guidance."
+      ],
+      "emoji": "\ud83d\udce6",
+      "end_week": 1,
+      "id": "RF-009",
+      "legacy_id": "H-009",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-27",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ],
+      "name": "Packaging metadata and Vulkan runtime preflight guidance",
+      "start_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H009-01",
+        "A-H009-02"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run pytest tests -k \"planes_runtime_ir_ingest or planes_determinism or planes_backend_normalization\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run --with pytest pytest tests -k \"planes_v2 and (debug_screenshot or debug_recording or debug_overlay or debug_replay or debug_frame_step or debug_bundle)\" -q",
+        "PYTHONPATH=. uv run python ops/ci/r040_macos_debug_menu_functional_smoke.py"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 88,
+        "hard_no_go_conditions": [
+          "transform/render/hit-test order mismatch",
+          "runtime bypasses canonical IR path"
+        ],
+        "metric_description": "Runtime deterministic correctness score.",
+        "metric_id": "rf-030-closeout-v1",
+        "required_commands": [
+          "uv run pytest tests -k \"planes_runtime_ir_ingest or planes_determinism or planes_backend_normalization\" -q"
+        ],
+        "required_evidence": [
+          "runtime tests",
+          "determinism snapshots",
+          "integration logs",
+          "artifact_manifest.json with deterministic provenance fields",
+          "screenshots with sidecars",
+          "recording manifests",
+          "replay manifests and digest outputs",
+          "frame-step and perf HUD snapshots",
+          "debug bundle export manifest"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "determinism_pass",
+          "runtime_integration_pass",
+          "backend_normalization_pass"
+        ],
+        "score_formula": "0.5*determinism_pass + 0.3*runtime_integration_pass + 0.2*backend_normalization_pass"
+      },
+      "descriptions": [
+        "Integrate runtime to consume canonical IR only with deterministic composition/order/hit-test behavior."
+      ],
+      "emoji": "\u2699\ufe0f",
+      "end_week": 22,
+      "id": "RF-030",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "runtime integration milestone staged"
+        }
+      ],
+      "name": "Planes v2 Runtime Integration on Canonical IR",
+      "start_week": 19,
+      "status": "Planned",
+      "success_criteria": [
+        "Runtime consumes canonical IR only.",
+        "Deterministic transform/render/hit-test/compositing rules are enforced and tested."
+      ],
+      "task_ids": [
+        "T-3422",
+        "T-3410",
+        "T-3411",
+        "T-3412",
+        "T-3428"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-007"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone U-007.",
+        "metric_id": "u-007-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-007",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/u-007_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "completed_on": "2026-02-27",
+      "descriptions": [
+        "Deliver milestone outcome: Plot stabilization and stream simulation integration."
+      ],
+      "emoji": "\ud83d\udd0c",
+      "end_week": 1,
+      "id": "U-007",
+      "legacy_id": "H-007",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-27",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ],
+      "name": "Plot stabilization and stream simulation integration",
+      "start_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H007-01",
+        "A-H007-02"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-017"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone U-017.",
+        "metric_id": "u-017-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-017",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/u-017_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Deliver milestone outcome: UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)."
+      ],
+      "emoji": "\ud83d\udcca",
+      "end_week": 9,
+      "id": "U-017",
+      "legacy_id": "M-008",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-01",
+          "event": "closed",
+          "framework": "kanban_v1",
+          "note": "sprint closure"
+        },
+        {
+          "date": "2026-03-01",
+          "event": "reopened",
+          "framework": "kanban_v1",
+          "note": "follow-up tasks added"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "framework migration cycle"
+        },
+        {
+          "date": "2026-03-03",
+          "event": "reopened",
+          "framework": "gateflow_v1",
+          "note": "scope split: plotting work moved into U-021 while UI/UX foundations remain in U-017"
+        }
+      ],
+      "name": "UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)",
+      "start_week": 4,
+      "status": "In Progress",
+      "task_ids": [
+        "T-805",
+        "T-834",
+        "T-835",
+        "T-836",
+        "T-837",
+        "T-838",
+        "T-839",
+        "T-840",
+        "T-2301",
+        "T-2302",
+        "T-2303",
+        "T-2304",
+        "T-2305"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-021"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone U-021.",
+        "metric_id": "u-021-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-021",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/u-021_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Foundational plotting capabilities shared by downstream apps, including viewport/scroll behavior and stream cadence/latency primitives."
+      ],
+      "emoji": "\ud83d\udcc9",
+      "end_week": 11,
+      "id": "U-021",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-03",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "split from U-017 to isolate plotting stack and integrate with AU-019"
+        }
+      ],
+      "name": "Plots module foundations (labels, bars, subplots, scrolling, dynamic data)",
+      "start_week": 4,
+      "status": "In Progress",
+      "task_ids": [
+        "T-801",
+        "T-802",
+        "T-803",
+        "T-821",
+        "T-822",
+        "T-804"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run pytest tests -k \"debug_screenshot or debug_recording or debug_overlay\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 87,
+        "hard_no_go_conditions": [
+          "capture start/stop violates render budget envelope",
+          "metadata sidecar missing required provenance fields",
+          "overlay toggles alter app state/render semantics",
+          "non-mac behavior is undefined instead of explicit stub/capability declaration"
+        ],
+        "metric_description": "Capture/overlay correctness and performance safety score.",
+        "metric_id": "u-035-closeout-v1",
+        "required_commands": [
+          "uv run pytest tests -k \"debug_screenshot or debug_recording or debug_overlay\" -q",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "screenshot schema tests",
+          "recording lifecycle perf tests",
+          "overlay regression snapshots",
+          "macOS-first go/no-go evidence packet with explicit non-mac stub/capability matrix and reopen plan note"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "capture_contract",
+          "overlay_safety",
+          "runtime_budget_safety"
+        ],
+        "score_formula": "0.45*capture_contract + 0.25*overlay_safety + 0.3*runtime_budget_safety"
+      },
+      "descriptions": [
+        "macOS-first screenshot/record tooling and visual overlays with deterministic metadata; non-mac paths remain explicit stubs/capability-declared for safe expansion."
+      ],
+      "emoji": "\ud83d\uddbc\ufe0f",
+      "end_week": 31,
+      "id": "U-035",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "visual/capture milestone created"
+        },
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "macOS-first phase; close with planned reopen for cross-platform expansion"
+        },
+        {
+          "date": "2026-03-05",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "GO in macOS scope; planned reopen remains for multi-platform expansion"
+        }
+      ],
+      "name": "Visual + Capture Tooling",
+      "start_week": 28,
+      "status": "Complete",
+      "success_criteria": [
+        "Screenshot and recording artifacts are deterministic with metadata sidecars on macOS.",
+        "Overlays are non-destructive and toggle cleanly on macOS while non-mac capabilities are explicitly stubbed/declared.",
+        "Milestone Go/No-Go is macOS-context only in this phase, with reopen intent for multi-platform expansion."
+      ],
+      "task_ids": [
+        "T-2921",
+        "T-2904",
+        "T-2905",
+        "T-2906"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-043"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "U-043 go/no-go closeout metric.",
+        "metric_id": "u-043-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-043",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/u-043_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "correctness",
+          "safety",
+          "compatibility",
+          "evidence"
+        ],
+        "score_formula": "weighted_sum(correctness,safety,compatibility,evidence)"
+      },
+      "descriptions": [
+        "Replace generation path with markdown/ascii rendering only for v1.",
+        "Remove PNG/matplotlib dependency from v1 execution path."
+      ],
+      "emoji": "\ud83d\udcdd",
+      "end_week": 52,
+      "id": "U-043",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-07",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "gateflow productization roadmap milestone created"
+        },
+        {
+          "date": "2026-03-07",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "policy and validation hardening complete and merged to main"
+        }
+      ],
+      "name": "Rendering v1 (Text-Only)",
+      "start_week": 50,
+      "status": "Complete",
+      "success_criteria": [
+        "Deterministic md/ascii render outputs are test-verified.",
+        "No PNG generation path is required for v1 completion."
+      ],
+      "task_ids": [
+        "T-4300",
+        "T-4301",
+        "T-4302",
+        "T-4303",
+        "T-4304"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id UF-006"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 85,
+        "hard_no_go_conditions": [
+          "required checks fail on main",
+          "closeout packet validation fails",
+          "unresolved high-severity risk without accepted waiver"
+        ],
+        "metric_description": "Go/No-Go closeout metric for milestone UF-006.",
+        "metric_id": "uf-006-closeout-v1",
+        "required_commands": [
+          "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id UF-006",
+          "uv run python ops/planning/agile/validate_milestone_task_links.py"
+        ],
+        "required_evidence": [
+          "ops/planning/closeout/uf-006_closeout.md",
+          "validator outputs",
+          "task-level evidence links"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "success_criteria_coverage",
+          "safety_test_pass_rate",
+          "compatibility_and_determinism_checks",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(success,safety,compatibility,evidence)"
+      },
+      "completed_on": "2026-02-26",
+      "descriptions": [
+        "Deliver milestone outcome: Interactive plot module and UI IR integration."
+      ],
+      "emoji": "\ud83d\udcc8",
+      "end_week": 1,
+      "id": "UF-006",
+      "legacy_id": "H-006",
+      "lifecycle_events": [
+        {
+          "date": "2026-02-26",
+          "event": "closed",
+          "framework": "legacy-kanban",
+          "note": "historical completion"
+        }
+      ],
+      "name": "Interactive plot module and UI IR integration",
+      "start_week": 1,
+      "status": "Complete",
+      "task_ids": [
+        "A-H006-01",
+        "A-H006-02"
+      ]
+    },
+    {
+      "ci_required_checks": [
+        "uv run pytest tests -k \"planes_split_compile or planes_parity_equivalence or planes_ir_contract\" -q",
+        "uv run python ops/planning/agile/validate_milestone_task_links.py",
+        "uv run --with pytest pytest tests -k \"planes_v2 and (debug_screenshot or debug_recording or debug_overlay or debug_replay or debug_frame_step or debug_bundle)\" -q",
+        "PYTHONPATH=. uv run python ops/ci/r040_macos_debug_menu_functional_smoke.py"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 86,
+        "hard_no_go_conditions": [
+          "monolith and split compile mismatch on ordering/rounding/hit-test",
+          "canonical IR contract mismatch against ir types"
+        ],
+        "metric_description": "Compiler correctness + parity score.",
+        "metric_id": "uf-029-closeout-v1",
+        "required_commands": [
+          "uv run pytest tests -k \"planes_split_compile or planes_parity_equivalence or planes_ir_contract\" -q"
+        ],
+        "required_evidence": [
+          "compiler tests",
+          "parity artifacts",
+          "ir contract docs",
+          "artifact_manifest.json with deterministic provenance fields",
+          "screenshots with sidecars",
+          "recording manifests",
+          "replay manifests and digest outputs",
+          "frame-step and perf HUD snapshots",
+          "debug bundle export manifest"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "compile_correctness",
+          "parity_equivalence",
+          "error_diagnostics"
+        ],
+        "score_formula": "0.45*compile_correctness + 0.35*parity_equivalence + 0.2*error_diagnostics"
+      },
+      "descriptions": [
+        "Compile split files and monolith adapter into canonical Planes IR with deterministic parity guarantees."
+      ],
+      "emoji": "\ud83e\udde0",
+      "end_week": 20,
+      "id": "UF-029",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-05",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "compiler milestone staged"
+        }
+      ],
+      "name": "Planes v2 Compiler to Canonical IR + Parity Contract",
+      "start_week": 17,
+      "status": "Planned",
+      "success_criteria": [
+        "Split-file and monolith inputs compile to canonically equivalent IR.",
+        "Compiler resolves basis aliases and frame refs into canonical u/v/w model."
+      ],
+      "task_ids": [
+        "T-3421",
+        "T-3406",
+        "T-3407",
+        "T-3408",
+        "T-3409"
+      ]
+    }
+  ],
+  "milestone_id_schema": {
+    "format": "<PRIMARY_OR_COMBINED_LETTERS>-<3_DIGIT_SEQUENCE>",
+    "rules": [
+      "A = whole app projects",
+      "R = rendering backend milestones",
+      "F = first-party protocol/system milestones",
+      "U = UI/UX tool milestones",
+      "P = project management milestones",
+      "X = uncategorized/other",
+      "Combined IDs may use up to 3 letters; primary letter goes first."
+    ]
+  },
+  "title": "Luvatrix Milestone Gantt (Historical + Active + Planned)",
+  "updated_at": "2026-03-07",
+  "version": "gateflow_v1"
+}

@@ -1,0 +1,117 @@
+{
+  "board_types": {
+    "backlog": {
+      "default_swimlane": "bucket",
+      "description": "Misc backlog ledger board for carryover/unscoped tickets."
+    },
+    "milestone": {
+      "default_swimlane": "specialist",
+      "description": "One board per milestone for execution tracking."
+    },
+    "specialist": {
+      "default_swimlane": "milestone_id",
+      "description": "Cross-milestone board for specialist roles."
+    },
+    "team": {
+      "default_swimlane": "milestone_id",
+      "description": "Cross-milestone board for domain teams."
+    }
+  },
+  "defaults": {
+    "framework": "gateflow_v1",
+    "warning_mode": "warn"
+  },
+  "frameworks": [
+    {
+      "description": "Luvatrix GateFlow stage-gated workflow (default).",
+      "name": "gateflow_v1",
+      "status_columns": [
+        "Intake",
+        "Success Criteria Spec",
+        "Safety Tests Spec",
+        "Implementation Tests Spec",
+        "Edge Case Tests Spec",
+        "Prototype Stage 1",
+        "Prototype Stage 2+",
+        "Verification Review",
+        "Integration Ready",
+        "Done",
+        "Blocked"
+      ],
+      "wip_limits": {
+        "Prototype Stage 1": 3,
+        "Prototype Stage 2+": 3,
+        "Verification Review": 2
+      }
+    },
+    {
+      "description": "Simple Kanban lifecycle.",
+      "name": "kanban_v1",
+      "status_columns": [
+        "Backlog",
+        "Ready",
+        "In Progress",
+        "Review",
+        "Done",
+        "Blocked"
+      ],
+      "wip_limits": {
+        "In Progress": 3,
+        "Review": 2
+      }
+    }
+  ],
+  "overlays": [],
+  "policy": {
+    "protected_branch_patterns": [],
+    "protected_branches": [
+      "main"
+    ]
+  },
+  "profile": "minimal",
+  "profiles": {},
+  "render": {
+    "format": "md",
+    "lane_mode": "milestone"
+  },
+  "render_defaults": {
+    "card_fields": [
+      "id",
+      "title",
+      "status",
+      "milestone_id",
+      "depends_on",
+      "cost_bucket",
+      "cost_score",
+      "cost_confidence"
+    ],
+    "sort_order": [
+      "priority",
+      "id"
+    ],
+    "status_columns": [
+      "Intake",
+      "Success Criteria Spec",
+      "Safety Tests Spec",
+      "Implementation Tests Spec",
+      "Edge Case Tests Spec",
+      "Prototype Stage 1",
+      "Prototype Stage 2+",
+      "Verification Review",
+      "Integration Ready",
+      "Done",
+      "Blocked"
+    ],
+    "wip_limits": {
+      "Prototype Stage 1": 3,
+      "Prototype Stage 2+": 3,
+      "Verification Review": 2
+    }
+  },
+  "source": {
+    "kind": "luvatrix_ops_planning",
+    "path": "/Users/aleccandidato/Projects/luvatrix/ops/planning"
+  },
+  "updated_at": "2026-03-07",
+  "version": "gateflow_v1"
+}
