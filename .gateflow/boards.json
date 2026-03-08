@@ -399,6 +399,19 @@
     },
     {
       "discord": {
+        "channel": "#milestone-p-048",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:P-048",
+      "source_filter": {
+        "milestone_id": "P-048"
+      },
+      "title": "P-048 Planning Canonicalization to GateFlow",
+      "type": "milestone"
+    },
+    {
+      "discord": {
         "channel": "#milestone-m-003-board",
         "threads_enabled": true
       },
