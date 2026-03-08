@@ -5,20 +5,20 @@
     {
       "id": "gateflow-links",
       "owner": "team:platform-ci",
-      "required_command": "PYTHONPATH=. uv run python ops/planning/agile/validate_milestone_task_links.py",
+      "required_command": "uvx --from gateflow==0.1.0a3 gateflow --root /Users/aleccandidato/Projects/luvatrix validate links",
       "pass_criteria": "validation: PASS"
     },
     {
-      "id": "closeout-packet",
+      "id": "gateflow-closeout",
       "owner": "team:release",
-      "required_command": "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_packet.py --milestone-id P-013",
+      "required_command": "uvx --from gateflow==0.1.0a3 gateflow --root /Users/aleccandidato/Projects/luvatrix validate closeout",
       "pass_criteria": "validation: PASS"
     },
     {
-      "id": "non-regression-p026",
+      "id": "gateflow-all",
       "owner": "team:platform-ci",
-      "required_command": "PYTHONPATH=. uv run python ops/planning/api/validate_closeout_evidence.py --milestone-id P-026",
-      "pass_criteria": "validation: PASS (evidence)"
+      "required_command": "uvx --from gateflow==0.1.0a3 gateflow --root /Users/aleccandidato/Projects/luvatrix validate all",
+      "pass_criteria": "validation: PASS (all)"
     }
   ],
   "escalation_path": [

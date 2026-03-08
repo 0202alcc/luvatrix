@@ -6,9 +6,9 @@ from ops.ci.p013_non_regression_gate import command_pack, run_gate_pack
 def test_command_pack_contains_required_checks() -> None:
     names = [entry.name for entry in command_pack()]
     assert names == [
-        "debug-manifest-compat",
-        "p026-non-regression-evidence",
-        "milestone-task-links",
+        "gateflow-links",
+        "gateflow-closeout",
+        "gateflow-all",
     ]
 
 

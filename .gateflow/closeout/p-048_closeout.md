@@ -6,7 +6,7 @@ Decommission `ops/planning` as active planning ledger and make `.gateflow` the c
 ## Task Final States
 - `T-4800` Done: closeout metric + evidence contract established.
 - `T-4801` Done: AGENTS and planning operator docs now assert `.gateflow` canonicalization and `uvx gateflow` command paths.
-- `T-4802` Intake.
+- `T-4802` Done: CI gate catalog and CI gate runner now use `uvx gateflow validate links|closeout|all` commands.
 - `T-4803` Intake.
 - `T-4804` Intake.
 - `T-4805` Intake.

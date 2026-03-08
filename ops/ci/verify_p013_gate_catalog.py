@@ -40,8 +40,8 @@ def validate_catalog(payload: dict[str, object]) -> list[str]:
             errors.append(f"gates[{idx}].owner must start with team:")
 
         command = gate.get("required_command")
-        if not isinstance(command, str) or "uv run" not in command:
-            errors.append(f"gates[{idx}].required_command must include uv run")
+        if not isinstance(command, str) or "gateflow" not in command or "validate" not in command:
+            errors.append(f"gates[{idx}].required_command must be a gateflow validate command")
 
         criteria = gate.get("pass_criteria")
         if not isinstance(criteria, str) or not criteria.strip():

@@ -8233,16 +8233,31 @@
       "title": "Policy + docs cutover"
     },
     {
+      "actuals": {
+        "input_tokens": 2400,
+        "output_tokens": 580,
+        "reopen_count": 0,
+        "tool_calls": 24,
+        "wall_time_sec": 760
+      },
       "depends_on": [
         "T-4801"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
       "id": "T-4802",
       "milestone_id": "P-048",
       "notes": [
         "Required CI gates must use gateflow validate links/closeout/all.",
         "Disable ops/planning validator checks as required gates."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "CI gate migration"
     },
