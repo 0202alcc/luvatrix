@@ -2,12 +2,42 @@
 
 Standalone GateFlow CLI package extracted from Luvatrix.
 
-This repository skeleton is intentionally minimal for milestone `F-045` task `T-4501`.
-Core modules, tests, and release flow are layered in subsequent tasks.
+## Install and Run
 
-## Local development
+### `uvx` (current pre-release workflow)
+
+```bash
+uvx --from ./gateflow gateflow --help
+```
+
+### Local editable install
 
 ```bash
 cd gateflow
-uv run python -m gateflow --help
+uv sync
+uv run gateflow --help
 ```
+
+### Future `pipx` path
+
+After publishing pre-release distributions to an index, install with:
+
+```bash
+pipx install gateflow
+gateflow --help
+```
+
+## Command Surface
+
+The standalone CLI exposes the extracted command groups:
+
+- `init`
+- `config`
+- `validate`
+- `api`
+- `render`
+- `milestones`
+- `tasks`
+- `boards`
+- `frameworks`
+- `backlog`
