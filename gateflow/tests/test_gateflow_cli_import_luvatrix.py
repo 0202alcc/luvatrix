@@ -99,3 +99,26 @@ def test_import_luvatrix_generates_missing_closeout_and_validate_all_passes(tmp_
     _ = capsys.readouterr()
     assert main(["--root", str(tmp_path), "validate", "all"]) == 0
     assert "validation: PASS (all)" in capsys.readouterr().out
+
+
+def test_import_luvatrix_check_mode_reports_drift_with_remediation(tmp_path: Path, capsys) -> None:
+    _seed_luvatrix_ops(tmp_path)
+
+    rc = main(["import-luvatrix", "--path", str(tmp_path), "--check"])
+    assert rc == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "drifted"
+    assert payload["mismatch_count"] > 0
+    assert payload["mismatches"][0]["remediation"].startswith("Run `gateflow import-luvatrix --path <repo>`")
+
+
+def test_import_luvatrix_check_mode_is_clean_after_import(tmp_path: Path, capsys) -> None:
+    _seed_luvatrix_ops(tmp_path)
+    assert main(["import-luvatrix", "--path", str(tmp_path)]) == 0
+    _ = capsys.readouterr()
+
+    rc = main(["import-luvatrix", "--path", str(tmp_path), "--check"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "clean"
+    assert payload["mismatch_count"] == 0
