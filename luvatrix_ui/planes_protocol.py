@@ -105,6 +105,21 @@ def compile_planes_to_ui_ir(
     return _compile_v0(payload, matrix_width=matrix_width, matrix_height=matrix_height, aspect_mode=aspect_mode)
 
 
+def compile_split_to_canonical_ir(
+    payload: dict[str, Any],
+    *,
+    matrix_width: int,
+    matrix_height: int,
+    aspect_mode: str = "stretch",
+    strict: bool = True,
+) -> UIIRPage:
+    """Compile split-file Planes payloads to canonical Planes IR."""
+    validate_planes_payload(payload, strict=strict)
+    if not isinstance(payload.get("planes"), list):
+        raise PlanesValidationError("split-file canonical compile requires `planes` payload")
+    return _compile_v2(payload, matrix_width=matrix_width, matrix_height=matrix_height, aspect_mode=aspect_mode)
+
+
 def _compile_v0(payload: dict[str, Any], *, matrix_width: int, matrix_height: int, aspect_mode: str) -> UIIRPage:
     app = _expect_obj(payload["app"], "app")
     plane = _expect_obj(payload["plane"], "plane")
