@@ -6341,6 +6341,13 @@
       "title": "Implement split-file compiler path to canonical Planes IR"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:UF-029",
         "team:protocol",
@@ -6349,13 +6356,26 @@
       "depends_on": [
         "T-3406"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: monolith adapter compiles to canonical IR with parity-equivalent digest and overlay semantics preserved.",
+        "received": true,
+        "received_at": "2026-03-08T22:01:10+00:00"
+      },
       "id": "T-3408",
       "milestone_id": "UF-029",
       "notes": [
         "Adapter path required: monolith -> canonical IR.",
         "Preserve existing app-facing behavior with version-gated protocol path."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Implement monolith compatibility adapter to canonical Planes IR"
     },
