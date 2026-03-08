@@ -6184,6 +6184,13 @@
       "title": "Implement schema validation pipeline for Planes v2 split files"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-028",
         "team:protocol",
@@ -6192,13 +6199,26 @@
       "depends_on": [
         "T-3403"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO candidate: cross-file invariant validator enforces camera/world/id/cycle/route/frame constraints with passing tests.",
+        "received": true,
+        "received_at": "2026-03-08T21:24:26+00:00"
+      },
       "id": "T-3404",
       "milestone_id": "F-028",
       "notes": [
         "Enforce invariants: camera exists + kind camera + k_hat_index==0; world planes k_hat_index<0; no duplicate ids; no attachment cycles; route/startup/frame ref constraints.",
         "Reference manifest required fields snippet: `required: [planes_protocol_version, camera_plane_id, planes]`."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Implement cross-file invariant validator for manifest/plane/route/frame references"
     },

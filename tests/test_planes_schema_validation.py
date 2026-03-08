@@ -43,6 +43,66 @@ def test_split_schema_documents_missing_required_field_raises_in_strict_mode() -
         validate_split_schema_documents(manifest, planes, [], [], strict=True)
 
 
+def test_cross_file_invariant_camera_plane_exists_and_kind_enforced() -> None:
+    manifest = {
+        "planes_protocol_version": "0.2.0-dev",
+        "camera_plane_id": "camera",
+        "planes": ["camera"],
+    }
+    planes = [{"id": "camera", "kind": "world", "k_hat_index": -1, "default_frame": "screen_tl"}]
+
+    with pytest.raises(PlanesValidationError, match="invariant.camera.kind"):
+        validate_split_schema_documents(manifest, planes, [], [{"id": "screen_tl"}], strict=True)
+
+
+def test_cross_file_invariant_world_plane_requires_negative_k_hat_index() -> None:
+    manifest = {
+        "planes_protocol_version": "0.2.0-dev",
+        "camera_plane_id": "camera",
+        "planes": ["camera", "world"],
+    }
+    planes = [
+        {"id": "camera", "kind": "camera", "k_hat_index": 0, "default_frame": "screen_tl"},
+        {"id": "world", "kind": "world", "k_hat_index": 1, "default_frame": "world_tl"},
+    ]
+    frames = [{"id": "screen_tl"}, {"id": "world_tl"}]
+
+    with pytest.raises(PlanesValidationError, match="invariant.world.k_hat_index"):
+        validate_split_schema_documents(manifest, planes, [], frames, strict=True)
+
+
+def test_cross_file_invariant_rejects_attachment_cycles() -> None:
+    manifest = {
+        "planes_protocol_version": "0.2.0-dev",
+        "camera_plane_id": "camera",
+        "planes": ["camera", "a", "b"],
+    }
+    planes = [
+        {"id": "camera", "kind": "camera", "k_hat_index": 0, "default_frame": "screen_tl"},
+        {"id": "a", "kind": "world", "k_hat_index": -1, "default_frame": "screen_tl", "attach_to": "b"},
+        {"id": "b", "kind": "world", "k_hat_index": -2, "default_frame": "screen_tl", "attach_to": "a"},
+    ]
+    frames = [{"id": "screen_tl"}]
+
+    with pytest.raises(PlanesValidationError, match="invariant.planes.attachment_cycle"):
+        validate_split_schema_documents(manifest, planes, [], frames, strict=True)
+
+
+def test_cross_file_invariant_route_startup_and_frame_refs() -> None:
+    manifest = {
+        "planes_protocol_version": "0.2.0-dev",
+        "camera_plane_id": "camera",
+        "planes": ["camera"],
+        "startup_route_id": "missing_route",
+    }
+    planes = [{"id": "camera", "kind": "camera", "k_hat_index": 0, "default_frame": "screen_tl"}]
+    routes = [{"id": "default", "active_planes": ["camera"], "startup_frame_id": "missing_frame"}]
+    frames = [{"id": "screen_tl"}]
+
+    with pytest.raises(PlanesValidationError, match="invariant.routes.startup_frame_ref"):
+        validate_split_schema_documents(manifest, planes, routes, frames, strict=True)
+
+
 def test_split_schema_documents_collects_diagnostics_in_permissive_mode() -> None:
     manifest = {
         "planes_protocol_version": "0.2.0-dev",
