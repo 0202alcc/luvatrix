@@ -3332,6 +3332,11 @@
       ],
       "emoji": "\ud83e\udde0",
       "end_week": 20,
+      "go_no_go": {
+        "message": "GO: all UF-029 tasks are Done, canonical IR parity digest checks pass for split-vs-monolith and overlay semantics, and GateFlow validations are green.",
+        "received": true,
+        "received_at": "2026-03-08T22:05:55+00:00"
+      },
       "id": "UF-029",
       "lifecycle_events": [
         {
@@ -3343,7 +3348,7 @@
       ],
       "name": "Planes v2 Compiler to Canonical IR + Parity Contract",
       "start_week": 17,
-      "status": "Planned",
+      "status": "Complete",
       "success_criteria": [
         "Split-file and monolith inputs compile to canonically equivalent IR.",
         "Compiler resolves basis aliases and frame refs into canonical u/v/w model."

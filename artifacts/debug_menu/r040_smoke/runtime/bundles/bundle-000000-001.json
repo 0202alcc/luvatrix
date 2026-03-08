@@ -6,13 +6,13 @@
     "provenance"
   ],
   "artifact_paths": [
-    "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmp47ngiidb/runtime/recordings/rec-000000.json",
-    "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmp47ngiidb/runtime/replay/replay-000000.json",
-    "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmp47ngiidb/runtime/perf/hud_snapshot.json",
-    "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmp47ngiidb/runtime/captures/capture-000000-000.json"
+    "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpss6n6kxz/runtime/recordings/rec-000000.json",
+    "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpss6n6kxz/runtime/replay/replay-000000.json",
+    "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpss6n6kxz/runtime/perf/hud_snapshot.json",
+    "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpss6n6kxz/runtime/captures/capture-000000-000.json"
   ],
   "bundle_id": "bundle-000000-001",
-  "exported_at_utc": "2026-03-08T21:33:37Z",
+  "exported_at_utc": "2026-03-08T22:04:35Z",
   "platform": "macos",
   "provenance_id": "194c8385a0c9abe80dae901fa227485a72a8d7271b5de073099342b678eeee6f"
 }
