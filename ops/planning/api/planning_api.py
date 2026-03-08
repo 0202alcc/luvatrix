@@ -9,8 +9,11 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
+from datetime import UTC, date, datetime
+from pathlib import Path
 
 from planning_domain import (
     METHODS,
@@ -32,6 +35,7 @@ DEPRECATION_NOTICE = (
     "  - uvx --from ./gateflow gateflow --root <repo> api <METHOD> <PATH>\n"
     "  - uvx --from ./gateflow gateflow --root <repo> tasks update <TASK_ID> --body '{...}'\n"
 )
+SUNSET_DATE = date(2026, 6, 30)
 
 
 def current_git_branch() -> str:
@@ -76,6 +80,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     print(DEPRECATION_NOTICE, file=sys.stderr)
+    _record_deprecation_usage(args.root, args.method, args.path)
 
     method = args.method.upper()
     if method not in METHODS:
@@ -134,6 +139,23 @@ def main() -> int:
     else:
         print("write: skipped (use --apply)")
     return 0
+
+
+def _record_deprecation_usage(root: str, method: str, path: str) -> None:
+    root_path = Path(root)
+    telemetry_path = root_path / "ops" / "planning" / "telemetry" / "planning_api_deprecation_usage.jsonl"
+    telemetry_path.parent.mkdir(parents=True, exist_ok=True)
+    today = date.today()
+    payload = {
+        "ts_utc": datetime.now(UTC).isoformat(),
+        "root": str(root_path.resolve()),
+        "method": method.upper(),
+        "path": path,
+        "sunset_date": SUNSET_DATE.isoformat(),
+        "days_until_sunset": (SUNSET_DATE - today).days,
+    }
+    with telemetry_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
 if __name__ == "__main__":

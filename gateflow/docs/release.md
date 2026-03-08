@@ -85,3 +85,17 @@ uv run --with twine twine upload dist/*
 pipx install gateflow
 gateflow --help
 ```
+
+## 0.1.0a3 Proposed Scope
+
+1. Error UX improvements:
+- normalize actionable remediation text across `api`, `validate`, and resource commands.
+
+2. Stricter schema diagnostics:
+- enrich validation failures with field-level mismatch hints and deterministic ordering.
+
+3. Import drift explainability:
+- attach concise mismatch-class summaries and top remediation actions in drift output.
+
+4. Deprecation execution support:
+- use `ops/planning/api/planning_api_deprecation_dashboard.py --root <repo>` to track legacy endpoint usage through sunset (`2026-06-30`).

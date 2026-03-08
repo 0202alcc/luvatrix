@@ -261,3 +261,41 @@ def test_harness_first_can_escalate_to_strict(tmp_path: Path) -> None:
 
     assert proc.returncode == 2
     assert "requires a closeout harness task" in proc.stderr
+
+
+def test_planning_api_writes_deprecation_telemetry_and_dashboard(tmp_path: Path) -> None:
+    _seed_planning_tree(tmp_path)
+    repo_root = Path(__file__).resolve().parents[1]
+    proc = _run(
+        [
+            sys.executable,
+            "ops/planning/api/planning_api.py",
+            "GET",
+            "/milestones/F-041",
+            "--root",
+            str(tmp_path),
+        ],
+        cwd=repo_root,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+    telemetry_file = tmp_path / "ops" / "planning" / "telemetry" / "planning_api_deprecation_usage.jsonl"
+    assert telemetry_file.exists()
+    first = json.loads(telemetry_file.read_text(encoding="utf-8").strip().splitlines()[0])
+    assert first["method"] == "GET"
+    assert first["path"] == "/milestones/F-041"
+    assert first["sunset_date"] == "2026-06-30"
+
+    dashboard = _run(
+        [
+            sys.executable,
+            "ops/planning/api/planning_api_deprecation_dashboard.py",
+            "--root",
+            str(tmp_path),
+        ],
+        cwd=repo_root,
+    )
+    assert dashboard.returncode == 0, dashboard.stderr
+    payload = json.loads(dashboard.stdout)
+    assert payload["status"] == "ok"
+    assert payload["entries_total"] >= 1

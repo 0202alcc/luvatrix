@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from gateflow import __version__
 from gateflow.api_shim import execute_api
 from gateflow.config import get_config_value, set_config_value, show_config
 from gateflow.import_luvatrix import check_luvatrix_import_drift, import_luvatrix
@@ -20,6 +21,7 @@ RESOURCES = ("milestones", "tasks", "boards", "frameworks", "backlog")
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="gateflow")
+    parser.add_argument("--version", action="version", version=f"gateflow {__version__}")
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--json-errors", action="store_true", help="Emit machine-readable error payloads.")
     sub = parser.add_subparsers(dest="command", required=True)
