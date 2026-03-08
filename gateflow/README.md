@@ -38,6 +38,7 @@ The standalone CLI exposes the extracted command groups:
 - `validate`
 - `api`
 - `render`
+- `import-luvatrix`
 - `milestones`
 - `tasks`
 - `boards`

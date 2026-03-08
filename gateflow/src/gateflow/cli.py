@@ -7,6 +7,7 @@ from typing import Any
 
 from gateflow.api_shim import execute_api
 from gateflow.config import get_config_value, set_config_value, show_config
+from gateflow.import_luvatrix import import_luvatrix
 from gateflow.policy import PolicyViolation, enforce_protected_branch_write_guard
 from gateflow.render import render_board, render_gantt
 from gateflow.scaffold import doctor_workspace, scaffold_workspace
@@ -76,6 +77,9 @@ def build_parser() -> argparse.ArgumentParser:
 
         delete_p = rsub.add_parser("delete")
         delete_p.add_argument("item_id")
+
+    import_p = sub.add_parser("import-luvatrix")
+    import_p.add_argument("--path", type=Path, required=True, help="Path to the Luvatrix repository root.")
 
     return parser
 
@@ -151,6 +155,11 @@ def _dispatch(args: argparse.Namespace) -> int:
                 print(output, end="")
             return 0
         raise ValueError(f"unsupported render action: {args.render_action}")
+
+    if args.command == "import-luvatrix":
+        result = import_luvatrix(args.path)
+        print(json.dumps({"status": "ok", **result.as_dict()}, indent=2, sort_keys=True))
+        return 0
 
     workspace = GateflowWorkspace(args.root)
     resource = args.command
