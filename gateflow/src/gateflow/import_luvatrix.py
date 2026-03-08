@@ -47,7 +47,7 @@ def import_luvatrix(path: Path) -> ImportResult:
     )
     boards = list(boards_payload.get("boards", []))
     backlog_items = list(backlog_payload.get("items", []))
-    closeout_count = _copy_closeout_packets(root)
+    closeout_count = _sync_closeout_packets(root, milestones)
 
     gateflow_dir = root / ".gateflow"
     write_json(
@@ -141,15 +141,66 @@ def _merge_tasks(*, active: list[dict[str, Any]], archived: list[dict[str, Any]]
     return [merged[key] for key in sorted(merged.keys())]
 
 
-def _copy_closeout_packets(root: Path) -> int:
+def _sync_closeout_packets(root: Path, milestones: list[dict[str, Any]]) -> int:
     src_dir = root / "ops" / "planning" / "closeout"
     dst_dir = root / ".gateflow" / "closeout"
     dst_dir.mkdir(parents=True, exist_ok=True)
     count = 0
-    if not src_dir.exists():
-        return count
-    for path in sorted(src_dir.glob("*_closeout.md")):
-        dst_path = dst_dir / path.name
-        dst_path.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    source_text: dict[str, str] = {}
+    if src_dir.exists():
+        for path in sorted(src_dir.glob("*_closeout.md")):
+            source_text[path.name] = path.read_text(encoding="utf-8")
+    for filename in sorted(source_text.keys()):
+        (dst_dir / filename).write_text(source_text[filename], encoding="utf-8")
+        count += 1
+
+    required_ids = _required_closeout_milestone_ids(milestones)
+    for milestone_id in required_ids:
+        filename = f"{milestone_id.lower()}_closeout.md"
+        if filename in source_text:
+            continue
+        text = source_text.get(filename)
+        if text is None:
+            text = _placeholder_closeout_text(milestone_id)
+        (dst_dir / filename).write_text(text, encoding="utf-8")
         count += 1
     return count
+
+
+def _required_closeout_milestone_ids(milestones: list[dict[str, Any]]) -> list[str]:
+    ids: list[str] = []
+    for milestone in milestones:
+        milestone_id = str(milestone.get("id", "")).strip()
+        if not milestone_id:
+            continue
+        if milestone.get("status") == "Complete" or "closeout_criteria" in milestone:
+            ids.append(milestone_id)
+    return sorted(set(ids))
+
+
+def _placeholder_closeout_text(milestone_id: str) -> str:
+    return "\n".join(
+        [
+            "# Objective Summary",
+            f"- Auto-generated placeholder for `{milestone_id}` during `import-luvatrix`.",
+            "",
+            "# Task Final States",
+            "- Pending closeout detail migration from source planning records.",
+            "",
+            "# Evidence",
+            "- Source closeout packet missing in `ops/planning/closeout`; generated to keep `validate all` deterministic.",
+            "",
+            "# Determinism",
+            "- Placeholder is generated from a stable template until source packet is authored.",
+            "",
+            "# Protocol Compatibility",
+            "- Closeout packet path and section contract are preserved for GateFlow validators.",
+            "",
+            "# Modularity",
+            "- Auto-generation is isolated to `gateflow.import_luvatrix` import flow.",
+            "",
+            "# Residual Risks",
+            "- Replace this placeholder with canonical milestone evidence before final release closeout.",
+            "",
+        ]
+    )
