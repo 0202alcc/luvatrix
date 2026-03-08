@@ -8493,7 +8493,7 @@
       "title": "Create standalone `gateflow` repo skeleton/package",
       "task_type": "standard",
       "milestone_id": "F-045",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4500",
         "T-4405"
@@ -8505,7 +8505,22 @@
       ],
       "notes": [
         "Initialize package layout and project metadata for standalone CLI tool."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 2800,
+        "output_tokens": 520,
+        "wall_time_sec": 1020,
+        "tool_calls": 24,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4502",
