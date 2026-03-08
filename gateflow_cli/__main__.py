@@ -1,3 +1,3 @@
-from gateflow_cli.cli import main
+from gateflow_cli.wrapper import main
 
 raise SystemExit(main())
