@@ -8291,16 +8291,31 @@
       "title": "Anti-regression guard"
     },
     {
+      "actuals": {
+        "input_tokens": 2000,
+        "output_tokens": 510,
+        "reopen_count": 0,
+        "tool_calls": 19,
+        "wall_time_sec": 700
+      },
       "depends_on": [
         "T-4803"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
       "id": "T-4804",
       "milestone_id": "P-048",
       "notes": [
         "Freeze ops/planning or move to ops/planning_legacy with deprecation marker.",
         "Write archive manifest with commit SHA and timestamp."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Legacy archive + freeze"
     },

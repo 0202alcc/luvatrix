@@ -5,7 +5,6 @@ Framework: `gateflow_v1`
 Branch: `codex/m-p-048`
 
 ## Intake
-- [ ] `T-4804` Legacy archive + freeze
 - [ ] `T-4805` Active milestone reconciliation
 - [ ] `T-4806` Final cutover verification and signoff
 
@@ -38,6 +37,7 @@ Branch: `codex/m-p-048`
 - [x] `T-4801` Policy + docs cutover
 - [x] `T-4802` CI gate migration
 - [x] `T-4803` Anti-regression guard
+- [x] `T-4804` Legacy archive + freeze
 
 ## Blocked
 - [ ] None
