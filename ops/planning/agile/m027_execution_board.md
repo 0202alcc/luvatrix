@@ -6,7 +6,6 @@ Name: **Planes v2 Protocol Foundation + File Layout Spec**
 ## GateFlow Columns
 
 ### Intake
-- `T-3401` Freeze Planes v2 protocol/file-system architecture spec
 - `T-3402` Define milestone CI profile and post-merge failure procedure for Planes v2 milestones
 
 ### Success Criteria Spec
@@ -37,6 +36,7 @@ Name: **Planes v2 Protocol Foundation + File Layout Spec**
 
 ### Done
 - `T-3400` [CLOSEOUT HARNESS] Define Planes v2 closeout metric and evidence harness
+- `T-3401` Freeze Planes v2 protocol/file-system architecture spec
 
 ### Blocked
 - _None_

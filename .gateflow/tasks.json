@@ -6064,6 +6064,13 @@
       "title": "[CLOSEOUT HARNESS] Define Planes v2 closeout metric and evidence harness"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-027",
         "team:protocol",
@@ -6072,6 +6079,19 @@
       "depends_on": [
         "T-3400"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: Planes v2 split-file architecture, canonical basis aliases, temporal rules, and default frame policy are frozen with deterministic ordering boundaries.",
+        "received": true,
+        "received_at": "2026-03-08T20:25:13+00:00"
+      },
       "id": "T-3401",
       "milestone_id": "F-027",
       "notes": [
@@ -6080,7 +6100,7 @@
         "Reference plane schema snippet: `if kind=camera then k_hat_index const 0; if kind=world then k_hat_index exclusiveMaximum 0 and attachment required`.",
         "Confirm default native frame policy includes cartesian_center with i_hat/j_hat semantics."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Freeze Planes v2 protocol/file-system architecture spec"
     },
