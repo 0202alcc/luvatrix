@@ -31,9 +31,11 @@ Name: **Planes v2 Runtime Integration on Canonical IR**
 - _None_
 
 ### Verification Review
+- [ ] Training evidence matrix completed (project id, commands, deterministic artifacts, per-scope verdicts)
 - _None_
 
 ### Integration Ready
+- [ ] Training Go blockers reviewed and clear (or explicitly waived)
 - _None_
 
 ### Done

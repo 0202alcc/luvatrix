@@ -18,3 +18,9 @@
 
 # Residual Risks
 - Replace this placeholder with canonical milestone evidence before final release closeout.
+
+# Training Demonstration Evidence
+- Project ID: `<required>`
+- Run command(s): `<required>`
+- Deterministic artifact references: `<required>`
+- Demo scope verdicts: `<pass/fail per scope item>`

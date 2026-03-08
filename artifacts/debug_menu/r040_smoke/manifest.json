@@ -37,7 +37,7 @@
     ]
   },
   "all_passed": true,
-  "generated_at_epoch_sec": 1772869973,
+  "generated_at_epoch_sec": 1773002110,
   "milestone_id": "R-040",
   "preflight": {
     "checks": [
@@ -62,30 +62,28 @@
       {
         "detail": "loader=present; module=missing (OSError: Cannot find Vulkan SDK version. Please ensure that it is installed and that the <sdk_root>/<version>/lib/ folder is in the library path)",
         "id": "vulkan_optional",
+        "module_ok": false,
         "required": false,
         "status": "PASS"
       }
     ],
     "host_platform": "darwin",
+    "macos_runtime_supported": false,
     "required_checks_passed": true,
-    "summary": "ready"
+    "summary": "missing_runtime_prereqs"
   },
   "runs": [
     {
-      "command": "uv run python main.py run-app examples/app_protocol/planes_v2_poc --render macos --ticks 120",
-      "duration_sec": 4.022,
-      "log": "artifacts/debug_menu/r040_smoke/planes_v2_poc.log",
       "name": "planes_v2_poc",
+      "reason": "runtime prerequisites unavailable for macOS run-app smoke",
       "return_code": 0,
-      "status": "PASS"
+      "status": "SKIPPED"
     },
     {
-      "command": "uv run python main.py run-app examples/app_protocol/input_sensor_logger --render macos --ticks 120",
-      "duration_sec": 3.784,
-      "log": "artifacts/debug_menu/r040_smoke/input_sensor_logger.log",
       "name": "input_sensor_logger",
+      "reason": "runtime prerequisites unavailable for macOS run-app smoke",
       "return_code": 0,
-      "status": "PASS"
+      "status": "SKIPPED"
     }
   ]
 }
