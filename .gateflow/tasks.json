@@ -6500,6 +6500,13 @@
       "title": "Enforce deterministic transform/render/hit-test/compositing rules in runtime"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:RF-030",
         "team:rendering",
@@ -6508,12 +6515,25 @@
       "depends_on": [
         "T-3410"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: Backend orientation normalization to canonical u/v/w path is validated for runtime app-transform ordering.",
+        "received": true,
+        "received_at": "2026-03-08T22:36:59+00:00"
+      },
       "id": "T-3412",
       "milestone_id": "RF-030",
       "notes": [
         "Platform backend must normalize orientation into canonical basis before app-level transforms."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Normalize device-native orientation to canonical u/v/w before app transforms"
     },
