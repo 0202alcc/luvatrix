@@ -44,3 +44,5 @@ The standalone CLI exposes the extracted command groups:
 - `boards`
 - `frameworks`
 - `backlog`
+
+`import-luvatrix` supports `--check` to emit deterministic drift output and non-zero exit when `.gateflow/*` diverges from `ops/planning/*`.
