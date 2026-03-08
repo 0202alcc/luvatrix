@@ -8660,7 +8660,7 @@
       "title": "[CLOSEOUT HARNESS] Define F-046 closeout metric + evidence harness",
       "task_type": "closeout_harness",
       "milestone_id": "F-046",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:F-046",
@@ -8669,14 +8669,29 @@
       ],
       "notes": [
         "Define closeout/evidence contract for migration tooling."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4601",
       "title": "Implement `gateflow import-luvatrix --path <repo>`",
       "task_type": "standard",
       "milestone_id": "F-046",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4600",
         "T-4505"
@@ -8688,14 +8703,29 @@
       ],
       "notes": [
         "Implement deterministic import path from ops/planning to .gateflow."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4602",
       "title": "Map milestone/task/board/backlog/closeout semantics exactly",
       "task_type": "standard",
       "milestone_id": "F-046",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4601"
       ],
@@ -8706,14 +8736,29 @@
       ],
       "notes": [
         "Ensure imported objects preserve identifiers, links, lifecycle semantics."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4603",
       "title": "Validate post-import with `gateflow validate all`",
       "task_type": "standard",
       "milestone_id": "F-046",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4602"
       ],
@@ -8724,14 +8769,29 @@
       ],
       "notes": [
         "Add integration validations proving import integrity."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4604",
       "title": "Add deterministic drift report + explicit remediation output",
       "task_type": "standard",
       "milestone_id": "F-046",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4603"
       ],
@@ -8742,7 +8802,22 @@
       ],
       "notes": [
         "Emit actionable mismatch reports for migration remediation."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "wall_time_sec": 0,
+        "tool_calls": 0,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4700",
