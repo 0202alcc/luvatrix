@@ -6459,6 +6459,13 @@
       "title": "Integrate runtime to consume canonical IR only"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:RF-030",
         "team:runtime",
@@ -6467,6 +6474,19 @@
       "depends_on": [
         "T-3410"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: Deterministic transform order, draw/hit-test ordering, and compositing semantics validated for runtime path.",
+        "received": true,
+        "received_at": "2026-03-08T22:36:17+00:00"
+      },
       "id": "T-3411",
       "milestone_id": "RF-030",
       "notes": [
@@ -6475,7 +6495,7 @@
         "Hit-test order is reverse draw order; compositing absolute overwrite, delta add+clamp [0,255].",
         "Replay and frame-step deterministic checks must include artifact digest continuity evidence."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Enforce deterministic transform/render/hit-test/compositing rules in runtime"
     },
