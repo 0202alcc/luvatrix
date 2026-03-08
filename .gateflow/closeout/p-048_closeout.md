@@ -5,7 +5,7 @@ Decommission `ops/planning` as active planning ledger and make `.gateflow` the c
 
 ## Task Final States
 - `T-4800` Done: closeout metric + evidence contract established.
-- `T-4801` Intake.
+- `T-4801` Done: AGENTS and planning operator docs now assert `.gateflow` canonicalization and `uvx gateflow` command paths.
 - `T-4802` Intake.
 - `T-4803` Intake.
 - `T-4804` Intake.
@@ -29,4 +29,3 @@ Cutover work is split across task branches `T-4800..T-4806` with isolated commit
 
 ## Residual Risks
 - Historical docs and artifacts under `ops/planning/*` may still reference legacy command paths until cutover tasks finish.
-

@@ -8204,16 +8204,31 @@
       "title": "[CLOSEOUT HARNESS] Canonicalization closeout metric + evidence contract"
     },
     {
+      "actuals": {
+        "input_tokens": 2100,
+        "output_tokens": 500,
+        "reopen_count": 0,
+        "tool_calls": 22,
+        "wall_time_sec": 680
+      },
       "depends_on": [
         "T-4800"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
       "id": "T-4801",
       "milestone_id": "P-048",
       "notes": [
         "Update AGENTS and planning docs to set .gateflow canonical and ops/planning deprecated.",
         "All planning operations must run via uvx gateflow commands."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Policy + docs cutover"
     },

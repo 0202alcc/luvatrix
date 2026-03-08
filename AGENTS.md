@@ -2,12 +2,21 @@
 
 Repository-level operating rules for human + AI contributors.
 
+## P-048 Canonicalization Override (Effective 2026-03-08)
+1. `.gateflow/*` is the only active planning ledger and source of truth.
+2. `ops/planning/*` is deprecated/legacy archive content and must not be used for active planning writes.
+3. All planning operations must use standalone GateFlow CLI commands:
+   - `uvx --from gateflow==0.1.0a3 gateflow --root <repo> ...`
+4. Legacy compatibility path `ops/planning/api/planning_api.py` is decommissioned for active operations.
+5. CI and Go/No-Go gates must resolve from `.gateflow/*` state and `uvx gateflow validate ...` commands only.
+6. If any instruction below conflicts with this section, this section takes precedence.
+
 ## Read First (Mandatory)
 Before planning or editing code, read:
-1. `ops/planning/gantt/milestone_schedule.json`
-2. `ops/planning/gantt/milestones_gantt.md`
-3. `ops/planning/agile/agile_board_seed.md`
-4. `ops/planning/agile/agile_lineage_and_boards.md`
+1. `.gateflow/milestones.json`
+2. `.gateflow/tasks.json`
+3. `.gateflow/boards.json`
+4. `.gateflow/config.json`
 
 ## Milestone Thread Policy
 1. Use one dedicated Codex thread per milestone.
