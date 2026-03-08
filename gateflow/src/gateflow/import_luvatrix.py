@@ -280,6 +280,26 @@ def _merge_tasks(*, active: list[dict[str, Any]], archived: list[dict[str, Any]]
         task_id = str(task.get("id", "")).strip()
         if task_id:
             merged[task_id] = dict(task)
+    for task in list(merged.values()):
+        deps = task.get("depends_on", [])
+        if not isinstance(deps, list):
+            continue
+        for dep in deps:
+            dep_id = str(dep).strip()
+            if not dep_id or dep_id in merged:
+                continue
+            merged[dep_id] = {
+                "id": dep_id,
+                "title": f"[IMPORTED PLACEHOLDER] Missing dependency task {dep_id}",
+                "status": "Blocked",
+                "depends_on": [],
+                "task_type": "placeholder",
+                "imported_placeholder": True,
+                "notes": [
+                    "Auto-generated during import-luvatrix because source planning references a missing dependency task.",
+                    "Remediation: add canonical task record in ops/planning/agile/tasks_master.json or tasks_archived.json, then re-import.",
+                ],
+            }
     return [merged[key] for key in sorted(merged.keys())]
 
 
