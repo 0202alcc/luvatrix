@@ -5,7 +5,7 @@ import shlex
 import subprocess
 import sys
 
-DEFAULT_GATEFLOW_CMD = "uvx --from ./gateflow gateflow"
+DEFAULT_GATEFLOW_CMD = "uvx --from gateflow gateflow"
 COMMAND_ENV_VAR = "LUVATRIX_GATEFLOW_WRAPPER_CMD"
 
 
