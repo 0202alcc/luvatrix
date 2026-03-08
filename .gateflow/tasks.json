@@ -6684,18 +6684,38 @@
       "title": "[CLOSEOUT HARNESS] Define UF-029 compiler/parity closeout metric and evidence harness"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:RF-030",
         "team:platform-ci",
         "specialist:pm"
       ],
       "depends_on": [],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: RF-030 closeout harness criteria and evidence profile defined with deterministic gate conditions.",
+        "received": true,
+        "received_at": "2026-03-08T22:19:20+00:00"
+      },
       "id": "T-3422",
       "milestone_id": "RF-030",
       "notes": [
         "Milestone-level scoring + hard no-go criteria + evidence/command profile for Go/No-Go decision."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "closeout_harness",
       "title": "[CLOSEOUT HARNESS] Define RF-030 runtime deterministic closeout metric and evidence harness"
     },
