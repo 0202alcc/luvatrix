@@ -5,7 +5,7 @@ Framework: `gateflow_v1`
 Branch: `codex/m-p-048`
 
 ## Intake
-- [ ] `T-4806` Final cutover verification and signoff
+- [ ] None
 
 ## Success Criteria Spec
 - [ ] None
@@ -38,6 +38,7 @@ Branch: `codex/m-p-048`
 - [x] `T-4803` Anti-regression guard
 - [x] `T-4804` Legacy archive + freeze
 - [x] `T-4805` Active milestone reconciliation
+- [x] `T-4806` Final cutover verification and signoff
 
 ## Blocked
 - [ ] None
