@@ -75,3 +75,27 @@ def test_import_luvatrix_creates_gateflow_ledgers(tmp_path: Path) -> None:
     assert [row["id"] for row in backlog["items"]] == ["B-1"]
     assert [row["name"] for row in config["frameworks"]] == ["gateflow_v1"]
     assert (gateflow / "closeout" / "f-046_closeout.md").exists()
+
+
+def test_import_luvatrix_generates_missing_closeout_and_validate_all_passes(tmp_path: Path, capsys) -> None:
+    _seed_luvatrix_ops(tmp_path)
+    _write_json(
+        tmp_path / "ops" / "planning" / "gantt" / "milestone_schedule.json",
+        {
+            "milestones": [
+                {
+                    "id": "F-046",
+                    "task_ids": ["T-4601"],
+                    "status": "Planned",
+                    "closeout_criteria": {"metric_id": "f-046-closeout-v1"},
+                }
+            ],
+        },
+    )
+    # Remove source closeout to force placeholder generation.
+    (tmp_path / "ops" / "planning" / "closeout" / "f-046_closeout.md").unlink()
+
+    assert main(["import-luvatrix", "--path", str(tmp_path)]) == 0
+    _ = capsys.readouterr()
+    assert main(["--root", str(tmp_path), "validate", "all"]) == 0
+    assert "validation: PASS (all)" in capsys.readouterr().out
