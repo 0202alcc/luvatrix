@@ -6144,6 +6144,13 @@
       "title": "Define milestone CI profile and post-merge failure procedure for Planes v2 milestones"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-028",
         "team:protocol",
@@ -6152,6 +6159,19 @@
       "depends_on": [
         "T-3401"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO candidate: split-file schema validation pipeline implemented with strict/permissive behavior and passing tests.",
+        "received": true,
+        "received_at": "2026-03-08T21:21:49+00:00"
+      },
       "id": "T-3403",
       "milestone_id": "F-028",
       "notes": [
@@ -6159,11 +6179,18 @@
         "Canonical IR contract source: tmp/planes_v2_handoff/ir/planes_ir_types.py (to be moved into repo-owned protocol module during implementation).",
         "Cross-file invariants must be deterministic under strict mode with explicit permissive warnings where allowed."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Implement schema validation pipeline for Planes v2 split files"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-028",
         "team:protocol",
@@ -6172,17 +6199,37 @@
       "depends_on": [
         "T-3403"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO candidate: cross-file invariant validator enforces camera/world/id/cycle/route/frame constraints with passing tests.",
+        "received": true,
+        "received_at": "2026-03-08T21:24:26+00:00"
+      },
       "id": "T-3404",
       "milestone_id": "F-028",
       "notes": [
         "Enforce invariants: camera exists + kind camera + k_hat_index==0; world planes k_hat_index<0; no duplicate ids; no attachment cycles; route/startup/frame ref constraints.",
         "Reference manifest required fields snippet: `required: [planes_protocol_version, camera_plane_id, planes]`."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Implement cross-file invariant validator for manifest/plane/route/frame references"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-028",
         "team:security-quality",
@@ -6191,13 +6238,26 @@
       "depends_on": [
         "T-3404"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO candidate: strict/permissive policy contract implemented; strict hard-fail and compatibility-window warnings validated.",
+        "received": true,
+        "received_at": "2026-03-08T21:26:34+00:00"
+      },
       "id": "T-3405",
       "milestone_id": "F-028",
       "notes": [
         "Strict mode must hard-fail invalid schema/reference data.",
         "Permissive mode allowed only for explicit compatibility windows with warnings."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Define strict vs permissive mode policy and diagnostics contract"
     },
@@ -6472,18 +6532,38 @@
       "title": "Implement post-foundation performance optimizations with determinism/compatibility guardrails"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-028",
         "team:platform-ci",
         "specialist:pm"
       ],
       "depends_on": [],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO candidate: closeout harness defined with deterministic evidence plan; final milestone decision pending remaining tasks.",
+        "received": true,
+        "received_at": "2026-03-08T21:18:38+00:00"
+      },
       "id": "T-3420",
       "milestone_id": "F-028",
       "notes": [
         "Milestone-level scoring + hard no-go criteria + evidence/command profile for Go/No-Go decision."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "closeout_harness",
       "title": "[CLOSEOUT HARNESS] Define F-028 validator closeout metric and evidence harness"
     },
@@ -6568,6 +6648,13 @@
       "title": "[CLOSEOUT HARNESS] Define R-033 perf non-regression closeout metric and evidence harness"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-028",
         "team:platform-ci",
@@ -6576,17 +6663,37 @@
       "depends_on": [
         "T-3403"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO candidate: visual evidence schema and deterministic manifest contract implemented with validator coverage.",
+        "received": true,
+        "received_at": "2026-03-08T21:28:04+00:00"
+      },
       "id": "T-3426",
       "milestone_id": "F-028",
       "notes": [
         "Canonicalize deterministic visual evidence manifest fields for screenshot/record/replay/bundle linkage.",
         "Manifest entries must include commit_sha, command, timestamp, scenario, seed, artifact_digest, and sidecar linkage."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Define Planes v2 visual evidence schema + manifest contract"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-028",
         "team:platform-ci",
@@ -6596,13 +6703,26 @@
         "T-3426",
         "T-3404"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO candidate: required visual evidence artifact matrix checks now enforced with strict validator failures.",
+        "received": true,
+        "received_at": "2026-03-08T21:30:25+00:00"
+      },
       "id": "T-3427",
       "milestone_id": "F-028",
       "notes": [
         "Validator must fail when required visual evidence artifacts are missing, invalid, or non-deterministic.",
         "Enforce artifact matrix coverage for screenshot, recording, replay digest, frame-step/perf HUD snapshots, and debug bundle manifest."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Add validator checks for required visual evidence artifacts"
     },
