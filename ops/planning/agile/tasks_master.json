@@ -8462,7 +8462,7 @@
       "title": "[CLOSEOUT HARNESS] Define F-045 closeout metric + evidence harness",
       "task_type": "closeout_harness",
       "milestone_id": "F-045",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [],
       "board_refs": [
         "milestone:F-045",
@@ -8471,7 +8471,22 @@
       ],
       "notes": [
         "Define closeout/evidence contract for standalone repo extraction."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 2200,
+        "output_tokens": 430,
+        "wall_time_sec": 780,
+        "tool_calls": 18,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4501",

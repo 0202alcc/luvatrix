@@ -526,6 +526,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 - Tasks: `T-4300, T-4301, T-4302, T-4303, T-4304`
 - Lifecycle events:
   - 2026-03-07 active (framework=gateflow_v1) - gateflow productization roadmap milestone created
+  - 2026-03-07 closed (framework=gateflow_v1) - policy and validation hardening complete and merged to main
 - Success criteria:
   - Deterministic md/ascii render outputs are test-verified.
   - No PNG generation path is required for v1 completion.
