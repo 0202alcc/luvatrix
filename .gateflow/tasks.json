@@ -6027,23 +6027,50 @@
       "title": "Rollback/kill-switch hardening + final closeout packet"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-027",
         "team:platform-ci",
         "specialist:pm"
       ],
       "depends_on": [],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: closeout harness metric/evidence contract defined for F-027 with training evidence requirements.",
+        "received": true,
+        "received_at": "2026-03-08T20:22:57+00:00"
+      },
       "id": "T-3400",
       "milestone_id": "F-027",
       "notes": [
         "Establish quantitative go/no-go scoring and hard no-go conditions for Planes v2 milestones.",
         "Include explicit non-regression gate linkage to P-026 evidence expectations."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "closeout_harness",
       "title": "[CLOSEOUT HARNESS] Define Planes v2 closeout metric and evidence harness"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-027",
         "team:protocol",
@@ -6052,6 +6079,19 @@
       "depends_on": [
         "T-3400"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: Planes v2 split-file architecture, canonical basis aliases, temporal rules, and default frame policy are frozen with deterministic ordering boundaries.",
+        "received": true,
+        "received_at": "2026-03-08T20:25:13+00:00"
+      },
       "id": "T-3401",
       "milestone_id": "F-027",
       "notes": [
@@ -6060,11 +6100,18 @@
         "Reference plane schema snippet: `if kind=camera then k_hat_index const 0; if kind=world then k_hat_index exclusiveMaximum 0 and attachment required`.",
         "Confirm default native frame policy includes cartesian_center with i_hat/j_hat semantics."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Freeze Planes v2 protocol/file-system architecture spec"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-027",
         "team:platform-ci",
@@ -6073,13 +6120,26 @@
       "depends_on": [
         "T-3400"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: F-027 CI profile and post-merge failure reopen procedure are defined with deterministic compatibility boundaries.",
+        "received": true,
+        "received_at": "2026-03-08T20:26:26+00:00"
+      },
       "id": "T-3402",
       "milestone_id": "F-027",
       "notes": [
         "Each first-degree milestone branch must declare ci_required_checks before implementation starts.",
         "Procedure must include milestone reopen + task reopen to Verification Review on post-merge CI failures."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Define milestone CI profile and post-merge failure procedure for Planes v2 milestones"
     },

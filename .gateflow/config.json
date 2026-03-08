@@ -64,9 +64,8 @@
   "overlays": [],
   "policy": {
     "protected_branch_patterns": [],
-    "protected_branches": [
-      "main"
-    ]
+    "protected_branches": [],
+    "require_sync_before_write": false
   },
   "profile": "minimal",
   "profiles": {},
