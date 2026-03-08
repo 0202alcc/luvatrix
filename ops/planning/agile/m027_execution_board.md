@@ -6,7 +6,6 @@ Name: **Planes v2 Protocol Foundation + File Layout Spec**
 ## GateFlow Columns
 
 ### Intake
-- `T-3400` [CLOSEOUT HARNESS] Define Planes v2 closeout metric and evidence harness
 - `T-3401` Freeze Planes v2 protocol/file-system architecture spec
 - `T-3402` Define milestone CI profile and post-merge failure procedure for Planes v2 milestones
 
@@ -29,13 +28,15 @@ Name: **Planes v2 Protocol Foundation + File Layout Spec**
 - _None_
 
 ### Verification Review
+- [ ] Training evidence matrix completed (project id, commands, deterministic artifacts, per-scope verdicts)
 - _None_
 
 ### Integration Ready
+- [ ] Training Go blockers reviewed and clear (or explicitly waived)
 - _None_
 
 ### Done
-- _None_
+- `T-3400` [CLOSEOUT HARNESS] Define Planes v2 closeout metric and evidence harness
 
 ### Blocked
 - _None_
