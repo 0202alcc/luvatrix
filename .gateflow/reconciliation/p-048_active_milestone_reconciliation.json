@@ -1,0 +1,309 @@
+{
+  "generated_at": "2026-03-08T21:08:13Z",
+  "window_days": 21,
+  "checked_count": 50,
+  "missing_count": 0,
+  "missing_milestone_ids": [],
+  "items": [
+    {
+      "id": "A-037",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/a-037_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "APU-020",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/apu-020_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "ARU-016",
+      "status": "In Progress",
+      "closeout_path": ".gateflow/closeout/aru-016_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "AU-018",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/au-018_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "AU-019",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/au-019_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-001",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/f-001_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-003",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/f-003_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-011",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/f-011_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-014",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/f-014_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-024",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/f-024_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-027",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/f-027_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-028",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/f-028_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-031",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/f-031_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-034",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/f-034_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-038",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/f-038_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-041",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/f-041_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-042",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/f-042_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-045",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/f-045_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "F-046",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/f-046_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "FR-004",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/fr-004_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "P-008",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/p-008_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "P-010",
+      "status": "In Progress",
+      "closeout_path": ".gateflow/closeout/p-010_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "P-013",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/p-013_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "P-015",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/p-015_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "P-021",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/p-021_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "P-026",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/p-026_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "P-032",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/p-032_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "P-040",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/p-040_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "P-044",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/p-044_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "P-047",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/p-047_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "P-048",
+      "status": "In Progress",
+      "closeout_path": ".gateflow/closeout/p-048_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "R-002",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/r-002_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "R-005",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/r-005_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "R-012",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/r-012_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "R-022",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/r-022_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "R-023",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/r-023_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "R-025",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/r-025_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "R-033",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/r-033_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "R-036",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/r-036_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "R-039",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/r-039_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "R-040",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/r-040_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "RF-009",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/rf-009_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "RF-030",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/rf-030_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "U-007",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/u-007_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "U-017",
+      "status": "In Progress",
+      "closeout_path": ".gateflow/closeout/u-017_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "U-021",
+      "status": "In Progress",
+      "closeout_path": ".gateflow/closeout/u-021_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "U-035",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/u-035_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "U-043",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/u-043_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "UF-006",
+      "status": "Complete",
+      "closeout_path": ".gateflow/closeout/uf-006_closeout.md",
+      "closeout_exists": true
+    },
+    {
+      "id": "UF-029",
+      "status": "Planned",
+      "closeout_path": ".gateflow/closeout/uf-029_closeout.md",
+      "closeout_exists": true
+    }
+  ]
+}
