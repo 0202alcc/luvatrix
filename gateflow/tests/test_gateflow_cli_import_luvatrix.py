@@ -122,3 +122,21 @@ def test_import_luvatrix_check_mode_is_clean_after_import(tmp_path: Path, capsys
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "clean"
     assert payload["mismatch_count"] == 0
+
+
+def test_import_luvatrix_adds_placeholder_for_missing_dependency(tmp_path: Path) -> None:
+    _seed_luvatrix_ops(tmp_path)
+    _write_json(
+        tmp_path / "ops" / "planning" / "agile" / "tasks_master.json",
+        {
+            "tasks": [{"id": "T-4601", "milestone_id": "F-046", "depends_on": ["T-9999"]}],
+            "status_values": ["Intake", "Done"],
+            "legacy_status_values": ["Backlog"],
+            "schema_version": "1.0.0",
+        },
+    )
+
+    assert main(["import-luvatrix", "--path", str(tmp_path)]) == 0
+    tasks = json.loads((tmp_path / ".gateflow" / "tasks.json").read_text(encoding="utf-8"))
+    placeholder = [row for row in tasks["items"] if row["id"] == "T-9999"][0]
+    assert placeholder["imported_placeholder"] is True
