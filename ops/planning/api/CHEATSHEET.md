@@ -1,37 +1,28 @@
-# Planning Operator Cheatsheet
+# Planning Operator Cheatsheet (GateFlow 0.1.0a3)
 
-Fast command reference for milestone/task/board/backlog operations.
+Quick reference for Luvatrix planning operations.
 
-## 0) Safe defaults
+## 0) Baseline
 
-1. Preferred command path is standalone `gateflow`:
-- `uv run gateflow --root <repo> ...` (Luvatrix wrapper)
-- `uvx --from ./gateflow gateflow --root <repo> ...` (direct standalone)
-2. Dry-run first when using legacy `planning_api.py` (`--apply` omitted).
-3. Re-run with `--apply` once output looks correct.
-4. Run `--apply` only on `main` (`main:/ops/planning/*` is source of truth).
-5. Legacy API `--apply` auto-regenerates:
-- `ops/planning/gantt/milestones_gantt.md`
-- `ops/planning/gantt/milestones_gantt.md` (text-only v1 artifact)
-6. Optional path override:
-- append `--root <repo-root>` to run against a non-default checkout/snapshot
-7. GateFlow guardrails:
-- no stage skipping
-- backward stage moves require `--force-with-reason`
-- WIP limits enforced from `ops/planning/agile/boards_registry.json` (`wip_limits`)
+1. Wrapper default is pinned to `gateflow==0.1.0a3`.
+2. Preferred command path:
+- `uv run gateflow --root <repo> ...`
+3. Direct published package path:
+- `uvx --from gateflow==0.1.0a3 gateflow --root <repo> ...`
+4. Verify active version:
 
-## 1) Milestone IDs
+```bash
+uv run gateflow --version
+```
 
-Format: `<1-3 letters>-<3 digits>` (examples: `A-021`, `FR-004`, `APU-020`)
+## 1) Initialize + doctor
 
-Letter taxonomy:
+```bash
+uv run gateflow --root . init
+uv run gateflow --root . init doctor
+```
 
-1. `A` app projects
-2. `R` rendering backend
-3. `F` first-party protocol/system
-4. `U` UI/UX native tooling
-5. `P` project management
-6. `X` uncategorized/other
+If doctor reports missing files, stop and repair before write operations.
 
 ## 2) Read state
 
@@ -43,192 +34,77 @@ uv run gateflow --root . api GET /frameworks
 uv run gateflow --root . api GET /backlog
 ```
 
-Legacy compatibility path (deprecated):
+## 3) CRUD (resource/API shim)
+
+```bash
+uv run gateflow --root . milestones create --body '{"id":"A-021", ...}'
+uv run gateflow --root . tasks create --body '{"id":"T-1201", ...}'
+uv run gateflow --root . tasks update T-1201 --body '{"status":"Success Criteria Spec"}'
+uv run gateflow --root . boards create --body '{"id":"milestone:A-021", ...}'
+```
+
+Legacy fallback (deprecated, compatibility only):
 
 ```bash
 uv run python ops/planning/api/planning_api.py GET /milestones
 ```
 
-## 3) Create milestone + board (GateFlow)
+## 4) Controlled close workflow (required)
+
+Use close commands instead of status-only close edits.
 
 ```bash
-uv run python ops/planning/api/planning_api.py POST /milestones \
-  --body '{"id":"A-021","emoji":"🧩","name":"Example app project","descriptions":["Initial objective: deliver app-level baseline workflow.","Reopen objective: add remediation scope without changing protocol compatibility."],"start_week":13,"end_week":16,"status":"Planned","task_ids":[],"success_criteria":["Milestone outcomes are validated on main with required checks passing."],"closeout_criteria":{"metric_id":"A-021-closeout-v1","metric_description":"Composite go/no-go score for milestone closeout.","score_formula":"0.5*correctness + 0.3*safety + 0.2*performance","score_components":["correctness","safety","performance"],"go_threshold":85,"hard_no_go_conditions":["any required validator fails","any unresolved high-severity risk"],"required_evidence":["ops/planning/closeout/a-021_closeout.md","validator outputs"],"required_commands":["uv run python ops/planning/api/validate_closeout_packet.py --milestone-id A-021","uv run python ops/planning/agile/validate_milestone_task_links.py"],"rubric_version":"closeout_rubric_v1"},"ci_required_checks":["uv run python ops/planning/agile/validate_milestone_task_links.py","uv run pytest -q"],"lifecycle_events":[{"date":"2026-03-03","event":"active","framework":"gateflow_v1","note":"opened"}]}'
+uv run gateflow --root . close task T-1201 --heads-up "Go: required checks passed on main"
+uv run gateflow --root . close milestone A-021 --heads-up "No-Go: missing deterministic replay evidence"
 ```
 
-Bootstrap milestone (no tasks yet):
+On close failure:
 
 ```bash
-uv run python ops/planning/api/planning_api.py POST /milestones \
-  --body '{"id":"U-099","emoji":"🧪","name":"New milestone bootstrap","start_week":13,"end_week":14,"status":"Planned","task_ids":[],"success_criteria":["Bootstrap success criteria placeholder."],"closeout_criteria":{"metric_id":"U-099-closeout-v1","metric_description":"Bootstrap closeout metric.","score_formula":"1.0*readiness","score_components":["readiness"],"go_threshold":80,"hard_no_go_conditions":["missing closeout packet"],"required_evidence":["ops/planning/closeout/u-099_closeout.md"],"required_commands":["uv run python ops/planning/api/validate_closeout_packet.py --milestone-id U-099"],"rubric_version":"closeout_rubric_v1"},"ci_required_checks":["uv run python ops/planning/agile/validate_milestone_task_links.py"]}'
+cat .gateflow/closeout/closure_issues.json
 ```
 
+Include remediation steps from `closure_issues.json` in milestone/task logs.
+
+## 5) Backend + sync workflow (phased adoption)
+
+Observe-only phase:
+
 ```bash
-uv run python ops/planning/api/planning_api.py POST /boards \
-  --body '{"id":"milestone:A-021","title":"A-021 Example app project","type":"milestone","framework_template":"gateflow_v1","source_filter":{"milestone_id":"A-021"},"discord":{"channel":"#milestone-a-021-board","threads_enabled":true}}'
+uv run gateflow --root . backend status
+uv run gateflow --root . sync status
 ```
 
-Apply:
+Opt-in backend migration:
 
 ```bash
-uv run python ops/planning/api/planning_api.py POST /milestones --body-file /tmp/new_milestone.json --apply
-uv run python ops/planning/api/planning_api.py POST /boards --body-file /tmp/new_board.json --apply
+uv run gateflow --root . backend migrate --to backend
 ```
 
-## 4) Create/update task (GateFlow statuses)
-
-Create:
+Sync flow:
 
 ```bash
-uv run python ops/planning/api/planning_api.py POST /tasks \
-  --body '{"id":"T-1200","title":"Define milestone closeout metric and evidence harness","task_type":"closeout_harness","milestone_id":"A-021","status":"Intake","depends_on":[],"board_refs":["milestone:A-021","team:platform-ci","specialist:pm"],"notes":["Define scoring formula and threshold.","Define required evidence artifacts and validator commands."]}'
+uv run gateflow --root . sync from-main
+uv run gateflow --root . sync status
+uv run gateflow --root . sync apply
 ```
 
-Add a standard task (after harness exists):
+Protected repos can require sync before writes:
 
 ```bash
-uv run python ops/planning/api/planning_api.py POST /tasks \
-  --body '{"id":"T-1201","title":"Define success criteria","task_type":"standard","milestone_id":"A-021","status":"Intake","depends_on":["T-1200"],"board_refs":["milestone:A-021","team:protocol","specialist:pm"],"notes":["Architect intent: preserve RenderTarget boundary.","Include deterministic replay evidence commands in acceptance criteria."]}'
+uv run gateflow --root . config set policy.require_sync_before_write true
 ```
 
-Move status:
+## 6) Validation + gates
 
 ```bash
-uv run python ops/planning/api/planning_api.py PATCH /tasks/T-1201 \
-  --body '{"status":"Success Criteria Spec"}'
-```
-
-Apply:
-
-```bash
-uv run python ops/planning/api/planning_api.py PATCH /tasks/T-1201 \
-  --body '{"status":"Prototype Stage 1"}' \
-  --apply
-```
-
-Re-estimate cost from rubric components:
-
-```bash
-uv run python ops/planning/api/planning_api.py PATCH /tasks/T-1201 \
-  --body '{"status":"Prototype Stage 1","cost_components":{"context_load":45,"reasoning_depth":55,"code_edit_surface":40,"validation_scope":50,"iteration_risk":35},"cost_confidence":0.78}' \
-  --reestimate-cost \
-  --apply
-```
-
-## 5) Close/reopen milestone lifecycle
-
-Update milestone status:
-
-```bash
-uv run python ops/planning/api/planning_api.py PATCH /milestones/A-021 \
-  --body '{"status":"Complete"}'
-```
-
-Update lifecycle events in milestone payload:
-
-```bash
-uv run python ops/planning/api/planning_api.py PATCH /milestones/A-021 \
-  --body '{"lifecycle_events":[{"date":"2026-03-03","event":"closed","framework":"gateflow_v1","note":"sprint complete"},{"date":"2026-03-10","event":"reopened","framework":"gateflow_v1","note":"new sprint started"}]}' \
-  --apply
-```
-
-## 6) Framework controls
-
-Show framework templates:
-
-```bash
-uv run python ops/planning/api/planning_api.py GET /frameworks
-```
-
-Set default template:
-
-```bash
-uv run python ops/planning/api/planning_api.py PATCH /frameworks \
-  --body '{"default_framework_template":"gateflow_v1"}' \
-  --apply
-```
-
-## 7) Misc backlog (leftovers/unattached)
-
-Create backlog item:
-
-```bash
-uv run python ops/planning/api/planning_api.py POST /backlog \
-  --body '{"id":"B-001","title":"Carry over unresolved perf probe","status":"Open","bucket":"Carryover","source_milestone_id":"U-017","task_ref":"T-836"}'
-```
-
-Update backlog item:
-
-```bash
-uv run python ops/planning/api/planning_api.py PATCH /backlog/B-001 \
-  --body '{"status":"Triaged","bucket":"Backfill"}'
-```
-
-Close backlog item:
-
-```bash
-uv run python ops/planning/api/planning_api.py PATCH /backlog/B-001 \
-  --body '{"status":"Closed"}' \
-  --apply
-```
-
-## 8) Validation
-
-```bash
+uv run gateflow --root . validate all
 uv run python ops/planning/agile/validate_milestone_task_links.py
+uv run python ops/planning/api/validate_closeout_packet.py --milestone-id <ID>
 ```
 
-## 9) Branch planning drift check/sync
+## 7) Branch/merge rule
 
-Check drift vs `origin/main`:
-
-```bash
-uv run python ops/planning/api/check_planning_drift.py --fetch
-```
-
-Auto-sync `ops/planning` on milestone branch:
-
-```bash
-bash ops/planning/api/sync_planning_from_main.sh
-```
-
-## 10) Backfill token telemetry
-
-Backfill all task cost fields + done telemetry defaults:
-
-```bash
-uv run python ops/planning/api/backfill_task_telemetry.py --include-done-telemetry --apply
-```
-
-Use this only on `main`.
-
-## 11) Validate closeout packet (required before milestone Complete)
-
-```bash
-uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-023
-```
-
-## 12) Auto-reopen task on post-merge CI failure
-
-```bash
-uv run python ops/planning/api/reopen_on_ci_failure.py \
-  --task-id T-2404 \
-  --check-id ci-12345 \
-  --summary "p95 transfer latency regression over threshold" \
-  --apply
-```
-
-## 13) Completion rule
-
-Milestone is considered complete only when:
-
-1. milestone thread changes are merged to `main`
-2. required checks pass on `main`
-
-When moving a task to `Done`, include required `actuals` + `done_gate`:
-
-```bash
-uv run python ops/planning/api/planning_api.py PATCH /tasks/T-1201 \
-  --body '{"status":"Done","actuals":{"input_tokens":1800,"output_tokens":2400,"wall_time_sec":920,"tool_calls":14,"reopen_count":1},"done_gate":{"success_criteria_met":true,"safety_tests_passed":true,"implementation_tests_passed":true,"edge_case_tests_passed":true,"merged_to_main":true,"required_checks_passed_on_main":true}}' \
-  --apply
-```
+1. Planning writes occur on milestone branch or approved planning branch.
+2. Merge to `main` only after Go/No-Go gate evidence is complete.
+3. Keep command outputs and evidence links in PR description.

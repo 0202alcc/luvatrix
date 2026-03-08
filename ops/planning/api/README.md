@@ -8,6 +8,35 @@ Quick operator reference:
 
 - `ops/planning/api/CHEATSHEET.md`
 
+## GateFlow Runtime Baseline
+
+1. Luvatrix planning baseline is `gateflow==0.1.0a3`.
+2. Wrapper path (recommended):
+   - `uv run gateflow --root <repo> ...`
+3. Direct published package path:
+   - `uvx --from gateflow==0.1.0a3 gateflow --root <repo> ...`
+4. Version check:
+   - `uv run gateflow --version`
+
+## New Lifecycle Commands (0.1.0a3)
+
+1. Initialize/doctor:
+   - `uv run gateflow --root <repo> init`
+   - `uv run gateflow --root <repo> init doctor`
+2. Controlled close flow:
+   - `uv run gateflow --root <repo> close task <id> --heads-up "<Go/No-Go note>"`
+   - `uv run gateflow --root <repo> close milestone <id> --heads-up "<Go/No-Go note>"`
+3. On close failure, inspect:
+   - `.gateflow/closeout/closure_issues.json`
+4. Backend/sync flow:
+   - `uv run gateflow --root <repo> backend status`
+   - `uv run gateflow --root <repo> backend migrate --to backend` (opt-in)
+   - `uv run gateflow --root <repo> sync from-main`
+   - `uv run gateflow --root <repo> sync status`
+   - `uv run gateflow --root <repo> sync apply`
+5. Protected flows may require sync-before-write:
+   - `uv run gateflow --root <repo> config set policy.require_sync_before_write true`
+
 ## Milestone Thread Rule
 
 1. At the beginning of each milestone thread, create/switch to a dedicated milestone branch.

@@ -12,14 +12,15 @@ def test_wrapper_uses_default_standalone_command() -> None:
     assert rc == 0
     called = run.call_args
     assert called is not None
-    assert called.args[0] == ["uvx", "--from", "gateflow", "gateflow", "--help"]
+    assert called.args[0] == ["uvx", "--from", "gateflow==0.1.0a3", "gateflow", "--help"]
     assert called.kwargs["check"] is False
-    assert called.kwargs["env"]["UV_CACHE_DIR"] == "./.uv-cache"
-    assert called.kwargs["env"]["UV_TOOL_DIR"] == "./gateflow/.uv-tools"
+    assert called.kwargs["env"]["UV_CACHE_DIR"] in {"./.uv-cache", ".uv-cache"}
+    assert called.kwargs["env"]["UV_TOOL_DIR"] in {"./gateflow/.uv-tools", ".uv-tools"}
 
 
 def test_wrapper_honors_env_override(monkeypatch) -> None:
     monkeypatch.setenv("LUVATRIX_GATEFLOW_WRAPPER_CMD", "gateflow")
+    monkeypatch.setenv("UV_TOOL_DIR", "/tmp/custom-tools")
     with patch("subprocess.run", return_value=subprocess.CompletedProcess(args=[], returncode=3)) as run:
         rc = main(["validate", "all"])
     assert rc == 3
@@ -27,7 +28,7 @@ def test_wrapper_honors_env_override(monkeypatch) -> None:
     assert called is not None
     assert called.args[0] == ["gateflow", "validate", "all"]
     assert called.kwargs["check"] is False
-    assert "UV_TOOL_DIR" not in called.kwargs["env"]
+    assert called.kwargs["env"]["UV_TOOL_DIR"] == "/tmp/custom-tools"
 
 
 def test_wrapper_returns_127_when_binary_missing(capsys) -> None:

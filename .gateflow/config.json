@@ -112,6 +112,10 @@
     "kind": "luvatrix_ops_planning",
     "path": "/Users/aleccandidato/Projects/luvatrix/ops/planning"
   },
+  "storage": {
+    "mode": "file",
+    "sqlite_path": ".gateflow/gateflow.db"
+  },
   "updated_at": "2026-03-07",
   "version": "gateflow_v1"
 }

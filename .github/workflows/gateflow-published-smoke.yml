@@ -16,4 +16,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Smoke published gateflow version command
-        run: uvx --from gateflow gateflow --version
+        run: uvx --from gateflow==0.1.0a3 gateflow --version
+      - name: Verify wrapper default resolves pinned version
+        run: uv run gateflow --version

@@ -24,3 +24,6 @@ artifacts/perf/.generated/
 .font-cache/
 .mpl-cache/
 tmp/
+
+# GateFlow local sync runtime state
+.gateflow/sync_state.json

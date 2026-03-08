@@ -63,44 +63,60 @@ Before planning or editing code, read:
    - `ops/planning/agile/boards_registry.json` (board definitions and formatting config)
    - `ops/planning/gantt/milestone_schedule.json` (milestones + `task_ids`)
 2. Use standalone `gateflow` command paths for milestone/task CRUD (`uv run gateflow --root <repo> api ...`) instead of manual JSON edits whenever possible.
-3. Every milestone must have a `task_ids` list (empty allowed for bootstrap/split states).
-4. Milestones should include `descriptions` (`string[]`) to record objective snapshots (especially across reopen cycles).
-5. New milestones must include non-empty `success_criteria` and `closeout_criteria` (quantitative Go/No-Go metric contract).
-6. New milestones must include non-empty `ci_required_checks` so each milestone branch has an explicit CI profile.
-6. For milestones with `closeout_criteria`, add a `closeout_harness` task first before adding other task types.
-7. `closeout_harness` task titles should use `[CLOSEOUT HARNESS]` prefix for clear visual separation.
-8. Every populated milestone `task_id` must exist in active or archived task ledgers.
-9. Tasks should include `notes` (`string | string[]`) for architect/system handoff context and implementation outline details.
-10. Validate links with:
+3. GateFlow runtime version baseline is `gateflow==0.1.0a3`.
+4. Wrapper default command is pinned to `uvx --from gateflow==0.1.0a3 gateflow`; use `LUVATRIX_GATEFLOW_WRAPPER_CMD` only for explicit overrides.
+5. Every milestone must have a `task_ids` list (empty allowed for bootstrap/split states).
+6. Milestones should include `descriptions` (`string[]`) to record objective snapshots (especially across reopen cycles).
+7. New milestones must include non-empty `success_criteria` and `closeout_criteria` (quantitative Go/No-Go metric contract).
+8. New milestones must include non-empty `ci_required_checks` so each milestone branch has an explicit CI profile.
+9. For milestones with `closeout_criteria`, add a `closeout_harness` task first before adding other task types.
+10. `closeout_harness` task titles should use `[CLOSEOUT HARNESS]` prefix for clear visual separation.
+11. Every populated milestone `task_id` must exist in active or archived task ledgers.
+12. Tasks should include `notes` (`string | string[]`) for architect/system handoff context and implementation outline details.
+13. Validate links with:
    - `uv run python ops/planning/agile/validate_milestone_task_links.py`
-11. On successful planning writes (`gateflow api ...` or legacy `planning_api.py --apply`), Gantt markdown and PNG are regenerated automatically.
-12. Agile framework default is `Luvatrix GateFlow (gateflow_v1)` defined in `ops/planning/agile/boards_registry.json`.
-13. Milestone IDs use lettered schema: `<1-3 letters>-<3 digits>` where letters map to:
+14. On successful planning writes (`gateflow api ...` or legacy `planning_api.py --apply`), Gantt markdown and PNG are regenerated automatically.
+15. Agile framework default is `Luvatrix GateFlow (gateflow_v1)` defined in `ops/planning/agile/boards_registry.json`.
+16. Milestone IDs use lettered schema: `<1-3 letters>-<3 digits>` where letters map to:
    - `A` app projects, `R` rendering backend, `F` first-party protocols/systems, `U` UI/UX tools, `P` project management, `X` other.
    - Combined IDs are allowed (up to 3 letters) and primary letter goes first.
-14. Milestone lifecycle must be tracked via `lifecycle_events` in `milestone_schedule.json` (close/reopen + framework notes).
-15. Use the operator command reference for standard actions:
+17. Milestone lifecycle must be tracked via `lifecycle_events` in `milestone_schedule.json` (close/reopen + framework notes).
+18. Use the operator command reference for standard actions:
    - `ops/planning/api/CHEATSHEET.md`
-16. Cost scoring rubric reference:
+19. Cost scoring rubric reference:
    - `ops/planning/agile/gateflow_cost_rubric.md`
-17. Closeout criteria rubric reference:
+20. Closeout criteria rubric reference:
    - `ops/planning/agile/gateflow_guide.md` (`Valid Closeout Criteria Rubric`)
-18. Milestone CI profile:
+21. Milestone CI profile:
    - `ci_required_checks` must list required commands/check suites for milestone gate and post-merge validation.
 
 ## Planning Command Usage (Required Flow)
 1. Primary command path is standalone `gateflow` (for example: `uv run gateflow --root <repo> api GET /milestones`).
-2. Use legacy `planning_api.py` for dry-run/write-guard workflows that still require `--apply` semantics.
-3. `planning_api.py --apply` is restricted to `main` only (global source of truth protection).
-4. Use API endpoints for planning changes:
+2. For first-time repo setup, run:
+   - `uv run gateflow init`
+   - `uv run gateflow init doctor`
+3. Prefer controlled close flows over raw status-only closures:
+   - `uv run gateflow close task <id> --heads-up "<Go/No-Go note>"`
+   - `uv run gateflow close milestone <id> --heads-up "<Go/No-Go note>"`
+4. If a close command fails, review `.gateflow/closeout/closure_issues.json` and include remediation in task/milestone logs.
+5. Backend/sync runbook commands:
+   - `uv run gateflow backend status`
+   - `uv run gateflow backend migrate --to backend` (opt-in)
+   - `uv run gateflow sync from-main`
+   - `uv run gateflow sync status`
+   - `uv run gateflow sync apply`
+6. For protected flows, set `policy.require_sync_before_write=true` before write operations.
+7. Use legacy `planning_api.py` for dry-run/write-guard workflows that still require `--apply` semantics.
+8. `planning_api.py --apply` is restricted to `main` only (global source of truth protection).
+9. Use API endpoints for planning changes:
    - `/milestones` for milestone create/update/delete
    - `/tasks` for task create/update/archive
    - `/boards` and `/frameworks` for Agile framework/board controls
    - `/backlog` for leftover/unattached tickets
-5. Do not manually edit planning JSON files unless API cannot express the needed operation.
-6. After planning changes, run:
+10. Do not manually edit planning JSON files unless API cannot express the needed operation.
+11. After planning changes, run:
    - `uv run python ops/planning/agile/validate_milestone_task_links.py`
-7. GateFlow transition rules are API-enforced:
+12. GateFlow transition rules are API-enforced:
    - no stage skipping,
    - backward moves require `--force-with-reason`,
    - WIP limits enforced per milestone from `ops/planning/agile/boards_registry.json` (`wip_limits`), with API-safe defaults/fallbacks if config is missing.
