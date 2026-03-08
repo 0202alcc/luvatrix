@@ -25,6 +25,13 @@ from planning_paths import PlanningPathResolver
 from planning_renderer import SubprocessPlanningRenderer
 from planning_storage import JsonPlanningStorage
 
+DEPRECATION_NOTICE = (
+    "DEPRECATION: ops/planning/api/planning_api.py is a legacy compatibility endpoint.\n"
+    "Migrate to standalone commands:\n"
+    "  - uvx --from ./gateflow gateflow --root <repo> api <METHOD> <PATH>\n"
+    "  - uvx --from ./gateflow gateflow --root <repo> tasks update <TASK_ID> --body '{...}'\n"
+)
+
 
 def current_git_branch() -> str:
     result = subprocess.run(
@@ -67,6 +74,7 @@ def main() -> int:
         help="Repository root to resolve planning ledger paths from (default: current directory)",
     )
     args = parser.parse_args()
+    print(DEPRECATION_NOTICE, file=sys.stderr)
 
     method = args.method.upper()
     if method not in METHODS:

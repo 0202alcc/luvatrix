@@ -180,6 +180,7 @@ def test_planning_api_get_with_root_reads_custom_tree(tmp_path: Path) -> None:
     payload = json.loads(proc.stdout)
     assert payload["id"] == "F-041"
     assert payload["task_ids"] == ["T-4101"]
+    assert "DEPRECATION: ops/planning/api/planning_api.py is a legacy compatibility endpoint." in proc.stderr
 
 
 def test_planning_api_rejects_gateflow_stage_skips(tmp_path: Path) -> None:
