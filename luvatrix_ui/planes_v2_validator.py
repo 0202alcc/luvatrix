@@ -7,6 +7,14 @@ from typing import Any
 
 from .planes_protocol import PlanesValidationError
 
+REQUIRED_VISUAL_ARTIFACT_TYPES = (
+    "screenshot",
+    "recording",
+    "replay_digest",
+    "frame_step_snapshot",
+    "debug_bundle",
+)
+
 
 @dataclass(frozen=True)
 class ValidationDiagnostic:
@@ -156,6 +164,7 @@ def validate_visual_evidence_manifest(manifest: dict[str, Any], *, strict: bool 
             )
         )
     else:
+        seen_types: set[str] = set()
         for idx, entry in enumerate(entries):
             if not isinstance(entry, dict):
                 diagnostics.append(
@@ -184,6 +193,38 @@ def validate_visual_evidence_manifest(manifest: dict[str, Any], *, strict: bool 
             _require_non_empty_str(entry.get("artifact_digest"), f"entries[{idx}].artifact_digest", diagnostics)
             _require_non_empty_str(entry.get("sidecar_path"), f"entries[{idx}].sidecar_path", diagnostics)
             _require_non_empty_str(entry.get("sidecar_digest"), f"entries[{idx}].sidecar_digest", diagnostics)
+            artifact_type = entry.get("artifact_type")
+            if not isinstance(artifact_type, str) or not artifact_type.strip():
+                diagnostics.append(
+                    ValidationDiagnostic(
+                        level="error",
+                        code="evidence.entry.artifact_type",
+                        message="artifact_type must be a non-empty string",
+                        path=f"entries[{idx}].artifact_type",
+                    )
+                )
+            elif artifact_type not in REQUIRED_VISUAL_ARTIFACT_TYPES:
+                diagnostics.append(
+                    ValidationDiagnostic(
+                        level="error",
+                        code="evidence.entry.artifact_type",
+                        message=f"artifact_type `{artifact_type}` is not supported",
+                        path=f"entries[{idx}].artifact_type",
+                    )
+                )
+            else:
+                seen_types.add(artifact_type)
+
+        for artifact_type in REQUIRED_VISUAL_ARTIFACT_TYPES:
+            if artifact_type not in seen_types:
+                diagnostics.append(
+                    ValidationDiagnostic(
+                        level="error",
+                        code="evidence.matrix.required_artifact",
+                        message=f"required artifact type `{artifact_type}` missing from entries",
+                        path="entries",
+                    )
+                )
 
     has_error = any(d.level == "error" for d in diagnostics)
     if strict and has_error:
