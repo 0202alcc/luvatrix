@@ -53,7 +53,7 @@ F-042 🛠️ Luvatrix Refactor: CLI Surface and Init Scaffolding               
 U-043 📝 Rendering v1 (Text-Only)                                                      |                                                                                                                                                                                                                                                                                                                                                       =====================                                                               | Complete
 P-044 🛡️ Policy/Validation Hardening                                                  |                                                                                                                                                                                                                                                                                                                                                                            ==============                                                 | Complete
 F-045 📦 Extract to Dedicated gateflow Repo                                            |                                                                                                                                                                                                                                                                                                                                                                                          =====================                            | Complete
-F-046 🔄 Migration Tooling (import-luvatrix)                                           |                                                                                                                                                                                                                                                                                                                                                                                                               ##############              | In Progress
+F-046 🔄 Migration Tooling (import-luvatrix)                                           |                                                                                                                                                                                                                                                                                                                                                                                                               ==============              | Complete
 P-047 🚚 Luvatrix Adoption + Deprecation                                               |                                                                                                                                                                                                                                                                                                                                                                                                                             ~~~~~~~~~~~~~~| Planned
 
 Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
@@ -553,11 +553,12 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - Test fixtures and integration suites are portable in new repo.
 
 ### F-046 🔄 Migration Tooling (import-luvatrix)
-- Status: In Progress
+- Status: Complete
 - Target window: Week 58-59
 - Tasks: `T-4600, T-4601, T-4602, T-4603, T-4604`
 - Lifecycle events:
   - 2026-03-07 active (framework=gateflow_v1) - gateflow productization roadmap milestone created
+  - 2026-03-08 closed (framework=gateflow_v1) - milestone merged to main with required checks passing
 - Success criteria:
   - Luvatrix data imports without manual edits and validates cleanly.
   - Migration drift report is deterministic and actionable.

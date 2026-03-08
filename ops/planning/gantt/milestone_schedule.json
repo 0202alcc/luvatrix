@@ -3108,7 +3108,7 @@
       ],
       "start_week": 58,
       "end_week": 59,
-      "status": "In Progress",
+      "status": "Complete",
       "task_ids": [
         "T-4600",
         "T-4601",
@@ -3157,6 +3157,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "gateflow productization roadmap milestone created"
+        },
+        {
+          "date": "2026-03-08",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "milestone merged to main with required checks passing"
         }
       ]
     },
