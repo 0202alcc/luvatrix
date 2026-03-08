@@ -2,12 +2,14 @@
 
 Standalone GateFlow CLI package extracted from Luvatrix.
 
+Current pre-release version: `0.1.0a1`.
+
 ## Install and Run
 
 ### `uvx` (current pre-release workflow)
 
 ```bash
-uvx --from ./gateflow gateflow --help
+UV_CACHE_DIR=./.uv-cache UV_TOOL_DIR=./gateflow/.uv-tools uvx --from ./gateflow gateflow --help
 ```
 
 ### Local editable install
