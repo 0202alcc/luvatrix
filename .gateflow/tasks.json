@@ -6648,6 +6648,13 @@
       "title": "[CLOSEOUT HARNESS] Define R-033 perf non-regression closeout metric and evidence harness"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-028",
         "team:platform-ci",
@@ -6656,13 +6663,26 @@
       "depends_on": [
         "T-3403"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO candidate: visual evidence schema and deterministic manifest contract implemented with validator coverage.",
+        "received": true,
+        "received_at": "2026-03-08T21:28:04+00:00"
+      },
       "id": "T-3426",
       "milestone_id": "F-028",
       "notes": [
         "Canonicalize deterministic visual evidence manifest fields for screenshot/record/replay/bundle linkage.",
         "Manifest entries must include commit_sha, command, timestamp, scenario, seed, artifact_digest, and sidecar linkage."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Define Planes v2 visual evidence schema + manifest contract"
     },
