@@ -29,7 +29,7 @@ dev = [
 ]
 
 [project.scripts]
-gateflow = "gateflow_cli.cli:main"
+gateflow = "gateflow_cli.wrapper:main"
 
 [tool.setuptools.packages.find]
 include = ["gateflow_cli*", "luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
