@@ -97,6 +97,7 @@ def validate_split_schema_documents(
 
     _validate_named_refs(routes, "routes", diagnostics)
     _validate_named_refs(frames, "frames", diagnostics)
+    _validate_cross_file_invariants(manifest, planes, routes, frames, diagnostics)
 
     has_error = any(d.level == "error" for d in diagnostics)
     if strict and has_error:
@@ -134,6 +135,176 @@ def _validate_named_refs(items: list[dict[str, Any]], label: str, diagnostics: l
             )
             continue
         _require_non_empty_str(row.get("id"), f"{label}[{idx}].id", diagnostics)
+
+
+def _validate_cross_file_invariants(
+    manifest: dict[str, Any],
+    planes: list[dict[str, Any]],
+    routes: list[dict[str, Any]],
+    frames: list[dict[str, Any]],
+    diagnostics: list[ValidationDiagnostic],
+) -> None:
+    plane_by_id: dict[str, dict[str, Any]] = {}
+    duplicate_plane_ids: set[str] = set()
+    for idx, plane in enumerate(planes):
+        if not isinstance(plane, dict):
+            continue
+        plane_id = plane.get("id")
+        if not isinstance(plane_id, str) or not plane_id.strip():
+            continue
+        if plane_id in plane_by_id:
+            duplicate_plane_ids.add(plane_id)
+        else:
+            plane_by_id[plane_id] = plane
+    for plane_id in sorted(duplicate_plane_ids):
+        diagnostics.append(
+            ValidationDiagnostic(
+                level="error",
+                code="invariant.planes.duplicate_id",
+                message=f"duplicate plane id `{plane_id}`",
+                path="planes",
+            )
+        )
+
+    camera_plane_id = manifest.get("camera_plane_id")
+    if isinstance(camera_plane_id, str) and camera_plane_id.strip():
+        camera_plane = plane_by_id.get(camera_plane_id)
+        if camera_plane is None:
+            diagnostics.append(
+                ValidationDiagnostic(
+                    level="error",
+                    code="invariant.camera.exists",
+                    message=f"camera plane `{camera_plane_id}` must exist in planes",
+                    path="manifest.camera_plane_id",
+                )
+            )
+        else:
+            if camera_plane.get("kind") != "camera":
+                diagnostics.append(
+                    ValidationDiagnostic(
+                        level="error",
+                        code="invariant.camera.kind",
+                        message="camera plane kind must be `camera`",
+                        path="manifest.camera_plane_id",
+                    )
+                )
+            if camera_plane.get("k_hat_index") != 0:
+                diagnostics.append(
+                    ValidationDiagnostic(
+                        level="error",
+                        code="invariant.camera.k_hat_index",
+                        message="camera plane k_hat_index must be 0",
+                        path="manifest.camera_plane_id",
+                    )
+                )
+
+    frame_ids = {
+        frame.get("id")
+        for frame in frames
+        if isinstance(frame, dict) and isinstance(frame.get("id"), str) and frame.get("id", "").strip()
+    }
+    for idx, plane in enumerate(planes):
+        if not isinstance(plane, dict):
+            continue
+        if plane.get("kind") == "world" and isinstance(plane.get("k_hat_index"), int) and plane.get("k_hat_index") >= 0:
+            diagnostics.append(
+                ValidationDiagnostic(
+                    level="error",
+                    code="invariant.world.k_hat_index",
+                    message="world planes must have k_hat_index < 0",
+                    path=f"planes[{idx}].k_hat_index",
+                )
+            )
+        default_frame = plane.get("default_frame")
+        if isinstance(default_frame, str) and frame_ids and default_frame not in frame_ids:
+            diagnostics.append(
+                ValidationDiagnostic(
+                    level="error",
+                    code="invariant.plane.frame_ref",
+                    message=f"default_frame `{default_frame}` must reference an existing frame id",
+                    path=f"planes[{idx}].default_frame",
+                )
+            )
+
+    _validate_attachment_cycles(planes, diagnostics)
+
+    route_by_id: dict[str, dict[str, Any]] = {}
+    for idx, route in enumerate(routes):
+        if not isinstance(route, dict):
+            continue
+        route_id = route.get("id")
+        if not isinstance(route_id, str) or not route_id.strip():
+            continue
+        if route_id in route_by_id:
+            diagnostics.append(
+                ValidationDiagnostic(
+                    level="error",
+                    code="invariant.routes.duplicate_id",
+                    message=f"duplicate route id `{route_id}`",
+                    path="routes",
+                )
+            )
+            continue
+        route_by_id[route_id] = route
+        for active_idx, plane_id in enumerate(route.get("active_planes", []) if isinstance(route.get("active_planes"), list) else []):
+            if not isinstance(plane_id, str) or plane_id not in plane_by_id:
+                diagnostics.append(
+                    ValidationDiagnostic(
+                        level="error",
+                        code="invariant.routes.active_plane_ref",
+                        message=f"active plane `{plane_id}` must reference an existing plane id",
+                        path=f"routes[{idx}].active_planes[{active_idx}]",
+                    )
+                )
+        startup_frame_id = route.get("startup_frame_id")
+        if isinstance(startup_frame_id, str) and startup_frame_id.strip() and frame_ids and startup_frame_id not in frame_ids:
+            diagnostics.append(
+                ValidationDiagnostic(
+                    level="error",
+                    code="invariant.routes.startup_frame_ref",
+                    message=f"startup_frame_id `{startup_frame_id}` must reference an existing frame id",
+                    path=f"routes[{idx}].startup_frame_id",
+                )
+            )
+
+    startup_route_id = manifest.get("startup_route_id")
+    if isinstance(startup_route_id, str) and startup_route_id.strip() and startup_route_id not in route_by_id:
+        diagnostics.append(
+            ValidationDiagnostic(
+                level="error",
+                code="invariant.manifest.startup_route_ref",
+                message=f"startup_route_id `{startup_route_id}` must reference an existing route id",
+                path="manifest.startup_route_id",
+            )
+        )
+
+
+def _validate_attachment_cycles(planes: list[dict[str, Any]], diagnostics: list[ValidationDiagnostic]) -> None:
+    graph: dict[str, str] = {}
+    for plane in planes:
+        if not isinstance(plane, dict):
+            continue
+        plane_id = plane.get("id")
+        attach_to = plane.get("attach_to")
+        if isinstance(plane_id, str) and plane_id.strip() and isinstance(attach_to, str) and attach_to.strip():
+            graph[plane_id] = attach_to
+
+    for start in sorted(graph):
+        seen: dict[str, int] = {}
+        node = start
+        while node in graph:
+            if node in seen:
+                diagnostics.append(
+                    ValidationDiagnostic(
+                        level="error",
+                        code="invariant.planes.attachment_cycle",
+                        message=f"attachment cycle detected starting at `{start}`",
+                        path=f"planes[{start}].attach_to",
+                    )
+                )
+                break
+            seen[node] = 1
+            node = graph[node]
 
 
 def _require_non_empty_str(value: Any, path: str, diagnostics: list[ValidationDiagnostic]) -> None:
