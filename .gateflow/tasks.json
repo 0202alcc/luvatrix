@@ -6262,6 +6262,13 @@
       "title": "Define strict vs permissive mode policy and diagnostics contract"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:UF-029",
         "team:protocol",
@@ -6271,17 +6278,37 @@
         "T-3401",
         "T-3404"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: canonical IR mapping contract documented with alias normalization and parity blockers; planes_ir_contract tests passing.",
+        "received": true,
+        "received_at": "2026-03-08T21:57:17+00:00"
+      },
       "id": "T-3406",
       "milestone_id": "UF-029",
       "notes": [
         "Reference IR types snippet: `PlanesAppIR(ir_version=\"planes-ir-v2-basis\", app, frames, planes, components, routes)` and compiler entrypoint `compile_to_ir(app_toml_path)`.",
         "Canonical runtime basis is u/v/w only; aliases x/y/z and i_hat/j_hat/k_hat must normalize pre-runtime."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Define canonical IR mapping contract for split files and monolith adapter"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:UF-029",
         "team:protocol",
@@ -6290,17 +6317,37 @@
       "depends_on": [
         "T-3406"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: split-file compiler path emits canonical IR contract and planes_split_compile tests pass.",
+        "received": true,
+        "received_at": "2026-03-08T21:59:25+00:00"
+      },
       "id": "T-3407",
       "milestone_id": "UF-029",
       "notes": [
         "Reference IR types snippet: `PlanesAppIR(ir_version=\"planes-ir-v2-basis\", app, frames, planes, components, routes)` and compiler entrypoint `compile_to_ir(app_toml_path)`.",
         "Runtime must receive canonical IR only (no split-file direct runtime bypass)."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Implement split-file compiler path to canonical Planes IR"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:UF-029",
         "team:protocol",
@@ -6309,17 +6356,37 @@
       "depends_on": [
         "T-3406"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: monolith adapter compiles to canonical IR with parity-equivalent digest and overlay semantics preserved.",
+        "received": true,
+        "received_at": "2026-03-08T22:01:10+00:00"
+      },
       "id": "T-3408",
       "milestone_id": "UF-029",
       "notes": [
         "Adapter path required: monolith -> canonical IR.",
         "Preserve existing app-facing behavior with version-gated protocol path."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Implement monolith compatibility adapter to canonical Planes IR"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:UF-029",
         "team:platform-ci",
@@ -6329,13 +6396,26 @@
         "T-3407",
         "T-3408"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: visual parity digest checks pass for split-vs-monolith parity and overlay parity semantics.",
+        "received": true,
+        "received_at": "2026-03-08T22:03:03+00:00"
+      },
       "id": "T-3409",
       "milestone_id": "UF-029",
       "notes": [
         "Parity must prove ordering/transforms/rounding/hit-test precedence equivalence for equivalent inputs.",
         "Include visual parity digest set for required scenarios comparing monolith vs split compile outputs."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Implement parity suite for monolith vs split canonical equivalence"
     },
@@ -6568,18 +6648,38 @@
       "title": "[CLOSEOUT HARNESS] Define F-028 validator closeout metric and evidence harness"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:UF-029",
         "team:platform-ci",
         "specialist:pm"
       ],
       "depends_on": [],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO for harness spec: command profile, training mapping, and deterministic artifact contract are defined.",
+        "received": true,
+        "received_at": "2026-03-08T21:55:28+00:00"
+      },
       "id": "T-3421",
       "milestone_id": "UF-029",
       "notes": [
         "Milestone-level scoring + hard no-go criteria + evidence/command profile for Go/No-Go decision."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "closeout_harness",
       "title": "[CLOSEOUT HARNESS] Define UF-029 compiler/parity closeout metric and evidence harness"
     },
