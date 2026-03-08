@@ -9,6 +9,11 @@ description = "Standalone GateFlow planning CLI"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = []
+keywords = ["planning", "workflow", "cli", "gateflow"]
+
+[project.urls]
+Homepage = "https://github.com/0202alcc/luvatrix"
+Documentation = "https://github.com/0202alcc/luvatrix/tree/main/gateflow"
 
 [project.scripts]
 gateflow = "gateflow.cli:main"
