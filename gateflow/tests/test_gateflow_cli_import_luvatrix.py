@@ -22,11 +22,26 @@ def _seed_luvatrix_ops(root: Path) -> None:
         root / "ops" / "planning" / "agile" / "tasks_master.json",
         {
             "tasks": [{"id": "T-4601", "milestone_id": "F-046", "depends_on": []}],
+            "status_values": ["Intake", "Done"],
+            "legacy_status_values": ["Backlog"],
+            "schema_version": "1.0.0",
+        },
+    )
+    _write_json(
+        root / "ops" / "planning" / "agile" / "tasks_archived.json",
+        {
+            "tasks": [{"id": "A-H001-01", "milestone_id": "F-001", "status": "Archived"}],
+            "schema_version": "1.0.0",
         },
     )
     _write_json(
         root / "ops" / "planning" / "agile" / "boards_registry.json",
         {
+            "schema_version": "1.0.0",
+            "default_framework_template": "gateflow_v1",
+            "framework_templates": {"gateflow_v1": {"description": "GateFlow"}},
+            "render_defaults": {"status_columns": ["Intake", "Done"]},
+            "board_types": {"milestone": {"default_swimlane": "specialist"}},
             "boards": [{"id": "milestone:F-046", "type": "milestone", "source_filter": {"milestone_id": "F-046"}}],
         },
     )
@@ -34,8 +49,13 @@ def _seed_luvatrix_ops(root: Path) -> None:
         root / "ops" / "planning" / "agile" / "backlog_misc.json",
         {
             "items": [{"id": "B-1", "title": "carryover"}],
+            "schema_version": "1.0.0",
+            "status_values": ["Open"],
+            "bucket_values": ["Carryover"],
         },
     )
+    (root / "ops" / "planning" / "closeout").mkdir(parents=True, exist_ok=True)
+    (root / "ops" / "planning" / "closeout" / "f-046_closeout.md").write_text("# Objective Summary\n", encoding="utf-8")
 
 
 def test_import_luvatrix_creates_gateflow_ledgers(tmp_path: Path) -> None:
@@ -47,8 +67,11 @@ def test_import_luvatrix_creates_gateflow_ledgers(tmp_path: Path) -> None:
     tasks = json.loads((gateflow / "tasks.json").read_text(encoding="utf-8"))
     boards = json.loads((gateflow / "boards.json").read_text(encoding="utf-8"))
     backlog = json.loads((gateflow / "backlog.json").read_text(encoding="utf-8"))
+    config = json.loads((gateflow / "config.json").read_text(encoding="utf-8"))
 
     assert [row["id"] for row in milestones["items"]] == ["F-046"]
-    assert [row["id"] for row in tasks["items"]] == ["T-4601"]
+    assert [row["id"] for row in tasks["items"]] == ["A-H001-01", "T-4601"]
     assert [row["id"] for row in boards["items"]] == ["milestone:F-046"]
     assert [row["id"] for row in backlog["items"]] == ["B-1"]
+    assert [row["name"] for row in config["frameworks"]] == ["gateflow_v1"]
+    assert (gateflow / "closeout" / "f-046_closeout.md").exists()
