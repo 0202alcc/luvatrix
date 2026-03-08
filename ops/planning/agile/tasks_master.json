@@ -8626,7 +8626,7 @@
       "title": "Publish pre-release tag + install documentation",
       "task_type": "standard",
       "milestone_id": "F-045",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4503",
         "T-4504"
@@ -8638,7 +8638,22 @@
       ],
       "notes": [
         "Create pre-release package/version and usage docs."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 3400,
+        "output_tokens": 620,
+        "wall_time_sec": 1440,
+        "tool_calls": 26,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4600",
