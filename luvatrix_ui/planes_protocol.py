@@ -120,6 +120,89 @@ def compile_split_to_canonical_ir(
     return _compile_v2(payload, matrix_width=matrix_width, matrix_height=matrix_height, aspect_mode=aspect_mode)
 
 
+def compile_monolith_to_canonical_ir(
+    payload: dict[str, Any],
+    *,
+    matrix_width: int,
+    matrix_height: int,
+    aspect_mode: str = "stretch",
+    strict: bool = True,
+) -> UIIRPage:
+    """Compile monolith Planes payloads to canonical Planes IR via adapter."""
+    validate_planes_payload(payload, strict=strict)
+    if isinstance(payload.get("planes"), list):
+        raise PlanesValidationError("monolith canonical compile requires legacy `plane` payload")
+    adapted = _adapt_v0_payload_to_v2(payload)
+    return _compile_v2(adapted, matrix_width=matrix_width, matrix_height=matrix_height, aspect_mode=aspect_mode)
+
+
+def compile_to_canonical_ir(
+    payload: dict[str, Any],
+    *,
+    matrix_width: int,
+    matrix_height: int,
+    aspect_mode: str = "stretch",
+    strict: bool = True,
+) -> UIIRPage:
+    if isinstance(payload.get("planes"), list):
+        return compile_split_to_canonical_ir(
+            payload,
+            matrix_width=matrix_width,
+            matrix_height=matrix_height,
+            aspect_mode=aspect_mode,
+            strict=strict,
+        )
+    return compile_monolith_to_canonical_ir(
+        payload,
+        matrix_width=matrix_width,
+        matrix_height=matrix_height,
+        aspect_mode=aspect_mode,
+        strict=strict,
+    )
+
+
+def _adapt_v0_payload_to_v2(payload: dict[str, Any]) -> dict[str, Any]:
+    app = _expect_obj(payload["app"], "app")
+    plane = _expect_obj(payload["plane"], "plane")
+    plane_id = _require_str(plane.get("id"), "plane.id")
+    default_frame = _require_str(plane.get("default_frame"), "plane.default_frame")
+    background = _expect_obj(plane.get("background", {}), "plane.background")
+
+    components_raw = payload.get("components", [])
+    if not isinstance(components_raw, list):
+        raise PlanesValidationError("components must be a list")
+    components: list[dict[str, Any]] = []
+    for raw in components_raw:
+        comp = _expect_obj(raw, "component")
+        adapted_comp = dict(comp)
+        attachment_kind = adapted_comp.get("attachment_kind", "plane")
+        if attachment_kind == "plane" and "attach_to" not in adapted_comp:
+            adapted_comp["attach_to"] = plane_id
+        adapted_comp["attachment_kind"] = attachment_kind
+        components.append(adapted_comp)
+
+    return {
+        "planes_protocol_version": payload.get("planes_protocol_version", "0.2.0-dev"),
+        "app": app,
+        "planes": [
+            {
+                "id": plane_id,
+                "default_frame": default_frame,
+                "background": background,
+                "plane_global_z": 0,
+                "position": {"x": 0, "y": 0, "frame": default_frame},
+                "size": {
+                    "width": {"unit": "px", "value": 1920},
+                    "height": {"unit": "px", "value": 1080},
+                },
+            }
+        ],
+        "routes": [{"id": "monolith-default", "default": True, "active_planes": [plane_id]}],
+        "scripts": payload.get("scripts", []),
+        "components": components,
+    }
+
+
 def _compile_v0(payload: dict[str, Any], *, matrix_width: int, matrix_height: int, aspect_mode: str) -> UIIRPage:
     app = _expect_obj(payload["app"], "app")
     plane = _expect_obj(payload["plane"], "plane")
