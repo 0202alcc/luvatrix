@@ -1,0 +1,22 @@
+name: p048-ops-planning-guard
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync deps
+        run: uv sync
+      - name: Block unauthorized ops/planning edits
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha || 'HEAD~1' }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha || 'HEAD' }}"
+          uv run python ops/ci/p048_ops_planning_guard.py --base "$BASE_SHA" --head "$HEAD_SHA"

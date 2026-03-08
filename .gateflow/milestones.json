@@ -2050,6 +2050,78 @@
     },
     {
       "ci_required_checks": [
+        "uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate links",
+        "uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate closeout",
+        "uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate all"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 90,
+        "hard_no_go_conditions": [
+          "any active read/write dependency on ops/planning remains",
+          "required gateflow validation commands fail",
+          "closeout evidence incomplete for active milestones"
+        ],
+        "metric_description": "GateFlow canonicalization go/no-go score.",
+        "metric_id": "p-048-closeout-v1",
+        "required_commands": [
+          "uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate links",
+          "uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate closeout",
+          "uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate all"
+        ],
+        "required_evidence": [
+          ".gateflow/closeout/p-048_closeout.md",
+          "archive manifest with commit SHA and timestamp",
+          "CI workflow evidence for gateflow-only validations"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "cutover_completeness",
+          "ci_guard_enforcement",
+          "active_milestone_reconciliation",
+          "evidence_integrity"
+        ],
+        "score_formula": "weighted_sum(cutover,ci_guard,reconciliation,evidence)"
+      },
+      "descriptions": [
+        "Decommission ops/planning as active ledger and eliminate dual-state drift.",
+        "Make .gateflow the only source for planning state and closeout decisions."
+      ],
+      "emoji": "\ud83d\udcda",
+      "end_week": 56,
+      "go_no_go": {
+        "message": "GO: .gateflow canonicalization complete; required gateflow validations passed; ops/planning frozen legacy",
+        "received": true,
+        "received_at": "2026-03-08T21:10:55+00:00"
+      },
+      "id": "P-048",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-08",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "milestone created for canonicalization cutover"
+        }
+      ],
+      "name": "Planning Canonicalization to GateFlow",
+      "start_week": 55,
+      "status": "Complete",
+      "success_criteria": [
+        "Zero active planning writes or CI checks depend on ops/planning.",
+        "All milestone/task Go/No-Go decisions resolve from .gateflow only.",
+        "Drift class ops vs gateflow mismatch is eliminated by policy plus CI."
+      ],
+      "task_ids": [
+        "T-4800",
+        "T-4801",
+        "T-4802",
+        "T-4803",
+        "T-4804",
+        "T-4805",
+        "T-4806"
+      ]
+    },
+    {
+      "ci_required_checks": [
         "uv run python ops/planning/agile/validate_milestone_task_links.py",
         "uv run python ops/planning/api/validate_closeout_packet.py --milestone-id R-002"
       ],

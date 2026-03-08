@@ -8178,6 +8178,241 @@
       "title": "Run full planning workflow dry-run in Luvatrix via standalone gateflow"
     },
     {
+      "actuals": {
+        "input_tokens": 1800,
+        "output_tokens": 420,
+        "reopen_count": 0,
+        "tool_calls": 18,
+        "wall_time_sec": 540
+      },
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: P-048 canonicalization deliverable complete and verified",
+        "received": true,
+        "received_at": "2026-03-08T21:10:54+00:00"
+      },
+      "id": "T-4800",
+      "milestone_id": "P-048",
+      "notes": [
+        "Define hard no-go for any active ops/planning dependency.",
+        "Establish evidence contract and required validation commands."
+      ],
+      "status": "Done",
+      "task_type": "closeout_harness",
+      "title": "[CLOSEOUT HARNESS] Canonicalization closeout metric + evidence contract"
+    },
+    {
+      "actuals": {
+        "input_tokens": 2100,
+        "output_tokens": 500,
+        "reopen_count": 0,
+        "tool_calls": 22,
+        "wall_time_sec": 680
+      },
+      "depends_on": [
+        "T-4800"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: P-048 canonicalization deliverable complete and verified",
+        "received": true,
+        "received_at": "2026-03-08T21:10:54+00:00"
+      },
+      "id": "T-4801",
+      "milestone_id": "P-048",
+      "notes": [
+        "Update AGENTS and planning docs to set .gateflow canonical and ops/planning deprecated.",
+        "All planning operations must run via uvx gateflow commands."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Policy + docs cutover"
+    },
+    {
+      "actuals": {
+        "input_tokens": 2400,
+        "output_tokens": 580,
+        "reopen_count": 0,
+        "tool_calls": 24,
+        "wall_time_sec": 760
+      },
+      "depends_on": [
+        "T-4801"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: P-048 canonicalization deliverable complete and verified",
+        "received": true,
+        "received_at": "2026-03-08T21:10:55+00:00"
+      },
+      "id": "T-4802",
+      "milestone_id": "P-048",
+      "notes": [
+        "Required CI gates must use gateflow validate links/closeout/all.",
+        "Disable ops/planning validator checks as required gates."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "CI gate migration"
+    },
+    {
+      "actuals": {
+        "input_tokens": 2300,
+        "output_tokens": 560,
+        "reopen_count": 0,
+        "tool_calls": 20,
+        "wall_time_sec": 720
+      },
+      "depends_on": [
+        "T-4802"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: P-048 canonicalization deliverable complete and verified",
+        "received": true,
+        "received_at": "2026-03-08T21:10:55+00:00"
+      },
+      "id": "T-4803",
+      "milestone_id": "P-048",
+      "notes": [
+        "Fail CI on ops/planning modifications outside explicit archive window.",
+        "Emit remediation guidance in failure message."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Anti-regression guard"
+    },
+    {
+      "actuals": {
+        "input_tokens": 2000,
+        "output_tokens": 510,
+        "reopen_count": 0,
+        "tool_calls": 19,
+        "wall_time_sec": 700
+      },
+      "depends_on": [
+        "T-4803"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: P-048 canonicalization deliverable complete and verified",
+        "received": true,
+        "received_at": "2026-03-08T21:10:55+00:00"
+      },
+      "id": "T-4804",
+      "milestone_id": "P-048",
+      "notes": [
+        "Freeze ops/planning or move to ops/planning_legacy with deprecation marker.",
+        "Write archive manifest with commit SHA and timestamp."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Legacy archive + freeze"
+    },
+    {
+      "actuals": {
+        "input_tokens": 1900,
+        "output_tokens": 470,
+        "reopen_count": 0,
+        "tool_calls": 16,
+        "wall_time_sec": 620
+      },
+      "depends_on": [
+        "T-4804"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: P-048 canonicalization deliverable complete and verified",
+        "received": true,
+        "received_at": "2026-03-08T21:10:55+00:00"
+      },
+      "id": "T-4805",
+      "milestone_id": "P-048",
+      "notes": [
+        "Reconcile active/recent milestones in .gateflow only.",
+        "Ensure closeout packets exist under .gateflow/closeout."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Active milestone reconciliation"
+    },
+    {
+      "actuals": {
+        "input_tokens": 2600,
+        "output_tokens": 640,
+        "reopen_count": 0,
+        "tool_calls": 28,
+        "wall_time_sec": 840
+      },
+      "depends_on": [
+        "T-4805"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: final gateflow validate links/closeout/all commands passed and closeout packet evidence updated",
+        "received": true,
+        "received_at": "2026-03-08T21:10:16+00:00"
+      },
+      "id": "T-4806",
+      "milestone_id": "P-048",
+      "notes": [
+        "Run gateflow validate links/closeout/all and capture outputs.",
+        "Produce final closeout packet with residual risks and rollback plan."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Final cutover verification and signoff"
+    },
+    {
       "board_refs": [
         "milestone:F-014",
         "team:security-quality",
