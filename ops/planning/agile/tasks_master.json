@@ -8560,7 +8560,7 @@
       "title": "Add packaging/install path (`uvx gateflow`, future `pipx`)",
       "task_type": "standard",
       "milestone_id": "F-045",
-      "status": "Intake",
+      "status": "Done",
       "depends_on": [
         "T-4502"
       ],
@@ -8571,7 +8571,22 @@
       ],
       "notes": [
         "Provide install docs and executable entrypoint semantics."
-      ]
+      ],
+      "actuals": {
+        "input_tokens": 3000,
+        "output_tokens": 580,
+        "wall_time_sec": 1320,
+        "tool_calls": 27,
+        "reopen_count": 0
+      },
+      "done_gate": {
+        "success_criteria_met": true,
+        "safety_tests_passed": true,
+        "implementation_tests_passed": true,
+        "edge_case_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true
+      }
     },
     {
       "id": "T-4504",
