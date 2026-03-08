@@ -54,7 +54,7 @@ U-043 📝 Rendering v1 (Text-Only)                                             
 P-044 🛡️ Policy/Validation Hardening                                                  |                                                                                                                                                                                                                                                                                                                                                                            ==============                                                 | Complete
 F-045 📦 Extract to Dedicated gateflow Repo                                            |                                                                                                                                                                                                                                                                                                                                                                                          =====================                            | Complete
 F-046 🔄 Migration Tooling (import-luvatrix)                                           |                                                                                                                                                                                                                                                                                                                                                                                                               ==============              | Complete
-P-047 🚚 Luvatrix Adoption + Deprecation                                               |                                                                                                                                                                                                                                                                                                                                                                                                                             ~~~~~~~~~~~~~~| Planned
+P-047 🚚 Luvatrix Adoption + Deprecation                                               |                                                                                                                                                                                                                                                                                                                                                                                                                             ==============| Complete
 
 Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 ```
@@ -564,11 +564,12 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
   - Migration drift report is deterministic and actionable.
 
 ### P-047 🚚 Luvatrix Adoption + Deprecation
-- Status: Planned
+- Status: Complete
 - Target window: Week 60-61
 - Tasks: `T-4700, T-4701, T-4702, T-4703, T-4704`
 - Lifecycle events:
   - 2026-03-07 active (framework=gateflow_v1) - gateflow productization roadmap milestone created
+  - 2026-03-08 closed (framework=gateflow_v1) - milestone merged to main with required checks passing
 - Success criteria:
   - Luvatrix planning operations run end-to-end through standalone gateflow tooling.
   - Legacy entrypoints are deprecated with clear migration guidance.
