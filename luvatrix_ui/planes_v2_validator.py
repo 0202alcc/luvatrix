@@ -42,6 +42,7 @@ def validate_split_schema_documents(
     frames: list[dict[str, Any]],
     *,
     strict: bool = True,
+    permissive_compatibility_window: bool = False,
 ) -> ValidationResult:
     diagnostics: list[ValidationDiagnostic] = []
 
@@ -104,12 +105,39 @@ def validate_split_schema_documents(
         first = next(d for d in diagnostics if d.level == "error")
         raise PlanesValidationError(f"{first.code}: {first.message} ({first.path})")
 
-    return ValidationResult(valid=not has_error, diagnostics=tuple(diagnostics))
+    if not strict and permissive_compatibility_window and has_error:
+        diagnostics = [
+            ValidationDiagnostic(
+                level="warning",
+                code=f"permissive.{item.code}",
+                message=item.message,
+                path=item.path,
+            )
+            for item in diagnostics
+        ]
+        return ValidationResult(valid=True, diagnostics=tuple(sorted(diagnostics, key=lambda d: (d.path, d.code))))
+
+    return ValidationResult(valid=not has_error, diagnostics=tuple(sorted(diagnostics, key=lambda d: (d.path, d.code))))
 
 
 def validate_split_schema_bundle(root: Path, *, strict: bool = True) -> ValidationResult:
     manifest, planes, routes, frames = load_split_bundle(root)
-    return validate_split_schema_documents(manifest, planes, routes, frames, strict=strict)
+    permissive_compatibility_window = bool(manifest.get("compatibility_window"))
+    return validate_split_schema_documents(
+        manifest,
+        planes,
+        routes,
+        frames,
+        strict=strict,
+        permissive_compatibility_window=permissive_compatibility_window,
+    )
+
+
+def render_diagnostics(result: ValidationResult) -> tuple[str, ...]:
+    return tuple(
+        f"{row.level.upper()} {row.code} {row.path}: {row.message}"
+        for row in sorted(result.diagnostics, key=lambda d: (d.path, d.code))
+    )
 
 
 def _validate_named_refs(items: list[dict[str, Any]], label: str, diagnostics: list[ValidationDiagnostic]) -> None:
