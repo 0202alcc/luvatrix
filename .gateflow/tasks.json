@@ -6027,19 +6027,39 @@
       "title": "Rollback/kill-switch hardening + final closeout packet"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-027",
         "team:platform-ci",
         "specialist:pm"
       ],
       "depends_on": [],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: closeout harness metric/evidence contract defined for F-027 with training evidence requirements.",
+        "received": true,
+        "received_at": "2026-03-08T20:22:57+00:00"
+      },
       "id": "T-3400",
       "milestone_id": "F-027",
       "notes": [
         "Establish quantitative go/no-go scoring and hard no-go conditions for Planes v2 milestones.",
         "Include explicit non-regression gate linkage to P-026 evidence expectations."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "closeout_harness",
       "title": "[CLOSEOUT HARNESS] Define Planes v2 closeout metric and evidence harness"
     },

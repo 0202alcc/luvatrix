@@ -72,6 +72,19 @@
     },
     {
       "discord": {
+        "channel": "#milestone-a-037",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:A-037",
+      "source_filter": {
+        "milestone_id": "A-037"
+      },
+      "title": "A-037 App-Configurable Debug Policy + Compatibility",
+      "type": "milestone"
+    },
+    {
+      "discord": {
         "channel": "#milestone-m-011-board",
         "threads_enabled": true
       },
@@ -156,6 +169,123 @@
     },
     {
       "discord": {
+        "channel": "#milestone-f-027",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:F-027",
+      "source_filter": {
+        "milestone_id": "F-027"
+      },
+      "title": "F-027 Planes v2 Protocol Foundation + File Layout Spec",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-f-028",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:F-028",
+      "source_filter": {
+        "milestone_id": "F-028"
+      },
+      "title": "F-028 Planes v2 Schema + Cross-File Validator Layer",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-f-031",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:F-031",
+      "source_filter": {
+        "milestone_id": "F-031"
+      },
+      "title": "F-031 Planes v2 Backward-Compat Adapter + Migration Tooling",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-f-034",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:F-034",
+      "source_filter": {
+        "milestone_id": "F-034"
+      },
+      "title": "F-034 Cross-Platform Debug Menu Foundation",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-f-038-board",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:F-038",
+      "source_filter": {
+        "milestone_id": "F-038"
+      },
+      "title": "F-038 Cross-Platform Notification Protocol + Runtime Adapters",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-f-041-board",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:F-041",
+      "source_filter": {
+        "milestone_id": "F-041"
+      },
+      "title": "F-041 Luvatrix Refactor: Core Domain Extraction",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-f-042-board",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:F-042",
+      "source_filter": {
+        "milestone_id": "F-042"
+      },
+      "title": "F-042 Luvatrix Refactor: CLI Surface and Init Scaffolding",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-f-045-board",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:F-045",
+      "source_filter": {
+        "milestone_id": "F-045"
+      },
+      "title": "F-045 Extract to Dedicated gateflow Repo",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-f-046-board",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:F-046",
+      "source_filter": {
+        "milestone_id": "F-046"
+      },
+      "title": "F-046 Migration Tooling (import-luvatrix)",
+      "type": "milestone"
+    },
+    {
+      "discord": {
         "channel": "#milestone-m-001-board",
         "threads_enabled": true
       },
@@ -200,6 +330,71 @@
         "milestone_id": "P-021"
       },
       "title": "P-021 Perf Baseline + Telemetry",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestones-gantt",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:P-026",
+      "source_filter": {
+        "milestone_id": "P-026"
+      },
+      "title": "P-026 Runtime Performance Hardening Closeout Signoff",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-p-032",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:P-032",
+      "source_filter": {
+        "milestone_id": "P-032"
+      },
+      "title": "P-032 Planes v2 Rollout Gates + Go/No-Go Closeout",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-p-040-board",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:P-040",
+      "source_filter": {
+        "milestone_id": "P-040"
+      },
+      "title": "P-040 Program Setup and Spec Lock",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-p-044-board",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:P-044",
+      "source_filter": {
+        "milestone_id": "P-044"
+      },
+      "title": "P-044 Policy/Validation Hardening",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-p-047-board",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:P-047",
+      "source_filter": {
+        "milestone_id": "P-047"
+      },
+      "title": "P-047 Luvatrix Adoption + Deprecation",
       "type": "milestone"
     },
     {
@@ -252,6 +447,71 @@
     },
     {
       "discord": {
+        "channel": "#milestone-r-033",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:R-033",
+      "source_filter": {
+        "milestone_id": "R-033"
+      },
+      "title": "R-033 Planes v2 Performance Follow-ups (Post-Foundation)",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-r-036",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:R-036",
+      "source_filter": {
+        "milestone_id": "R-036"
+      },
+      "title": "R-036 Replay + Perf Observability",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-r-039-board",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:R-039",
+      "source_filter": {
+        "milestone_id": "R-039"
+      },
+      "title": "R-039 macOS Debug Menu Runtime Wiring (E2E)",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-r-040-board",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:R-040",
+      "source_filter": {
+        "milestone_id": "R-040"
+      },
+      "title": "R-040 macOS Debug Menu Functionalization (Full Actions)",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-rf-030",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:RF-030",
+      "source_filter": {
+        "milestone_id": "RF-030"
+      },
+      "title": "RF-030 Planes v2 Runtime Integration on Canonical IR",
+      "type": "milestone"
+    },
+    {
+      "discord": {
         "channel": "#milestone-m-008-board",
         "threads_enabled": true
       },
@@ -272,6 +532,45 @@
         "milestone_id": "U-021"
       },
       "title": "U-021 Plots Module Foundations",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-u-035",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:U-035",
+      "source_filter": {
+        "milestone_id": "U-035"
+      },
+      "title": "U-035 Visual + Capture Tooling",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-u-043-board",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:U-043",
+      "source_filter": {
+        "milestone_id": "U-043"
+      },
+      "title": "U-043 Rendering v1 (Text-Only)",
+      "type": "milestone"
+    },
+    {
+      "discord": {
+        "channel": "#milestone-uf-029",
+        "threads_enabled": true
+      },
+      "framework_template": "gateflow_v1",
+      "id": "milestone:UF-029",
+      "source_filter": {
+        "milestone_id": "UF-029"
+      },
+      "title": "UF-029 Planes v2 Compiler to Canonical IR + Parity Contract",
       "type": "milestone"
     },
     {
@@ -417,305 +716,6 @@
       },
       "title": "Team Security and Quality Board",
       "type": "team"
-    },
-    {
-      "discord": {
-        "channel": "#milestones-gantt",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:P-026",
-      "source_filter": {
-        "milestone_id": "P-026"
-      },
-      "title": "P-026 Runtime Performance Hardening Closeout Signoff",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-f-027",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:F-027",
-      "source_filter": {
-        "milestone_id": "F-027"
-      },
-      "title": "F-027 Planes v2 Protocol Foundation + File Layout Spec",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-f-028",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:F-028",
-      "source_filter": {
-        "milestone_id": "F-028"
-      },
-      "title": "F-028 Planes v2 Schema + Cross-File Validator Layer",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-uf-029",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:UF-029",
-      "source_filter": {
-        "milestone_id": "UF-029"
-      },
-      "title": "UF-029 Planes v2 Compiler to Canonical IR + Parity Contract",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-rf-030",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:RF-030",
-      "source_filter": {
-        "milestone_id": "RF-030"
-      },
-      "title": "RF-030 Planes v2 Runtime Integration on Canonical IR",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-f-031",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:F-031",
-      "source_filter": {
-        "milestone_id": "F-031"
-      },
-      "title": "F-031 Planes v2 Backward-Compat Adapter + Migration Tooling",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-p-032",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:P-032",
-      "source_filter": {
-        "milestone_id": "P-032"
-      },
-      "title": "P-032 Planes v2 Rollout Gates + Go/No-Go Closeout",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-r-033",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:R-033",
-      "source_filter": {
-        "milestone_id": "R-033"
-      },
-      "title": "R-033 Planes v2 Performance Follow-ups (Post-Foundation)",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-f-034",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:F-034",
-      "source_filter": {
-        "milestone_id": "F-034"
-      },
-      "title": "F-034 Cross-Platform Debug Menu Foundation",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-u-035",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:U-035",
-      "source_filter": {
-        "milestone_id": "U-035"
-      },
-      "title": "U-035 Visual + Capture Tooling",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-r-036",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:R-036",
-      "source_filter": {
-        "milestone_id": "R-036"
-      },
-      "title": "R-036 Replay + Perf Observability",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-a-037",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:A-037",
-      "source_filter": {
-        "milestone_id": "A-037"
-      },
-      "title": "A-037 App-Configurable Debug Policy + Compatibility",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-f-038-board",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:F-038",
-      "source_filter": {
-        "milestone_id": "F-038"
-      },
-      "title": "F-038 Cross-Platform Notification Protocol + Runtime Adapters",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-r-039-board",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:R-039",
-      "source_filter": {
-        "milestone_id": "R-039"
-      },
-      "title": "R-039 macOS Debug Menu Runtime Wiring (E2E)",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-r-040-board",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:R-040",
-      "source_filter": {
-        "milestone_id": "R-040"
-      },
-      "title": "R-040 macOS Debug Menu Functionalization (Full Actions)",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-p-040-board",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:P-040",
-      "source_filter": {
-        "milestone_id": "P-040"
-      },
-      "title": "P-040 Program Setup and Spec Lock",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-f-041-board",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:F-041",
-      "source_filter": {
-        "milestone_id": "F-041"
-      },
-      "title": "F-041 Luvatrix Refactor: Core Domain Extraction",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-f-042-board",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:F-042",
-      "source_filter": {
-        "milestone_id": "F-042"
-      },
-      "title": "F-042 Luvatrix Refactor: CLI Surface and Init Scaffolding",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-u-043-board",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:U-043",
-      "source_filter": {
-        "milestone_id": "U-043"
-      },
-      "title": "U-043 Rendering v1 (Text-Only)",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-p-044-board",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:P-044",
-      "source_filter": {
-        "milestone_id": "P-044"
-      },
-      "title": "P-044 Policy/Validation Hardening",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-f-045-board",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:F-045",
-      "source_filter": {
-        "milestone_id": "F-045"
-      },
-      "title": "F-045 Extract to Dedicated gateflow Repo",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-f-046-board",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:F-046",
-      "source_filter": {
-        "milestone_id": "F-046"
-      },
-      "title": "F-046 Migration Tooling (import-luvatrix)",
-      "type": "milestone"
-    },
-    {
-      "discord": {
-        "channel": "#milestone-p-047-board",
-        "threads_enabled": true
-      },
-      "framework_template": "gateflow_v1",
-      "id": "milestone:P-047",
-      "source_filter": {
-        "milestone_id": "P-047"
-      },
-      "title": "P-047 Luvatrix Adoption + Deprecation",
-      "type": "milestone"
     }
   ],
   "render_defaults": {
