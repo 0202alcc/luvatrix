@@ -547,6 +547,7 @@ Legend: '=' Complete, '#' In Progress, '~' Planned, '!' At Risk, 'x' Blocked
 - Tasks: `T-4500, T-4501, T-4502, T-4503, T-4504, T-4505`
 - Lifecycle events:
   - 2026-03-07 active (framework=gateflow_v1) - gateflow productization roadmap milestone created
+  - 2026-03-08 closed (framework=gateflow_v1) - milestone merged to main with required checks passing
 - Success criteria:
   - Standalone CLI installs and runs full command surface locally.
   - Test fixtures and integration suites are portable in new repo.

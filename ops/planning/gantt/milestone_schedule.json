@@ -3089,6 +3089,12 @@
           "event": "active",
           "framework": "gateflow_v1",
           "note": "gateflow productization roadmap milestone created"
+        },
+        {
+          "date": "2026-03-08",
+          "event": "closed",
+          "framework": "gateflow_v1",
+          "note": "milestone merged to main with required checks passing"
         }
       ]
     },
