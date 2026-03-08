@@ -5,12 +5,7 @@ Framework: `gateflow_v1`
 Branch: `codex/m-f-045-gateflow-repo-extraction`
 
 ## Intake
-- [ ] `T-4500` [CLOSEOUT HARNESS] Define F-045 closeout metric + evidence harness
-- [ ] `T-4501` Create standalone `gateflow` repo skeleton/package
-- [ ] `T-4502` Move refactored modules + CLI entrypoint into standalone repo
-- [ ] `T-4503` Add packaging/install path (`uvx gateflow`, future `pipx`)
-- [ ] `T-4504` Port test fixtures and integration suites to standalone repo
-- [ ] `T-4505` Publish pre-release tag + install documentation
+- [ ] None
 
 ## Success Criteria Spec
 - [ ] None
@@ -37,7 +32,12 @@ Branch: `codex/m-f-045-gateflow-repo-extraction`
 - [ ] None
 
 ## Done
-- [ ] None
+- [x] `T-4500` [CLOSEOUT HARNESS] Define F-045 closeout metric + evidence harness
+- [x] `T-4501` Create standalone `gateflow` repo skeleton/package
+- [x] `T-4502` Move refactored modules + CLI entrypoint into standalone repo
+- [x] `T-4503` Add packaging/install path (`uvx gateflow`, future `pipx`)
+- [x] `T-4504` Port test fixtures and integration suites to standalone repo
+- [x] `T-4505` Publish pre-release tag + install documentation
 
 ## Blocked
 - [ ] None
