@@ -6,7 +6,6 @@ Name: **Planes v2 Schema + Cross-File Validator Layer**
 ## GateFlow Columns
 
 ### Intake
-- `T-3403` Implement schema validation pipeline for Planes v2 split files
 - `T-3404` Implement cross-file invariant validator for manifest/plane/route/frame references
 - `T-3405` Define strict vs permissive mode policy and diagnostics contract
 - `T-3426` Define Planes v2 visual evidence schema + manifest contract
@@ -36,10 +35,10 @@ Name: **Planes v2 Schema + Cross-File Validator Layer**
 
 ### Integration Ready
 - [ ] Training Go blockers reviewed and clear (or explicitly waived)
-- _None_
 
 ### Done
 - `T-3420` [CLOSEOUT HARNESS] Define F-028 validator closeout metric and evidence harness
+- `T-3403` Implement schema validation pipeline for Planes v2 split files
 
 ### Blocked
 - _None_
