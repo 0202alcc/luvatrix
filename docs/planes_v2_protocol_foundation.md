@@ -109,6 +109,11 @@ Script handler target resolution is strict:
 
 ## Go/No-Go Blockers for Training
 
+Training demonstration project IDs:
+
+1. `hello_plane`
+2. `coordinate_playground`
+
 Hard blockers:
 
 1. Coordinate ambiguity between alias/canonical fields.

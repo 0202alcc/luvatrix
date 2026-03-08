@@ -707,6 +707,11 @@
       ],
       "emoji": "\ud83e\uddf1",
       "end_week": 17,
+      "go_no_go": {
+        "message": "GO: All F-027 tasks are Done, closeout packet validated, training blockers cleared, and required CI checks passed.",
+        "received": true,
+        "received_at": "2026-03-08T20:33:56+00:00"
+      },
       "id": "F-027",
       "lifecycle_events": [
         {
@@ -718,7 +723,7 @@
       ],
       "name": "Planes v2 Protocol Foundation + File Layout Spec",
       "start_week": 15,
-      "status": "Planned",
+      "status": "Complete",
       "success_criteria": [
         "Split-file contract and canonical basis rules are frozen and documented.",
         "Deterministic runtime rules are explicitly specified and testable.",
