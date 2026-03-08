@@ -9,7 +9,7 @@ Decommission `ops/planning` as active planning ledger and make `.gateflow` the c
 - `T-4802` Done: CI gate catalog and CI gate runner now use `uvx gateflow validate links|closeout|all` commands.
 - `T-4803` Done: CI guard workflow now fails unauthorized `ops/planning/*` edits with archive-window exception path and remediation output.
 - `T-4804` Done: `ops/planning` frozen in place with deprecation marker plus archive manifest (commit SHA + timestamp).
-- `T-4805` Intake.
+- `T-4805` Done: active/recent milestones reconciled from `.gateflow/milestones.json` with closeout packet presence verified in `.gateflow/closeout/*`.
 - `T-4806` Intake.
 
 ## Evidence

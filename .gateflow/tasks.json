@@ -8320,16 +8320,31 @@
       "title": "Legacy archive + freeze"
     },
     {
+      "actuals": {
+        "input_tokens": 1900,
+        "output_tokens": 470,
+        "reopen_count": 0,
+        "tool_calls": 16,
+        "wall_time_sec": 620
+      },
       "depends_on": [
         "T-4804"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
       "id": "T-4805",
       "milestone_id": "P-048",
       "notes": [
         "Reconcile active/recent milestones in .gateflow only.",
         "Ensure closeout packets exist under .gateflow/closeout."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Active milestone reconciliation"
     },
