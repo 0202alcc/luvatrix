@@ -1,7 +1,18 @@
 {
+  "actions_executed": [
+    "capture_coordinates"
+  ],
+  "all_checks_passed": true,
   "app_id": "coordinate_playground",
-  "artifact_version": "v1",
-  "deterministic_fingerprint": "3b29a06359509fccd95475b014b4e47663933a082d0561039efeb8aecc4f0290",
+  "artifact_version": "v2",
+  "deterministic_fingerprint": "bc4a34dfbe2e09f1cf2cc71e0c50105ea824756fca73cd84b1039c1bfb17132d",
+  "interactive_checks": {
+    "captured_coordinates_set": true
+  },
+  "required_features": [
+    "captured_coordinates_set"
+  ],
   "status": "PASS",
+  "status_text": "last_action=capture_coordinates",
   "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/coordinate_playground/app_main.py --validate"
 }

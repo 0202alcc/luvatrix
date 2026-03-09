@@ -51,8 +51,8 @@ Determinism enforcement:
 - Closeout matrix is consolidated in this packet to reduce cross-file ambiguity.
 
 # Residual Risks
-- Current training app implementations are deterministic scaffolds, not full interactive feature-complete demos.
-- If richer runtime coupling is added later, deterministic artifact guarantees must be preserved to keep CI stable.
+- Interactive handlers are validated through synthetic HDI events; additional manual UX checks are still recommended for long-running sessions.
+- Future feature expansion must preserve deterministic artifact fingerprints and selector stability.
 
 # Training Demonstration Evidence
 | app_id | command(s) | deterministic artifact | verdict |
@@ -70,19 +70,26 @@ Determinism enforcement:
 
 # Command Outputs
 - `uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate links`
-  - `error: failed to create directory /Users/aleccandidato/.local/share/uv/tools: Permission denied (os error 13)`
+  - `validation: PASS (links)`
 - `uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate closeout`
-  - `error: failed to create directory /Users/aleccandidato/.local/share/uv/tools: Permission denied (os error 13)`
+  - `validation: PASS (closeout)`
 - `uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate all`
-  - `error: failed to create directory /Users/aleccandidato/.local/share/uv/tools: Permission denied (os error 13)`
+  - `validation: PASS (all)`
 - `PYTHONPATH=. uv run --with pytest pytest tests -k "planes_training_apps" -q`
-  - `error: Request failed after 3 retries ... failed to lookup address information`
-- Fallback evidence executed in this sandbox:
-  - `UV_CACHE_DIR=.uv-cache uv run gateflow --root /Users/aleccandidato/Projects/luvatrix validate links`
-    - `validation: PASS (links)`
-  - `UV_CACHE_DIR=.uv-cache uv run gateflow --root /Users/aleccandidato/Projects/luvatrix validate closeout`
-    - `validation: PASS (closeout)`
-  - `UV_CACHE_DIR=.uv-cache uv run gateflow --root /Users/aleccandidato/Projects/luvatrix validate all`
-    - `validation: PASS (all)`
-  - `PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run pytest tests -k "planes_training_apps" -q`
-    - `3 passed, 488 deselected in 11.12s`
+  - `.... [100%]`
+  - `4 passed, 488 deselected in 17.04s`
+
+# Corrective Addendum (2026-03-09)
+- Reopened milestone `A-048` and tasks `T-4810..T-4819` for corrective verification pass.
+- Replaced scaffold app implementations with interactive `PlaneApp` runtimes backed by `plane.json` manifests and event handlers via `examples/app_protocol/training_protocol.py`.
+- Added deterministic interactive validation assertions for:
+  - coordinate capture
+  - overlay toggles
+  - multi-plane switching
+  - scroll/pan telemetry
+  - component mode cycling
+  - sensor refresh telemetry
+  - input + sensor overlay logging
+  - debug capture workflow actions
+  - route switching for `/home`, `/settings`, `/analytics`
+- Re-ran and passed the exact required command bundle, then re-closed all tasks and milestone with GO heads-up.

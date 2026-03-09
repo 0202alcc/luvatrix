@@ -1,33 +1,39 @@
 # interactive_components
 
 ## Objective
-Package interactive component training shell with deterministic testability contract.
+Cycle component interaction modes and persist the current mode.
 
 ## Concepts introduced
-- Interaction affordance planning\n- Deterministic entrypoint behavior\n- Validation discipline
+- Interactive component state machine
+- Mode cycling
+- UI status updates
 
 ## Files to inspect
 - `app.toml`
 - `app_main.py`
+- `plane.json`
+- `assets/`
 - `validation_artifact.json` (generated)
 
 ## Hands-on tasks
-1. Run the validation command.
-2. Inspect `validation_artifact.json` and verify `status` is `PASS`.
-3. Re-run the command and confirm artifact content is deterministic.
+- Trigger `cycle_component` from the on-screen control.
+- Trigger `cycle_component` from the on-screen control.
+- Run the validation command.
+- Open the resulting artifact and verify every interactive check is `true`.
 
 ## Expected outputs/artifacts
-- Console line starting with `VALIDATION_ARTIFACT=`.
-- `examples/app_protocol/interactive_components/validation_artifact.json` with deterministic fingerprint.
+- Console output containing `VALIDATION_ARTIFACT=`.
+- `examples/app_protocol/interactive_components/validation_artifact.json` with:
+- `active_component_mode` == `advanced`
 
 ## Validation checklist
-- [ ] `app.toml` exists and points to `app_main:create`.
-- [ ] Validation command exits with code `0`.
-- [ ] Artifact file exists and contains `"status": "PASS"`.
-- [ ] Artifact fingerprint is stable across repeated runs.
+- [ ] App loads through `app_main:create`.
+- [ ] Interaction handlers execute without runtime errors.
+- [ ] `interactive_checks` in artifact are all `true`.
+- [ ] Deterministic fingerprint remains stable across repeated runs.
 
 ## Stretch challenge
-Wire this app into a richer runtime flow by replacing `create()` stub state with live plane/component behavior while preserving deterministic validation output.
+Add an additional interaction control and extend `training_protocol.py` validation checks while preserving deterministic artifact output.
 
 ## Runnable command
 `PYTHONPATH=. uv run python examples/app_protocol/interactive_components/app_main.py --validate`
