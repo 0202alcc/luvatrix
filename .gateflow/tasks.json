@@ -6972,18 +6972,38 @@
       "title": "[CLOSEOUT HARNESS] Define P-032 rollout go/no-go closeout metric and evidence harness"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:R-033",
         "team:platform-ci",
         "specialist:pm"
       ],
       "depends_on": [],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: R-033 closeout harness and evidence contract are defined and aligned to hard no-go conditions.",
+        "received": true,
+        "received_at": "2026-03-09T02:41:35+00:00"
+      },
       "id": "T-3425",
       "milestone_id": "R-033",
       "notes": [
         "Milestone-level scoring + hard no-go criteria + evidence/command profile for Go/No-Go decision."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "closeout_harness",
       "title": "[CLOSEOUT HARNESS] Define R-033 perf non-regression closeout metric and evidence harness"
     },
