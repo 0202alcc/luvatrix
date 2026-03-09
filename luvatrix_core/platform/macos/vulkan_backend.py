@@ -138,6 +138,8 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._last_presented_digest = ""
         self._last_present_elapsed_ms: float = 16.667
         self._debug_screenshot_count = 0
+        self._debug_clipboard_capture_count = 0
+        self._last_clipboard_png_size = 0
         self._recording_active = False
         self._recording_session_id = ""
         self._recording_started_at_utc = ""
@@ -1455,6 +1457,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         def _handler(_context: dict[str, object]) -> None:
             handlers = {
                 "debug.menu.capture.screenshot": self._handle_debug_screenshot,
+                "debug.menu.capture.screenshot.clipboard": self._handle_debug_screenshot_clipboard,
                 "debug.menu.capture.record.toggle": self._handle_debug_recording_toggle,
                 "debug.menu.overlay.toggle": self._handle_debug_overlay_toggle,
                 "debug.menu.replay.start": self._handle_debug_replay_start,
@@ -1510,6 +1513,25 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
                 "png_path": str(png_path),
                 "sidecar_path": str(sidecar_path),
                 "provenance_id": provenance_id,
+            }
+        )
+
+    def _handle_debug_screenshot_clipboard(self) -> None:
+        frame = self._latest_frame_or_placeholder()
+        capture_id = f"clipboard-{self._frames_presented:06d}-{self._debug_clipboard_capture_count:03d}"
+        self._debug_clipboard_capture_count += 1
+        captured_at = self._now_utc()
+        provenance_id = self._frame_digest(frame)
+        png_bytes = self._encode_png_rgba_bytes(frame)
+        self._last_clipboard_png_size = len(png_bytes)
+        self._append_debug_menu_event(
+            {
+                "action_id": "debug.menu.capture.screenshot.clipboard",
+                "status": "HANDLER_EXECUTED",
+                "capture_id": capture_id,
+                "captured_at_utc": captured_at,
+                "provenance_id": provenance_id,
+                "clipboard_bytes": self._last_clipboard_png_size,
             }
         )
 
@@ -1757,6 +1779,9 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     def _write_png_rgba(self, rgba: torch.Tensor, out_path: Path) -> None:
+        out_path.write_bytes(self._encode_png_rgba_bytes(rgba))
+
+    def _encode_png_rgba_bytes(self, rgba: torch.Tensor) -> bytes:
         arr = rgba.contiguous().cpu().numpy()
         height, width, channels = arr.shape
         if channels != 4:
@@ -1776,7 +1801,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         ihdr = _chunk(b"IHDR", struct.pack("!IIBBBBB", width, height, 8, 6, 0, 0, 0))
         idat = _chunk(b"IDAT", payload)
         iend = _chunk(b"IEND", b"")
-        out_path.write_bytes(header + ihdr + idat + iend)
+        return header + ihdr + idat + iend
 
     def _build_menu_config(self, title: str) -> MacOSMenuConfig:
         def _on_action(action_id: str) -> None:

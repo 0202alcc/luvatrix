@@ -71,6 +71,18 @@ class MacOSMenuIntegrationTests(unittest.TestCase):
             pngs = list(captures.glob("*.png"))
             self.assertTrue(pngs)
 
+    def test_clipboard_screenshot_executes_without_filesystem_artifacts(self) -> None:
+        backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "debug_menu"
+            backend.configure_debug_menu(app_id="examples.app", profile=self._profile(), artifact_dir=out)
+            result = backend.dispatch_debug_menu_action("debug.menu.capture.screenshot.clipboard")
+            self.assertEqual(result.status, "EXECUTED")
+            events = (out / "events.jsonl").read_text(encoding="utf-8").splitlines()
+            self.assertTrue(any("debug.menu.capture.screenshot.clipboard" in line for line in events))
+            captures = out / "captures"
+            self.assertFalse(captures.exists())
+
     def test_recording_toggle_is_idempotent_start_stop(self) -> None:
         backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
         with tempfile.TemporaryDirectory() as tmp:

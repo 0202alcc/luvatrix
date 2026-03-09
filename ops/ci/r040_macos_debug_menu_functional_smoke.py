@@ -158,6 +158,7 @@ def _exercise_actions(out_dir: Path) -> dict[str, object]:
         backend.configure_debug_menu(app_id="r040.smoke", profile=profile, artifact_dir=artifact_dir)
         action_order = [
             "debug.menu.capture.screenshot",
+            "debug.menu.capture.screenshot.clipboard",
             "debug.menu.capture.record.toggle",
             "debug.menu.capture.record.toggle",
             "debug.menu.overlay.toggle",

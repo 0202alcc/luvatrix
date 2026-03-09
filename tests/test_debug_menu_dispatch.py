@@ -10,7 +10,7 @@ class DebugMenuDispatchTests(unittest.TestCase):
         warnings: list[str] = []
         dispatcher = DebugMenuDispatcher(warning_sink=warnings.append)
         result = dispatcher.dispatch("debug.unknown")
-        self.assertEqual(result.status, "NOOP")
+        self.assertEqual(result.status, "UNSUPPORTED")
         self.assertEqual(result.warning, "unknown action: debug.unknown")
         self.assertEqual(warnings, ["unknown action: debug.unknown"])
 
@@ -33,7 +33,7 @@ class DebugMenuDispatchTests(unittest.TestCase):
         dispatcher = DebugMenuDispatcher(warning_sink=warnings.append)
         dispatcher.register("debug.capture.start", lambda _ctx: (_ for _ in ()).throw(RuntimeError("boom")))
         result = dispatcher.dispatch("debug.capture.start")
-        self.assertEqual(result.status, "NOOP")
+        self.assertEqual(result.status, "ERROR")
         self.assertEqual(result.warning, "handler failure for debug.capture.start: RuntimeError")
         self.assertEqual(warnings, ["handler failure for debug.capture.start: RuntimeError"])
 

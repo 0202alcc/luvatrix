@@ -20,6 +20,14 @@ class DebugCapabilityRegistryTests(unittest.TestCase):
     def test_default_ids_follow_canonical_format(self) -> None:
         validate_debug_menu_actions(DEFAULT_DEBUG_MENU_ACTIONS)
 
+    def test_clipboard_screenshot_action_is_declared(self) -> None:
+        registry = build_debug_capability_registry()
+        self.assertIn("debug.menu.capture.screenshot.clipboard", registry)
+        self.assertEqual(
+            registry["debug.menu.capture.screenshot.clipboard"],
+            "debug.capture.screenshot.clipboard",
+        )
+
     def test_duplicate_menu_ids_are_rejected(self) -> None:
         duplicated = DEFAULT_DEBUG_MENU_ACTIONS + (
             DebugMenuActionSpec(
