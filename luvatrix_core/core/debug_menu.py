@@ -33,6 +33,11 @@ DEFAULT_DEBUG_MENU_ACTIONS: tuple[DebugMenuActionSpec, ...] = (
         label="Capture Screenshot",
     ),
     DebugMenuActionSpec(
+        menu_id="debug.menu.capture.screenshot.clipboard",
+        capability_id="debug.capture.screenshot.clipboard",
+        label="Capture Screenshot to Clipboard",
+    ),
+    DebugMenuActionSpec(
         menu_id="debug.menu.capture.record.toggle",
         capability_id="debug.capture.record",
         label="Toggle Window Recording",
@@ -107,12 +112,12 @@ class DebugMenuDispatcher:
         if not normalized:
             warning = "empty action id"
             self._warn(warning)
-            return DebugMenuDispatchResult(action_id=action_id, status="NOOP", warning=warning)
+            return DebugMenuDispatchResult(action_id=action_id, status="UNSUPPORTED", warning=warning)
         action = self._actions.get(normalized)
         if action is None:
             warning = f"unknown action: {normalized}"
             self._warn(warning)
-            return DebugMenuDispatchResult(action_id=normalized, status="NOOP", warning=warning)
+            return DebugMenuDispatchResult(action_id=normalized, status="UNSUPPORTED", warning=warning)
 
         payload = context or {}
         if not action.is_enabled(payload):
@@ -124,7 +129,7 @@ class DebugMenuDispatcher:
         except Exception as exc:  # defensive fallback is required for crash-proof dispatch
             warning = f"handler failure for {normalized}: {exc.__class__.__name__}"
             self._warn(warning)
-            return DebugMenuDispatchResult(action_id=normalized, status="NOOP", warning=warning)
+            return DebugMenuDispatchResult(action_id=normalized, status="ERROR", warning=warning)
         return DebugMenuDispatchResult(action_id=normalized, status="EXECUTED")
 
     def _warn(self, message: str) -> None:
@@ -191,6 +196,13 @@ def default_debug_menu_adapter_specs() -> tuple[DebugMenuAdapterSpec, ...]:
             supported=False,
             supported_menu_ids=(),
             declared_capabilities=("debug.adapter.linux.stub",),
+            unsupported_reason="macOS-first phase: explicit stub only",
+        ),
+        DebugMenuAdapterSpec(
+            platform="web",
+            supported=False,
+            supported_menu_ids=(),
+            declared_capabilities=("debug.adapter.web.stub",),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
     )

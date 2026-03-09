@@ -7,7 +7,7 @@
 
 ## Phase Policy
 1. Current phase is macOS-first.
-2. `windows` and `linux` adapters are explicit stubs in this phase.
+2. `windows`, `linux`, and `web` adapters are explicit stubs in this phase.
 3. No implicit fallback behavior is allowed for unsupported platforms.
 
 ## Platform Matrix
@@ -24,6 +24,11 @@
    - `supported=false`
    - `supported_menu_ids=[]`
    - `declared_capabilities=["debug.adapter.linux.stub"]`
+   - `unsupported_reason="macOS-first phase: explicit stub only"`
+4. `web`
+   - `supported=false`
+   - `supported_menu_ids=[]`
+   - `declared_capabilities=["debug.adapter.web.stub"]`
    - `unsupported_reason="macOS-first phase: explicit stub only"`
 
 ## Bootstrap and Verification Flow (R-039)
