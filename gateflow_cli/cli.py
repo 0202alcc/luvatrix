@@ -8,7 +8,7 @@ DEPRECATION_MESSAGE = (
     "gateflow_cli.cli is deprecated and no longer provides an in-repo CLI implementation.\n"
     "Use standalone gateflow instead:\n"
     "  uv run gateflow --root <repo> <command>\n"
-    "  uvx --from gateflow==0.1.0a3 gateflow --root <repo> <command>\n"
+    "  uvx --from gateflow==1.0.0 gateflow --root <repo> <command>\n"
 )
 
 

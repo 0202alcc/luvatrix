@@ -1,0 +1,1 @@
+policy error: POLICY_SYNC_REQUIRED: writes are blocked until branch is synced; run `gateflow sync from-main` then `gateflow sync apply`

@@ -1,0 +1,7 @@
+usage: gateflow validate [-h] {links,closeout,all} ...
+
+positional arguments:
+  {links,closeout,all}
+
+options:
+  -h, --help            show this help message and exit

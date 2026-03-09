@@ -1,0 +1,330 @@
+{
+  "captured_at_epoch": 1773076148.8785422,
+  "files": [
+    {
+      "path": ".gateflow/backlog.json",
+      "sha256": "c9214b4cc5e793baa2de188396214a0689fc736bccebe665396bc484c33da0a2",
+      "size": 279
+    },
+    {
+      "path": ".gateflow/boards.json",
+      "sha256": "23290e992b91e4aaaf81527a3b9330fef7ca9a0e59ce9672cde2c7fb3808dd57",
+      "size": 19398
+    },
+    {
+      "path": ".gateflow/closeout/a-037_closeout.md",
+      "sha256": "9580c9d82dd820593f4b433d3aee0ad01c7001b72e327605707284a28ff33dc2",
+      "size": 2715
+    },
+    {
+      "path": ".gateflow/closeout/a-048_closeout.md",
+      "sha256": "d9c900a463b3a58517ace2803b1d2de868e462f7ef238b048cd7df1673b803b7",
+      "size": 6628
+    },
+    {
+      "path": ".gateflow/closeout/apu-020_closeout.md",
+      "sha256": "1df925c1cf28051eeee7000a64f5d72c8a4dfa5dbd78dc648671be3ddde4fa71",
+      "size": 701
+    },
+    {
+      "path": ".gateflow/closeout/aru-016_closeout.md",
+      "sha256": "06dd249db42d578e20a237af55bd6836b4c025d23bdedd1e88c270e34c567766",
+      "size": 701
+    },
+    {
+      "path": ".gateflow/closeout/au-018_closeout.md",
+      "sha256": "652e6fc89a445c3d6e386e985323b50d48a6b67256b3e35d100ac027bf5ac12e",
+      "size": 700
+    },
+    {
+      "path": ".gateflow/closeout/au-019_closeout.md",
+      "sha256": "0a5c2000e117982ead825584749e18326f3d12b1e0ce0e3b63552c9d07e24c42",
+      "size": 700
+    },
+    {
+      "path": ".gateflow/closeout/closure_issues.json",
+      "sha256": "143f1b3120c7f54d9be7d7cb88dc6091a42d4033c2e2a04b2830b3613b543008",
+      "size": 76
+    },
+    {
+      "path": ".gateflow/closeout/f-001_closeout.md",
+      "sha256": "8ae531efb671c7e70ef78606b4464fe2f0e7d18d0ada77528c7dcd6bb30c1897",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/f-003_closeout.md",
+      "sha256": "4b4f8e5f2f484c5d59eecbeb7d7b6a2c5a33f0cd26a09118f478e0b5178b11b2",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/f-011_closeout.md",
+      "sha256": "95bc6e76af5b1c17bdaad427ab5bea7908587bab4970af70de0064fdb1382c9b",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/f-014_closeout.md",
+      "sha256": "d94c9e66dc8668a32d2d3b452c20836e3f5dbb90a291aa7645b8d095eda6c545",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/f-024_closeout.md",
+      "sha256": "37d3152b8960a5e2dc2dbe35ffaa9b4f9859489263d7e4eba541cc1dcf748c1e",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/f-027_closeout.md",
+      "sha256": "d9c67c93d1ad14d21c9a14cb981e1811081a5710bef585113a30190cf6259089",
+      "size": 4058
+    },
+    {
+      "path": ".gateflow/closeout/f-028_closeout.md",
+      "sha256": "c8036cab162110c27af44327b44e0a19879573cb54b9d28e63c0df8e01fb80b2",
+      "size": 3378
+    },
+    {
+      "path": ".gateflow/closeout/f-031_closeout.md",
+      "sha256": "d62463ff110555d083870e274b457b162742215e4ce3a8ace285dcdd6d4b7f03",
+      "size": 4061
+    },
+    {
+      "path": ".gateflow/closeout/f-034_closeout.md",
+      "sha256": "99cf1f3b8b8b83f2ba6a795c68be559cc3ff40ea74845ed3cfd5da5d3d6d123d",
+      "size": 2018
+    },
+    {
+      "path": ".gateflow/closeout/f-038_closeout.md",
+      "sha256": "d5e775dd72000496cd11d28e6c3cc622c2f9d868723a9eb41e1a014a33254d80",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/f-041_closeout.md",
+      "sha256": "9bad5f92344e086fd853155b4ee708bc75eb518df312ea8ff06276e307d083eb",
+      "size": 2212
+    },
+    {
+      "path": ".gateflow/closeout/f-042_closeout.md",
+      "sha256": "388ef8d4d43b0f8dc25d3666b7716c43171699f87abe488eea0c72b44116050d",
+      "size": 2122
+    },
+    {
+      "path": ".gateflow/closeout/f-045_closeout.md",
+      "sha256": "30b81fe7e241415ddeee569e0c1fdb8f04b651520b0a5f237ab1680ef9a56016",
+      "size": 2278
+    },
+    {
+      "path": ".gateflow/closeout/f-046_closeout.md",
+      "sha256": "69dd2ea30a20b2ab3c04dd05fbec05e308da5feeee776e1bd7b5dbcad76b4399",
+      "size": 2593
+    },
+    {
+      "path": ".gateflow/closeout/fr-004_closeout.md",
+      "sha256": "8d1ad7052799e7d9bd115ced2de108e42757075cad908338fe6bf315ca042410",
+      "size": 700
+    },
+    {
+      "path": ".gateflow/closeout/logs/p-048_validate_all.log",
+      "sha256": "0b0102e150f0fb4688b3630dff0c589256c77ab7bf85001b3c9cdf68dda500b8",
+      "size": 23
+    },
+    {
+      "path": ".gateflow/closeout/logs/p-048_validate_closeout.log",
+      "sha256": "070c99fff1644889c752c321f92724f57261083d93c9dabe79afbe336f72f014",
+      "size": 28
+    },
+    {
+      "path": ".gateflow/closeout/logs/p-048_validate_links.log",
+      "sha256": "560de6b7a47acc101a205d0975b78df65a0e36dad9c187ff52cc10495b318e03",
+      "size": 25
+    },
+    {
+      "path": ".gateflow/closeout/metadata_refs.json",
+      "sha256": "143f1b3120c7f54d9be7d7cb88dc6091a42d4033c2e2a04b2830b3613b543008",
+      "size": 76
+    },
+    {
+      "path": ".gateflow/closeout/p-008_closeout.md",
+      "sha256": "81ccc187a2d327a20876d84ea00f90132912fba21bd6287b92b883d91a4658e4",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/p-010_closeout.md",
+      "sha256": "cadcf8138bed191416038ec4d982f8f62e67b3b9c36df9923f7ca547ed11f8bd",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/p-013_closeout.md",
+      "sha256": "30f6e7d9bb6e6d62f90ea8b6a4364fe801e28eb871e94a62953650a5743822e4",
+      "size": 2316
+    },
+    {
+      "path": ".gateflow/closeout/p-015_closeout.md",
+      "sha256": "1634f775d9dff0e1167e1b42ae1e380eaef40f0790b1d240c4091340e0f23263",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/p-021_closeout.md",
+      "sha256": "2789b39f777fd8cf0c74219acc1c44665c1cc55e82b7d6728754a65d4947cb6e",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/p-026_closeout.md",
+      "sha256": "c05dd79e6a98193103f467c20ce5585d4c5bc40abce9d958418789d2b3cbbde9",
+      "size": 4907
+    },
+    {
+      "path": ".gateflow/closeout/p-032_closeout.md",
+      "sha256": "b1caee0a18de05a156dbc16ec11a8d2d3dede3f567a20cb73c8dbd2b61e7fa6f",
+      "size": 8735
+    },
+    {
+      "path": ".gateflow/closeout/p-040_closeout.md",
+      "sha256": "be862ad4ab5df94b527fb327cf2b788dca72a663669e93a959a2aabb57f4a2cf",
+      "size": 2954
+    },
+    {
+      "path": ".gateflow/closeout/p-044_closeout.md",
+      "sha256": "db65f919a63885a41f54ba31404d29a90fd722012569599db302e0cb1d1632d5",
+      "size": 2520
+    },
+    {
+      "path": ".gateflow/closeout/p-047_closeout.md",
+      "sha256": "24fcdc28dbecaa79640def48d34177688683d26d8484fb3ae796d27797efee2b",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/p-048_closeout.md",
+      "sha256": "c7ddefa6e8367393590df9c9762c8cbc5b59881610c568c212760c86c376b14a",
+      "size": 3284
+    },
+    {
+      "path": ".gateflow/closeout/r-002_closeout.md",
+      "sha256": "51ff7f223860ce2dda6e07d804981b6768abd4df52ec04bcea3f0c425af6706b",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/r-005_closeout.md",
+      "sha256": "15369de7385f16beefafc03cbd189a63ebaf4b609755c5c1f52ff962d322ef65",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/r-012_closeout.md",
+      "sha256": "fd58947e166d96c727bc61daf393ae1ac36a1803d2116a7fe066f517d2459114",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/r-022_closeout.md",
+      "sha256": "a38cd0e8d5968c868db2b259bf9779e66e569160658635117e50469468d17738",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/r-023_closeout.md",
+      "sha256": "628379016bacabdebaa2f6b134804787d1d8d7e97b84ee966bbed84a2bfa6480",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/r-025_closeout.md",
+      "sha256": "c3fabd7aa110c978c4202770420559a2e4a1fb8e4d0e2dd53432ce5a15ed523e",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/r-033_closeout.md",
+      "sha256": "0f9212f0cf03b233b74b455d0057f24fcfcf1e65e8202d6d526606326e7ef7de",
+      "size": 4814
+    },
+    {
+      "path": ".gateflow/closeout/r-036_closeout.md",
+      "sha256": "b51d52b95e16e96364afea2fab298c6a9f63b2fe92df180d349632de9d0a41a6",
+      "size": 2724
+    },
+    {
+      "path": ".gateflow/closeout/r-039_closeout.md",
+      "sha256": "8c6dc8c54424c322e59a2bde51d0c65469c7b0bbbcc77e4388f5c5e90bd8bc83",
+      "size": 3386
+    },
+    {
+      "path": ".gateflow/closeout/r-040_closeout.md",
+      "sha256": "aa5094d3bf4329ab2236b2a944801f097341f7ca330a336053ae99665d1558e3",
+      "size": 2201
+    },
+    {
+      "path": ".gateflow/closeout/rf-009_closeout.md",
+      "sha256": "7fe91d7ef60af427ef41812dcce870a59955e779e48144ce1b71b59c927b35e7",
+      "size": 700
+    },
+    {
+      "path": ".gateflow/closeout/rf-030_closeout.md",
+      "sha256": "99b595722137b73ef7de7689f2d36447266c0e17af3c562b7058274b770e1328",
+      "size": 5887
+    },
+    {
+      "path": ".gateflow/closeout/u-007_closeout.md",
+      "sha256": "568c3dbda29cfd206a71afc5ef128100b23fe0ee080e2b9e754d6d7093221e35",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/u-017_closeout.md",
+      "sha256": "d3581b40c06b8b945448149085559da7c06dc3d894544b0d16d6e99d225a6f03",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/u-021_closeout.md",
+      "sha256": "a4a9a639f355fdf7bff1cf671974eacad916492c83569005daacb2efa8d7d6e5",
+      "size": 699
+    },
+    {
+      "path": ".gateflow/closeout/u-035_closeout.md",
+      "sha256": "6e57c779e9bf98a4234e3ae7ef93749320e50ab402efec6860a360a41a027ea1",
+      "size": 2507
+    },
+    {
+      "path": ".gateflow/closeout/u-043_closeout.md",
+      "sha256": "dad08f482f1f9363f19b363fbf3df9c00fe4bd146a5cdcc30abc740631da028f",
+      "size": 1512
+    },
+    {
+      "path": ".gateflow/closeout/uf-006_closeout.md",
+      "sha256": "c2835fa86b2859e7f8e0dfb2346ebc5db0cab04cc04190367c87f39613ea4d89",
+      "size": 700
+    },
+    {
+      "path": ".gateflow/closeout/uf-029_closeout.md",
+      "sha256": "fd573411e41f3a388c1693289a3a5857a2a7c3945ddf5770d14d674318411997",
+      "size": 3839
+    },
+    {
+      "path": ".gateflow/config.json",
+      "sha256": "b714b7bd74776576d7b284abbd12adcb49a2215476e955d6089d9a98ed8bc0d8",
+      "size": 2767
+    },
+    {
+      "path": ".gateflow/legacy_ops_planning_archive_window.json",
+      "sha256": "2c8b204578978e390f5ad4ff57bbc2b55f3802fbb8d33b0b62348df6dbede6b6",
+      "size": 376
+    },
+    {
+      "path": ".gateflow/legacy_ops_planning_manifest.json",
+      "sha256": "df1226d09b946726f960588e3cc18c6ee905b893eeddc5fdc68de3c4a26bbf25",
+      "size": 443
+    },
+    {
+      "path": ".gateflow/milestones.json",
+      "sha256": "ddc1a0827cb8cdcc3bfd7817b8bd6b6f3d77abd77055b6fa7b420d64be37663e",
+      "size": 131132
+    },
+    {
+      "path": ".gateflow/reconciliation/p-048_active_milestone_reconciliation.json",
+      "sha256": "e9615122ed6e8f2014fb28b483522aad7539ea032139764f47de12b1fce8d947",
+      "size": 7932
+    },
+    {
+      "path": ".gateflow/sync_state.json",
+      "sha256": "579024f83207c97b2a793c4bb1c176a39038b23439c37f064a60cf989a1a96ee",
+      "size": 534129
+    },
+    {
+      "path": ".gateflow/tasks.json",
+      "sha256": "4bdaa2e86de9b14896f4e5fd088a95692cf1237bc00ceb8e77f404ea980107e8",
+      "size": 329955
+    }
+  ]
+}

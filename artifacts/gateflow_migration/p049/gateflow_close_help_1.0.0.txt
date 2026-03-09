@@ -1,0 +1,7 @@
+usage: gateflow close [-h] {task,milestone} ...
+
+positional arguments:
+  {task,milestone}
+
+options:
+  -h, --help        show this help message and exit

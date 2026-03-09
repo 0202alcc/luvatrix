@@ -1,0 +1,10 @@
+{
+  "entity": "task",
+  "go_no_go": {
+    "message": "Close attempt for workflow validation",
+    "received": true,
+    "received_at": "2026-03-09T17:11:00+00:00"
+  },
+  "id": "T-1001",
+  "status": "closed"
+}

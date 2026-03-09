@@ -1,0 +1,10 @@
+{
+  "applied_at": "2026-03-09T17:15:32+00:00",
+  "drift": {
+    "conflict_count": 0,
+    "conflicts": [],
+    "resources": []
+  },
+  "source_commit": "30e2e0f3929c9049d452ef425fc74fa2a4c4f47b",
+  "status": "ok"
+}

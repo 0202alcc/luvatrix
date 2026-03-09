@@ -6,7 +6,7 @@ Repository-level operating rules for human + AI contributors.
 1. `.gateflow/*` is the only active planning ledger and source of truth.
 2. `ops/planning/*` is deprecated/legacy archive content and must not be used for active planning writes.
 3. All planning operations must use standalone GateFlow CLI commands:
-   - `uvx --from gateflow==0.1.0a3 gateflow --root <repo> ...`
+   - `uvx --from gateflow==1.0.0 gateflow --root <repo> ...`
 4. Legacy compatibility path `ops/planning/api/planning_api.py` is decommissioned for active operations.
 5. CI and Go/No-Go gates must resolve from `.gateflow/*` state and `uvx gateflow validate ...` commands only.
 6. If any instruction below conflicts with this section, this section takes precedence.
@@ -72,8 +72,8 @@ Before planning or editing code, read:
    - `ops/planning/agile/boards_registry.json` (board definitions and formatting config)
    - `ops/planning/gantt/milestone_schedule.json` (milestones + `task_ids`)
 2. Use standalone `gateflow` command paths for milestone/task CRUD (`uv run gateflow --root <repo> api ...`) instead of manual JSON edits whenever possible.
-3. GateFlow runtime version baseline is `gateflow==0.1.0a3`.
-4. Wrapper default command is pinned to `uvx --from gateflow==0.1.0a3 gateflow`; use `LUVATRIX_GATEFLOW_WRAPPER_CMD` only for explicit overrides.
+3. GateFlow runtime version baseline is `gateflow==1.0.0`.
+4. Wrapper default command is pinned to `uvx --from gateflow==1.0.0 gateflow`; use `LUVATRIX_GATEFLOW_WRAPPER_CMD` only for explicit overrides.
 5. Every milestone must have a `task_ids` list (empty allowed for bootstrap/split states).
 6. Milestones should include `descriptions` (`string[]`) to record objective snapshots (especially across reopen cycles).
 7. New milestones must include non-empty `success_criteria` and `closeout_criteria` (quantitative Go/No-Go metric contract).

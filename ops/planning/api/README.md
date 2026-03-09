@@ -4,7 +4,7 @@ This provides a standardized, safe mutation path for planning data using:
 
 `METHOD /resource[/id]`
 
-> Deprecation: `ops/planning/*` is now legacy/archive-only. Active planning state is `.gateflow/*`, and active operations must use `uvx --from gateflow==0.1.0a3 gateflow ...`.
+> Deprecation: `ops/planning/*` is now legacy/archive-only. Active planning state is `.gateflow/*`, and active operations must use `uvx --from gateflow==1.0.0 gateflow ...`.
 
 Quick operator reference:
 
@@ -12,22 +12,22 @@ Quick operator reference:
 
 ## GateFlow Runtime Baseline
 
-1. Luvatrix planning baseline is `gateflow==0.1.0a3`.
+1. Luvatrix planning baseline is `gateflow==1.0.0`.
 2. Wrapper path (recommended):
-   - `uvx --from gateflow==0.1.0a3 gateflow --root <repo> ...`
+   - `uvx --from gateflow==1.0.0 gateflow --root <repo> ...`
 3. Direct published package path:
-   - `uvx --from gateflow==0.1.0a3 gateflow --root <repo> ...`
+   - `uvx --from gateflow==1.0.0 gateflow --root <repo> ...`
 4. Version check:
-   - `uvx --from gateflow==0.1.0a3 gateflow --version`
+   - `uvx --from gateflow==1.0.0 gateflow --version`
 
-## New Lifecycle Commands (0.1.0a3)
+## New Lifecycle Commands (1.0.0)
 
 1. Initialize/doctor:
-   - `uvx --from gateflow==0.1.0a3 gateflow --root <repo> init`
-   - `uvx --from gateflow==0.1.0a3 gateflow --root <repo> init doctor`
+   - `uvx --from gateflow==1.0.0 gateflow --root <repo> init`
+   - `uvx --from gateflow==1.0.0 gateflow --root <repo> init doctor`
 2. Controlled close flow:
-   - `uvx --from gateflow==0.1.0a3 gateflow --root <repo> close task <id> --heads-up "<Go/No-Go note>"`
-   - `uvx --from gateflow==0.1.0a3 gateflow --root <repo> close milestone <id> --heads-up "<Go/No-Go note>"`
+   - `uvx --from gateflow==1.0.0 gateflow --root <repo> close task <id> --heads-up "<Go/No-Go note>"`
+   - `uvx --from gateflow==1.0.0 gateflow --root <repo> close milestone <id> --heads-up "<Go/No-Go note>"`
 3. On close failure, inspect:
    - `.gateflow/closeout/closure_issues.json`
 4. Backend/sync flow:

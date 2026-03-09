@@ -1,0 +1,23 @@
+{
+  "captured_at": "2026-03-09T17:10:46+00:00",
+  "drift": {
+    "conflict_count": 1,
+    "conflicts": [
+      {
+        "code": "content_mismatch",
+        "item_id": "T-4819",
+        "resource": "tasks"
+      }
+    ],
+    "resources": [
+      "tasks"
+    ]
+  },
+  "remediation": [
+    "gateflow sync from-main",
+    "gateflow sync status",
+    "gateflow sync apply"
+  ],
+  "source_commit": "30e2e0f3929c9049d452ef425fc74fa2a4c4f47b",
+  "status": "ok"
+}

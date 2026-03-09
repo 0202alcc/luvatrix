@@ -5,7 +5,7 @@ Status: Frozen legacy archive as of 2026-03-08T21:06:27Z.
 `ops/planning/*` is no longer the active planning ledger.
 Use `.gateflow/*` and standalone GateFlow CLI commands for all active planning operations:
 
-- `uvx --from gateflow==0.1.0a3 gateflow --root /Users/aleccandidato/Projects/luvatrix ...`
+- `uvx --from gateflow==1.0.0 gateflow --root /Users/aleccandidato/Projects/luvatrix ...`
 
 Archive provenance:
 - Freeze mode: in-place (non-destructive)

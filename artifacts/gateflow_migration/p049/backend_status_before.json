@@ -1,0 +1,6 @@
+{
+  "backend_target": "repo-local-sqlite",
+  "mode": "file",
+  "policy_require_sync_before_write": false,
+  "sqlite_path": "/Users/aleccandidato/Projects/luvatrix/.gateflow/gateflow.db"
+}

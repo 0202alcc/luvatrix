@@ -12,7 +12,7 @@ def test_wrapper_uses_default_standalone_command() -> None:
     assert rc == 0
     called = run.call_args
     assert called is not None
-    assert called.args[0] == ["uvx", "--from", "gateflow==0.1.0a3", "gateflow", "--help"]
+    assert called.args[0] == ["uvx", "--from", "gateflow==1.0.0", "gateflow", "--help"]
     assert called.kwargs["check"] is False
     assert called.kwargs["env"]["UV_CACHE_DIR"] in {"./.uv-cache", ".uv-cache"}
     assert called.kwargs["env"]["UV_TOOL_DIR"] in {"./gateflow/.uv-tools", ".uv-tools"}
