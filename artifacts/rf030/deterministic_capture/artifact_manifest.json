@@ -1,0 +1,59 @@
+{
+  "milestone_id": "RF-030",
+  "task_id": "T-3428",
+  "training_project_ids": [
+    "scroll_and_pan_plane",
+    "interactive_components"
+  ],
+  "determinism_capture_schema": "rf030_debug_capture_v1",
+  "scenarios": {
+    "startup": {
+      "source": "artifacts/rf030/deterministic_capture/startup_idle.json",
+      "scenario_key": "idle",
+      "deterministic": true,
+      "incremental_present_pct": 100.0,
+      "sha256": "3c03683e11446b81c911c2e7855ffdf9e58e594040c0eb9ded9160dbe9469512"
+    },
+    "vertical_scroll": {
+      "source": "artifacts/rf030/deterministic_capture/vertical_scroll.json",
+      "scenario_key": "scroll",
+      "deterministic": true,
+      "incremental_present_pct": 100.0,
+      "sha256": "3ae4d9fafd933d2e7541c31f3e4d7a4c28d524daff3448862bd2a4c408d5c08c"
+    },
+    "horizontal_pan": {
+      "source": "artifacts/rf030/deterministic_capture/horizontal_pan.json",
+      "scenario_key": "horizontal_pan",
+      "deterministic": true,
+      "incremental_present_pct": 100.0,
+      "sha256": "25c28336a095d57f27b4810ba5dff2e8169ddb9b01c847320ba8208327040383"
+    },
+    "drag_heavy": {
+      "source": "artifacts/rf030/deterministic_capture/drag_heavy.json",
+      "scenario_key": "drag_heavy",
+      "deterministic": true,
+      "incremental_present_pct": 100.0,
+      "sha256": "7faca173ad4a51a6e930dacabf9bb11ed0d9bc26fb504d307e12ab7038a7a05a"
+    },
+    "resize_burst": {
+      "source": "artifacts/rf030/deterministic_capture/resize_burst.json",
+      "scenario_key": "resize_overlap_incremental_required",
+      "deterministic": true,
+      "incremental_present_pct": 100.0,
+      "sha256": "88a3852587902ef7a87769059ffd34ddde548638a0563efcc3fdeefd8c48f0f0"
+    },
+    "overlay_toggle": {
+      "source": "artifacts/rf030/deterministic_capture/debug_menu_smoke.json",
+      "deterministic": true,
+      "action_status": "EXECUTED",
+      "sha256": "cd7f1f9f9cdb057420340937ef7698292a546b1b2d2d54c2a051da6eccb3f874"
+    },
+    "replay_frame_step": {
+      "source": "artifacts/rf030/deterministic_capture/debug_menu_smoke.json",
+      "deterministic": true,
+      "replay_status": "EXECUTED",
+      "frame_step_status": "EXECUTED",
+      "sha256": "cd7f1f9f9cdb057420340937ef7698292a546b1b2d2d54c2a051da6eccb3f874"
+    }
+  }
+}

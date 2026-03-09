@@ -1,16 +1,16 @@
-{"action_id": "debug.menu.capture.screenshot", "capture_id": "capture-000000-000", "png_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpss6n6kxz/runtime/captures/capture-000000-000.png", "provenance_id": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119", "sidecar_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpss6n6kxz/runtime/captures/capture-000000-000.json", "status": "HANDLER_EXECUTED"}
+{"action_id": "debug.menu.capture.screenshot", "capture_id": "capture-000000-000", "png_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpueckx2p9/runtime/captures/capture-000000-000.png", "provenance_id": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119", "sidecar_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpueckx2p9/runtime/captures/capture-000000-000.json", "status": "HANDLER_EXECUTED"}
 {"action_id": "debug.menu.capture.screenshot", "status": "EXECUTED", "warning": null}
 {"action_id": "debug.menu.capture.record.toggle", "session_id": "rec-000000", "status": "RECORDING_STARTED"}
 {"action_id": "debug.menu.capture.record.toggle", "status": "EXECUTED", "warning": null}
-{"action_id": "debug.menu.capture.record.toggle", "manifest_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpss6n6kxz/runtime/recordings/rec-000000.json", "session_id": "rec-000000", "status": "RECORDING_STOPPED"}
+{"action_id": "debug.menu.capture.record.toggle", "manifest_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpueckx2p9/runtime/recordings/rec-000000.json", "session_id": "rec-000000", "status": "RECORDING_STOPPED"}
 {"action_id": "debug.menu.capture.record.toggle", "status": "EXECUTED", "warning": null}
-{"action_id": "debug.menu.overlay.toggle", "enabled": true, "state_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpss6n6kxz/runtime/overlays/state.json", "status": "HANDLER_EXECUTED"}
+{"action_id": "debug.menu.overlay.toggle", "enabled": true, "state_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpueckx2p9/runtime/overlays/state.json", "status": "HANDLER_EXECUTED"}
 {"action_id": "debug.menu.overlay.toggle", "status": "EXECUTED", "warning": null}
-{"action_id": "debug.menu.replay.start", "manifest_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpss6n6kxz/runtime/replay/replay-000000.json", "ordering_digest": "194c8385a0c9abe80dae901fa227485a72a8d7271b5de073099342b678eeee6f", "session_id": "replay-000000", "status": "HANDLER_EXECUTED"}
+{"action_id": "debug.menu.replay.start", "manifest_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpueckx2p9/runtime/replay/replay-000000.json", "ordering_digest": "194c8385a0c9abe80dae901fa227485a72a8d7271b5de073099342b678eeee6f", "session_id": "replay-000000", "status": "HANDLER_EXECUTED"}
 {"action_id": "debug.menu.replay.start", "status": "EXECUTED", "warning": null}
 {"action_id": "debug.menu.frame.step", "frame_index": 1, "ordering_digest": "194c8385a0c9abe80dae901fa227485a72a8d7271b5de073099342b678eeee6f", "status": "HANDLER_EXECUTED"}
 {"action_id": "debug.menu.frame.step", "status": "EXECUTED", "warning": null}
-{"action_id": "debug.menu.perf.hud.toggle", "enabled": true, "snapshot_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpss6n6kxz/runtime/perf/hud_snapshot.json", "status": "HANDLER_EXECUTED"}
+{"action_id": "debug.menu.perf.hud.toggle", "enabled": true, "snapshot_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpueckx2p9/runtime/perf/hud_snapshot.json", "status": "HANDLER_EXECUTED"}
 {"action_id": "debug.menu.perf.hud.toggle", "status": "EXECUTED", "warning": null}
-{"action_id": "debug.menu.bundle.export", "bundle_id": "bundle-000000-001", "manifest_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpss6n6kxz/runtime/bundles/bundle-000000-001.json", "status": "HANDLER_EXECUTED", "zip_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpss6n6kxz/runtime/bundles/bundle-000000-001.zip"}
+{"action_id": "debug.menu.bundle.export", "bundle_id": "bundle-000000-001", "manifest_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpueckx2p9/runtime/bundles/bundle-000000-001.json", "status": "HANDLER_EXECUTED", "zip_path": "/var/folders/vq/gzgtrf617hj57p_1vm5p758c0000gn/T/tmpueckx2p9/runtime/bundles/bundle-000000-001.zip"}
 {"action_id": "debug.menu.bundle.export", "status": "EXECUTED", "warning": null}

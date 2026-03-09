@@ -6420,6 +6420,13 @@
       "title": "Implement parity suite for monolith vs split canonical equivalence"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:RF-030",
         "team:runtime",
@@ -6429,16 +6436,36 @@
         "T-3407",
         "T-3408"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: Runtime canonical-IR-only ingestion path validated and non-canonical direct paths remain disabled.",
+        "received": true,
+        "received_at": "2026-03-08T22:22:47+00:00"
+      },
       "id": "T-3410",
       "milestone_id": "RF-030",
       "notes": [
         "Remove/disable any runtime path that consumes non-canonical IR structures directly."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Integrate runtime to consume canonical IR only"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:RF-030",
         "team:runtime",
@@ -6447,6 +6474,19 @@
       "depends_on": [
         "T-3410"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: Deterministic transform order, draw/hit-test ordering, and compositing semantics validated for runtime path.",
+        "received": true,
+        "received_at": "2026-03-08T22:36:17+00:00"
+      },
       "id": "T-3411",
       "milestone_id": "RF-030",
       "notes": [
@@ -6455,11 +6495,18 @@
         "Hit-test order is reverse draw order; compositing absolute overwrite, delta add+clamp [0,255].",
         "Replay and frame-step deterministic checks must include artifact digest continuity evidence."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Enforce deterministic transform/render/hit-test/compositing rules in runtime"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:RF-030",
         "team:rendering",
@@ -6468,12 +6515,25 @@
       "depends_on": [
         "T-3410"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: Backend orientation normalization to canonical u/v/w path is validated for runtime app-transform ordering.",
+        "received": true,
+        "received_at": "2026-03-08T22:36:59+00:00"
+      },
       "id": "T-3412",
       "milestone_id": "RF-030",
       "notes": [
         "Platform backend must normalize orientation into canonical basis before app-level transforms."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Normalize device-native orientation to canonical u/v/w before app transforms"
     },
@@ -6684,18 +6744,38 @@
       "title": "[CLOSEOUT HARNESS] Define UF-029 compiler/parity closeout metric and evidence harness"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:RF-030",
         "team:platform-ci",
         "specialist:pm"
       ],
       "depends_on": [],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: RF-030 closeout harness criteria and evidence profile defined with deterministic gate conditions.",
+        "received": true,
+        "received_at": "2026-03-08T22:19:20+00:00"
+      },
       "id": "T-3422",
       "milestone_id": "RF-030",
       "notes": [
         "Milestone-level scoring + hard no-go criteria + evidence/command profile for Go/No-Go decision."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "closeout_harness",
       "title": "[CLOSEOUT HARNESS] Define RF-030 runtime deterministic closeout metric and evidence harness"
     },
@@ -6827,6 +6907,13 @@
       "title": "Add validator checks for required visual evidence artifacts"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:RF-030",
         "team:runtime",
@@ -6835,13 +6922,26 @@
       "depends_on": [
         "T-3410"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: Deterministic capture harness artifacts emitted for startup/scroll/pan/drag/overlay/replay-frame-step/resize scenarios.",
+        "received": true,
+        "received_at": "2026-03-09T01:19:50+00:00"
+      },
       "id": "T-3428",
       "milestone_id": "RF-030",
       "notes": [
         "Required scenarios: startup, vertical scroll, horizontal pan, drag-heavy, overlay toggle, replay+frame-step, resize burst.",
         "Emit deterministic artifacts + manifest aligned to visual evidence schema."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Build planes_v2_poc debug capture harness (macOS-first)"
     },
