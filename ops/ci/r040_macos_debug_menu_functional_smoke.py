@@ -162,6 +162,7 @@ def _exercise_actions(out_dir: Path) -> dict[str, object]:
             "debug.menu.capture.record.toggle",
             "debug.menu.capture.record.toggle",
             "debug.menu.overlay.toggle",
+            "debug.menu.overlay.origin_refs.toggle",
             "debug.menu.replay.start",
             "debug.menu.frame.step",
             "debug.menu.perf.hud.toggle",

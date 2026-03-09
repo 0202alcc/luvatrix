@@ -28,6 +28,14 @@ class DebugCapabilityRegistryTests(unittest.TestCase):
             "debug.capture.screenshot.clipboard",
         )
 
+    def test_origin_refs_toggle_action_is_declared(self) -> None:
+        registry = build_debug_capability_registry()
+        self.assertIn("debug.menu.overlay.origin_refs.toggle", registry)
+        self.assertEqual(
+            registry["debug.menu.overlay.origin_refs.toggle"],
+            "debug.overlay.origin_refs.toggle",
+        )
+
     def test_duplicate_menu_ids_are_rejected(self) -> None:
         duplicated = DEFAULT_DEBUG_MENU_ACTIONS + (
             DebugMenuActionSpec(

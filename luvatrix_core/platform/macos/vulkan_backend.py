@@ -147,6 +147,8 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._recording_artifacts: list[str] = []
         self._overlay_enabled = False
         self._overlay_last_spec: dict[str, object] | None = None
+        self._runtime_origin_refs_state_setter = None
+        self._runtime_origin_refs_enabled = False
         self._replay_active = False
         self._replay_paused = False
         self._replay_session_id = ""
@@ -270,6 +272,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         app_id: str,
         profile: dict[str, object],
         artifact_dir: str | Path = "artifacts/debug_menu/runtime",
+        runtime_origin_refs_state_setter=None,
     ) -> None:
         self._debug_menu_app_id = app_id
         self._debug_menu_profile = dict(profile)
@@ -277,6 +280,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         self._debug_menu_events_path = self._debug_menu_artifact_dir / "events.jsonl"
         self._debug_menu_enabled = os.getenv("LUVATRIX_MACOS_DEBUG_MENU_WIRING", "1").strip() != "0"
         self._debug_menu_functional_enabled = os.getenv("LUVATRIX_MACOS_DEBUG_MENU_FUNCTIONAL_ACTIONS", "1").strip() != "0"
+        self._runtime_origin_refs_state_setter = runtime_origin_refs_state_setter
         self._write_debug_menu_manifest()
 
     def dispatch_debug_menu_action(self, action_id: str) -> DebugMenuDispatchResult:
@@ -1460,6 +1464,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
                 "debug.menu.capture.screenshot.clipboard": self._handle_debug_screenshot_clipboard,
                 "debug.menu.capture.record.toggle": self._handle_debug_recording_toggle,
                 "debug.menu.overlay.toggle": self._handle_debug_overlay_toggle,
+                "debug.menu.overlay.origin_refs.toggle": self._handle_debug_origin_refs_toggle,
                 "debug.menu.replay.start": self._handle_debug_replay_start,
                 "debug.menu.frame.step": self._handle_debug_frame_step,
                 "debug.menu.perf.hud.toggle": self._handle_debug_perf_hud_toggle,
@@ -1622,6 +1627,21 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
                 "state_path": str(out_path),
             }
         )
+
+    def _handle_debug_origin_refs_toggle(self) -> None:
+        setter = self._runtime_origin_refs_state_setter
+        if callable(setter):
+            next_enabled = bool(setter())
+        else:
+            next_enabled = not bool(self._runtime_origin_refs_enabled)
+        self._runtime_origin_refs_enabled = next_enabled
+        payload = {
+            "action_id": "debug.menu.overlay.origin_refs.toggle",
+            "status": "HANDLER_EXECUTED",
+            "enabled": self._runtime_origin_refs_enabled,
+            "mode": "runtime_local" if callable(setter) else "stub",
+        }
+        self._append_debug_menu_event(payload)
 
     def _handle_debug_replay_start(self) -> None:
         self._replay_active = True

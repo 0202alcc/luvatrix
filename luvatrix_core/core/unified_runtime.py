@@ -72,7 +72,6 @@ class UnifiedRuntime:
         debug_policy_profile = self._app_runtime.resolve_debug_policy_profile(manifest)
         granted = self._app_runtime.resolve_capabilities(manifest)
         ctx = self._app_runtime.build_context(granted_capabilities=granted)
-        self._configure_target_debug_menu(manifest.app_id, debug_policy_profile)
         resolved = self._app_runtime.resolve_variant(app_path, manifest)
         if manifest.runtime_kind == "process":
             lifecycle = ProcessLifecycleClient(
@@ -82,6 +81,12 @@ class UnifiedRuntime:
             )
         else:
             lifecycle = self._app_runtime.load_lifecycle(resolved.module_dir, resolved.entrypoint)
+        runtime_state_setter = self._build_origin_refs_state_setter(lifecycle)
+        self._configure_target_debug_menu(
+            manifest.app_id,
+            debug_policy_profile,
+            runtime_origin_refs_state_setter=runtime_state_setter,
+        )
         self._enable_granted_sensors(ctx.sensor_manager, granted)
 
         ticks_run = 0
@@ -157,12 +162,41 @@ class UnifiedRuntime:
             if cap in granted_capabilities:
                 sensor_manager.set_sensor_enabled(sensor_type, True, actor="unified_runtime")
 
-    def _configure_target_debug_menu(self, app_id: str, profile: dict[str, object]) -> None:
+    def _build_origin_refs_state_setter(self, lifecycle) -> Callable[[], bool] | None:
+        if not hasattr(lifecycle, "state"):
+            return None
+
+        def _toggle() -> bool:
+            raw_state = getattr(lifecycle, "state", None)
+            if not isinstance(raw_state, dict):
+                raise RuntimeError("runtime lifecycle has no mutable state dictionary")
+            current = bool(raw_state.get("origin_refs_enabled", False))
+            next_value = not current
+            raw_state["origin_refs_enabled"] = next_value
+            return next_value
+
+        return _toggle
+
+    def _configure_target_debug_menu(
+        self,
+        app_id: str,
+        profile: dict[str, object],
+        *,
+        runtime_origin_refs_state_setter: Callable[[], bool] | None = None,
+    ) -> None:
         configure = getattr(self._target, "configure_debug_menu", None)
         if configure is None or not callable(configure):
             return
-        configure(
-            app_id=app_id,
-            profile=profile,
-            artifact_dir="artifacts/debug_menu/runtime",
-        )
+        try:
+            configure(
+                app_id=app_id,
+                profile=profile,
+                artifact_dir="artifacts/debug_menu/runtime",
+                runtime_origin_refs_state_setter=runtime_origin_refs_state_setter,
+            )
+        except TypeError:
+            configure(
+                app_id=app_id,
+                profile=profile,
+                artifact_dir="artifacts/debug_menu/runtime",
+            )
