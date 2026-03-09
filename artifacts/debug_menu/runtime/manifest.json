@@ -17,7 +17,7 @@
     "debug.menu.perf.hud.toggle",
     "debug.menu.bundle.export"
   ],
-  "app_id": "examples.input_sensor_logger",
+  "app_id": "examples.hello_plane",
   "functional_wiring_enabled": true,
   "menu_wiring_enabled": true,
   "profile": {

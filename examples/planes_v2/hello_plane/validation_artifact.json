@@ -1,0 +1,16 @@
+{
+  "actions_executed": [],
+  "all_checks_passed": false,
+  "app_id": "hello_plane",
+  "artifact_version": "v2",
+  "deterministic_fingerprint": "9c7a1dd1683e4e5971d521bedf5c42ffe69e49c07226525e582947b852f3cc90",
+  "interactive_checks": {
+    "theme_toggled": false
+  },
+  "required_features": [
+    "theme_toggled"
+  ],
+  "status": "FAIL",
+  "status_text": "",
+  "validation_command": "PYTHONPATH=. uv run python examples/planes_v2/hello_plane/app_main.py --validate"
+}

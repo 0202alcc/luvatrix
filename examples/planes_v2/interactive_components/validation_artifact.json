@@ -1,0 +1,19 @@
+{
+  "actions_executed": [
+    "cycle_component",
+    "cycle_component"
+  ],
+  "all_checks_passed": true,
+  "app_id": "interactive_components",
+  "artifact_version": "v2",
+  "deterministic_fingerprint": "a43027e3ca10e7e595ce4b2a05f71220260df0ff4bc57cf54a0aa640fede3d9b",
+  "interactive_checks": {
+    "active_component_mode": true
+  },
+  "required_features": [
+    "active_component_mode"
+  ],
+  "status": "PASS",
+  "status_text": "last_action=cycle_component",
+  "validation_command": "PYTHONPATH=. uv run python examples/planes_v2/interactive_components/app_main.py --validate"
+}

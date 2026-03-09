@@ -1,0 +1,18 @@
+{
+  "actions_executed": [
+    "scroll_plane"
+  ],
+  "all_checks_passed": true,
+  "app_id": "scroll_and_pan_plane",
+  "artifact_version": "v2",
+  "deterministic_fingerprint": "3248e2c329568830362f1bce0c8007f5748a1f3aeba5653d1d325b2809fb5787",
+  "interactive_checks": {
+    "scroll_recorded": true
+  },
+  "required_features": [
+    "scroll_recorded"
+  ],
+  "status": "PASS",
+  "status_text": "last_action=scroll_plane",
+  "validation_command": "PYTHONPATH=. uv run python examples/planes_v2/scroll_and_pan_plane/app_main.py --validate"
+}

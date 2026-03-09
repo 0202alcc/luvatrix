@@ -1,0 +1,19 @@
+{
+  "actions_executed": [
+    "activate_plane_primary",
+    "activate_plane_secondary"
+  ],
+  "all_checks_passed": true,
+  "app_id": "multi_plane_layout",
+  "artifact_version": "v2",
+  "deterministic_fingerprint": "73c5261190c312f2b1226e0b1c5b3fad4789b0e22a866294045e2aaa3d1a7f7a",
+  "interactive_checks": {
+    "plane_switch_count": true
+  },
+  "required_features": [
+    "plane_switch_count"
+  ],
+  "status": "PASS",
+  "status_text": "last_action=activate_plane_secondary",
+  "validation_command": "PYTHONPATH=. uv run python examples/planes_v2/multi_plane_layout/app_main.py --validate"
+}

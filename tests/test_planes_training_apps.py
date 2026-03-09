@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-APP_ROOT = REPO_ROOT / "examples" / "app_protocol"
+APP_ROOT = REPO_ROOT / "examples" / "planes_v2"
 
 APP_IDS = [
     "hello_plane",
@@ -40,7 +40,7 @@ def test_planes_training_apps_closeout_matrix_contract() -> None:
     assert "# Training Demonstration Evidence" in closeout
     for app_id in APP_IDS:
         assert app_id in closeout, f"missing closeout matrix entry for {app_id}"
-        expected_artifact = f"examples/app_protocol/{app_id}/validation_artifact.json"
+        expected_artifact = f"examples/planes_v2/{app_id}/validation_artifact.json"
         assert expected_artifact in closeout, f"missing artifact reference for {app_id}"
 
 

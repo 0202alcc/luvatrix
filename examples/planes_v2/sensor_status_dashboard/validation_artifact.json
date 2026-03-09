@@ -1,0 +1,19 @@
+{
+  "actions_executed": [
+    "refresh_sensors",
+    "refresh_sensors"
+  ],
+  "all_checks_passed": true,
+  "app_id": "sensor_status_dashboard",
+  "artifact_version": "v2",
+  "deterministic_fingerprint": "27fbad005549906ca7320fb3e2ab9554bae2717048081689041fb087ad7cd67b",
+  "interactive_checks": {
+    "sensor_refresh_count": true
+  },
+  "required_features": [
+    "sensor_refresh_count"
+  ],
+  "status": "PASS",
+  "status_text": "last_action=refresh_sensors",
+  "validation_command": "PYTHONPATH=. uv run python examples/planes_v2/sensor_status_dashboard/app_main.py --validate"
+}

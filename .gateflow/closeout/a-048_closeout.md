@@ -1,5 +1,5 @@
 # Objective Summary
-A-048 delivered 10 runnable training app artifacts under `examples/app_protocol/` with deterministic validation outputs, CI contract checks, and closeout evidence matrix enforcement under the GateFlow stage-gated workflow.
+A-048 delivered 10 runnable training app artifacts under `examples/planes_v2/` with deterministic validation outputs, CI contract checks, and closeout evidence matrix enforcement under the GateFlow stage-gated workflow.
 
 # Task Final States
 - `T-4810`: closeout harness + evidence contract implementation and packet schema finalized.
@@ -15,9 +15,9 @@ A-048 delivered 10 runnable training app artifacts under `examples/app_protocol/
 
 # Evidence
 - Required app contract files created for all 10 app IDs:
-  - `examples/app_protocol/<app_id>/app.toml`
-  - `examples/app_protocol/<app_id>/app_main.py`
-  - `examples/app_protocol/<app_id>/README.md`
+  - `examples/planes_v2/<app_id>/app.toml`
+  - `examples/planes_v2/<app_id>/app_main.py`
+  - `examples/planes_v2/<app_id>/README.md`
 - Validation selector:
   - `tests/test_planes_training_apps.py`
 - Required command bundle results:
@@ -28,7 +28,7 @@ A-048 delivered 10 runnable training app artifacts under `examples/app_protocol/
 
 # Determinism
 Each app ships deterministic artifact generation at:
-- `examples/app_protocol/<app_id>/validation_artifact.json`
+- `examples/planes_v2/<app_id>/validation_artifact.json`
 
 Artifacts include stable keys:
 - `app_id`
@@ -57,16 +57,16 @@ Determinism enforcement:
 # Training Demonstration Evidence
 | app_id | command(s) | deterministic artifact | verdict |
 |---|---|---|---|
-| hello_plane | `PYTHONPATH=. uv run python examples/app_protocol/hello_plane/app_main.py --validate` | `examples/app_protocol/hello_plane/validation_artifact.json` | PASS |
-| coordinate_playground | `PYTHONPATH=. uv run python examples/app_protocol/coordinate_playground/app_main.py --validate` | `examples/app_protocol/coordinate_playground/validation_artifact.json` | PASS |
-| camera_overlay_basics | `PYTHONPATH=. uv run python examples/app_protocol/camera_overlay_basics/app_main.py --validate` | `examples/app_protocol/camera_overlay_basics/validation_artifact.json` | PASS |
-| multi_plane_layout | `PYTHONPATH=. uv run python examples/app_protocol/multi_plane_layout/app_main.py --validate` | `examples/app_protocol/multi_plane_layout/validation_artifact.json` | PASS |
-| scroll_and_pan_plane | `PYTHONPATH=. uv run python examples/app_protocol/scroll_and_pan_plane/app_main.py --validate` | `examples/app_protocol/scroll_and_pan_plane/validation_artifact.json` | PASS |
-| interactive_components | `PYTHONPATH=. uv run python examples/app_protocol/interactive_components/app_main.py --validate` | `examples/app_protocol/interactive_components/validation_artifact.json` | PASS |
-| sensor_status_dashboard | `PYTHONPATH=. uv run python examples/app_protocol/sensor_status_dashboard/app_main.py --validate` | `examples/app_protocol/sensor_status_dashboard/validation_artifact.json` | PASS |
-| input_sensor_overlay_logger | `PYTHONPATH=. uv run python examples/app_protocol/input_sensor_overlay_logger/app_main.py --validate` | `examples/app_protocol/input_sensor_overlay_logger/validation_artifact.json` | PASS |
-| debug_capture_workflow | `PYTHONPATH=. uv run python examples/app_protocol/debug_capture_workflow/app_main.py --validate` | `examples/app_protocol/debug_capture_workflow/validation_artifact.json` | PASS |
-| planes_v2_poc_plus | `PYTHONPATH=. uv run python examples/app_protocol/planes_v2_poc_plus/app_main.py --validate` | `examples/app_protocol/planes_v2_poc_plus/validation_artifact.json` | PASS |
+| hello_plane | `PYTHONPATH=. uv run python examples/planes_v2/hello_plane/app_main.py --validate` | `examples/planes_v2/hello_plane/validation_artifact.json` | PASS |
+| coordinate_playground | `PYTHONPATH=. uv run python examples/planes_v2/coordinate_playground/app_main.py --validate` | `examples/planes_v2/coordinate_playground/validation_artifact.json` | PASS |
+| camera_overlay_basics | `PYTHONPATH=. uv run python examples/planes_v2/camera_overlay_basics/app_main.py --validate` | `examples/planes_v2/camera_overlay_basics/validation_artifact.json` | PASS |
+| multi_plane_layout | `PYTHONPATH=. uv run python examples/planes_v2/multi_plane_layout/app_main.py --validate` | `examples/planes_v2/multi_plane_layout/validation_artifact.json` | PASS |
+| scroll_and_pan_plane | `PYTHONPATH=. uv run python examples/planes_v2/scroll_and_pan_plane/app_main.py --validate` | `examples/planes_v2/scroll_and_pan_plane/validation_artifact.json` | PASS |
+| interactive_components | `PYTHONPATH=. uv run python examples/planes_v2/interactive_components/app_main.py --validate` | `examples/planes_v2/interactive_components/validation_artifact.json` | PASS |
+| sensor_status_dashboard | `PYTHONPATH=. uv run python examples/planes_v2/sensor_status_dashboard/app_main.py --validate` | `examples/planes_v2/sensor_status_dashboard/validation_artifact.json` | PASS |
+| input_sensor_overlay_logger | `PYTHONPATH=. uv run python examples/planes_v2/input_sensor_overlay_logger/app_main.py --validate` | `examples/planes_v2/input_sensor_overlay_logger/validation_artifact.json` | PASS |
+| debug_capture_workflow | `PYTHONPATH=. uv run python examples/planes_v2/debug_capture_workflow/app_main.py --validate` | `examples/planes_v2/debug_capture_workflow/validation_artifact.json` | PASS |
+| planes_v2_poc_plus | `PYTHONPATH=. uv run python examples/planes_v2/planes_v2_poc_plus/app_main.py --validate` | `examples/planes_v2/planes_v2_poc_plus/validation_artifact.json` | PASS |
 
 # Command Outputs
 - `uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate links`
@@ -81,7 +81,7 @@ Determinism enforcement:
 
 # Corrective Addendum (2026-03-09)
 - Reopened milestone `A-048` and tasks `T-4810..T-4819` for corrective verification pass.
-- Replaced scaffold app implementations with interactive `PlaneApp` runtimes backed by `plane.json` manifests and event handlers via `examples/app_protocol/training_protocol.py`.
+- Replaced scaffold app implementations with interactive `PlaneApp` runtimes backed by `plane.json` manifests and event handlers via `examples/planes_v2/training_protocol.py`.
 - Added deterministic interactive validation assertions for:
   - coordinate capture
   - overlay toggles
