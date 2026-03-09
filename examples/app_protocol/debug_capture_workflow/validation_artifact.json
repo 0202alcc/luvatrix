@@ -1,0 +1,7 @@
+{
+  "app_id": "debug_capture_workflow",
+  "artifact_version": "v1",
+  "deterministic_fingerprint": "cc2470069977517a09b4317d33a5c648b490d50dd17e4df7638fba2e9b4039e8",
+  "status": "PASS",
+  "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/debug_capture_workflow/app_main.py --validate"
+}

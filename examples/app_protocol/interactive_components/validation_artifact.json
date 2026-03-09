@@ -1,0 +1,7 @@
+{
+  "app_id": "interactive_components",
+  "artifact_version": "v1",
+  "deterministic_fingerprint": "89925438e9bb7c219f82cc64f47e8ce5ca8a22b12d77de76608da1d801585683",
+  "status": "PASS",
+  "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/interactive_components/app_main.py --validate"
+}

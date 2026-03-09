@@ -8933,6 +8933,392 @@
       "title": "Final cutover verification and signoff"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: T-4810 evidence complete and dependency order preserved.",
+        "received": true,
+        "received_at": "2026-03-09T03:57:48+00:00"
+      },
+      "id": "T-4810",
+      "milestone_id": "A-048",
+      "notes": [
+        "Hard no-go if any listed training app directory is missing.",
+        "Requested task ID: T-4800; remapped to T-4810 due existing P-048 task ID collision."
+      ],
+      "status": "Done",
+      "task_type": "closeout_harness",
+      "title": "[CLOSEOUT HARNESS] Define A-048 closeout metric + evidence harness"
+    },
+    {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4810"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: T-4811 evidence complete and dependency order preserved.",
+        "received": true,
+        "received_at": "2026-03-09T03:57:50+00:00"
+      },
+      "id": "T-4811",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4801; remapped to T-4811 due existing P-048 task ID collision."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Scaffold Level 0 apps (hello_plane, coordinate_playground)"
+    },
+    {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4810"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: T-4812 evidence complete and dependency order preserved.",
+        "received": true,
+        "received_at": "2026-03-09T03:57:51+00:00"
+      },
+      "id": "T-4812",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4802; remapped to T-4812 due existing P-048 task ID collision."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Scaffold Level 1 apps (camera_overlay_basics, multi_plane_layout)"
+    },
+    {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4810"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: T-4813 evidence complete and dependency order preserved.",
+        "received": true,
+        "received_at": "2026-03-09T03:57:52+00:00"
+      },
+      "id": "T-4813",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4803; remapped to T-4813 due existing P-048 task ID collision."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Scaffold Level 2 apps (scroll_and_pan_plane, interactive_components)"
+    },
+    {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4810"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: T-4814 evidence complete and dependency order preserved.",
+        "received": true,
+        "received_at": "2026-03-09T03:57:54+00:00"
+      },
+      "id": "T-4814",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4804; remapped to T-4814 due existing P-048 task ID collision."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Scaffold Level 3 apps (sensor_status_dashboard, input_sensor_overlay_logger)"
+    },
+    {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4810"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: T-4815 evidence complete and dependency order preserved.",
+        "received": true,
+        "received_at": "2026-03-09T03:57:55+00:00"
+      },
+      "id": "T-4815",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4805; remapped to T-4815 due existing P-048 task ID collision."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Scaffold Level 4 app (debug_capture_workflow) with screenshot/record/replay/frame-step/perf-hud/bundle evidence flow"
+    },
+    {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4810"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: T-4816 evidence complete and dependency order preserved.",
+        "received": true,
+        "received_at": "2026-03-09T03:57:56+00:00"
+      },
+      "id": "T-4816",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4806; remapped to T-4816 due existing P-048 task ID collision."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Scaffold Level 5 app (planes_v2_poc_plus) with route groups (/home, /settings, /analytics)"
+    },
+    {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4811",
+        "T-4812",
+        "T-4813",
+        "T-4814",
+        "T-4815",
+        "T-4816"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: T-4817 evidence complete and dependency order preserved.",
+        "received": true,
+        "received_at": "2026-03-09T03:57:57+00:00"
+      },
+      "id": "T-4817",
+      "milestone_id": "A-048",
+      "notes": [
+        "Include path existence checks, import/runtime smoke checks, and artifact schema checks.",
+        "Requested task ID: T-4807; remapped to T-4817 due existing P-048 task ID collision."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Add deterministic validation suite for all training apps"
+    },
+    {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4817"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: T-4818 evidence complete and dependency order preserved.",
+        "received": true,
+        "received_at": "2026-03-09T03:57:59+00:00"
+      },
+      "id": "T-4818",
+      "milestone_id": "A-048",
+      "notes": [
+        "Fail if any training app path missing or any required evidence missing.",
+        "Requested task ID: T-4808; remapped to T-4818 due existing P-048 task ID collision."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Add CI gate and closeout evidence matrix enforcement"
+    },
+    {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4818"
+      ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: T-4819 evidence complete and dependency order preserved.",
+        "received": true,
+        "received_at": "2026-03-09T03:58:00+00:00"
+      },
+      "id": "T-4819",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4809; remapped to T-4819 due existing P-048 task ID collision."
+      ],
+      "status": "Done",
+      "task_type": "standard",
+      "title": "Final packet + Go/No-Go closeout for A-048"
+    },
+    {
       "board_refs": [
         "milestone:F-014",
         "team:security-quality",

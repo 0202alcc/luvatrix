@@ -1,0 +1,7 @@
+{
+  "app_id": "multi_plane_layout",
+  "artifact_version": "v1",
+  "deterministic_fingerprint": "513aa5f2acb3a744c8d211a544fe4452e81a1a24f36bda3545a9fd4b3f29dd57",
+  "status": "PASS",
+  "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/multi_plane_layout/app_main.py --validate"
+}
