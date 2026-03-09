@@ -5,19 +5,19 @@
     {
       "id": "gateflow-links",
       "owner": "team:platform-ci",
-      "required_command": "uvx --from gateflow==0.1.0a3 gateflow --root /Users/aleccandidato/Projects/luvatrix validate links",
+      "required_command": "uvx --from gateflow==1.0.0 gateflow --root /Users/aleccandidato/Projects/luvatrix validate links",
       "pass_criteria": "validation: PASS"
     },
     {
       "id": "gateflow-closeout",
       "owner": "team:release",
-      "required_command": "uvx --from gateflow==0.1.0a3 gateflow --root /Users/aleccandidato/Projects/luvatrix validate closeout",
+      "required_command": "uvx --from gateflow==1.0.0 gateflow --root /Users/aleccandidato/Projects/luvatrix validate closeout",
       "pass_criteria": "validation: PASS"
     },
     {
       "id": "gateflow-all",
       "owner": "team:platform-ci",
-      "required_command": "uvx --from gateflow==0.1.0a3 gateflow --root /Users/aleccandidato/Projects/luvatrix validate all",
+      "required_command": "uvx --from gateflow==1.0.0 gateflow --root /Users/aleccandidato/Projects/luvatrix validate all",
       "pass_criteria": "validation: PASS (all)"
     }
   ],

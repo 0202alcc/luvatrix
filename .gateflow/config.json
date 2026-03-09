@@ -65,7 +65,7 @@
   "policy": {
     "protected_branch_patterns": [],
     "protected_branches": [],
-    "require_sync_before_write": false
+    "require_sync_before_write": true
   },
   "profile": "minimal",
   "profiles": {},
@@ -112,7 +112,7 @@
     "path": "/Users/aleccandidato/Projects/luvatrix/ops/planning"
   },
   "storage": {
-    "mode": "file",
+    "mode": "backend",
     "sqlite_path": ".gateflow/gateflow.db"
   },
   "updated_at": "2026-03-07",

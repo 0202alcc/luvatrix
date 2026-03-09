@@ -13,5 +13,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - name: Sync deps
         run: uv sync
+      - name: Verify pinned GateFlow version
+        run: uvx --from gateflow==1.0.0 gateflow --version
+      - name: Verify sync status is clean
+        run: uvx --from gateflow==1.0.0 gateflow --root . sync status
+      - name: Verify planning validation pack
+        run: uvx --from gateflow==1.0.0 gateflow --root . validate all
       - name: Run standalone gateflow continuity integration test
         run: PYTHONPATH=. uv run --with pytest pytest tests/test_gateflow_validate_all_ci.py -q

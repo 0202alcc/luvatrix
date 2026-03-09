@@ -21,7 +21,7 @@ def command_pack() -> list[GateCommand]:
             command=[
                 "uvx",
                 "--from",
-                "gateflow==0.1.0a3",
+                "gateflow==1.0.0",
                 "gateflow",
                 "--root",
                 ".",
@@ -34,7 +34,7 @@ def command_pack() -> list[GateCommand]:
             command=[
                 "uvx",
                 "--from",
-                "gateflow==0.1.0a3",
+                "gateflow==1.0.0",
                 "gateflow",
                 "--root",
                 ".",
@@ -47,7 +47,7 @@ def command_pack() -> list[GateCommand]:
             command=[
                 "uvx",
                 "--from",
-                "gateflow==0.1.0a3",
+                "gateflow==1.0.0",
                 "gateflow",
                 "--root",
                 ".",

@@ -18,13 +18,13 @@ def test_catalog_rejects_duplicate_gate_ids() -> None:
             {
                 "id": "x",
                 "owner": "team:a",
-                "required_command": "uvx --from gateflow==0.1.0a3 gateflow --root . validate links",
+                "required_command": "uvx --from gateflow==1.0.0 gateflow --root . validate links",
                 "pass_criteria": "ok",
             },
             {
                 "id": "x",
                 "owner": "team:b",
-                "required_command": "uvx --from gateflow==0.1.0a3 gateflow --root . validate closeout",
+                "required_command": "uvx --from gateflow==1.0.0 gateflow --root . validate closeout",
                 "pass_criteria": "ok",
             },
         ],

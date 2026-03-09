@@ -1,0 +1,11 @@
+usage: gateflow [-h] [--version] [--root ROOT] [--json-errors]
+                {init,config,validate,api,render,milestones,tasks,boards,frameworks,backlog,closeout-refs,import-luvatrix,backend,sync,close,connect} ...
+
+positional arguments:
+  {init,config,validate,api,render,milestones,tasks,boards,frameworks,backlog,closeout-refs,import-luvatrix,backend,sync,close,connect}
+
+options:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+  --root ROOT
+  --json-errors         Emit machine-readable error payloads.

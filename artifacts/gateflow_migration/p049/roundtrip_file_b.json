@@ -1,0 +1,39 @@
+{
+  "files": [
+    {
+      "path": ".gateflow/backlog.json",
+      "sha256": "c9214b4cc5e793baa2de188396214a0689fc736bccebe665396bc484c33da0a2",
+      "size": 279
+    },
+    {
+      "path": ".gateflow/boards.json",
+      "sha256": "23290e992b91e4aaaf81527a3b9330fef7ca9a0e59ce9672cde2c7fb3808dd57",
+      "size": 19398
+    },
+    {
+      "path": ".gateflow/config.json",
+      "sha256": "99817c63fd1bbed62529dff29544ae2c67e00fcd5cad7109a959911c44774d85",
+      "size": 2766
+    },
+    {
+      "path": ".gateflow/legacy_ops_planning_archive_window.json",
+      "sha256": "2c8b204578978e390f5ad4ff57bbc2b55f3802fbb8d33b0b62348df6dbede6b6",
+      "size": 376
+    },
+    {
+      "path": ".gateflow/legacy_ops_planning_manifest.json",
+      "sha256": "df1226d09b946726f960588e3cc18c6ee905b893eeddc5fdc68de3c4a26bbf25",
+      "size": 443
+    },
+    {
+      "path": ".gateflow/milestones.json",
+      "sha256": "e705203b49db0da584e47e8400412133dcdaac9658ce0a13c970a0e3e71f063f",
+      "size": 130678
+    },
+    {
+      "path": ".gateflow/tasks.json",
+      "sha256": "4c0268690e30e30fb52706f782a21892be86b55d12af213d2fdd2c479423afd0",
+      "size": 328382
+    }
+  ]
+}
