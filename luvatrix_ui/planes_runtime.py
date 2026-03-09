@@ -70,6 +70,10 @@ class PlaneApp:
             "LUVATRIX_SCROLL_SCHEDULER_ENABLED",
             default=True,
         )
+        self._origin_refs_enabled_default = _env_flag(
+            "LUVATRIX_SHOW_ORIGIN_REFS",
+            default=False,
+        )
         self._intent_queue_enabled_default = _env_flag(
             "LUVATRIX_INTENT_QUEUE_ENABLED",
             default=True,
@@ -90,6 +94,7 @@ class PlaneApp:
         self.state.setdefault("incremental_present_enabled", self._incremental_present_enabled_default)
         self.state.setdefault("scroll_bitmap_cache_enabled", self._scroll_bitmap_cache_enabled_default)
         self.state.setdefault("scroll_scheduler_enabled", self._scroll_scheduler_enabled_default)
+        self.state.setdefault("origin_refs_enabled", self._origin_refs_enabled_default)
         self.state.setdefault("intent_queue_enabled", self._intent_queue_enabled_default)
         self.state.setdefault("planes_v2_schema_enabled", self._planes_v2_rollout_flags.schema_enabled)
         self.state.setdefault("planes_v2_compiler_enabled", self._planes_v2_rollout_flags.compiler_enabled)
@@ -253,6 +258,7 @@ class PlaneApp:
                 "retained_components_reused": int(self._frame_counts.get("retained_components_reused", 0)),
                 "retained_components_new": int(self._frame_counts.get("retained_components_new", 0)),
                 "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
+                "origin_reference_primitives": int(self._frame_counts.get("origin_reference_primitives", 0)),
                 "dirty_rect_count": 0,
                 "dirty_rect_area_px": 0,
                 "dirty_rect_area_ratio": 0.0,
@@ -360,6 +366,9 @@ class PlaneApp:
         mount_scrollbar_start_ns = time.perf_counter_ns()
         self._mount_plane_scrollbars(ctx)
         self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_scrollbar_start_ns)
+        mount_origin_refs_start_ns = time.perf_counter_ns()
+        mounted += self._mount_origin_reference_overlay(ctx)
+        self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_origin_refs_start_ns)
         present_start_ns = time.perf_counter_ns()
         counters = self._update_present_counters(compose_mode)
         self.state["perf"] = {
@@ -401,6 +410,7 @@ class PlaneApp:
             "retained_components_reused": int(self._frame_counts.get("retained_components_reused", 0)),
             "retained_components_new": int(self._frame_counts.get("retained_components_new", 0)),
             "camera_overlay_scrollbar_primitives": int(self._frame_counts.get("camera_overlay_scrollbar_primitives", 0)),
+            "origin_reference_primitives": int(self._frame_counts.get("origin_reference_primitives", 0)),
             "dirty_rect_count": dirty_count,
             "dirty_rect_area_px": dirty_area,
             "dirty_rect_area_ratio": float(dirty_area_ratio),
@@ -1285,6 +1295,128 @@ class PlaneApp:
             )
         )
 
+    def _mount_origin_reference_overlay(self, ctx) -> int:
+        if self._ui_page is None or not self._origin_refs_enabled():
+            return 0
+        entities = self._origin_reference_entities()
+        if not entities:
+            return 0
+        axis_len = 18.0
+        label_color = "#7cc7ff"
+        mounted = 0
+        viewport_w = float(self._ui_page.matrix.width)
+        viewport_h = float(self._ui_page.matrix.height)
+        for index, (entity_id, x, y) in enumerate(entities):
+            root = f"__origin_ref__{index:04d}__{entity_id}"
+            ctx.mount_component(
+                self._retained_svg_component(
+                    component_id=f"{root}__x_axis",
+                    svg_markup=self._origin_axis_svg(axis_length=axis_len, color_hex="#ff4d4d", horizontal=True),
+                    x=float(x),
+                    y=float(y),
+                    frame="screen_tl",
+                    width=axis_len,
+                    height=2.0,
+                    opacity=0.95,
+                )
+            )
+            ctx.mount_component(
+                self._retained_svg_component(
+                    component_id=f"{root}__y_axis",
+                    svg_markup=self._origin_axis_svg(axis_length=axis_len, color_hex="#4dff88", horizontal=False),
+                    x=float(x),
+                    y=float(y),
+                    frame="screen_tl",
+                    width=2.0,
+                    height=axis_len,
+                    opacity=0.95,
+                )
+            )
+            ctx.mount_component(
+                self._retained_svg_component(
+                    component_id=f"{root}__origin_dot",
+                    svg_markup=self._origin_dot_svg(),
+                    x=float(x - 3.0),
+                    y=float(y - 3.0),
+                    frame="screen_tl",
+                    width=6.0,
+                    height=6.0,
+                    opacity=1.0,
+                )
+            )
+            label_x = min(max(0.0, float(x + axis_len + 4.0)), max(0.0, viewport_w - 8.0))
+            label_y = min(max(0.0, float(y - 12.0)), max(0.0, viewport_h - 12.0))
+            ctx.mount_component(
+                self._retained_text_component(
+                    component_id=f"{root}__label",
+                    text=str(entity_id),
+                    x=label_x,
+                    y=label_y,
+                    frame="screen_tl",
+                    font_size_px=10.0,
+                    color_hex=label_color,
+                    opacity=1.0,
+                    max_width_px=None,
+                )
+            )
+            mounted += 4
+        self._frame_counts["origin_reference_primitives"] = int(
+            self._frame_counts.get("origin_reference_primitives", 0)
+        ) + mounted
+        return mounted
+
+    def _origin_reference_entities(self) -> list[tuple[str, float, float]]:
+        if self._ui_page is None:
+            return []
+        points: list[tuple[str, float, float]] = [("camera", 0.0, 0.0)]
+        plane_scroll_x, plane_scroll_y = self._plane_scroll_position()
+        active_plane_ids = set(self._ui_page.active_plane_ids)
+        for plane in sorted(self._plane_index.values(), key=lambda item: (int(item.plane_global_z), item.plane_id)):
+            if active_plane_ids and plane.plane_id not in active_plane_ids:
+                continue
+            frame = str(plane.resolved_position.frame or plane.default_frame)
+            px, py = self._transform_point_to_screen_tl(
+                float(plane.resolved_position.x),
+                float(plane.resolved_position.y),
+                from_frame=frame,
+            )
+            points.append((plane.plane_id, float(px - plane_scroll_x), float(py - plane_scroll_y)))
+        for component in sorted(self._ui_page.components, key=lambda item: item.component_id):
+            if not component.visible:
+                continue
+            if not self._component_is_active(component):
+                continue
+            cx, cy = self._resolved_position(component)
+            points.append((component.component_id, float(cx), float(cy)))
+        return points
+
+    @staticmethod
+    def _origin_axis_svg(*, axis_length: float, color_hex: str, horizontal: bool) -> str:
+        length = max(1, int(round(axis_length)))
+        if horizontal:
+            width = length
+            height = 2
+            rect_w = length
+            rect_h = 2
+        else:
+            width = 2
+            height = length
+            rect_w = 2
+            rect_h = length
+        return (
+            f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">'
+            f'<rect x="0" y="0" width="{rect_w}" height="{rect_h}" fill="{color_hex}"/>'
+            "</svg>"
+        )
+
+    @staticmethod
+    def _origin_dot_svg() -> str:
+        return (
+            '<svg width="6" height="6" xmlns="http://www.w3.org/2000/svg">'
+            '<circle cx="3" cy="3" r="3" fill="#3a8dff"/>'
+            "</svg>"
+        )
+
     def _begin_perf_frame(self) -> None:
         self._frame_perf = {}
         self._event_pointer_dirty_rects = []
@@ -1319,6 +1451,7 @@ class PlaneApp:
             "retained_components_reused": 0,
             "retained_components_new": 0,
             "camera_overlay_scrollbar_primitives": 0,
+            "origin_reference_primitives": 0,
             "pointer_move_events": 0,
             "non_scroll_non_pointer_events": 0,
         }
@@ -1876,6 +2009,12 @@ class PlaneApp:
         if isinstance(raw, bool):
             return raw
         return bool(self._intent_queue_enabled_default)
+
+    def _origin_refs_enabled(self) -> bool:
+        raw = self.state.get("origin_refs_enabled")
+        if isinstance(raw, bool):
+            return raw
+        return bool(self._origin_refs_enabled_default)
 
     def _consume_invalidation_escape_hatch(self) -> tuple[bool, str | None]:
         raw = self.state.get("force_full_invalidation")
