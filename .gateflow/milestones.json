@@ -849,6 +849,11 @@
       ],
       "emoji": "\ud83d\udd01",
       "end_week": 23,
+      "go_no_go": {
+        "message": "GO: All F-031 tasks closed, conformance and debug evidence checks passed, and canonical closeout packet validated.",
+        "received": true,
+        "received_at": "2026-03-09T01:49:00+00:00"
+      },
       "id": "F-031",
       "lifecycle_events": [
         {
@@ -860,7 +865,7 @@
       ],
       "name": "Planes v2 Backward-Compat Adapter + Migration Tooling",
       "start_week": 20,
-      "status": "Planned",
+      "status": "Complete",
       "success_criteria": [
         "Legacy apps run through adapter with no forced rewrites.",
         "z_index_alias compatibility preserved during migration to k_hat_index canonical order."
