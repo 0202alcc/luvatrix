@@ -48,8 +48,13 @@ class DebugScreenshotContractTests(unittest.TestCase):
         matrix = debug_capture_platform_capability_matrix()
         self.assertEqual(matrix["windows"]["supported"], False)
         self.assertEqual(matrix["linux"]["supported"], False)
+        self.assertEqual(matrix["web"]["supported"], False)
         self.assertEqual(matrix["windows"]["unsupported_reason"], "macOS-first phase: explicit stub only")
         self.assertEqual(matrix["linux"]["unsupported_reason"], "macOS-first phase: explicit stub only")
+        self.assertEqual(matrix["web"]["unsupported_reason"], "macOS-first phase: explicit stub only")
+        self.assertIn("debug.capture.screenshot.clipboard.stub", matrix["windows"]["declared_capabilities"])
+        self.assertIn("debug.capture.screenshot.clipboard.stub", matrix["linux"]["declared_capabilities"])
+        self.assertIn("debug.capture.screenshot.clipboard.stub", matrix["web"]["declared_capabilities"])
 
 
 if __name__ == "__main__":
