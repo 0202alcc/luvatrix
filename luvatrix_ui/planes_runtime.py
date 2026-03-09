@@ -9,11 +9,13 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from luvatrix_core.core.coordinates import CoordinateFrameRegistry
 from luvatrix_ui.component_schema import CoordinatePoint
 from luvatrix_ui.controls.svg_component import SVGComponent
 from luvatrix_ui.planes_protocol import compile_planes_to_ui_ir, resolve_web_metadata
+from luvatrix_ui.ui_ir import BoundingBoxSpec
 from luvatrix_ui.text.component import TextComponent
-from luvatrix_ui.text.renderer import TextAppearance, TextSizeSpec
+from luvatrix_ui.text.renderer import FontSpec, TextAppearance, TextMeasureRequest, TextSizeSpec
 
 from luvatrix_core.core.ui_frame_renderer import MatrixUIFrameRenderer
 
@@ -109,12 +111,14 @@ class PlaneApp:
         )
         self._component_index: dict[str, Any] = {}
         self._plane_index: dict[str, Any] = {}
+        self._coord_registry: CoordinateFrameRegistry | None = None
         self._frame_perf: dict[str, float] = {}
         self._frame_counts: dict[str, int] = {}
         self._retained_mount_cache: dict[str, tuple[tuple[Any, ...], Any]] = {}
         self._layout_position_cache: dict[str, tuple[tuple[Any, ...], tuple[float, float]]] = {}
         self._interaction_bounds_cache: dict[str, tuple[tuple[Any, ...], Any]] = {}
         self._layout_cache_signature: tuple[tuple[float, float], tuple[str, ...]] | None = None
+        self._auto_component_size: dict[str, tuple[float, float]] = {}
         self._scrollbar_markups: dict[str, str] = {
             "page_track_h": self._build_scrollbar_markup(100, 10, "#1f344d"),
             "page_thumb_h": self._build_scrollbar_markup(100, 10, "#9bc9f8"),
@@ -326,12 +330,14 @@ class PlaneApp:
                 # Viewport content is rendered through the viewport camera pass.
                 continue
             resolved_x, resolved_y = self._resolved_position(component)
+            props = component.style if isinstance(component.style, dict) else {}
+            layout_w, layout_h = self._component_layout_size(component, props=props)
             cull_start_ns = time.perf_counter_ns()
             if not self._is_component_in_camera_region(
                 x=resolved_x,
                 y=resolved_y,
-                width=float(component.width),
-                height=float(component.height),
+                width=float(layout_w),
+                height=float(layout_h),
                 margin_x=prefetch_x,
                 margin_y=prefetch_y,
             ):
@@ -463,6 +469,12 @@ class PlaneApp:
         )
         self._component_index = {component.component_id: component for component in self._ui_page.components}
         self._plane_index = {plane.plane_id: plane for plane in getattr(self._ui_page, "plane_manifest", ())}
+        self._auto_component_size.clear()
+        self._coord_registry = CoordinateFrameRegistry(
+            width=int(self._ui_page.matrix.width),
+            height=int(self._ui_page.matrix.height),
+            default_frame="screen_tl",
+        )
         self._initialize_viewport_scroll_state()
         self._initialize_plane_scroll_state()
         self._bg_color = _parse_hex_rgba(self._ui_page.background)
@@ -881,6 +893,7 @@ class PlaneApp:
 
     def _resolved_position_cache_key(self, component) -> tuple[Any, ...]:
         props = component.style if isinstance(component.style, dict) else {}
+        layout_w, layout_h = self._component_layout_size(component, props=props)
         plane_id = getattr(component, "plane_id", None)
         plane_x = 0.0
         plane_y = 0.0
@@ -889,15 +902,29 @@ class PlaneApp:
             if plane is not None:
                 plane_x = float(plane.resolved_position.x)
                 plane_y = float(plane.resolved_position.y)
+                plane_frame = str(plane.resolved_position.frame or plane.default_frame)
+            else:
+                plane_frame = ""
+        else:
+            plane_frame = ""
+        component_frame = component.resolved_frame(self._ui_page.default_frame) if self._ui_page is not None else ""
         return (
             float(component.position.x),
             float(component.position.y),
-            float(component.width),
-            float(component.height),
+            float(layout_w),
+            float(layout_h),
             str(getattr(component, "attachment_kind", "plane")),
             str(plane_id or ""),
             plane_x,
             plane_y,
+            plane_frame,
+            component_frame,
+            int(self._ui_page.matrix.width) if self._ui_page is not None else 0,
+            int(self._ui_page.matrix.height) if self._ui_page is not None else 0,
+            props.get("anchor_x"),
+            props.get("anchor_y"),
+            props.get("anchor_frame"),
+            props.get("font_size_px"),
             bool(props.get("camera_fixed", False)),
             str(props.get("align", "")),
             str(props.get("v_align", "")),
@@ -908,12 +935,28 @@ class PlaneApp:
         if self._ui_page is None:
             return component.resolved_interaction_bounds("screen_tl")
         self._ensure_layout_cache_state()
-        key = (float(component.width), float(component.height), self._ui_page.default_frame)
+        props = component.style if isinstance(component.style, dict) else {}
+        layout_w, layout_h = self._component_layout_size(component, props=props)
+        key = (
+            float(layout_w),
+            float(layout_h),
+            self._ui_page.default_frame,
+            bool(props.get("auto_size_width", False)),
+            bool(props.get("auto_size_height", False)),
+        )
         cached = self._interaction_bounds_cache.get(component.component_id)
         if cached is not None and cached[0] == key:
             self._frame_counts["layout_cache_hits"] = int(self._frame_counts.get("layout_cache_hits", 0)) + 1
             return cached[1]
         bounds = component.resolved_interaction_bounds(self._ui_page.default_frame)
+        if bool(props.get("auto_size_width", False)) or bool(props.get("auto_size_height", False)):
+            bounds = BoundingBoxSpec(
+                x=float(bounds.x),
+                y=float(bounds.y),
+                width=float(layout_w),
+                height=float(layout_h),
+                frame=bounds.frame,
+            )
         self._interaction_bounds_cache[component.component_id] = (key, bounds)
         self._frame_counts["layout_cache_misses"] = int(self._frame_counts.get("layout_cache_misses", 0)) + 1
         return bounds
@@ -1024,6 +1067,13 @@ class PlaneApp:
                     max_width_px = props.get("max_width_px")
                     if max_width_px is not None:
                         max_width_px = float(max_width_px)
+                    if self._text_origin_uses_frame_reference(props):
+                        resolved_x, resolved_y = self._resolve_text_draw_origin_frame_reference(
+                            component=component,
+                            x=float(resolved_x),
+                            y=float(resolved_y),
+                            props=props,
+                        )
                     mount_start_ns = time.perf_counter_ns()
                     ctx.mount_component(
                         self._retained_text_component(
@@ -1061,6 +1111,45 @@ class PlaneApp:
                 self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_start_ns)
                 mounted += 1
         return mounted
+
+    @staticmethod
+    def _text_origin_uses_frame_reference(props: dict[str, Any]) -> bool:
+        raw = str(props.get("text_origin_mode", "")).strip().lower()
+        return raw in {"frame_reference", "component_frame_reference"}
+
+    def _resolve_text_draw_origin_frame_reference(
+        self,
+        *,
+        component,
+        x: float,
+        y: float,
+        props: dict[str, Any],
+    ) -> tuple[float, float]:
+        if self._ui_page is None:
+            return (x, y)
+        viewport_w = float(self._ui_page.matrix.width)
+        viewport_h = float(self._ui_page.matrix.height)
+        layout_w, layout_h = self._component_layout_size(component, props=props)
+        text_w, text_h = self._measure_text_layout_size(component, style=props)
+        if abs(float(layout_w) - float(text_w)) <= 1e-6 and abs(float(layout_h) - float(text_h)) <= 1e-6:
+            return (x, y)
+        layout_ax, layout_ay = self._resolve_anchor_offset_for_size(
+            component=component,
+            local_w=float(layout_w),
+            local_h=float(layout_h),
+            viewport_w=viewport_w,
+            viewport_h=viewport_h,
+            props=props,
+        )
+        text_ax, text_ay = self._resolve_anchor_offset_for_size(
+            component=component,
+            local_w=float(text_w),
+            local_h=float(text_h),
+            viewport_w=viewport_w,
+            viewport_h=viewport_h,
+            props=props,
+        )
+        return (float(x + (layout_ax - text_ax)), float(y + (layout_ay - text_ay)))
 
     def _retained_text_component(
         self,
@@ -1499,8 +1588,10 @@ class PlaneApp:
     def _component_dirty_rect(self, component, *, margin_px: int) -> tuple[int, int, int, int] | None:
         x, y = self._resolved_position(component)
         bounds = self._resolved_interaction_bounds(component)
-        width = max(0.0, float(bounds.width), float(component.width))
-        height = max(0.0, float(bounds.height), float(component.height))
+        props = component.style if isinstance(component.style, dict) else {}
+        layout_w, layout_h = self._component_layout_size(component, props=props)
+        width = max(0.0, float(bounds.width), float(layout_w))
+        height = max(0.0, float(bounds.height), float(layout_h))
         if width <= 0.0 or height <= 0.0:
             return None
         margin = max(0, int(margin_px))
@@ -1844,24 +1935,253 @@ class PlaneApp:
     def _resolved_position_base(self, component) -> tuple[float, float]:
         if self._ui_page is None:
             return (float(component.position.x), float(component.position.y))
+        component_frame = component.resolved_frame(self._ui_page.default_frame)
         x = float(component.position.x)
         y = float(component.position.y)
+        props = component.style if isinstance(component.style, dict) else {}
+        layout_w, layout_h = self._component_layout_size(component, props=props)
         if self._ui_page.ir_version == "planes-v2":
             plane_id = getattr(component, "plane_id", None)
             if isinstance(plane_id, str) and plane_id:
                 plane = self._plane_index.get(plane_id)
                 if plane is not None:
-                    x += float(plane.resolved_position.x)
-                    y += float(plane.resolved_position.y)
-        props = component.style if isinstance(component.style, dict) else {}
+                    plane_frame = str(plane.resolved_position.frame or plane.default_frame)
+                    plane_x = float(plane.resolved_position.x)
+                    plane_y = float(plane.resolved_position.y)
+                    if plane_frame != component_frame:
+                        plane_x, plane_y = self._transform_point_between_frames(
+                            plane_x,
+                            plane_y,
+                            from_frame=plane_frame,
+                            to_frame=component_frame,
+                        )
+                    x += plane_x
+                    y += plane_y
+        x, y = self._transform_point_to_screen_tl(x, y, from_frame=component_frame)
         align = str(props.get("align", "")).lower()
         if align == "center":
-            x = (float(self._ui_page.matrix.width) - float(component.width)) / 2.0
+            x = (float(self._ui_page.matrix.width) - float(layout_w)) / 2.0
         v_align = str(props.get("v_align", "")).lower()
         if v_align == "bottom":
             margin_bottom_px = float(props.get("margin_bottom_px", 0.0))
-            y = float(self._ui_page.matrix.height) - float(component.height) - margin_bottom_px
+            y = float(self._ui_page.matrix.height) - float(layout_h) - margin_bottom_px
+        anchor_x_px, anchor_y_px = self._resolve_anchor_offset_px(
+            component=component,
+            layout_w=float(layout_w),
+            layout_h=float(layout_h),
+            viewport_w=float(self._ui_page.matrix.width),
+            viewport_h=float(self._ui_page.matrix.height),
+            props=props,
+        )
+        x -= anchor_x_px
+        y -= anchor_y_px
         return (x, y)
+
+    def _resolve_anchor_offset_px(
+        self,
+        *,
+        component,
+        layout_w: float,
+        layout_h: float,
+        viewport_w: float,
+        viewport_h: float,
+        props: dict[str, Any],
+    ) -> tuple[float, float]:
+        return self._resolve_anchor_offset_for_size(
+            component=component,
+            local_w=float(layout_w),
+            local_h=float(layout_h),
+            viewport_w=viewport_w,
+            viewport_h=viewport_h,
+            props=props,
+        )
+
+    def _resolve_anchor_offset_for_size(
+        self,
+        *,
+        component,
+        local_w: float,
+        local_h: float,
+        viewport_w: float,
+        viewport_h: float,
+        props: dict[str, Any],
+    ) -> tuple[float, float]:
+        anchor_frame = self._resolve_anchor_frame(component, props)
+        font_size_px = float(props.get("font_size_px", 16.0)) if isinstance(props.get("font_size_px"), (int, float)) else 16.0
+        ax_local = self._resolve_anchor_axis_local_value(
+            axis="x",
+            raw=props.get("anchor_x", 0.0),
+            local_w=local_w,
+            local_h=local_h,
+            viewport_w=viewport_w,
+            viewport_h=viewport_h,
+            font_size_px=font_size_px,
+        )
+        ay_local = self._resolve_anchor_axis_local_value(
+            axis="y",
+            raw=props.get("anchor_y", 0.0),
+            local_w=local_w,
+            local_h=local_h,
+            viewport_w=viewport_w,
+            viewport_h=viewport_h,
+            font_size_px=font_size_px,
+        )
+        local_reg = CoordinateFrameRegistry(
+            width=max(1, int(round(local_w))),
+            height=max(1, int(round(local_h))),
+            default_frame="screen_tl",
+        )
+        try:
+            sx, sy = local_reg.transform_point((ax_local, ay_local), from_frame=anchor_frame, to_frame="screen_tl")
+            return (float(sx), float(sy))
+        except Exception:
+            return (ax_local, ay_local)
+
+    def _resolve_anchor_axis_local_value(
+        self,
+        *,
+        axis: str,
+        raw: Any,
+        local_w: float,
+        local_h: float,
+        viewport_w: float,
+        viewport_h: float,
+        font_size_px: float,
+    ) -> float:
+        local_size = local_w if axis == "x" else local_h
+        if isinstance(raw, (int, float)):
+            return float(raw) * float(local_size)
+        if not isinstance(raw, str):
+            return 0.0
+        text = raw.strip().lower()
+        if not text:
+            return 0.0
+        if text.endswith("%"):
+            try:
+                return (float(text[:-1].strip()) / 100.0) * float(local_size)
+            except ValueError:
+                return 0.0
+        if text.endswith("px"):
+            try:
+                return float(text[:-2].strip())
+            except ValueError:
+                return 0.0
+        if text.endswith("em"):
+            try:
+                return float(text[:-2].strip()) * float(font_size_px)
+            except ValueError:
+                return 0.0
+        if text.endswith("vw"):
+            try:
+                return (float(text[:-2].strip()) / 100.0) * float(viewport_w)
+            except ValueError:
+                return 0.0
+        if text.endswith("vh"):
+            try:
+                return (float(text[:-2].strip()) / 100.0) * float(viewport_h)
+            except ValueError:
+                return 0.0
+        try:
+            return float(text) * float(local_size)
+        except ValueError:
+            return 0.0
+
+    def _resolve_anchor_frame(self, component, props: dict[str, Any]) -> str:
+        raw = props.get("anchor_frame")
+        if isinstance(raw, str) and raw.strip():
+            return raw
+        if (
+            getattr(component, "component_type", "") == "text"
+            and ("anchor_x" in props or "anchor_y" in props)
+        ):
+            return "cartesian_center"
+        plane_id = getattr(component, "plane_id", None)
+        if isinstance(plane_id, str):
+            plane = self._plane_index.get(plane_id)
+            if plane is not None and isinstance(plane.default_frame, str) and plane.default_frame.strip():
+                return plane.default_frame
+        if self._ui_page is not None and isinstance(self._ui_page.default_frame, str) and self._ui_page.default_frame.strip():
+            return self._ui_page.default_frame
+        return "cartesian_center"
+
+    def _component_layout_size(self, component, *, props: dict[str, Any] | None = None) -> tuple[float, float]:
+        style = props if isinstance(props, dict) else (component.style if isinstance(component.style, dict) else {})
+        auto_w = bool(style.get("auto_size_width", False))
+        auto_h = bool(style.get("auto_size_height", False))
+        if not auto_w and not auto_h:
+            return (float(component.width), float(component.height))
+        measured_w, measured_h = self._measure_text_layout_size(component, style=style)
+        final_w = measured_w if auto_w else float(component.width)
+        final_h = measured_h if auto_h else float(component.height)
+        final_w = max(0.0, float(final_w))
+        final_h = max(0.0, float(final_h))
+        self._auto_component_size[component.component_id] = (final_w, final_h)
+        return (final_w, final_h)
+
+    def _measure_text_layout_size(self, component, *, style: dict[str, Any]) -> tuple[float, float]:
+        if component.component_type != "text":
+            return (float(component.width), float(component.height))
+        text = str(style.get("text", component.component_id))
+        try:
+            font_size_px = float(style.get("font_size_px", 14.0))
+        except (TypeError, ValueError):
+            font_size_px = 14.0
+        max_width_px_raw = style.get("max_width_px")
+        if max_width_px_raw is None:
+            max_width_px = None
+        else:
+            try:
+                max_width_px = float(max_width_px_raw)
+            except (TypeError, ValueError):
+                max_width_px = None
+        try:
+            opacity = float(style.get("opacity", 1.0))
+        except (TypeError, ValueError):
+            opacity = 1.0
+        try:
+            letter_spacing_px = float(style.get("letter_spacing_px", 0.0))
+        except (TypeError, ValueError):
+            letter_spacing_px = 0.0
+        try:
+            line_height_multiplier = float(style.get("line_height_multiplier", 1.2))
+        except (TypeError, ValueError):
+            line_height_multiplier = 1.2
+        req = TextMeasureRequest(
+            text=text,
+            font=FontSpec(),
+            font_size_px=font_size_px,
+            appearance=TextAppearance(
+                color_hex=str(style.get("color_hex", "#f5fbff")),
+                opacity=max(0.0, min(1.0, opacity)),
+                letter_spacing_px=letter_spacing_px,
+                line_height_multiplier=max(0.01, line_height_multiplier),
+            ),
+            max_width_px=max_width_px,
+        )
+        metrics = self._renderer.measure_text(req)
+        return (float(metrics.width_px), float(metrics.height_px))
+
+    def _transform_point_to_screen_tl(self, x: float, y: float, *, from_frame: str) -> tuple[float, float]:
+        return self._transform_point_between_frames(x, y, from_frame=from_frame, to_frame="screen_tl")
+
+    def _transform_point_between_frames(
+        self,
+        x: float,
+        y: float,
+        *,
+        from_frame: str,
+        to_frame: str,
+    ) -> tuple[float, float]:
+        if from_frame == to_frame:
+            return (x, y)
+        registry = self._coord_registry
+        if registry is None:
+            return (x, y)
+        try:
+            tx, ty = registry.transform_point((float(x), float(y)), from_frame=from_frame, to_frame=to_frame)
+            return (float(tx), float(ty))
+        except Exception:
+            return (x, y)
 
     def _is_camera_fixed(self, component) -> bool:
         props = component.style if isinstance(component.style, dict) else {}

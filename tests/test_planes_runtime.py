@@ -436,6 +436,182 @@ def _build_plane_v2_multi_file(root: Path) -> Path:
     return plane_path
 
 
+def _build_plane_v2_cartesian_center_file(root: Path) -> Path:
+    payload = {
+        "planes_protocol_version": "0.2.0-dev",
+        "app": {
+            "id": "x.v2.cartesian",
+            "title": "V2 Cartesian",
+            "icon": "assets/logo.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "planes": [
+            {
+                "id": "main",
+                "default_frame": "cartesian_center",
+                "background": {"color": "#111111"},
+                "plane_global_z": 0,
+                "position": {"x": 0, "y": 0, "frame": "cartesian_center"},
+                "size": {"width": {"unit": "px", "value": 320}, "height": {"unit": "px", "value": 180}},
+            }
+        ],
+        "routes": [{"id": "main", "default": True, "active_planes": ["main"]}],
+        "components": [
+            {
+                "id": "title",
+                "type": "text",
+                "attachment_kind": "camera_overlay",
+                "component_local_z": 1,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 0, "y": 0, "frame": "cartesian_center"},
+                "anchor": {"x": 0, "y": 0, "frame_reference": "cartesian_center"},
+                "size": {"width": {"unit": "px", "value": 120}, "height": {"unit": "px", "value": 24}},
+                "props": {"text": "center"},
+            }
+        ],
+    }
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "logo.svg").write_text(
+        "<svg width=\"10\" height=\"10\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#ffffff\"/></svg>",
+        encoding="utf-8",
+    )
+    plane_path = root / "plane_v2_cartesian_center.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
+def _build_plane_v2_auto_text_file(root: Path) -> Path:
+    payload = {
+        "planes_protocol_version": "0.2.0-dev",
+        "app": {
+            "id": "x.v2.auto",
+            "title": "V2 Auto",
+            "icon": "assets/logo.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "planes": [
+            {
+                "id": "main",
+                "default_frame": "screen_tl",
+                "background": {"color": "#111111"},
+                "plane_global_z": 0,
+                "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 320}, "height": {"unit": "px", "value": 180}},
+            }
+        ],
+        "routes": [{"id": "main", "default": True, "active_planes": ["main"]}],
+        "components": [
+            {
+                "id": "title",
+                "type": "text",
+                "attachment_kind": "camera_overlay",
+                "component_local_z": 1,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 160, "y": 90, "frame": "screen_tl"},
+                "anchor": {"x": "50%", "y": "50%", "frame_reference": "screen_tl"},
+                "size": {"width": {"unit": "auto"}, "height": {"unit": "auto"}},
+                "props": {"text": "auto size", "font_size_px": 18},
+            }
+        ],
+    }
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "logo.svg").write_text(
+        "<svg width=\"10\" height=\"10\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#ffffff\"/></svg>",
+        encoding="utf-8",
+    )
+    plane_path = root / "plane_v2_auto_text.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
+def _build_plane_v2_text_origin_frame_reference_file(root: Path) -> Path:
+    payload = {
+        "planes_protocol_version": "0.2.0-dev",
+        "app": {
+            "id": "x.v2.text_origin",
+            "title": "V2 Text Origin",
+            "icon": "assets/logo.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "planes": [
+            {
+                "id": "main",
+                "default_frame": "screen_tl",
+                "background": {"color": "#111111"},
+                "plane_global_z": 0,
+                "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 320}, "height": {"unit": "px", "value": 180}},
+            }
+        ],
+        "routes": [{"id": "main", "default": True, "active_planes": ["main"]}],
+        "components": [
+            {
+                "id": "title",
+                "type": "text",
+                "attachment_kind": "camera_overlay",
+                "component_local_z": 1,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 160, "y": 90, "frame": "screen_tl"},
+                "anchor": {"x": "50%", "y": "50%", "frame_reference": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 40}, "height": {"unit": "px", "value": 20}},
+                "props": {"text": "wide text", "font_size_px": 22, "text_origin_mode": "frame_reference"},
+            }
+        ],
+    }
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "logo.svg").write_text(
+        "<svg width=\"10\" height=\"10\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#ffffff\"/></svg>",
+        encoding="utf-8",
+    )
+    plane_path = root / "plane_v2_text_origin_frame_reference.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
+def _build_plane_v2_text_default_anchor_frame_file(root: Path) -> Path:
+    payload = {
+        "planes_protocol_version": "0.2.0-dev",
+        "app": {
+            "id": "x.v2.text_default_anchor_frame",
+            "title": "V2 Text Default Anchor Frame",
+            "icon": "assets/logo.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "planes": [
+            {
+                "id": "main",
+                "default_frame": "screen_tl",
+                "background": {"color": "#111111"},
+                "plane_global_z": 0,
+                "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 320}, "height": {"unit": "px", "value": 180}},
+            }
+        ],
+        "routes": [{"id": "main", "default": True, "active_planes": ["main"]}],
+        "components": [
+            {
+                "id": "title",
+                "type": "text",
+                "attachment_kind": "camera_overlay",
+                "component_local_z": 1,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 160, "y": 90, "frame": "screen_tl"},
+                "anchor": {"x": 0, "y": 0},
+                "size": {"width": "auto", "height": "auto"},
+                "props": {"text": "default anchor frame", "font_size_px": 18, "text_origin_mode": "frame_reference"},
+            }
+        ],
+    }
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "logo.svg").write_text(
+        "<svg width=\"10\" height=\"10\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#ffffff\"/></svg>",
+        encoding="utf-8",
+    )
+    plane_path = root / "plane_v2_text_default_anchor_frame.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
 def _build_scroll_hook_plane_file(root: Path) -> Path:
     payload = {
         "planes_protocol_version": "0.1.0",
@@ -510,6 +686,72 @@ class PlanesRuntimeTests(unittest.TestCase):
             app.loop(ctx, 0.016)
             self.assertEqual(calls, [("on_press_single", "title")])
             self.assertEqual(app.state.get("clicked"), "title")
+
+    def test_plane_runtime_transforms_cartesian_center_positions_to_render_frame(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_v2_cartesian_center_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+
+            title = next((comp for comp in ctx.mounted if comp.component_id == "title"), None)
+            self.assertIsNotNone(title)
+            assert title is not None
+            self.assertAlmostEqual(float(title.position.x), 100.0, places=6)
+            self.assertAlmostEqual(float(title.position.y), 78.0, places=6)
+
+    def test_plane_runtime_auto_text_size_drives_bounds_and_anchor(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_v2_auto_text_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+
+            component = app._component_index["title"]
+            bounds = app._resolved_interaction_bounds(component)
+            self.assertGreater(float(bounds.width), 0.0)
+            self.assertGreater(float(bounds.height), 0.0)
+            title = next((comp for comp in ctx.mounted if comp.component_id == "title"), None)
+            self.assertIsNotNone(title)
+            assert title is not None
+            self.assertAlmostEqual(float(title.position.x) + (float(bounds.width) * 0.5), 160.0, places=4)
+            self.assertAlmostEqual(float(title.position.y) + (float(bounds.height) * 0.5), 90.0, places=4)
+
+    def test_plane_runtime_text_origin_mode_frame_reference_centers_drawn_text(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_v2_text_origin_frame_reference_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+
+            component = app._component_index["title"]
+            props = component.style if isinstance(component.style, dict) else {}
+            measured_w, measured_h = app._measure_text_layout_size(component, style=props)
+            title = next((comp for comp in ctx.mounted if comp.component_id == "title"), None)
+            self.assertIsNotNone(title)
+            assert title is not None
+            self.assertAlmostEqual(float(title.position.x) + (float(measured_w) * 0.5), 160.0, delta=0.51)
+            self.assertAlmostEqual(float(title.position.y) + (float(measured_h) * 0.5), 90.0, delta=0.51)
+
+    def test_plane_runtime_text_anchor_defaults_to_cartesian_center(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_v2_text_default_anchor_frame_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+
+            component = app._component_index["title"]
+            props = component.style if isinstance(component.style, dict) else {}
+            measured_w, measured_h = app._measure_text_layout_size(component, style=props)
+            title = next((comp for comp in ctx.mounted if comp.component_id == "title"), None)
+            self.assertIsNotNone(title)
+            assert title is not None
+            self.assertAlmostEqual(float(title.position.x) + (float(measured_w) * 0.5), 160.0, delta=0.51)
+            self.assertAlmostEqual(float(title.position.y) + (float(measured_h) * 0.5), 90.0, delta=0.51)
 
     def test_plane_runtime_strict_missing_handler_raises(self) -> None:
         with tempfile.TemporaryDirectory() as td:

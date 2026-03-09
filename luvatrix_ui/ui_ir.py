@@ -186,7 +186,7 @@ class UIIRPage:
     page_id: str
     matrix: MatrixSpec
     aspect_mode: AspectMode
-    default_frame: str = "screen_tl"
+    default_frame: str = "cartesian_center"
     app_protocol_version: str | None = None
     revision: int = 0
     route: str | None = None
@@ -408,7 +408,7 @@ class UIIRPage:
                 pixel_format=str(matrix_raw.get("pixel_format", "RGBA255")),
             ),
             aspect_mode=str(payload["aspect_mode"]),
-            default_frame=str(payload.get("default_frame", "screen_tl")),
+            default_frame=str(payload.get("default_frame", "cartesian_center")),
             background=str(payload.get("background", "#000000")),
             safe_insets=Insets(
                 left=float(insets_raw.get("left", 0.0)),
@@ -566,7 +566,7 @@ def _parse_plane_ref(item: object) -> UIIRPlaneRef:
             height=float(bounds_raw.get("height", 0.0)),
             frame=None if bounds_raw.get("frame") is None else str(bounds_raw.get("frame")),
         ),
-        default_frame=str(raw.get("default_frame", "screen_tl")),
+        default_frame=str(raw.get("default_frame", "cartesian_center")),
     )
 
 

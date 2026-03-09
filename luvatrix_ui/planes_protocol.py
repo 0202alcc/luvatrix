@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from .ui_ir import (
@@ -35,6 +36,7 @@ SUPPORTED_HDI_HOOKS = {
     "on_pinch",
     "on_rotate",
 }
+DEFAULT_COORD_FRAME = "cartesian_center"
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,15 @@ def resolve_web_metadata(app: dict[str, Any]) -> PlanesAppMetadata:
     if not isinstance(tab_icon, str) or not tab_icon.strip():
         raise PlanesValidationError("app.web.tab_icon must be a non-empty string")
     return PlanesAppMetadata(title=title, icon=icon, tab_title=tab_title, tab_icon=tab_icon)
+
+
+def _resolve_app_default_frame(app: dict[str, Any]) -> str:
+    raw = app.get("default_frame")
+    if raw is None:
+        return DEFAULT_COORD_FRAME
+    if not isinstance(raw, str) or not raw.strip():
+        raise PlanesValidationError("app.default_frame must be a non-empty string")
+    return str(raw)
 
 
 def validate_planes_payload(payload: dict[str, Any], *, strict: bool = True) -> None:
@@ -165,7 +176,12 @@ def _adapt_v0_payload_to_v2(payload: dict[str, Any]) -> dict[str, Any]:
     app = _expect_obj(payload["app"], "app")
     plane = _expect_obj(payload["plane"], "plane")
     plane_id = _require_str(plane.get("id"), "plane.id")
-    default_frame = _require_str(plane.get("default_frame"), "plane.default_frame")
+    app_default_frame = _resolve_app_default_frame(app)
+    default_frame_raw = plane.get("default_frame")
+    if default_frame_raw is None:
+        default_frame = app_default_frame
+    else:
+        default_frame = _require_str(default_frame_raw, "plane.default_frame")
     background = _expect_obj(plane.get("background", {}), "plane.background")
 
     components_raw = payload.get("components", [])
@@ -207,7 +223,8 @@ def _compile_v0(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
     app = _expect_obj(payload["app"], "app")
     plane = _expect_obj(payload["plane"], "plane")
     components_raw = payload["components"]
-    default_frame = str(plane["default_frame"])
+    app_default_frame = _resolve_app_default_frame(app)
+    default_frame = str(plane.get("default_frame", app_default_frame))
     plane_id = str(plane["id"])
 
     components: list[UIIRComponent] = []
@@ -218,6 +235,8 @@ def _compile_v0(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
             mount_order=mount_order,
             matrix_width=matrix_width,
             matrix_height=matrix_height,
+            parent_width=float(matrix_width),
+            parent_height=float(matrix_height),
             default_frame=default_frame,
             plane_id=plane_id,
             plane_global_z=0,
@@ -241,6 +260,7 @@ def _compile_v0(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
 
 def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: int, aspect_mode: str) -> UIIRPage:
     app = _expect_obj(payload["app"], "app")
+    app_default_frame = _resolve_app_default_frame(app)
     planes_raw = payload["planes"]
     assert isinstance(planes_raw, list)
     components_raw = payload["components"]
@@ -254,12 +274,13 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
     plane_map: dict[str, UIIRPlaneRef] = {}
     ordered_planes: list[UIIRPlaneRef] = []
     first_background = "#000000"
-    default_frame = "screen_tl"
+    default_frame = app_default_frame
 
     for i, raw in enumerate(planes_raw):
         plane_obj = _expect_obj(raw, f"planes[{i}]")
         plane_id = _require_str(plane_obj.get("id"), f"planes[{i}].id")
-        frame = _require_str(plane_obj.get("default_frame"), f"planes[{i}].default_frame")
+        frame_raw = plane_obj.get("default_frame")
+        frame = _require_str(frame_raw, f"planes[{i}].default_frame") if frame_raw is not None else app_default_frame
         bg = _expect_obj(plane_obj.get("background", {}), f"planes[{i}].background")
         if i == 0:
             first_background = str(bg.get("color", "#000000"))
@@ -328,13 +349,19 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
                 plane_id = ordered_planes[0].plane_id
             plane_global_z = plane_map[plane_id].plane_global_z
             default_component_frame = plane_map[plane_id].default_frame
+            parent_width = float(plane_map[plane_id].resolved_bounds.width)
+            parent_height = float(plane_map[plane_id].resolved_bounds.height)
         else:
             default_component_frame = default_frame
+            parent_width = float(matrix_width)
+            parent_height = float(matrix_height)
         component = _compile_component(
             comp_obj,
             mount_order=mount_order,
             matrix_width=matrix_width,
             matrix_height=matrix_height,
+            parent_width=parent_width,
+            parent_height=parent_height,
             default_frame=default_component_frame,
             plane_id=plane_id if attachment_kind == "plane" else None,
             plane_global_z=plane_global_z,
@@ -367,6 +394,8 @@ def _compile_component(
     mount_order: int,
     matrix_width: int,
     matrix_height: int,
+    parent_width: float,
+    parent_height: float,
     default_frame: str,
     plane_id: str | None,
     plane_global_z: int | None,
@@ -377,12 +406,42 @@ def _compile_component(
     frame = pos.get("frame")
     if frame is not None and not isinstance(frame, str):
         raise PlanesValidationError("component.position.frame must be string")
-    width = _resolve_dimension(_expect_obj(comp_obj["size"], "component.size").get("width"), matrix_width, matrix_height)
-    height = _resolve_dimension(_expect_obj(comp_obj["size"], "component.size").get("height"), matrix_width, matrix_height)
+    size_obj = _expect_obj(comp_obj["size"], "component.size")
+    width, auto_width = _resolve_component_dimension(
+        size_obj.get("width"),
+        viewport_w=matrix_width,
+        viewport_h=matrix_height,
+        parent_w=parent_width,
+        parent_h=parent_height,
+        axis="x",
+    )
+    height, auto_height = _resolve_component_dimension(
+        size_obj.get("height"),
+        viewport_w=matrix_width,
+        viewport_h=matrix_height,
+        parent_w=parent_width,
+        parent_h=parent_height,
+        axis="y",
+    )
     interactions = _compile_interactions(comp_obj.get("functions", {}))
     comp_type = str(comp_obj["type"])
     props = comp_obj.get("props", {})
-    style: dict[str, Any] = props if isinstance(props, dict) else {}
+    style: dict[str, Any] = dict(props) if isinstance(props, dict) else {}
+    if auto_width:
+        style["auto_size_width"] = True
+    if auto_height:
+        style["auto_size_height"] = True
+    anchor = comp_obj.get("anchor")
+    if isinstance(anchor, dict):
+        if "x" in anchor:
+            style["anchor_x"] = anchor["x"]
+        if "y" in anchor:
+            style["anchor_y"] = anchor["y"]
+        frame_reference = anchor.get("frame_reference")
+        if frame_reference is None:
+            frame_reference = anchor.get("frame")
+        if frame_reference is not None:
+            style["anchor_frame"] = frame_reference
     asset = None
     if comp_type == "svg":
         svg_source = _require_str(style.get("svg"), "component.props.svg")
@@ -436,12 +495,20 @@ def _compile_component(
 
 def _validate_v0_payload(payload: dict[str, Any], *, strict: bool) -> None:
     _ = strict
+    app = _expect_obj(payload.get("app"), "app")
+    _resolve_app_default_frame(app)
     plane = _expect_obj(payload.get("plane"), "plane")
     _require_str(plane.get("id"), "plane.id")
-    _require_str(plane.get("default_frame"), "plane.default_frame")
+    default_frame = plane.get("default_frame")
+    if default_frame is not None:
+        _require_str(default_frame, "plane.default_frame")
 
 
 def _validate_v2_payload(payload: dict[str, Any], *, strict: bool) -> None:
+    app = _expect_obj(payload.get("app"), "app")
+    app_default_frame = _resolve_app_default_frame(app)
+    if not app_default_frame:
+        raise PlanesValidationError("app.default_frame must be non-empty")
     planes = payload.get("planes")
     if not isinstance(planes, list) or not planes:
         raise PlanesValidationError("planes must be a non-empty list")
@@ -452,7 +519,9 @@ def _validate_v2_payload(payload: dict[str, Any], *, strict: bool) -> None:
         if plane_id in plane_ids:
             raise PlanesValidationError(f"duplicate plane id: {plane_id}")
         plane_ids.add(plane_id)
-        _require_str(plane.get("default_frame"), f"planes[{i}].default_frame")
+        frame = plane.get("default_frame")
+        if frame is not None:
+            _require_str(frame, f"planes[{i}].default_frame")
         _resolve_plane_depth(plane, f"planes[{i}]", strict=strict)
         _expect_obj(plane.get("background", {}), f"planes[{i}].background")
 
@@ -532,6 +601,18 @@ def _validate_components(
         _expect_obj(comp_obj.get("size"), f"components[{i}].size")
         if not isinstance(comp_obj.get("z_index", 0), int):
             raise PlanesValidationError(f"components[{i}].z_index must be int")
+        anchor = comp_obj.get("anchor")
+        if anchor is not None:
+            anchor_obj = _expect_obj(anchor, f"components[{i}].anchor")
+            if "x" in anchor_obj:
+                _validate_anchor_value(anchor_obj["x"], f"components[{i}].anchor.x")
+            if "y" in anchor_obj:
+                _validate_anchor_value(anchor_obj["y"], f"components[{i}].anchor.y")
+            frame_reference = anchor_obj.get("frame_reference")
+            if frame_reference is None:
+                frame_reference = anchor_obj.get("frame")
+            if frame_reference is not None:
+                _require_str(frame_reference, f"components[{i}].anchor.frame_reference")
 
         if has_v2:
             attachment_kind = comp_obj.get("attachment_kind")
@@ -611,7 +692,15 @@ def _compile_interactions(functions: Any) -> tuple[InteractionBinding, ...]:
     return tuple(out)
 
 
-def _resolve_dimension(raw: Any, viewport_w: int, viewport_h: int) -> float:
+def _resolve_dimension(
+    raw: Any,
+    viewport_w: int,
+    viewport_h: int,
+    *,
+    parent_w: float | None = None,
+    parent_h: float | None = None,
+    axis: str = "x",
+) -> float:
     spec = _expect_obj(raw, "dimension")
     unit = _require_str(spec.get("unit"), "dimension.unit")
     value = spec.get("value")
@@ -625,12 +714,44 @@ def _resolve_dimension(raw: Any, viewport_w: int, viewport_h: int) -> float:
     if unit == "vh":
         return (v / 100.0) * float(viewport_h)
     if unit == "%":
-        return (v / 100.0) * float(viewport_w)
+        if axis == "y":
+            reference = float(parent_h if parent_h is not None else viewport_h)
+        else:
+            reference = float(parent_w if parent_w is not None else viewport_w)
+        return (v / 100.0) * reference
     if unit == "pt":
         return v * (96.0 / 72.0)
     if unit == "cm":
         return v * (96.0 / 2.54)
     raise PlanesValidationError(f"unsupported unit: {unit}")
+
+
+def _resolve_component_dimension(
+    raw: Any,
+    *,
+    viewport_w: int,
+    viewport_h: int,
+    parent_w: float,
+    parent_h: float,
+    axis: str,
+) -> tuple[float, bool]:
+    if isinstance(raw, str) and raw.strip().lower() == "auto":
+        return (0.0, True)
+    spec = _expect_obj(raw, "dimension")
+    unit = _require_str(spec.get("unit"), "dimension.unit")
+    if unit == "auto":
+        return (0.0, True)
+    return (
+        _resolve_dimension(
+            spec,
+            viewport_w,
+            viewport_h,
+            parent_w=parent_w,
+            parent_h=parent_h,
+            axis=axis,
+        ),
+        False,
+    )
 
 
 def _resolve_plane_depth(plane: dict[str, Any], path: str, *, strict: bool) -> int:
@@ -665,3 +786,21 @@ def _require_str(value: Any, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise PlanesValidationError(f"{name} must be a non-empty string")
     return value
+
+
+_ANCHOR_UNIT_PATTERN = re.compile(r"^\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*(%|px|em|vw|vh)\s*$", re.IGNORECASE)
+
+
+def _validate_anchor_value(value: Any, name: str) -> None:
+    if isinstance(value, (int, float)):
+        return
+    if not isinstance(value, str) or not value.strip():
+        raise PlanesValidationError(f"{name} must be number or unitized string")
+    raw = value.strip()
+    if _ANCHOR_UNIT_PATTERN.match(raw):
+        return
+    try:
+        float(raw)
+        return
+    except ValueError as exc:  # noqa: PERF203
+        raise PlanesValidationError(f"{name} has unsupported unit format: `{value}`") from exc

@@ -1,0 +1,82 @@
+{
+  "planes_protocol_version": "0.2.0-dev",
+  "app": {
+    "id": "examples.hello_plane",
+    "title": "Hello Plane",
+    "icon": "assets/logo.svg",
+    "default_frame": "cartesian_center",
+    "web": {
+      "tab_title": null,
+      "tab_icon": null
+    }
+  },
+  "planes": [
+    {
+      "id": "main",
+      "default_frame": "cartesian_center",
+      "background": {
+        "color": "#F6F1E8"
+      },
+      "plane_global_z": 0,
+      "position": {
+        "x": 0,
+        "y": 0,
+        "frame": "cartesian_center"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 960
+        },
+        "height": {
+          "unit": "px",
+          "value": 540
+        }
+      }
+    }
+  ],
+  "routes": [
+    {
+      "id": "main",
+      "default": true,
+      "active_planes": [
+        "main"
+      ]
+    }
+  ],
+  "themes": {
+    "default": {
+      "background": "#F6F1E8"
+    }
+  },
+  "scripts": [],
+  "components": [
+    {
+      "id": "title_text",
+      "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 90,
+      "blend_mode": "absolute_rgba",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "frame": "cartesian_center"
+      },
+      "anchor": {
+        "x": 0,
+        "y": 0,
+        "frame_reference": "cartesian_center"
+      },
+      "size": {
+        "width": "auto",
+        "height": "auto"
+      },
+      "props": {
+        "text": "Hello Plane!",
+        "font_size_px": 54,
+        "color_hex": "#5B1210",
+        "text_origin_mode": "frame_reference"
+      }
+    }
+  ]
+}

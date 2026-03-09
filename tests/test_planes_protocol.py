@@ -187,6 +187,58 @@ class PlanesProtocolTests(unittest.TestCase):
     def test_validate_accepts_v2_payload(self) -> None:
         validate_planes_payload(_base_payload_v2())
 
+    def test_validate_accepts_anchor_string_units(self) -> None:
+        payload = _base_payload_v2()
+        payload["components"][1]["anchor"] = {  # type: ignore[index]
+            "x": "50%",
+            "y": "1.25em",
+            "frame_reference": "cartesian_center",
+        }
+        validate_planes_payload(payload)
+
+    def test_validate_rejects_invalid_anchor_unit(self) -> None:
+        payload = _base_payload_v2()
+        payload["components"][1]["anchor"] = {"x": "50percent", "y": "50%"}  # type: ignore[index]
+        with self.assertRaises(PlanesValidationError):
+            validate_planes_payload(payload)
+
+    def test_validate_rejects_invalid_anchor_frame(self) -> None:
+        payload = _base_payload_v2()
+        payload["components"][1]["anchor"] = {"x": "50%", "y": "50%", "frame_reference": ""}  # type: ignore[index]
+        with self.assertRaises(PlanesValidationError):
+            validate_planes_payload(payload)
+
+    def test_compile_uses_cartesian_center_default_when_frames_omitted(self) -> None:
+        payload = _base_payload_v2()
+        payload["planes"][0].pop("default_frame")  # type: ignore[index]
+        payload["planes"][1].pop("default_frame")  # type: ignore[index]
+        page = compile_planes_to_ui_ir(payload, matrix_width=640, matrix_height=360)
+        self.assertEqual(page.default_frame, "cartesian_center")
+
+    def test_compile_accepts_auto_component_size_units(self) -> None:
+        payload = _base_payload_v2()
+        payload["components"][1]["size"] = {  # type: ignore[index]
+            "width": "auto",
+            "height": "auto",
+        }
+        page = compile_planes_to_ui_ir(payload, matrix_width=640, matrix_height=360)
+        overlay = next(c for c in page.components if c.component_id == "title_overlay")
+        self.assertEqual(float(overlay.width), 0.0)
+        self.assertEqual(float(overlay.height), 0.0)
+        self.assertTrue(bool(overlay.style.get("auto_size_width", False)))
+        self.assertTrue(bool(overlay.style.get("auto_size_height", False)))
+
+    def test_compile_component_percent_dimensions_are_parent_relative(self) -> None:
+        payload = _base_payload_v2()
+        payload["components"][0]["size"] = {  # type: ignore[index]
+            "width": {"unit": "%", "value": 50},
+            "height": {"unit": "%", "value": 25},
+        }
+        page = compile_planes_to_ui_ir(payload, matrix_width=640, matrix_height=360)
+        world = next(c for c in page.components if c.component_id == "world_svg")
+        self.assertAlmostEqual(float(world.width), 400.0)
+        self.assertAlmostEqual(float(world.height), 150.0)
+
     def test_compile_v2_produces_planes_v2_ir(self) -> None:
         page = compile_planes_to_ui_ir(_base_payload_v2(), matrix_width=640, matrix_height=360)
         self.assertEqual(page.ir_version, "planes-v2")
