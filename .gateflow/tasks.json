@@ -6576,6 +6576,13 @@
       "title": "Add version-gated v2 entry path while preserving existing app-facing APIs"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-031",
         "team:protocol",
@@ -6584,12 +6591,25 @@
       "depends_on": [
         "T-3411"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: z_index_alias compatibility preserved while canonical depth ordering resolves through k_hat_index/plane_global_z normalization.",
+        "received": true,
+        "received_at": "2026-03-09T01:45:39+00:00"
+      },
       "id": "T-3414",
       "milestone_id": "F-031",
       "notes": [
         "Compatibility bridge must preserve ordering behavior for legacy apps during migration horizon."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Maintain z_index_alias compatibility while canonicalizing on k_hat_index ordering"
     },

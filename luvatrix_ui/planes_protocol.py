@@ -264,7 +264,7 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
         if i == 0:
             first_background = str(bg.get("color", "#000000"))
             default_frame = frame
-        plane_global_z = int(plane_obj.get("plane_global_z", 0))
+        plane_global_z = _resolve_plane_depth(plane_obj, f"planes[{i}]", strict=False)
         pos = _expect_obj(plane_obj.get("position", {"x": 0.0, "y": 0.0}), f"planes[{i}].position")
         size = _expect_obj(
             plane_obj.get(
@@ -453,8 +453,7 @@ def _validate_v2_payload(payload: dict[str, Any], *, strict: bool) -> None:
             raise PlanesValidationError(f"duplicate plane id: {plane_id}")
         plane_ids.add(plane_id)
         _require_str(plane.get("default_frame"), f"planes[{i}].default_frame")
-        if strict and "plane_global_z" not in plane:
-            raise PlanesValidationError(f"planes[{i}].plane_global_z required in strict mode")
+        _resolve_plane_depth(plane, f"planes[{i}]", strict=strict)
         _expect_obj(plane.get("background", {}), f"planes[{i}].background")
 
     cuts = payload.get("section_cuts", [])
@@ -632,6 +631,28 @@ def _resolve_dimension(raw: Any, viewport_w: int, viewport_h: int) -> float:
     if unit == "cm":
         return v * (96.0 / 2.54)
     raise PlanesValidationError(f"unsupported unit: {unit}")
+
+
+def _resolve_plane_depth(plane: dict[str, Any], path: str, *, strict: bool) -> int:
+    values: dict[str, int] = {}
+    for key in ("plane_global_z", "k_hat_index", "z_index_alias"):
+        if key not in plane:
+            continue
+        raw_value = plane.get(key)
+        if not isinstance(raw_value, int):
+            raise PlanesValidationError(f"{path}.{key} must be int")
+        values[key] = raw_value
+    if not values:
+        if strict:
+            raise PlanesValidationError(f"{path}.plane_global_z (or k_hat_index/z_index_alias) required in strict mode")
+        return 0
+    if len(set(values.values())) != 1:
+        raise PlanesValidationError(f"{path} has conflicting depth aliases: {values}")
+    if "k_hat_index" in values:
+        return values["k_hat_index"]
+    if "plane_global_z" in values:
+        return values["plane_global_z"]
+    return values["z_index_alias"]
 
 
 def _expect_obj(value: Any, name: str) -> dict[str, Any]:
