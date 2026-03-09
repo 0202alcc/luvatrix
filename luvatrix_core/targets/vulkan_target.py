@@ -17,7 +17,14 @@ class VulkanPresenter(Protocol):
     def shutdown(self) -> None:
         ...
 
-    def configure_debug_menu(self, *, app_id: str, profile: dict[str, object], artifact_dir: str) -> None:
+    def configure_debug_menu(
+        self,
+        *,
+        app_id: str,
+        profile: dict[str, object],
+        artifact_dir: str,
+        runtime_origin_refs_state_setter=None,
+    ) -> None:
         ...
 
 
@@ -62,10 +69,12 @@ class VulkanTarget(RenderTarget):
         app_id: str,
         profile: dict[str, object],
         artifact_dir: str | Path = "artifacts/debug_menu/runtime",
+        runtime_origin_refs_state_setter=None,
     ) -> None:
         if hasattr(self.presenter, "configure_debug_menu"):
             self.presenter.configure_debug_menu(
                 app_id=app_id,
                 profile=profile,
                 artifact_dir=str(artifact_dir),
+                runtime_origin_refs_state_setter=runtime_origin_refs_state_setter,
             )

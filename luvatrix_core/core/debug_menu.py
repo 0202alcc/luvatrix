@@ -48,6 +48,11 @@ DEFAULT_DEBUG_MENU_ACTIONS: tuple[DebugMenuActionSpec, ...] = (
         label="Toggle Overlay Tooling",
     ),
     DebugMenuActionSpec(
+        menu_id="debug.menu.overlay.origin_refs.toggle",
+        capability_id="debug.overlay.origin_refs.toggle",
+        label="Toggle Origin Refs",
+    ),
+    DebugMenuActionSpec(
         menu_id="debug.menu.replay.start",
         capability_id="debug.replay.start",
         label="Start Replay",
@@ -188,21 +193,21 @@ def default_debug_menu_adapter_specs() -> tuple[DebugMenuAdapterSpec, ...]:
             platform="windows",
             supported=False,
             supported_menu_ids=(),
-            declared_capabilities=("debug.adapter.windows.stub",),
+            declared_capabilities=("debug.adapter.windows.stub", "debug.overlay.origin_refs.stub"),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
         DebugMenuAdapterSpec(
             platform="linux",
             supported=False,
             supported_menu_ids=(),
-            declared_capabilities=("debug.adapter.linux.stub",),
+            declared_capabilities=("debug.adapter.linux.stub", "debug.overlay.origin_refs.stub"),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
         DebugMenuAdapterSpec(
             platform="web",
             supported=False,
             supported_menu_ids=(),
-            declared_capabilities=("debug.adapter.web.stub",),
+            declared_capabilities=("debug.adapter.web.stub", "debug.overlay.origin_refs.stub"),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
     )
