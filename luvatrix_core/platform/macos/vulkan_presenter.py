@@ -41,7 +41,14 @@ class MacOSVulkanBackend(Protocol):
     def should_close(self) -> bool:
         ...
 
-    def configure_debug_menu(self, *, app_id: str, profile: dict[str, object], artifact_dir: str) -> None:
+    def configure_debug_menu(
+        self,
+        *,
+        app_id: str,
+        profile: dict[str, object],
+        artifact_dir: str,
+        runtime_origin_refs_state_setter=None,
+    ) -> None:
         ...
 
     def dispatch_debug_menu_action(self, action_id: str):
@@ -169,10 +176,22 @@ class MacOSVulkanPresenter:
                 return False
             return self.backend.should_close()
 
-    def configure_debug_menu(self, *, app_id: str, profile: dict[str, object], artifact_dir: str = "artifacts/debug_menu/runtime") -> None:
+    def configure_debug_menu(
+        self,
+        *,
+        app_id: str,
+        profile: dict[str, object],
+        artifact_dir: str = "artifacts/debug_menu/runtime",
+        runtime_origin_refs_state_setter=None,
+    ) -> None:
         with self._lock:
             if hasattr(self.backend, "configure_debug_menu"):
-                self.backend.configure_debug_menu(app_id=app_id, profile=profile, artifact_dir=artifact_dir)
+                self.backend.configure_debug_menu(
+                    app_id=app_id,
+                    profile=profile,
+                    artifact_dir=artifact_dir,
+                    runtime_origin_refs_state_setter=runtime_origin_refs_state_setter,
+                )
 
     def dispatch_debug_menu_action(self, action_id: str):
         with self._lock:

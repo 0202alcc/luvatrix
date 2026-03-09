@@ -30,8 +30,9 @@ class DebugMenuAdapterTests(unittest.TestCase):
                 continue
             self.assertFalse(spec.supported)
             self.assertEqual(spec.supported_menu_ids, ())
-            self.assertEqual(len(spec.declared_capabilities), 1)
+            self.assertGreaterEqual(len(spec.declared_capabilities), 1)
             self.assertTrue(spec.declared_capabilities[0].startswith(f"debug.adapter.{spec.platform}.stub"))
+            self.assertIn("debug.overlay.origin_refs.stub", spec.declared_capabilities)
             self.assertEqual(spec.unsupported_reason, "macOS-first phase: explicit stub only")
 
     def test_matrix_uses_explicit_fields_for_unsupported_platforms(self) -> None:

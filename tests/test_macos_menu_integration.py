@@ -126,6 +126,30 @@ class MacOSMenuIntegrationTests(unittest.TestCase):
             result = backend.dispatch_debug_menu_action("debug.menu.capture.screenshot")
             self.assertEqual(result.status, "DISABLED")
 
+    def test_origin_refs_toggle_updates_runtime_local_state(self) -> None:
+        backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "debug_menu"
+            runtime_state = {"origin_refs_enabled": False}
+
+            def _toggle() -> bool:
+                runtime_state["origin_refs_enabled"] = not bool(runtime_state["origin_refs_enabled"])
+                return bool(runtime_state["origin_refs_enabled"])
+
+            backend.configure_debug_menu(
+                app_id="examples.app",
+                profile=self._profile(),
+                artifact_dir=out,
+                runtime_origin_refs_state_setter=_toggle,
+            )
+            first = backend.dispatch_debug_menu_action("debug.menu.overlay.origin_refs.toggle")
+            second = backend.dispatch_debug_menu_action("debug.menu.overlay.origin_refs.toggle")
+            self.assertEqual(first.status, "EXECUTED")
+            self.assertEqual(second.status, "EXECUTED")
+            self.assertFalse(runtime_state["origin_refs_enabled"])
+            events = (out / "events.jsonl").read_text(encoding="utf-8").splitlines()
+            self.assertTrue(any("debug.menu.overlay.origin_refs.toggle" in line for line in events))
+
     def test_rollback_flag_disables_wiring(self) -> None:
         backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())
         old = os.environ.get("LUVATRIX_MACOS_DEBUG_MENU_WIRING")
