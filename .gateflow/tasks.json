@@ -6614,6 +6614,13 @@
       "title": "Maintain z_index_alias compatibility while canonicalizing on k_hat_index ordering"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:F-031",
         "team:platform-ci",
@@ -6623,13 +6630,26 @@
         "T-3413",
         "T-3408"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: Legacy adapter conformance selectors, debug evidence selectors, and smoke action coverage all passed for migration-readiness.",
+        "received": true,
+        "received_at": "2026-03-09T01:47:49+00:00"
+      },
       "id": "T-3415",
       "milestone_id": "F-031",
       "notes": [
         "Conformance tests prove existing apps still run with adapter and canonical runtime ingestion.",
         "Must include screenshot parity and replay digest parity between adapter path and canonical path."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Deliver legacy app conformance suite under adapter path"
     },
