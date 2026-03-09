@@ -2525,9 +2525,9 @@
       "emoji": "\ud83d\udcc8",
       "end_week": 27,
       "go_no_go": {
-        "message": "GO: R-033 evidence and validators passed; non-regression and determinism guardrails hold.",
+        "message": "Reconfirm GO close for milestone replay with training evidence mapping",
         "received": true,
-        "received_at": "2026-03-09T02:46:26+00:00"
+        "received_at": "2026-03-09T03:31:44+00:00"
       },
       "id": "R-033",
       "lifecycle_events": [

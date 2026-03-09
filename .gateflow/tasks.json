@@ -6797,9 +6797,9 @@
         "success_criteria_met": true
       },
       "go_no_go": {
-        "message": "GO: R-033 performance follow-up evidence passed with P-026 non-regression and determinism safeguards intact.",
+        "message": "Reconfirm perf optimization close with determinism/compatibility guardrails",
         "received": true,
-        "received_at": "2026-03-09T02:43:52+00:00"
+        "received_at": "2026-03-09T03:31:45+00:00"
       },
       "id": "T-3419",
       "milestone_id": "R-033",
@@ -7014,9 +7014,9 @@
         "success_criteria_met": true
       },
       "go_no_go": {
-        "message": "GO: R-033 closeout harness and evidence contract are defined and aligned to hard no-go conditions.",
+        "message": "Reconfirm closeout harness completion for R-033 execution replay",
         "received": true,
-        "received_at": "2026-03-09T02:41:35+00:00"
+        "received_at": "2026-03-09T03:31:45+00:00"
       },
       "id": "T-3425",
       "milestone_id": "R-033",
