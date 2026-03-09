@@ -123,6 +123,11 @@ def main() -> None:
         help="Window/matrix height. Default: display-relative for macos render, 360 for headless.",
     )
     run.add_argument("--sensor-backend", choices=["none", "macos"], default="none")
+    run.add_argument(
+        "--show-origin-refs",
+        action="store_true",
+        help="Enable Planes origin-reference debug overlay (camera, active planes, mounted components).",
+    )
     run.add_argument("--audit-sqlite", type=Path, default=None)
     run.add_argument("--audit-jsonl", type=Path, default=None)
     run.add_argument("--energy-safety", choices=["off", "monitor", "enforce"], default="monitor")
@@ -153,6 +158,7 @@ def main() -> None:
             providers = make_default_macos_sensor_providers()
         audit_sink = _build_audit_sink(args.audit_sqlite, args.audit_jsonl)
         try:
+            os.environ["LUVATRIX_SHOW_ORIGIN_REFS"] = "1" if bool(args.show_origin_refs) else "0"
             audit_logger = audit_sink.log if audit_sink is not None else None
             sensors = SensorManagerThread(providers=providers, audit_logger=audit_logger)
             if args.render == "headless":
