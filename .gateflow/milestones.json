@@ -2871,9 +2871,9 @@
       "emoji": "\u2699\ufe0f",
       "end_week": 22,
       "go_no_go": {
-        "message": "GO: RF-030 tasks are Done, deterministic capture manifest is complete, and GateFlow validations are passing.",
+        "message": "GO: RF-030 is merged to main with required checks passing; milestone close synced on canonical branch.",
         "received": true,
-        "received_at": "2026-03-09T01:24:54+00:00"
+        "received_at": "2026-03-09T01:29:54+00:00"
       },
       "id": "RF-030",
       "lifecycle_events": [
