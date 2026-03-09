@@ -1,7 +1,18 @@
 {
+  "actions_executed": [
+    "toggle_theme"
+  ],
+  "all_checks_passed": true,
   "app_id": "hello_plane",
-  "artifact_version": "v1",
-  "deterministic_fingerprint": "186466555fdf4f56f608533ddc91f35097e527aea0830ac24fd121f6bbc708df",
+  "artifact_version": "v2",
+  "deterministic_fingerprint": "281b8c7abfb2895545dcc015dbe27b9d0ff7f7e6bd701abd2cd366d7d1b962a2",
+  "interactive_checks": {
+    "theme_toggled": true
+  },
+  "required_features": [
+    "theme_toggled"
+  ],
   "status": "PASS",
+  "status_text": "last_action=toggle_theme",
   "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/hello_plane/app_main.py --validate"
 }

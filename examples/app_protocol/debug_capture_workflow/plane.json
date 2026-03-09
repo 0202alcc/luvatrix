@@ -1,0 +1,323 @@
+{
+  "planes_protocol_version": "0.2.0-dev",
+  "app": {
+    "id": "examples.debug_capture_workflow",
+    "title": "Debug Capture Workflow",
+    "icon": "assets/logo.svg",
+    "web": {
+      "tab_title": null,
+      "tab_icon": null
+    }
+  },
+  "planes": [
+    {
+      "id": "main",
+      "default_frame": "screen_tl",
+      "background": {
+        "color": "#0f1b2a"
+      },
+      "plane_global_z": 0,
+      "position": {
+        "x": 0,
+        "y": 0,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 900
+        },
+        "height": {
+          "unit": "px",
+          "value": 500
+        }
+      }
+    }
+  ],
+  "routes": [
+    {
+      "id": "main",
+      "default": true,
+      "active_planes": [
+        "main"
+      ]
+    }
+  ],
+  "themes": {
+    "default": {
+      "background": "#0f1b2a"
+    },
+    "training_alt": {
+      "background": "#1f3047"
+    }
+  },
+  "scripts": [
+    {
+      "id": "handlers",
+      "lang": "python",
+      "src": "scripts/handlers.py"
+    }
+  ],
+  "components": [
+    {
+      "id": "title_text",
+      "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 90,
+      "blend_mode": "absolute_rgba",
+      "position": {
+        "x": 12,
+        "y": 8,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 540
+        },
+        "height": {
+          "unit": "px",
+          "value": 28
+        }
+      },
+      "props": {
+        "text": "debug capture workflow",
+        "color_hex": "#eaf5ff",
+        "font_size_px": 18
+      }
+    },
+    {
+      "id": "status_text",
+      "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 91,
+      "blend_mode": "absolute_rgba",
+      "position": {
+        "x": 12,
+        "y": 38,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 620
+        },
+        "height": {
+          "unit": "px",
+          "value": 24
+        }
+      },
+      "props": {
+        "text": "ready",
+        "color_hex": "#9bc9f8",
+        "font_size_px": 15
+      }
+    },
+    {
+      "id": "btn_debug_screenshot",
+      "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 92,
+      "blend_mode": "absolute_rgba",
+      "position": {
+        "x": 12,
+        "y": 78,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 280
+        },
+        "height": {
+          "unit": "px",
+          "value": 28
+        }
+      },
+      "functions": {
+        "on_press_single": "handlers::debug_screenshot"
+      },
+      "props": {
+        "text": "Run debug_screenshot",
+        "color_hex": "#ffe082",
+        "font_size_px": 14
+      }
+    },
+    {
+      "id": "btn_debug_record",
+      "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 92,
+      "blend_mode": "absolute_rgba",
+      "position": {
+        "x": 12,
+        "y": 110,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 280
+        },
+        "height": {
+          "unit": "px",
+          "value": 28
+        }
+      },
+      "functions": {
+        "on_press_single": "handlers::debug_record"
+      },
+      "props": {
+        "text": "Run debug_record",
+        "color_hex": "#ffe082",
+        "font_size_px": 14
+      }
+    },
+    {
+      "id": "btn_debug_replay",
+      "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 92,
+      "blend_mode": "absolute_rgba",
+      "position": {
+        "x": 12,
+        "y": 142,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 280
+        },
+        "height": {
+          "unit": "px",
+          "value": 28
+        }
+      },
+      "functions": {
+        "on_press_single": "handlers::debug_replay"
+      },
+      "props": {
+        "text": "Run debug_replay",
+        "color_hex": "#ffe082",
+        "font_size_px": 14
+      }
+    },
+    {
+      "id": "btn_debug_frame_step",
+      "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 92,
+      "blend_mode": "absolute_rgba",
+      "position": {
+        "x": 12,
+        "y": 174,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 280
+        },
+        "height": {
+          "unit": "px",
+          "value": 28
+        }
+      },
+      "functions": {
+        "on_press_single": "handlers::debug_frame_step"
+      },
+      "props": {
+        "text": "Run debug_frame_step",
+        "color_hex": "#ffe082",
+        "font_size_px": 14
+      }
+    },
+    {
+      "id": "btn_debug_perf_hud",
+      "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 92,
+      "blend_mode": "absolute_rgba",
+      "position": {
+        "x": 12,
+        "y": 206,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 280
+        },
+        "height": {
+          "unit": "px",
+          "value": 28
+        }
+      },
+      "functions": {
+        "on_press_single": "handlers::debug_perf_hud"
+      },
+      "props": {
+        "text": "Run debug_perf_hud",
+        "color_hex": "#ffe082",
+        "font_size_px": 14
+      }
+    },
+    {
+      "id": "btn_debug_bundle",
+      "type": "text",
+      "attachment_kind": "camera_overlay",
+      "component_local_z": 92,
+      "blend_mode": "absolute_rgba",
+      "position": {
+        "x": 12,
+        "y": 238,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 280
+        },
+        "height": {
+          "unit": "px",
+          "value": 28
+        }
+      },
+      "functions": {
+        "on_press_single": "handlers::debug_bundle"
+      },
+      "props": {
+        "text": "Run debug_bundle",
+        "color_hex": "#ffe082",
+        "font_size_px": 14
+      }
+    },
+    {
+      "id": "panel_bg",
+      "type": "svg",
+      "attachment_kind": "plane",
+      "attach_to": "main",
+      "component_local_z": 1,
+      "blend_mode": "absolute_rgba",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 840
+        },
+        "height": {
+          "unit": "px",
+          "value": 420
+        }
+      },
+      "props": {
+        "svg": "assets/panel.svg"
+      }
+    }
+  ]
+}

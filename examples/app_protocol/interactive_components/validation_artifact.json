@@ -1,7 +1,19 @@
 {
+  "actions_executed": [
+    "cycle_component",
+    "cycle_component"
+  ],
+  "all_checks_passed": true,
   "app_id": "interactive_components",
-  "artifact_version": "v1",
-  "deterministic_fingerprint": "89925438e9bb7c219f82cc64f47e8ce5ca8a22b12d77de76608da1d801585683",
+  "artifact_version": "v2",
+  "deterministic_fingerprint": "31a073cf95ecb36cf18481ee7452d7f9ad460023394ddeea9380ce1946466a07",
+  "interactive_checks": {
+    "active_component_mode": true
+  },
+  "required_features": [
+    "active_component_mode"
+  ],
   "status": "PASS",
+  "status_text": "last_action=cycle_component",
   "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/interactive_components/app_main.py --validate"
 }

@@ -1,33 +1,38 @@
 # coordinate_playground
 
 ## Objective
-Practice coordinate-space focused app packaging and reproducible artifact generation.
+Capture pointer coordinates and store the latest sampled click location.
 
 ## Concepts introduced
-- Coordinate frame literacy\n- Deterministic command execution\n- Artifact schema consistency
+- Pointer event routing
+- Coordinate capture
+- State-to-UI feedback loop
 
 ## Files to inspect
 - `app.toml`
 - `app_main.py`
+- `plane.json`
+- `assets/`
 - `validation_artifact.json` (generated)
 
 ## Hands-on tasks
-1. Run the validation command.
-2. Inspect `validation_artifact.json` and verify `status` is `PASS`.
-3. Re-run the command and confirm artifact content is deterministic.
+- Trigger `capture_coordinates` from the on-screen control.
+- Run the validation command.
+- Open the resulting artifact and verify every interactive check is `true`.
 
 ## Expected outputs/artifacts
-- Console line starting with `VALIDATION_ARTIFACT=`.
-- `examples/app_protocol/coordinate_playground/validation_artifact.json` with deterministic fingerprint.
+- Console output containing `VALIDATION_ARTIFACT=`.
+- `examples/app_protocol/coordinate_playground/validation_artifact.json` with:
+- `captured_coordinates_set` == `True`
 
 ## Validation checklist
-- [ ] `app.toml` exists and points to `app_main:create`.
-- [ ] Validation command exits with code `0`.
-- [ ] Artifact file exists and contains `"status": "PASS"`.
-- [ ] Artifact fingerprint is stable across repeated runs.
+- [ ] App loads through `app_main:create`.
+- [ ] Interaction handlers execute without runtime errors.
+- [ ] `interactive_checks` in artifact are all `true`.
+- [ ] Deterministic fingerprint remains stable across repeated runs.
 
 ## Stretch challenge
-Wire this app into a richer runtime flow by replacing `create()` stub state with live plane/component behavior while preserving deterministic validation output.
+Add an additional interaction control and extend `training_protocol.py` validation checks while preserving deterministic artifact output.
 
 ## Runnable command
 `PYTHONPATH=. uv run python examples/app_protocol/coordinate_playground/app_main.py --validate`

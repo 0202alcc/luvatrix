@@ -58,6 +58,7 @@ def test_planes_training_apps_contract() -> None:
         assert app_dir.is_dir(), f"missing app directory: {app_dir}"
         assert (app_dir / "app.toml").is_file(), f"missing app.toml for {app_id}"
         assert (app_dir / "app_main.py").is_file(), f"missing app_main.py for {app_id}"
+        assert (app_dir / "plane.json").is_file(), f"missing plane.json for {app_id}"
         readme_path = app_dir / "README.md"
         assert readme_path.is_file(), f"missing README.md for {app_id}"
         readme = readme_path.read_text(encoding="utf-8")
@@ -72,8 +73,29 @@ def test_planes_training_apps_runtime_and_determinism() -> None:
         assert first == second, f"nondeterministic artifact for {app_id}"
         assert first["app_id"] == app_id
         assert first["status"] == "PASS"
-        assert first["artifact_version"] == "v1"
+        assert first["artifact_version"] == "v2"
+        assert first["all_checks_passed"] is True
+        checks = first["interactive_checks"]
+        assert isinstance(checks, dict)
+        assert checks, f"no interactive checks recorded for {app_id}"
+        assert all(bool(v) for v in checks.values()), f"failing interactive checks for {app_id}: {checks}"
         assert first["validation_command"].endswith("--validate")
 
-    routes = _run_validation("planes_v2_poc_plus")["routes"]
-    assert routes == ["/home", "/settings", "/analytics"]
+    routes_payload = _run_validation("planes_v2_poc_plus")
+    assert routes_payload["routes"] == ["/home", "/settings", "/analytics"]
+    assert routes_payload["active_route_path"] == "/analytics"
+
+
+def test_planes_training_apps_debug_workflow_contract() -> None:
+    payload = _run_validation("debug_capture_workflow")
+    required = {
+        "screenshot_taken",
+        "record_toggled",
+        "replay_started",
+        "frame_step_count",
+        "perf_hud_toggled",
+        "bundle_exported",
+    }
+    checks = payload["interactive_checks"]
+    assert required.issubset(set(checks.keys()))
+    assert all(bool(checks[k]) for k in required)

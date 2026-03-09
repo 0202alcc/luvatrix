@@ -1,33 +1,39 @@
 # multi_plane_layout
 
 ## Objective
-Package a multi-plane layout training shell that can be expanded while keeping deterministic checks.
+Switch focus across primary and secondary planes in a multi-plane route.
 
 ## Concepts introduced
-- Plane composition planning\n- Modularity boundaries\n- Stable validation outputs
+- Planes v2 multi-plane layout
+- Plane focus controls
+- Route active-plane behavior
 
 ## Files to inspect
 - `app.toml`
 - `app_main.py`
+- `plane.json`
+- `assets/`
 - `validation_artifact.json` (generated)
 
 ## Hands-on tasks
-1. Run the validation command.
-2. Inspect `validation_artifact.json` and verify `status` is `PASS`.
-3. Re-run the command and confirm artifact content is deterministic.
+- Trigger `activate_plane_primary` from the on-screen control.
+- Trigger `activate_plane_secondary` from the on-screen control.
+- Run the validation command.
+- Open the resulting artifact and verify every interactive check is `true`.
 
 ## Expected outputs/artifacts
-- Console line starting with `VALIDATION_ARTIFACT=`.
-- `examples/app_protocol/multi_plane_layout/validation_artifact.json` with deterministic fingerprint.
+- Console output containing `VALIDATION_ARTIFACT=`.
+- `examples/app_protocol/multi_plane_layout/validation_artifact.json` with:
+- `plane_switch_count` == `2`
 
 ## Validation checklist
-- [ ] `app.toml` exists and points to `app_main:create`.
-- [ ] Validation command exits with code `0`.
-- [ ] Artifact file exists and contains `"status": "PASS"`.
-- [ ] Artifact fingerprint is stable across repeated runs.
+- [ ] App loads through `app_main:create`.
+- [ ] Interaction handlers execute without runtime errors.
+- [ ] `interactive_checks` in artifact are all `true`.
+- [ ] Deterministic fingerprint remains stable across repeated runs.
 
 ## Stretch challenge
-Wire this app into a richer runtime flow by replacing `create()` stub state with live plane/component behavior while preserving deterministic validation output.
+Add an additional interaction control and extend `training_protocol.py` validation checks while preserving deterministic artifact output.
 
 ## Runnable command
 `PYTHONPATH=. uv run python examples/app_protocol/multi_plane_layout/app_main.py --validate`

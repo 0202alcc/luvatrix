@@ -1,33 +1,48 @@
 # debug_capture_workflow
 
 ## Objective
-Package debug capture workflow training shell covering screenshot/record/replay/frame-step/perf-hud/bundle readiness.
+Execute full debug capture workflow controls (screenshot, record, replay, frame-step, perf-hud, bundle).
 
 ## Concepts introduced
-- Debug capture lifecycle\n- Replay/perf-hud contract awareness\n- Deterministic evidence packaging
+- Debug capture lifecycle
+- Record/replay toggles
+- Bundle export readiness
 
 ## Files to inspect
 - `app.toml`
 - `app_main.py`
+- `plane.json`
+- `assets/`
 - `validation_artifact.json` (generated)
 
 ## Hands-on tasks
-1. Run the validation command.
-2. Inspect `validation_artifact.json` and verify `status` is `PASS`.
-3. Re-run the command and confirm artifact content is deterministic.
+- Trigger `debug_screenshot` from the on-screen control.
+- Trigger `debug_record` from the on-screen control.
+- Trigger `debug_replay` from the on-screen control.
+- Trigger `debug_frame_step` from the on-screen control.
+- Trigger `debug_perf_hud` from the on-screen control.
+- Trigger `debug_bundle` from the on-screen control.
+- Run the validation command.
+- Open the resulting artifact and verify every interactive check is `true`.
 
 ## Expected outputs/artifacts
-- Console line starting with `VALIDATION_ARTIFACT=`.
-- `examples/app_protocol/debug_capture_workflow/validation_artifact.json` with deterministic fingerprint.
+- Console output containing `VALIDATION_ARTIFACT=`.
+- `examples/app_protocol/debug_capture_workflow/validation_artifact.json` with:
+- `bundle_exported` == `True`
+- `frame_step_count` == `1`
+- `perf_hud_toggled` == `True`
+- `record_toggled` == `True`
+- `replay_started` == `True`
+- `screenshot_taken` == `True`
 
 ## Validation checklist
-- [ ] `app.toml` exists and points to `app_main:create`.
-- [ ] Validation command exits with code `0`.
-- [ ] Artifact file exists and contains `"status": "PASS"`.
-- [ ] Artifact fingerprint is stable across repeated runs.
+- [ ] App loads through `app_main:create`.
+- [ ] Interaction handlers execute without runtime errors.
+- [ ] `interactive_checks` in artifact are all `true`.
+- [ ] Deterministic fingerprint remains stable across repeated runs.
 
 ## Stretch challenge
-Wire this app into a richer runtime flow by replacing `create()` stub state with live plane/component behavior while preserving deterministic validation output.
+Add an additional interaction control and extend `training_protocol.py` validation checks while preserving deterministic artifact output.
 
 ## Runnable command
 `PYTHONPATH=. uv run python examples/app_protocol/debug_capture_workflow/app_main.py --validate`

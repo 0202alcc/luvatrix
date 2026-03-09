@@ -1,7 +1,19 @@
 {
+  "actions_executed": [
+    "refresh_sensors",
+    "refresh_sensors"
+  ],
+  "all_checks_passed": true,
   "app_id": "sensor_status_dashboard",
-  "artifact_version": "v1",
-  "deterministic_fingerprint": "46bfbee18ee1f2d446f1fcb60bfa47f753d09d8d4e1487a0b75bef90865eacc9",
+  "artifact_version": "v2",
+  "deterministic_fingerprint": "c5044dce7f88cabbc94b5cd384f6ccf03fcb9420587c6a84291655726cd250a2",
+  "interactive_checks": {
+    "sensor_refresh_count": true
+  },
+  "required_features": [
+    "sensor_refresh_count"
+  ],
   "status": "PASS",
+  "status_text": "last_action=refresh_sensors",
   "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/sensor_status_dashboard/app_main.py --validate"
 }
