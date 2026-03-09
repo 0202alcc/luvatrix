@@ -76,6 +76,78 @@
       ]
     },
     {
+      "ci_required_checks": [
+        "uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate links",
+        "uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate closeout",
+        "uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate all",
+        "PYTHONPATH=. uv run --with pytest pytest tests -k \"planes_training_apps\" -q"
+      ],
+      "closeout_criteria": {
+        "go_threshold": 90,
+        "hard_no_go_conditions": [
+          "any missing training app directory/file contract",
+          "any missing deterministic validation evidence",
+          "closeout packet validator failure"
+        ],
+        "metric_description": "Runnable training app pack completeness and deterministic evidence score.",
+        "metric_id": "a-048-closeout-v1",
+        "required_commands": [
+          "uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate links",
+          "uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate closeout",
+          "uvx gateflow --root /Users/aleccandidato/Projects/luvatrix validate all",
+          "PYTHONPATH=. uv run --with pytest pytest tests -k \"planes_training_apps\" -q"
+        ],
+        "required_evidence": [
+          ".gateflow/closeout/a-048_closeout.md",
+          "training app evidence matrix",
+          "deterministic validation artifacts"
+        ],
+        "rubric_version": "closeout_rubric_v1",
+        "score_components": [
+          "artifact_contract",
+          "runtime_validation",
+          "deterministic_evidence",
+          "ci_enforcement"
+        ],
+        "score_formula": "0.35*artifact_contract + 0.25*runtime_validation + 0.20*deterministic_evidence + 0.20*ci_enforcement"
+      },
+      "descriptions": [
+        "Implement and validate 10 concrete training example apps under examples/app_protocol/ with deterministic outputs and debug-tooling evidence."
+      ],
+      "emoji": "\ud83e\uddea",
+      "end_week": 15,
+      "id": "A-048",
+      "lifecycle_events": [
+        {
+          "date": "2026-03-08",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "milestone created for runnable training artifacts"
+        }
+      ],
+      "name": "Planes Training Syllabus App Pack (Runnable Artifacts)",
+      "start_week": 11,
+      "status": "Planned",
+      "success_criteria": [
+        "All 10 app directories exist with required files.",
+        "Each app has a runnable command and passes deterministic validation checks.",
+        "Debug-capture app emits valid artifacts/manifests.",
+        "CI enforces training app presence + evidence completeness."
+      ],
+      "task_ids": [
+        "T-4810",
+        "T-4811",
+        "T-4812",
+        "T-4813",
+        "T-4814",
+        "T-4815",
+        "T-4816",
+        "T-4817",
+        "T-4818",
+        "T-4819"
+      ]
+    },
+    {
       "acceptance_checks": {
         "T-1101": "Schema contract includes milestone/task/dependency/owner fields with strict status validation; tests prove canonical parse/load and first-party type export.",
         "T-1102": "Gantt renderer produces deterministic axis/status/dependency output with collapsed/expanded lanes and is callable from first-party planning modules.",

@@ -8934,6 +8934,192 @@
     },
     {
       "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [],
+      "id": "T-4810",
+      "milestone_id": "A-048",
+      "notes": [
+        "Hard no-go if any listed training app directory is missing.",
+        "Requested task ID: T-4800; remapped to T-4810 due existing P-048 task ID collision."
+      ],
+      "status": "Intake",
+      "task_type": "closeout_harness",
+      "title": "[CLOSEOUT HARNESS] Define A-048 closeout metric + evidence harness"
+    },
+    {
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4810"
+      ],
+      "id": "T-4811",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4801; remapped to T-4811 due existing P-048 task ID collision."
+      ],
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Scaffold Level 0 apps (hello_plane, coordinate_playground)"
+    },
+    {
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4810"
+      ],
+      "id": "T-4812",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4802; remapped to T-4812 due existing P-048 task ID collision."
+      ],
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Scaffold Level 1 apps (camera_overlay_basics, multi_plane_layout)"
+    },
+    {
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4810"
+      ],
+      "id": "T-4813",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4803; remapped to T-4813 due existing P-048 task ID collision."
+      ],
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Scaffold Level 2 apps (scroll_and_pan_plane, interactive_components)"
+    },
+    {
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4810"
+      ],
+      "id": "T-4814",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4804; remapped to T-4814 due existing P-048 task ID collision."
+      ],
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Scaffold Level 3 apps (sensor_status_dashboard, input_sensor_overlay_logger)"
+    },
+    {
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4810"
+      ],
+      "id": "T-4815",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4805; remapped to T-4815 due existing P-048 task ID collision."
+      ],
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Scaffold Level 4 app (debug_capture_workflow) with screenshot/record/replay/frame-step/perf-hud/bundle evidence flow"
+    },
+    {
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4810"
+      ],
+      "id": "T-4816",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4806; remapped to T-4816 due existing P-048 task ID collision."
+      ],
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Scaffold Level 5 app (planes_v2_poc_plus) with route groups (/home, /settings, /analytics)"
+    },
+    {
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4811",
+        "T-4812",
+        "T-4813",
+        "T-4814",
+        "T-4815",
+        "T-4816"
+      ],
+      "id": "T-4817",
+      "milestone_id": "A-048",
+      "notes": [
+        "Include path existence checks, import/runtime smoke checks, and artifact schema checks.",
+        "Requested task ID: T-4807; remapped to T-4817 due existing P-048 task ID collision."
+      ],
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Add deterministic validation suite for all training apps"
+    },
+    {
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4817"
+      ],
+      "id": "T-4818",
+      "milestone_id": "A-048",
+      "notes": [
+        "Fail if any training app path missing or any required evidence missing.",
+        "Requested task ID: T-4808; remapped to T-4818 due existing P-048 task ID collision."
+      ],
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Add CI gate and closeout evidence matrix enforcement"
+    },
+    {
+      "board_refs": [
+        "milestone:A-048",
+        "team:platform-ci",
+        "specialist:pm"
+      ],
+      "depends_on": [
+        "T-4818"
+      ],
+      "id": "T-4819",
+      "milestone_id": "A-048",
+      "notes": [
+        "Requested task ID: T-4809; remapped to T-4819 due existing P-048 task ID collision."
+      ],
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Final packet + Go/No-Go closeout for A-048"
+    },
+    {
+      "board_refs": [
         "milestone:F-014",
         "team:security-quality",
         "specialist:safety"
