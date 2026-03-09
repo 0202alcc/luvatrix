@@ -645,6 +645,69 @@ def _build_scroll_hook_plane_file(root: Path) -> Path:
     return plane_path
 
 
+def _build_plane_v2_origin_refs_mixed_frames_file(root: Path) -> Path:
+    payload = {
+        "planes_protocol_version": "0.2.0-dev",
+        "app": {
+            "id": "x.v2.origin_refs_mixed",
+            "title": "V2 Origin Refs Mixed Frames",
+            "icon": "assets/logo.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "planes": [
+            {
+                "id": "world_center",
+                "default_frame": "cartesian_center",
+                "background": {"color": "#101010"},
+                "plane_global_z": 5,
+                "position": {"x": 0, "y": 0, "frame": "cartesian_center"},
+                "size": {"width": {"unit": "px", "value": 320}, "height": {"unit": "px", "value": 180}},
+            },
+            {
+                "id": "hud_top_left",
+                "default_frame": "screen_tl",
+                "background": {"color": "#151515"},
+                "plane_global_z": 20,
+                "position": {"x": 12, "y": 10, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 320}, "height": {"unit": "px", "value": 180}},
+            },
+        ],
+        "routes": [{"id": "main", "default": True, "active_planes": ["world_center", "hud_top_left"]}],
+        "components": [
+            {
+                "id": "component_alpha",
+                "type": "text",
+                "attachment_kind": "plane",
+                "attach_to": "world_center",
+                "component_local_z": 1,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": -40, "y": 20, "frame": "cartesian_center"},
+                "size": {"width": {"unit": "px", "value": 120}, "height": {"unit": "px", "value": 20}},
+                "props": {"text": "alpha", "font_size_px": 12},
+            },
+            {
+                "id": "component_beta",
+                "type": "text",
+                "attachment_kind": "plane",
+                "attach_to": "hud_top_left",
+                "component_local_z": 2,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 16, "y": 14, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 120}, "height": {"unit": "px", "value": 20}},
+                "props": {"text": "beta", "font_size_px": 12},
+            },
+        ],
+    }
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "logo.svg").write_text(
+        "<svg width=\"10\" height=\"10\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#ffffff\"/></svg>",
+        encoding="utf-8",
+    )
+    plane_path = root / "plane_v2_origin_refs_mixed_frames.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
 class PlanesRuntimeTests(unittest.TestCase):
     def test_load_plane_app_renders_components(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -1655,6 +1718,127 @@ class PlanesRuntimeTests(unittest.TestCase):
             self.assertAlmostEqual(float(world.position.y), 60.0, places=6)
             self.assertAlmostEqual(float(overlay.position.x), 12.0, places=6)
             self.assertAlmostEqual(float(overlay.position.y), 8.0, places=6)
+
+    def test_origin_refs_frame_conversion_round_trip_is_correct(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_v2_origin_refs_mixed_frames_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+
+            for frame_name, point in (
+                ("screen_tl", (21.0, 34.0)),
+                ("cartesian_bl", (40.0, 25.0)),
+                ("cartesian_center", (-15.0, 22.0)),
+            ):
+                sx, sy = app._transform_point_between_frames(  # type: ignore[attr-defined]
+                    point[0], point[1], from_frame=frame_name, to_frame="screen_tl"
+                )
+                back_x, back_y = app._transform_point_between_frames(  # type: ignore[attr-defined]
+                    sx, sy, from_frame="screen_tl", to_frame=frame_name
+                )
+                self.assertAlmostEqual(float(back_x), float(point[0]), places=4)
+                self.assertAlmostEqual(float(back_y), float(point[1]), places=4)
+
+    def test_origin_refs_deterministic_primitive_ordering(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_v2_origin_refs_mixed_frames_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            app.state["origin_refs_enabled"] = True
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+
+            labels = [
+                comp.component_id
+                for comp in ctx.mounted
+                if "__origin_ref__" in comp.component_id and comp.component_id.endswith("__label")
+            ]
+            rendered_order = [label.split("__")[3] for label in labels]
+            self.assertEqual(
+                rendered_order,
+                ["camera", "world_center", "hud_top_left", "component_alpha", "component_beta"],
+            )
+
+    def test_origin_refs_overlay_primitive_count_toggle(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_v2_origin_refs_mixed_frames_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+
+            app.state["origin_refs_enabled"] = False
+            app.loop(ctx, 0.016)
+            disabled_perf = dict(app.state.get("perf", {}))
+            self.assertEqual(int(disabled_perf.get("origin_reference_primitives", 0)), 0)
+
+            ctx.mounted = []
+            app.state["origin_refs_enabled"] = True
+            app.state["force_full_invalidation"] = True
+            app.state["force_full_invalidation_reason"] = "origin-refs-toggle-test"
+            app.loop(ctx, 0.016)
+            enabled_perf = dict(app.state.get("perf", {}))
+            self.assertGreater(int(enabled_perf.get("origin_reference_primitives", 0)), 0)
+
+    def test_origin_refs_visual_delta_for_hello_plane_and_mixed_frames(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            mixed_plane_path = _build_plane_v2_origin_refs_mixed_frames_file(Path(td))
+            mixed_app = load_plane_app(mixed_plane_path, handlers={})
+            mixed_ctx = _FakeCtx(width=320, height=180)
+            mixed_app.init(mixed_ctx)
+            mixed_app.state["origin_refs_enabled"] = False
+            mixed_app.loop(mixed_ctx, 0.016)
+            mixed_off_ids = [str(comp.component_id) for comp in mixed_ctx.mounted]
+            mixed_app.state["origin_refs_enabled"] = True
+            mixed_app.state["force_full_invalidation"] = True
+            mixed_app.state["force_full_invalidation_reason"] = "origin-refs-visual-mixed"
+            mixed_ctx.mounted = []
+            mixed_app.loop(mixed_ctx, 0.016)
+            mixed_on_ids = [str(comp.component_id) for comp in mixed_ctx.mounted]
+            self.assertNotEqual(mixed_off_ids, mixed_on_ids)
+
+        hello_plane_path = Path(__file__).resolve().parents[1] / "examples" / "planes_v2" / "hello_plane" / "plane.json"
+        hello_app = load_plane_app(hello_plane_path, handlers={})
+        hello_ctx = _FakeCtx(width=320, height=180)
+        hello_app.init(hello_ctx)
+        hello_app.state["origin_refs_enabled"] = False
+        hello_app.loop(hello_ctx, 0.016)
+        hello_off_ids = [str(comp.component_id) for comp in hello_ctx.mounted]
+        hello_app.state["origin_refs_enabled"] = True
+        hello_app.state["force_full_invalidation"] = True
+        hello_app.state["force_full_invalidation_reason"] = "origin-refs-visual-hello"
+        hello_ctx.mounted = []
+        hello_app.loop(hello_ctx, 0.016)
+        hello_on_ids = [str(comp.component_id) for comp in hello_ctx.mounted]
+        self.assertNotEqual(hello_off_ids, hello_on_ids)
+
+    def test_origin_refs_no_hit_test_regression(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_file(Path(td))
+            app = PlaneApp(plane_path, handlers={})
+            calls: list[str] = []
+
+            def _on_open(event_ctx, state):
+                state["clicked"] = event_ctx["component_id"]
+                calls.append(str(event_ctx["component_id"]))
+
+            app.register_handler("handlers::open", _on_open)
+            app.state["origin_refs_enabled"] = True
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="click",
+                    status="OK",
+                    payload={"x": 20.0, "y": 20.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            self.assertEqual(calls, ["title"])
 
 
 if __name__ == "__main__":
