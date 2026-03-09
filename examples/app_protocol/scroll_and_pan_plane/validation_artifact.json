@@ -1,0 +1,7 @@
+{
+  "app_id": "scroll_and_pan_plane",
+  "artifact_version": "v1",
+  "deterministic_fingerprint": "90bbe8f24ee4d22770826576cebe287cb798216967ce3a2256b2b5de7b823293",
+  "status": "PASS",
+  "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/scroll_and_pan_plane/app_main.py --validate"
+}

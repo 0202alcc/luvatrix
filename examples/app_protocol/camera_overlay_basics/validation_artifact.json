@@ -1,0 +1,7 @@
+{
+  "app_id": "camera_overlay_basics",
+  "artifact_version": "v1",
+  "deterministic_fingerprint": "a7f4edea1e4f6b41fe2e67ac1ced31ff069b92f4f2bbeb559943d3942ae2d9be",
+  "status": "PASS",
+  "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/camera_overlay_basics/app_main.py --validate"
+}

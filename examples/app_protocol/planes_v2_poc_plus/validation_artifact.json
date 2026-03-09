@@ -1,0 +1,12 @@
+{
+  "app_id": "planes_v2_poc_plus",
+  "artifact_version": "v1",
+  "deterministic_fingerprint": "d785d5e7fae684ea56ae94a4943c90c936cb00782beb8236d3197cbf75c01f0c",
+  "routes": [
+    "/home",
+    "/settings",
+    "/analytics"
+  ],
+  "status": "PASS",
+  "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/planes_v2_poc_plus/app_main.py --validate"
+}

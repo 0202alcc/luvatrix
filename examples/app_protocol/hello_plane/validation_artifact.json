@@ -1,0 +1,7 @@
+{
+  "app_id": "hello_plane",
+  "artifact_version": "v1",
+  "deterministic_fingerprint": "186466555fdf4f56f608533ddc91f35097e527aea0830ac24fd121f6bbc708df",
+  "status": "PASS",
+  "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/hello_plane/app_main.py --validate"
+}

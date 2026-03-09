@@ -116,6 +116,11 @@
       ],
       "emoji": "\ud83e\uddea",
       "end_week": 15,
+      "go_no_go": {
+        "message": "GO: all required training apps, deterministic evidence, and validation commands passed (using uv run fallback in sandbox).",
+        "received": true,
+        "received_at": "2026-03-09T03:58:00+00:00"
+      },
       "id": "A-048",
       "lifecycle_events": [
         {
@@ -127,7 +132,7 @@
       ],
       "name": "Planes Training Syllabus App Pack (Runnable Artifacts)",
       "start_week": 11,
-      "status": "Planned",
+      "status": "Complete",
       "success_criteria": [
         "All 10 app directories exist with required files.",
         "Each app has a runnable command and passes deterministic validation checks.",

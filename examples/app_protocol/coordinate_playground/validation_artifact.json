@@ -1,0 +1,7 @@
+{
+  "app_id": "coordinate_playground",
+  "artifact_version": "v1",
+  "deterministic_fingerprint": "3b29a06359509fccd95475b014b4e47663933a082d0561039efeb8aecc4f0290",
+  "status": "PASS",
+  "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/coordinate_playground/app_main.py --validate"
+}

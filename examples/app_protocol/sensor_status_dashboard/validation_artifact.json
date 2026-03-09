@@ -1,0 +1,7 @@
+{
+  "app_id": "sensor_status_dashboard",
+  "artifact_version": "v1",
+  "deterministic_fingerprint": "46bfbee18ee1f2d446f1fcb60bfa47f753d09d8d4e1487a0b75bef90865eacc9",
+  "status": "PASS",
+  "validation_command": "PYTHONPATH=. uv run python examples/app_protocol/sensor_status_dashboard/app_main.py --validate"
+}

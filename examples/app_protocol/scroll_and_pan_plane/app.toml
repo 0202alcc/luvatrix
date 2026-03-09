@@ -1,0 +1,9 @@
+app_id = "examples.scroll_and_pan_plane"
+protocol_version = "2"
+entrypoint = "app_main:create"
+required_capabilities = ["window.write"]
+optional_capabilities = ["hdi.mouse", "hdi.trackpad"]
+
+[runtime]
+kind = "python_inproc"
+transport = "stdio_jsonl"
