@@ -12,7 +12,7 @@ from luvatrix_core.core.debug_menu import (
 class DebugMenuAdapterTests(unittest.TestCase):
     def test_adapter_specs_cover_macos_windows_linux(self) -> None:
         specs = default_debug_menu_adapter_specs()
-        self.assertEqual(tuple(spec.platform for spec in specs), ("macos", "windows", "linux"))
+        self.assertEqual(tuple(spec.platform for spec in specs), ("macos", "windows", "linux", "web"))
 
     def test_macos_adapter_declares_supported_menu_and_capabilities(self) -> None:
         specs = default_debug_menu_adapter_specs()
@@ -40,8 +40,11 @@ class DebugMenuAdapterTests(unittest.TestCase):
         self.assertEqual(matrix["windows"]["supported_menu_ids"], [])
         self.assertEqual(matrix["linux"]["supported"], False)
         self.assertEqual(matrix["linux"]["supported_menu_ids"], [])
+        self.assertEqual(matrix["web"]["supported"], False)
+        self.assertEqual(matrix["web"]["supported_menu_ids"], [])
         self.assertIsInstance(matrix["windows"]["declared_capabilities"], list)
         self.assertIsInstance(matrix["linux"]["declared_capabilities"], list)
+        self.assertIsInstance(matrix["web"]["declared_capabilities"], list)
 
 
 if __name__ == "__main__":

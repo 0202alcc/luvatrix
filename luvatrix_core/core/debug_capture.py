@@ -210,6 +210,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
             supported=True,
             declared_capabilities=(
                 "debug.capture.screenshot",
+                "debug.capture.screenshot.clipboard",
                 "debug.capture.screenshot.sidecar",
                 "debug.capture.record",
                 "debug.overlay.render",
@@ -227,6 +228,7 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
             declared_capabilities=(
                 "debug.capture.windows.stub",
                 "debug.capture.screenshot.stub",
+                "debug.capture.screenshot.clipboard.stub",
                 "debug.capture.record.stub",
                 "debug.overlay.stub",
                 "debug.replay.stub",
@@ -242,6 +244,23 @@ def default_debug_capture_platform_specs() -> tuple[DebugCapturePlatformSpec, ..
             declared_capabilities=(
                 "debug.capture.linux.stub",
                 "debug.capture.screenshot.stub",
+                "debug.capture.screenshot.clipboard.stub",
+                "debug.capture.record.stub",
+                "debug.overlay.stub",
+                "debug.replay.stub",
+                "debug.frame.step.stub",
+                "debug.perf.hud.stub",
+                "debug.bundle.stub",
+            ),
+            unsupported_reason="macOS-first phase: explicit stub only",
+        ),
+        DebugCapturePlatformSpec(
+            platform="web",
+            supported=False,
+            declared_capabilities=(
+                "debug.capture.web.stub",
+                "debug.capture.screenshot.stub",
+                "debug.capture.screenshot.clipboard.stub",
                 "debug.capture.record.stub",
                 "debug.overlay.stub",
                 "debug.replay.stub",
