@@ -6679,9 +6679,9 @@
         "success_criteria_met": true
       },
       "go_no_go": {
-        "message": "GO: rollout flags and rollback-to-compat adapter default implemented with passing rollout flag tests.",
+        "message": "Reconfirm rollout flags+rollback gate evidence for P-032 execution run",
         "received": true,
-        "received_at": "2026-03-09T02:20:23+00:00"
+        "received_at": "2026-03-09T03:08:02+00:00"
       },
       "id": "T-3416",
       "milestone_id": "P-032",
@@ -6718,9 +6718,9 @@
         "success_criteria_met": true
       },
       "go_no_go": {
-        "message": "GO: P-032 closeout packet authored; validate links/closeout/all passing.",
+        "message": "Reconfirm closeout packet GO evidence for P-032 execution run",
         "received": true,
-        "received_at": "2026-03-09T02:20:26+00:00"
+        "received_at": "2026-03-09T03:08:02+00:00"
       },
       "id": "T-3417",
       "milestone_id": "P-032",
@@ -6757,9 +6757,9 @@
         "success_criteria_met": true
       },
       "go_no_go": {
-        "message": "GO: P-026 non-regression CI guard passed; deterministic debug evidence preserved.",
+        "message": "Reconfirm P-026 non-regression evidence gate for P-032 execution run",
         "received": true,
-        "received_at": "2026-03-09T02:20:25+00:00"
+        "received_at": "2026-03-09T03:08:02+00:00"
       },
       "id": "T-3418",
       "milestone_id": "P-032",
@@ -6978,9 +6978,9 @@
         "success_criteria_met": true
       },
       "go_no_go": {
-        "message": "GO: closeout harness contract and evidence profile validated for P-032.",
+        "message": "Reconfirm closeout harness GO evidence for P-032 execution run",
         "received": true,
-        "received_at": "2026-03-09T02:20:22+00:00"
+        "received_at": "2026-03-09T03:08:02+00:00"
       },
       "id": "T-3424",
       "milestone_id": "P-032",
