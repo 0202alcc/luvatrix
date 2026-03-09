@@ -198,6 +198,13 @@ def default_debug_menu_adapter_specs() -> tuple[DebugMenuAdapterSpec, ...]:
             declared_capabilities=("debug.adapter.linux.stub",),
             unsupported_reason="macOS-first phase: explicit stub only",
         ),
+        DebugMenuAdapterSpec(
+            platform="web",
+            supported=False,
+            supported_menu_ids=(),
+            declared_capabilities=("debug.adapter.web.stub",),
+            unsupported_reason="macOS-first phase: explicit stub only",
+        ),
     )
 
 
