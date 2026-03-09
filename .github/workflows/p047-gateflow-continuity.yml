@@ -15,6 +15,10 @@ jobs:
         run: uv sync
       - name: Verify pinned GateFlow version
         run: uvx --from gateflow==1.0.0 gateflow --version
+      - name: Initialize sync metadata
+        run: uvx --from gateflow==1.0.0 gateflow --root . sync from-main
+      - name: Apply sync remediation (if needed)
+        run: uvx --from gateflow==1.0.0 gateflow --root . sync apply
       - name: Verify sync status is clean
         run: uvx --from gateflow==1.0.0 gateflow --root . sync status
       - name: Verify planning validation pack
