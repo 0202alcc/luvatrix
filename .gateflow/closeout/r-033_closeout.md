@@ -22,6 +22,23 @@
   - `artifacts/debug_menu/r040_smoke/runtime/perf/hud_snapshot.json`
   - `artifacts/debug_menu/r040_smoke/runtime/bundles/bundle-000000-001.json`
 
+# Training Demonstration Evidence
+- `closeout_training_project_ids`: `["debug_capture_workflow"]`
+- Demonstration runs:
+  - `uv run pytest tests -k "planes_v2_perf or p026_non_regression" -q`
+  - `uv run --with pytest pytest tests -k "planes_v2 and (debug_screenshot or debug_recording or debug_overlay or debug_replay or debug_frame_step or debug_bundle)" -q`
+  - `PYTHONPATH=. uv run python ops/ci/r040_macos_debug_menu_functional_smoke.py`
+- Deterministic artifact set:
+  - `artifacts/rf030/deterministic_capture/artifact_manifest.json`
+  - `artifacts/debug_menu/r040_smoke/runtime/replay/replay-000000.json`
+  - `artifacts/debug_menu/r040_smoke/runtime/replay/frame_step_state.json`
+  - `artifacts/debug_menu/r040_smoke/runtime/perf/hud_snapshot.json`
+  - `artifacts/debug_menu/r040_smoke/runtime/bundles/bundle-000000-001.json`
+- Demo scope status:
+  - Perf optimization with no compatibility/determinism regressions: `PASS` (P-026 evidence validator pass + no replay mismatch in required selectors).
+  - Debug tooling evidence flow (screenshot/record/replay/frame-step/perf-hud/bundle): `PASS` (all artifact families present in closeout manifests).
+  - P-026 envelopes remain within allowed bounds or approved re-baseline evidence: `PASS` (closeout evidence validator pass; no re-baseline required in this cycle).
+
 # Determinism
 - P-026 evidence validation passed, preserving the determinism replay envelope required by R-033 hard no-go rules.
 - Debug replay/frame-step/bundle evidence artifacts are present and referenceable from deterministic capture and r040 smoke manifests.
