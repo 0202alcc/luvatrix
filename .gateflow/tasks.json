@@ -6907,6 +6907,13 @@
       "title": "Add validator checks for required visual evidence artifacts"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:RF-030",
         "team:runtime",
@@ -6915,13 +6922,26 @@
       "depends_on": [
         "T-3410"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: Deterministic capture harness artifacts emitted for startup/scroll/pan/drag/overlay/replay-frame-step/resize scenarios.",
+        "received": true,
+        "received_at": "2026-03-09T01:19:50+00:00"
+      },
       "id": "T-3428",
       "milestone_id": "RF-030",
       "notes": [
         "Required scenarios: startup, vertical scroll, horizontal pan, drag-heavy, overlay toggle, replay+frame-step, resize burst.",
         "Emit deterministic artifacts + manifest aligned to visual evidence schema."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Build planes_v2_poc debug capture harness (macOS-first)"
     },
