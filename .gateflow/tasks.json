@@ -6654,6 +6654,13 @@
       "title": "Deliver legacy app conformance suite under adapter path"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:P-032",
         "team:platform-ci",
@@ -6663,17 +6670,37 @@
         "T-3411",
         "T-3415"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: rollout flags and rollback-to-compat adapter default implemented with passing rollout flag tests.",
+        "received": true,
+        "received_at": "2026-03-09T02:20:23+00:00"
+      },
       "id": "T-3416",
       "milestone_id": "P-032",
       "notes": [
         "Flags: planes_v2_schema, planes_v2_compiler, planes_v2_runtime.",
         "Rollback path must restore compatibility adapter default without data loss."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Implement feature flags and rollback points for Planes v2 switchover"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:P-032",
         "team:platform-ci",
@@ -6682,17 +6709,37 @@
       "depends_on": [
         "T-3416"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: P-032 closeout packet authored; validate links/closeout/all passing.",
+        "received": true,
+        "received_at": "2026-03-09T02:20:26+00:00"
+      },
       "id": "T-3417",
       "milestone_id": "P-032",
       "notes": [
         "Closeout must include scenario-level policy verdict table and CI outputs; no unresolved high-severity blockers.",
         "Closeout packet must include artifact matrix, deterministic digests, exception caps, and unresolved-risk table."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Build final closeout packet and execute Go/No-Go scoring for Planes v2 rollout"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:P-032",
         "team:runtime",
@@ -6701,6 +6748,19 @@
       "depends_on": [
         "T-3416"
       ],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: P-026 non-regression CI guard passed; deterministic debug evidence preserved.",
+        "received": true,
+        "received_at": "2026-03-09T02:20:25+00:00"
+      },
       "id": "T-3418",
       "milestone_id": "P-032",
       "notes": [
@@ -6708,7 +6768,7 @@
         "Must preserve incremental-present caps and determinism replay semantics from P-026 unless explicitly re-baselined with evidence.",
         "Must include visual evidence table + policy verdict in non-regression gate outputs."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "standard",
       "title": "Run P-026 non-regression evidence gate for Planes v2 path"
     },
@@ -6876,18 +6936,38 @@
       "title": "[CLOSEOUT HARNESS] Define F-031 compatibility/migration closeout metric and evidence harness"
     },
     {
+      "actuals": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reopen_count": 0,
+        "tool_calls": 0,
+        "wall_time_sec": 0
+      },
       "board_refs": [
         "milestone:P-032",
         "team:platform-ci",
         "specialist:pm"
       ],
       "depends_on": [],
+      "done_gate": {
+        "edge_case_tests_passed": true,
+        "implementation_tests_passed": true,
+        "merged_to_main": true,
+        "required_checks_passed_on_main": true,
+        "safety_tests_passed": true,
+        "success_criteria_met": true
+      },
+      "go_no_go": {
+        "message": "GO: closeout harness contract and evidence profile validated for P-032.",
+        "received": true,
+        "received_at": "2026-03-09T02:20:22+00:00"
+      },
       "id": "T-3424",
       "milestone_id": "P-032",
       "notes": [
         "Milestone-level scoring + hard no-go criteria + evidence/command profile for Go/No-Go decision."
       ],
-      "status": "Intake",
+      "status": "Done",
       "task_type": "closeout_harness",
       "title": "[CLOSEOUT HARNESS] Define P-032 rollout go/no-go closeout metric and evidence harness"
     },

@@ -1841,6 +1841,11 @@
       ],
       "emoji": "\ud83d\udea6",
       "end_week": 24,
+      "go_no_go": {
+        "message": "GO: P-032 rollout gates passed; non-regression evidence and canonical closeout validations are green.",
+        "received": true,
+        "received_at": "2026-03-09T02:23:09+00:00"
+      },
       "id": "P-032",
       "lifecycle_events": [
         {
@@ -1852,7 +1857,7 @@
       ],
       "name": "Planes v2 rollout non-regression gates + Go/No-Go closeout",
       "start_week": 22,
-      "status": "Planned",
+      "status": "Complete",
       "success_criteria": [
         "Feature flags and rollback points defined and tested.",
         "Go/No-Go closeout is evidence-backed and reproducible."

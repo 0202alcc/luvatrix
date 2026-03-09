@@ -31,6 +31,14 @@ class ScrollIntent:
     event_count: int = 1
 
 
+@dataclass(frozen=True)
+class PlanesV2RolloutFlags:
+    schema_enabled: bool
+    compiler_enabled: bool
+    runtime_enabled: bool
+    rollback_to_compat_adapter_default: bool
+
+
 class PlaneApp:
     """Framework-managed Planes runtime lifecycle for App Protocol apps."""
 
@@ -64,6 +72,7 @@ class PlaneApp:
             "LUVATRIX_INTENT_QUEUE_ENABLED",
             default=True,
         )
+        self._planes_v2_rollout_flags = resolve_planes_v2_rollout_flags()
 
         self._planes = json.loads(self._plane_path.read_text(encoding="utf-8"))
         self.metadata = resolve_web_metadata(self._planes["app"])
@@ -80,6 +89,13 @@ class PlaneApp:
         self.state.setdefault("scroll_bitmap_cache_enabled", self._scroll_bitmap_cache_enabled_default)
         self.state.setdefault("scroll_scheduler_enabled", self._scroll_scheduler_enabled_default)
         self.state.setdefault("intent_queue_enabled", self._intent_queue_enabled_default)
+        self.state.setdefault("planes_v2_schema_enabled", self._planes_v2_rollout_flags.schema_enabled)
+        self.state.setdefault("planes_v2_compiler_enabled", self._planes_v2_rollout_flags.compiler_enabled)
+        self.state.setdefault("planes_v2_runtime_enabled", self._planes_v2_rollout_flags.runtime_enabled)
+        self.state.setdefault(
+            "planes_v2_rollback_to_compat_adapter_default",
+            self._planes_v2_rollout_flags.rollback_to_compat_adapter_default,
+        )
         self.state.setdefault("force_full_invalidation", False)
         self.state.setdefault("force_full_invalidation_reason", None)
         self.state.setdefault(
@@ -2326,6 +2342,23 @@ def _scroll_intent_from_event(event_type: str, payload: dict[str, Any], device: 
         momentum = str(momentum_phase) if isinstance(momentum_phase, str) and momentum_phase else None
         return ScrollIntent(delta_x=-dx, delta_y=-dy, source="touch_drag", phase=phase, momentum_phase=momentum)
     return None
+
+
+def resolve_planes_v2_rollout_flags() -> PlanesV2RolloutFlags:
+    rollback = _env_flag("LUVATRIX_PLANES_V2_ROLLBACK_COMPAT_ADAPTER_DEFAULT", default=False)
+    if rollback:
+        return PlanesV2RolloutFlags(
+            schema_enabled=False,
+            compiler_enabled=False,
+            runtime_enabled=False,
+            rollback_to_compat_adapter_default=True,
+        )
+    return PlanesV2RolloutFlags(
+        schema_enabled=_env_flag("LUVATRIX_PLANES_V2_SCHEMA", default=True),
+        compiler_enabled=_env_flag("LUVATRIX_PLANES_V2_COMPILER", default=True),
+        runtime_enabled=_env_flag("LUVATRIX_PLANES_V2_RUNTIME", default=True),
+        rollback_to_compat_adapter_default=False,
+    )
 
 
 def _env_flag(name: str, *, default: bool) -> bool:
