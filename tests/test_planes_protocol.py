@@ -239,6 +239,30 @@ class PlanesProtocolTests(unittest.TestCase):
         self.assertAlmostEqual(float(world.width), 400.0)
         self.assertAlmostEqual(float(world.height), 150.0)
 
+    def test_compile_accepts_unitized_string_size_shorthand(self) -> None:
+        payload = _base_payload_v2()
+        payload["planes"][0]["size"] = {"width": "100vw", "height": "100vh"}  # type: ignore[index]
+        payload["components"][1]["size"] = {"width": "50vw", "height": "10vh"}  # type: ignore[index]
+        page = compile_planes_to_ui_ir(payload, matrix_width=640, matrix_height=360)
+        world_plane = next(p for p in page.plane_manifest if p.plane_id == "world")
+        overlay = next(c for c in page.components if c.component_id == "title_overlay")
+        self.assertAlmostEqual(float(world_plane.resolved_bounds.width), 640.0)
+        self.assertAlmostEqual(float(world_plane.resolved_bounds.height), 360.0)
+        self.assertAlmostEqual(float(overlay.width), 320.0)
+        self.assertAlmostEqual(float(overlay.height), 36.0)
+
+    def test_compile_accepts_unitized_string_positions(self) -> None:
+        payload = _base_payload_v2()
+        payload["components"][0]["position"] = {"x": "50%", "y": "25%", "frame": "screen_tl"}  # type: ignore[index]
+        payload["planes"][1]["position"] = {"x": "10vw", "y": "5vh", "frame": "screen_tl"}  # type: ignore[index]
+        page = compile_planes_to_ui_ir(payload, matrix_width=640, matrix_height=360)
+        world = next(c for c in page.components if c.component_id == "world_svg")
+        overlay_plane = next(p for p in page.plane_manifest if p.plane_id == "overlay_plane")
+        self.assertAlmostEqual(float(world.position.x), 400.0)
+        self.assertAlmostEqual(float(world.position.y), 150.0)
+        self.assertAlmostEqual(float(overlay_plane.resolved_position.x), 64.0)
+        self.assertAlmostEqual(float(overlay_plane.resolved_position.y), 18.0)
+
     def test_compile_v2_produces_planes_v2_ir(self) -> None:
         page = compile_planes_to_ui_ir(_base_payload_v2(), matrix_width=640, matrix_height=360)
         self.assertEqual(page.ir_version, "planes-v2")

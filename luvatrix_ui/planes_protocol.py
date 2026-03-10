@@ -297,8 +297,24 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
             ),
             f"planes[{i}].size",
         )
-        px = float(pos.get("x", 0.0))
-        py = float(pos.get("y", 0.0))
+        px = _resolve_unitized_scalar(
+            pos.get("x", 0.0),
+            viewport_w=matrix_width,
+            viewport_h=matrix_height,
+            parent_w=float(matrix_width),
+            parent_h=float(matrix_height),
+            axis="x",
+            name=f"planes[{i}].position.x",
+        )
+        py = _resolve_unitized_scalar(
+            pos.get("y", 0.0),
+            viewport_w=matrix_width,
+            viewport_h=matrix_height,
+            parent_w=float(matrix_width),
+            parent_h=float(matrix_height),
+            axis="y",
+            name=f"planes[{i}].position.y",
+        )
         pw = _resolve_dimension(size.get("width"), matrix_width, matrix_height)
         ph = _resolve_dimension(size.get("height"), matrix_width, matrix_height)
         plane_ref = UIIRPlaneRef(
@@ -327,10 +343,42 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
                 owner_plane_id=_require_str(cut.get("owner_plane_id"), f"section_cuts[{i}].owner_plane_id"),
                 target_plane_ids=tuple(str(t) for t in cut.get("target_plane_ids", []) if isinstance(t, str)),
                 region_bounds=BoundingBoxSpec(
-                    x=float(region.get("x", 0.0)),
-                    y=float(region.get("y", 0.0)),
-                    width=float(region.get("width", 0.0)),
-                    height=float(region.get("height", 0.0)),
+                    x=_resolve_unitized_scalar(
+                        region.get("x", 0.0),
+                        viewport_w=matrix_width,
+                        viewport_h=matrix_height,
+                        parent_w=float(matrix_width),
+                        parent_h=float(matrix_height),
+                        axis="x",
+                        name=f"section_cuts[{i}].region.x",
+                    ),
+                    y=_resolve_unitized_scalar(
+                        region.get("y", 0.0),
+                        viewport_w=matrix_width,
+                        viewport_h=matrix_height,
+                        parent_w=float(matrix_width),
+                        parent_h=float(matrix_height),
+                        axis="y",
+                        name=f"section_cuts[{i}].region.y",
+                    ),
+                    width=_resolve_unitized_scalar(
+                        region.get("width", 0.0),
+                        viewport_w=matrix_width,
+                        viewport_h=matrix_height,
+                        parent_w=float(matrix_width),
+                        parent_h=float(matrix_height),
+                        axis="x",
+                        name=f"section_cuts[{i}].region.width",
+                    ),
+                    height=_resolve_unitized_scalar(
+                        region.get("height", 0.0),
+                        viewport_w=matrix_width,
+                        viewport_h=matrix_height,
+                        parent_w=float(matrix_width),
+                        parent_h=float(matrix_height),
+                        axis="y",
+                        name=f"section_cuts[{i}].region.height",
+                    ),
                     frame=None if region.get("frame") is None else str(region.get("frame")),
                 ),
                 enabled=bool(cut.get("enabled", True)),
@@ -465,8 +513,24 @@ def _compile_component(
         int(component_local_z),
         int(mount_order),
     )
-    px = float(pos.get("x", 0.0))
-    py = float(pos.get("y", 0.0))
+    px = _resolve_unitized_scalar(
+        pos.get("x", 0.0),
+        viewport_w=matrix_width,
+        viewport_h=matrix_height,
+        parent_w=parent_width,
+        parent_h=parent_height,
+        axis="x",
+        name="component.position.x",
+    )
+    py = _resolve_unitized_scalar(
+        pos.get("y", 0.0),
+        viewport_w=matrix_width,
+        viewport_h=matrix_height,
+        parent_w=parent_width,
+        parent_h=parent_height,
+        axis="y",
+        name="component.position.y",
+    )
     comp_frame = frame if isinstance(frame, str) else default_frame
     world_bounds = BoundingBoxSpec(x=px, y=py, width=width, height=height, frame=comp_frame)
     return UIIRComponent(
@@ -524,6 +588,12 @@ def _validate_v2_payload(payload: dict[str, Any], *, strict: bool) -> None:
             _require_str(frame, f"planes[{i}].default_frame")
         _resolve_plane_depth(plane, f"planes[{i}]", strict=strict)
         _expect_obj(plane.get("background", {}), f"planes[{i}].background")
+        position = _expect_obj(plane.get("position", {"x": 0.0, "y": 0.0}), f"planes[{i}].position")
+        _validate_numeric_or_unitized(position.get("x", 0.0), f"planes[{i}].position.x")
+        _validate_numeric_or_unitized(position.get("y", 0.0), f"planes[{i}].position.y")
+        size = _expect_obj(plane.get("size", {"width": {"unit": "px", "value": 0}, "height": {"unit": "px", "value": 0}}), f"planes[{i}].size")
+        _validate_dimension_value(size.get("width"), f"planes[{i}].size.width", allow_auto=False)
+        _validate_dimension_value(size.get("height"), f"planes[{i}].size.height", allow_auto=False)
 
     cuts = payload.get("section_cuts", [])
     if not isinstance(cuts, list):
@@ -540,7 +610,11 @@ def _validate_v2_payload(payload: dict[str, Any], *, strict: bool) -> None:
         for t in targets:
             if not isinstance(t, str) or t not in plane_ids:
                 raise PlanesValidationError(f"section_cuts[{i}] has unknown target plane `{t}`")
-        _expect_obj(cut.get("region"), f"section_cuts[{i}].region")
+        region = _expect_obj(cut.get("region"), f"section_cuts[{i}].region")
+        _validate_numeric_or_unitized(region.get("x", 0.0), f"section_cuts[{i}].region.x")
+        _validate_numeric_or_unitized(region.get("y", 0.0), f"section_cuts[{i}].region.y")
+        _validate_numeric_or_unitized(region.get("width", 0.0), f"section_cuts[{i}].region.width")
+        _validate_numeric_or_unitized(region.get("height", 0.0), f"section_cuts[{i}].region.height")
 
     routes = payload.get("routes", [])
     if not isinstance(routes, list):
@@ -597,8 +671,12 @@ def _validate_components(
             raise PlanesValidationError(f"duplicate component id: {comp_id}")
         component_ids.add(comp_id)
         _require_str(comp_obj.get("type"), f"components[{i}].type")
-        _expect_obj(comp_obj.get("position"), f"components[{i}].position")
-        _expect_obj(comp_obj.get("size"), f"components[{i}].size")
+        position = _expect_obj(comp_obj.get("position"), f"components[{i}].position")
+        _validate_numeric_or_unitized(position.get("x", 0.0), f"components[{i}].position.x")
+        _validate_numeric_or_unitized(position.get("y", 0.0), f"components[{i}].position.y")
+        size = _expect_obj(comp_obj.get("size"), f"components[{i}].size")
+        _validate_dimension_value(size.get("width"), f"components[{i}].size.width", allow_auto=True)
+        _validate_dimension_value(size.get("height"), f"components[{i}].size.height", allow_auto=True)
         if not isinstance(comp_obj.get("z_index", 0), int):
             raise PlanesValidationError(f"components[{i}].z_index must be int")
         anchor = comp_obj.get("anchor")
@@ -651,8 +729,8 @@ def _validate_components(
                 raise PlanesValidationError("viewport requires props.clip=true")
             _require_str(props.get("content_ref"), f"components[{i}].props.content_ref")
             scroll = _expect_obj(props.get("scroll", {}), f"components[{i}].props.scroll")
-            if not isinstance(scroll.get("x", 0), (int, float)) or not isinstance(scroll.get("y", 0), (int, float)):
-                raise PlanesValidationError("viewport props.scroll requires numeric x/y")
+            _validate_numeric_or_unitized(scroll.get("x", 0.0), f"components[{i}].props.scroll.x")
+            _validate_numeric_or_unitized(scroll.get("y", 0.0), f"components[{i}].props.scroll.y")
 
 
 def _resolve_route_activation(routes_raw: list[Any], planes: list[UIIRPlaneRef]) -> tuple[str | None, tuple[str, ...]]:
@@ -701,6 +779,16 @@ def _resolve_dimension(
     parent_h: float | None = None,
     axis: str = "x",
 ) -> float:
+    if isinstance(raw, (int, float, str)):
+        return _resolve_unitized_scalar(
+            raw,
+            viewport_w=viewport_w,
+            viewport_h=viewport_h,
+            parent_w=parent_w,
+            parent_h=parent_h,
+            axis=axis,
+            name="dimension",
+        )
     spec = _expect_obj(raw, "dimension")
     unit = _require_str(spec.get("unit"), "dimension.unit")
     value = spec.get("value")
@@ -737,6 +825,18 @@ def _resolve_component_dimension(
 ) -> tuple[float, bool]:
     if isinstance(raw, str) and raw.strip().lower() == "auto":
         return (0.0, True)
+    if isinstance(raw, (int, float, str)):
+        return (
+            _resolve_dimension(
+                raw,
+                viewport_w,
+                viewport_h,
+                parent_w=parent_w,
+                parent_h=parent_h,
+                axis=axis,
+            ),
+            False,
+        )
     spec = _expect_obj(raw, "dimension")
     unit = _require_str(spec.get("unit"), "dimension.unit")
     if unit == "auto":
@@ -789,6 +889,83 @@ def _require_str(value: Any, name: str) -> str:
 
 
 _ANCHOR_UNIT_PATTERN = re.compile(r"^\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*(%|px|em|vw|vh)\s*$", re.IGNORECASE)
+_SCALAR_UNIT_PATTERN = re.compile(r"^\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*(px|vw|vh|%|pt|cm)\s*$", re.IGNORECASE)
+
+
+def _resolve_unitized_scalar(
+    raw: Any,
+    *,
+    viewport_w: int,
+    viewport_h: int,
+    parent_w: float | None,
+    parent_h: float | None,
+    axis: str,
+    name: str,
+) -> float:
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        text = raw.strip().lower()
+        if not text:
+            raise PlanesValidationError(f"{name} must be numeric or unitized string")
+        match = _SCALAR_UNIT_PATTERN.match(text)
+        if match is not None:
+            value = float(match.group(1))
+            unit = str(match.group(2)).lower()
+            if unit == "px":
+                return value
+            if unit == "vw":
+                return (value / 100.0) * float(viewport_w)
+            if unit == "vh":
+                return (value / 100.0) * float(viewport_h)
+            if unit == "%":
+                if axis == "y":
+                    reference = float(parent_h if parent_h is not None else viewport_h)
+                else:
+                    reference = float(parent_w if parent_w is not None else viewport_w)
+                return (value / 100.0) * reference
+            if unit == "pt":
+                return value * (96.0 / 72.0)
+            if unit == "cm":
+                return value * (96.0 / 2.54)
+        try:
+            return float(text)
+        except ValueError as exc:  # noqa: PERF203
+            raise PlanesValidationError(f"{name} has unsupported unit format: `{raw}`") from exc
+    raise PlanesValidationError(f"{name} must be numeric or unitized string")
+
+
+def _validate_numeric_or_unitized(value: Any, name: str) -> None:
+    _resolve_unitized_scalar(
+        value,
+        viewport_w=1,
+        viewport_h=1,
+        parent_w=1.0,
+        parent_h=1.0,
+        axis="x",
+        name=name,
+    )
+
+
+def _validate_dimension_value(value: Any, name: str, *, allow_auto: bool) -> None:
+    if isinstance(value, str) and value.strip().lower() == "auto":
+        if allow_auto:
+            return
+        raise PlanesValidationError(f"{name} does not support `auto`")
+    if isinstance(value, (int, float, str)):
+        _validate_numeric_or_unitized(value, name)
+        return
+    spec = _expect_obj(value, name)
+    unit = _require_str(spec.get("unit"), f"{name}.unit").lower()
+    if unit == "auto":
+        if allow_auto:
+            return
+        raise PlanesValidationError(f"{name} does not support unit `auto`")
+    if unit not in {"px", "vw", "vh", "%", "pt", "cm"}:
+        raise PlanesValidationError(f"{name}.unit unsupported: `{unit}`")
+    raw_value = spec.get("value")
+    if not isinstance(raw_value, (int, float)):
+        raise PlanesValidationError(f"{name}.value must be numeric")
 
 
 def _validate_anchor_value(value: Any, name: str) -> None:
