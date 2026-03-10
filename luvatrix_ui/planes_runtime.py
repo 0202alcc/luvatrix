@@ -1386,9 +1386,25 @@ class PlaneApp:
                 continue
             if not self._component_is_active(component):
                 continue
-            cx, cy = self._resolved_position(component)
+            cx, cy = self._component_origin_reference_point(component)
             points.append((component.component_id, float(cx), float(cy)))
         return points
+
+    def _component_origin_reference_point(self, component) -> tuple[float, float]:
+        if self._ui_page is None:
+            return self._resolved_position(component)
+        props = component.style if isinstance(component.style, dict) else {}
+        layout_w, layout_h = self._component_layout_size(component, props=props)
+        anchor_x_px, anchor_y_px = self._resolve_anchor_offset_px(
+            component=component,
+            layout_w=float(layout_w),
+            layout_h=float(layout_h),
+            viewport_w=float(self._ui_page.matrix.width),
+            viewport_h=float(self._ui_page.matrix.height),
+            props=props,
+        )
+        resolved_x, resolved_y = self._resolved_position(component)
+        return (float(resolved_x + anchor_x_px), float(resolved_y + anchor_y_px))
 
     @staticmethod
     def _origin_axis_svg(*, axis_length: float, color_hex: str, horizontal: bool) -> str:
