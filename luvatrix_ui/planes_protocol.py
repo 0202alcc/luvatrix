@@ -513,13 +513,25 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
     components: list[UIIRComponent] = []
     for mount_order, comp in enumerate(components_raw):
         comp_obj = _expect_obj(comp, "component")
-        attachment_kind = str(comp_obj.get("attachment_kind", "plane"))
-        attach_to = comp_obj.get("attach_to")
-        plane_id = str(attach_to) if isinstance(attach_to, str) else None
+        attach_to_raw = comp_obj.get("attach_to")
+        attach_to_norm = str(attach_to_raw).strip() if isinstance(attach_to_raw, str) else None
+        legacy_kind = str(comp_obj.get("attachment_kind", "plane")).strip().lower()
+        if isinstance(attach_to_norm, str) and attach_to_norm:
+            if attach_to_norm in {"camera_overlay", "camera"}:
+                attachment_kind = "camera_overlay"
+                plane_id = None
+            else:
+                attachment_kind = "plane"
+                plane_id = attach_to_norm
+        else:
+            attachment_kind = "camera_overlay" if legacy_kind == "camera_overlay" else "plane"
+            plane_id = None
         plane_global_z: int | None = None
         if attachment_kind == "plane":
             if plane_id is None:
                 plane_id = ordered_planes[0].plane_id
+            if plane_id not in plane_map:
+                raise PlanesValidationError(f"components[{mount_order}].attach_to references unknown plane `{plane_id}`")
             plane_global_z = plane_map[plane_id].plane_global_z
             default_component_frame = plane_map[plane_id].default_frame
             parent_width = float(plane_map[plane_id].resolved_bounds.width)
@@ -621,11 +633,7 @@ def _compile_component(
         svg_source = _require_str(style.get("svg"), "component.props.svg")
         asset = UIIRAsset(kind="svg", source=svg_source)
 
-    attachment_kind = str(comp_obj.get("attachment_kind", default_attachment_kind))
-    if strict and attachment_kind not in {"plane", "camera_overlay"}:
-        raise PlanesValidationError("component.attachment_kind must be `plane` or `camera_overlay`")
-    if attachment_kind not in {"plane", "camera_overlay"}:
-        attachment_kind = default_attachment_kind
+    attachment_kind = "camera_overlay" if default_attachment_kind == "camera_overlay" else "plane"
     component_local_z = int(comp_obj.get("component_local_z", comp_obj.get("z_index", 0)))
     blend_mode = str(comp_obj.get("blend_mode", "absolute_rgba"))
     if blend_mode not in {"absolute_rgba", "delta_rgba"}:
@@ -835,14 +843,34 @@ def _validate_components(
 
         if has_v2:
             attachment_kind = comp_obj.get("attachment_kind")
-            if strict and not isinstance(attachment_kind, str):
-                raise PlanesValidationError(f"components[{i}].attachment_kind is required in strict v2 mode")
             if attachment_kind is not None and attachment_kind not in {"plane", "camera_overlay"}:
                 raise PlanesValidationError(f"components[{i}].attachment_kind invalid")
-            if isinstance(attachment_kind, str) and attachment_kind == "plane":
-                attach_to = comp_obj.get("attach_to")
-                if not isinstance(attach_to, str) or attach_to not in plane_ids:
-                    raise PlanesValidationError(f"components[{i}].attach_to must reference an existing plane")
+            attach_to = comp_obj.get("attach_to")
+            attach_to_norm: str | None = None
+            if attach_to is not None:
+                if not isinstance(attach_to, str) or not attach_to.strip():
+                    raise PlanesValidationError(f"components[{i}].attach_to must be a non-empty string")
+                attach_to_norm = attach_to.strip()
+                if attach_to_norm in {"camera_overlay", "camera"}:
+                    if attachment_kind == "plane":
+                        raise PlanesValidationError(
+                            f"components[{i}] has conflicting attachment_kind `plane` with attach_to `{attach_to_norm}`"
+                        )
+                else:
+                    if attach_to_norm not in plane_ids:
+                        raise PlanesValidationError(
+                            f"components[{i}].attach_to must reference an existing plane or `camera_overlay`/`camera`"
+                        )
+                    if attachment_kind == "camera_overlay":
+                        raise PlanesValidationError(
+                            f"components[{i}] has conflicting attachment_kind `camera_overlay` with plane attach_to"
+                        )
+            if strict and not isinstance(attachment_kind, str) and attach_to_norm is None:
+                raise PlanesValidationError(
+                    f"components[{i}] must define either attachment_kind or attach_to in strict v2 mode"
+                )
+            if isinstance(attachment_kind, str) and attachment_kind == "plane" and attach_to_norm is None:
+                raise PlanesValidationError(f"components[{i}].attach_to must reference an existing plane")
 
         functions = comp_obj.get("functions", {})
         if not isinstance(functions, dict):

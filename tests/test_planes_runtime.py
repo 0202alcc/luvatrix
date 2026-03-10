@@ -1797,36 +1797,38 @@ class PlanesRuntimeTests(unittest.TestCase):
             mixed_on_ids = [str(comp.component_id) for comp in mixed_ctx.mounted]
             self.assertNotEqual(mixed_off_ids, mixed_on_ids)
 
-        hello_plane_path = Path(__file__).resolve().parents[1] / "examples" / "planes_v2" / "hello_plane" / "plane.json"
-        hello_app = load_plane_app(hello_plane_path, handlers={})
-        hello_ctx = _FakeCtx(width=320, height=180)
-        hello_app.init(hello_ctx)
-        hello_app.state["origin_refs_enabled"] = False
-        hello_app.loop(hello_ctx, 0.016)
-        hello_off_ids = [str(comp.component_id) for comp in hello_ctx.mounted]
-        hello_app.state["origin_refs_enabled"] = True
-        hello_app.state["force_full_invalidation"] = True
-        hello_app.state["force_full_invalidation_reason"] = "origin-refs-visual-hello"
-        hello_ctx.mounted = []
-        hello_app.loop(hello_ctx, 0.016)
-        hello_on_ids = [str(comp.component_id) for comp in hello_ctx.mounted]
-        self.assertNotEqual(hello_off_ids, hello_on_ids)
+        with tempfile.TemporaryDirectory() as td:
+            cart_plane_path = _build_plane_v2_cartesian_center_file(Path(td))
+            cart_app = load_plane_app(cart_plane_path, handlers={})
+            cart_ctx = _FakeCtx(width=320, height=180)
+            cart_app.init(cart_ctx)
+            cart_app.state["origin_refs_enabled"] = False
+            cart_app.loop(cart_ctx, 0.016)
+            cart_off_ids = [str(comp.component_id) for comp in cart_ctx.mounted]
+            cart_app.state["origin_refs_enabled"] = True
+            cart_app.state["force_full_invalidation"] = True
+            cart_app.state["force_full_invalidation_reason"] = "origin-refs-visual-cartesian"
+            cart_ctx.mounted = []
+            cart_app.loop(cart_ctx, 0.016)
+            cart_on_ids = [str(comp.component_id) for comp in cart_ctx.mounted]
+            self.assertNotEqual(cart_off_ids, cart_on_ids)
 
     def test_origin_refs_use_component_anchor_for_hello_plane_title(self) -> None:
-        hello_plane_path = Path(__file__).resolve().parents[1] / "examples" / "planes_v2" / "hello_plane" / "plane.json"
-        hello_app = load_plane_app(hello_plane_path, handlers={})
-        hello_ctx = _FakeCtx(width=320, height=180)
-        hello_app.init(hello_ctx)
-        entities = hello_app._origin_reference_entities()  # type: ignore[attr-defined]
-        title = next(item for item in entities if item[0] == "title_text")
-        expected_x, expected_y = hello_app._transform_point_between_frames(  # type: ignore[attr-defined]
-            0.0,
-            0.0,
-            from_frame="cartesian_center",
-            to_frame="screen_tl",
-        )
-        self.assertAlmostEqual(float(title[1]), float(expected_x), places=3)
-        self.assertAlmostEqual(float(title[2]), float(expected_y), places=3)
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_v2_cartesian_center_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            entities = app._origin_reference_entities()  # type: ignore[attr-defined]
+            title = next(item for item in entities if item[0] == "title")
+            expected_x, expected_y = app._transform_point_between_frames(  # type: ignore[attr-defined]
+                0.0,
+                0.0,
+                from_frame="cartesian_center",
+                to_frame="screen_tl",
+            )
+            self.assertAlmostEqual(float(title[1]), float(expected_x), places=3)
+            self.assertAlmostEqual(float(title[2]), float(expected_y), places=3)
 
     def test_runtime_resolves_inline_position_frame_object(self) -> None:
         with tempfile.TemporaryDirectory() as td:

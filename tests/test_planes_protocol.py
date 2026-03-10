@@ -295,11 +295,26 @@ class PlanesProtocolTests(unittest.TestCase):
         self.assertEqual(world.plane_id, "world")
         self.assertEqual(overlay.attachment_kind, "camera_overlay")
 
-    def test_validate_v2_rejects_missing_attachment_kind_in_strict_mode(self) -> None:
+    def test_validate_v2_allows_attach_to_only_in_strict_mode(self) -> None:
         payload = _base_payload_v2()
         payload["components"][0].pop("attachment_kind")  # type: ignore[index]
+        validate_planes_payload(payload, strict=True)
+
+    def test_validate_v2_rejects_missing_attachment_target_and_kind(self) -> None:
+        payload = _base_payload_v2()
+        payload["components"][0].pop("attachment_kind")  # type: ignore[index]
+        payload["components"][0].pop("attach_to")  # type: ignore[index]
         with self.assertRaises(PlanesValidationError):
             validate_planes_payload(payload, strict=True)
+
+    def test_compile_v2_accepts_attach_to_camera_short_alias(self) -> None:
+        payload = _base_payload_v2()
+        payload["components"][1].pop("attachment_kind")  # type: ignore[index]
+        payload["components"][1]["attach_to"] = "camera"  # type: ignore[index]
+        page = compile_planes_to_ui_ir(payload, matrix_width=640, matrix_height=360)
+        overlay = next(c for c in page.components if c.component_id == "title_overlay")
+        self.assertEqual(overlay.attachment_kind, "camera_overlay")
+        self.assertIsNone(overlay.plane_id)
 
 
 if __name__ == "__main__":
