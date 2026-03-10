@@ -121,6 +121,7 @@ class PlaneApp:
         self._frame_counts: dict[str, int] = {}
         self._retained_mount_cache: dict[str, tuple[tuple[Any, ...], Any]] = {}
         self._layout_position_cache: dict[str, tuple[tuple[Any, ...], tuple[float, float]]] = {}
+        self._layout_resolve_stack: set[str] = set()
         self._interaction_bounds_cache: dict[str, tuple[tuple[Any, ...], Any]] = {}
         self._layout_cache_signature: tuple[tuple[float, float], tuple[str, ...]] | None = None
         self._auto_component_size: dict[str, tuple[float, float]] = {}
@@ -893,12 +894,24 @@ class PlaneApp:
 
     def _resolved_position(self, component) -> tuple[float, float]:
         self._ensure_layout_cache_state()
+        component_id = str(component.component_id)
+        if component_id in self._layout_resolve_stack:
+            x, y = self._resolved_position_base(component, skip_component_attachment=True)
+            if not (self._is_overlay_attached(component) or self._is_camera_fixed(component)):
+                plane_x, plane_y = self._plane_scroll_position()
+                x -= plane_x
+                y -= plane_y
+            return (x, y)
         key = self._resolved_position_cache_key(component)
         cached = self._layout_position_cache.get(component.component_id)
         if cached is not None and cached[0] == key:
             self._frame_counts["layout_cache_hits"] = int(self._frame_counts.get("layout_cache_hits", 0)) + 1
             return cached[1]
-        x, y = self._resolved_position_base(component)
+        self._layout_resolve_stack.add(component_id)
+        try:
+            x, y = self._resolved_position_base(component)
+        finally:
+            self._layout_resolve_stack.discard(component_id)
         if not (self._is_overlay_attached(component) or self._is_camera_fixed(component)):
             plane_x, plane_y = self._plane_scroll_position()
             x -= plane_x
@@ -925,6 +938,23 @@ class PlaneApp:
         else:
             plane_frame = ""
         component_frame = component.resolved_frame(self._ui_page.default_frame) if self._ui_page is not None else ""
+        parent_attach_id = props.get("attach_to_component_id")
+        if isinstance(parent_attach_id, str):
+            parent_component = self._component_index.get(parent_attach_id)
+            if parent_component is not None:
+                parent_props = parent_component.style if isinstance(parent_component.style, dict) else {}
+                parent_sig = (
+                    parent_attach_id,
+                    float(parent_component.position.x),
+                    float(parent_component.position.y),
+                    str(parent_component.position.frame or ""),
+                    parent_props.get("anchor_x"),
+                    parent_props.get("anchor_y"),
+                )
+            else:
+                parent_sig = (str(parent_attach_id), "missing")
+        else:
+            parent_sig = ("",)
         return (
             float(component.position.x),
             float(component.position.y),
@@ -946,6 +976,7 @@ class PlaneApp:
             str(props.get("align", "")),
             str(props.get("v_align", "")),
             float(props.get("margin_bottom_px", 0.0)),
+            parent_sig,
         )
 
     def _resolved_interaction_bounds(self, component):
@@ -2094,7 +2125,7 @@ class PlaneApp:
     def _ns_to_ms(value_ns: float) -> float:
         return float(value_ns) / 1_000_000.0
 
-    def _resolved_position_base(self, component) -> tuple[float, float]:
+    def _resolved_position_base(self, component, *, skip_component_attachment: bool = False) -> tuple[float, float]:
         if self._ui_page is None:
             return (float(component.position.x), float(component.position.y))
         component_frame = component.resolved_frame(self._ui_page.default_frame)
@@ -2119,6 +2150,20 @@ class PlaneApp:
                         )
                     x += plane_x
                     y += plane_y
+            if not skip_component_attachment:
+                parent_attach_id = props.get("attach_to_component_id")
+                if isinstance(parent_attach_id, str) and parent_attach_id:
+                    parent_component = self._component_index.get(parent_attach_id)
+                    if parent_component is not None and parent_component is not component:
+                        parent_sx, parent_sy = self._component_origin_reference_point(parent_component)
+                        parent_x, parent_y = self._transform_point_between_frames(
+                            parent_sx,
+                            parent_sy,
+                            from_frame="screen_tl",
+                            to_frame=component_frame,
+                        )
+                        x += float(parent_x)
+                        y += float(parent_y)
         x, y = self._transform_point_to_screen_tl(x, y, from_frame=component_frame)
         align = str(props.get("align", "")).lower()
         if align == "center":

@@ -316,6 +316,32 @@ class PlanesProtocolTests(unittest.TestCase):
         self.assertEqual(overlay.attachment_kind, "camera_overlay")
         self.assertIsNone(overlay.plane_id)
 
+    def test_compile_v2_accepts_typed_targets(self) -> None:
+        payload = _base_payload_v2()
+        payload["components"][0]["attach_to"] = "plane:world"  # type: ignore[index]
+        payload["components"][1]["attach_to"] = "component:world#world_svg"  # type: ignore[index]
+        payload["components"][1].pop("attachment_kind")  # type: ignore[index]
+        page = compile_planes_to_ui_ir(payload, matrix_width=640, matrix_height=360)
+        overlay = next(c for c in page.components if c.component_id == "title_overlay")
+        self.assertEqual(overlay.attachment_kind, "plane")
+        self.assertEqual(overlay.plane_id, "world")
+        self.assertEqual(str(overlay.style.get("attach_to_component_id")), "world_svg")
+
+    def test_validate_v2_rejects_unknown_typed_attach_to(self) -> None:
+        payload = _base_payload_v2()
+        payload["components"][0]["attach_to"] = "widget:oops"  # type: ignore[index]
+        with self.assertRaises(PlanesValidationError):
+            validate_planes_payload(payload, strict=True)
+
+    def test_validate_v2_rejects_component_attach_cycle(self) -> None:
+        payload = _base_payload_v2()
+        payload["components"][0]["attach_to"] = "component:world#title_overlay"  # type: ignore[index]
+        payload["components"][1]["attach_to"] = "component:world#world_svg"  # type: ignore[index]
+        payload["components"][0].pop("attachment_kind")  # type: ignore[index]
+        payload["components"][1].pop("attachment_kind")  # type: ignore[index]
+        with self.assertRaises(PlanesValidationError):
+            validate_planes_payload(payload, strict=True)
+
 
 if __name__ == "__main__":
     unittest.main()

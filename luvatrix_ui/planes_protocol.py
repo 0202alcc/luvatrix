@@ -131,6 +131,36 @@ class _InlineFrameResolver:
         return tuple(self._specs)
 
 
+def _parse_attach_to_target(raw: Any, *, name: str) -> tuple[str, str | None, str | None]:
+    if raw is None:
+        return ("unspecified", None, None)
+    if not isinstance(raw, str) or not raw.strip():
+        raise PlanesValidationError(f"{name} must be a non-empty string when provided")
+    token = raw.strip()
+    lowered = token.lower()
+    if lowered in {"camera", "camera_overlay"}:
+        return ("camera_overlay", None, None)
+    if lowered.startswith("plane:"):
+        plane_id = token[len("plane:") :].strip()
+        if not plane_id:
+            raise PlanesValidationError(f"{name} plane target must include plane id")
+        return ("plane", plane_id, None)
+    if lowered.startswith("component:"):
+        target = token[len("component:") :].strip()
+        if "#" not in target:
+            raise PlanesValidationError(f"{name} component target must use `component:<plane_id>#<component_id>`")
+        plane_id, component_id = target.split("#", 1)
+        plane_id = plane_id.strip()
+        component_id = component_id.strip()
+        if not plane_id or not component_id:
+            raise PlanesValidationError(f"{name} component target must include plane and component id")
+        return ("component", plane_id, component_id)
+    if ":" in token:
+        raise PlanesValidationError(f"{name} has unsupported typed target `{token}`")
+    # Backward compatibility: plain token means plane id.
+    return ("plane", token, None)
+
+
 @dataclass(frozen=True)
 class PlanesAppMetadata:
     title: str
@@ -513,19 +543,23 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
     components: list[UIIRComponent] = []
     for mount_order, comp in enumerate(components_raw):
         comp_obj = _expect_obj(comp, "component")
-        attach_to_raw = comp_obj.get("attach_to")
-        attach_to_norm = str(attach_to_raw).strip() if isinstance(attach_to_raw, str) else None
+        target_kind, target_plane_id, target_component_id = _parse_attach_to_target(
+            comp_obj.get("attach_to"),
+            name=f"components[{mount_order}].attach_to",
+        )
         legacy_kind = str(comp_obj.get("attachment_kind", "plane")).strip().lower()
-        if isinstance(attach_to_norm, str) and attach_to_norm:
-            if attach_to_norm in {"camera_overlay", "camera"}:
-                attachment_kind = "camera_overlay"
-                plane_id = None
-            else:
-                attachment_kind = "plane"
-                plane_id = attach_to_norm
+        if target_kind in {"plane", "component"}:
+            attachment_kind = "plane"
+            plane_id = target_plane_id
+            attach_to_component_id = target_component_id
+        elif target_kind == "camera_overlay":
+            attachment_kind = "camera_overlay"
+            plane_id = None
+            attach_to_component_id = None
         else:
             attachment_kind = "camera_overlay" if legacy_kind == "camera_overlay" else "plane"
             plane_id = None
+            attach_to_component_id = None
         plane_global_z: int | None = None
         if attachment_kind == "plane":
             if plane_id is None:
@@ -553,6 +587,7 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
             strict=True,
             default_attachment_kind=attachment_kind,
             frame_resolver=frame_resolver,
+            attach_to_component_id=attach_to_component_id,
         )
         components.append(component)
 
@@ -589,6 +624,7 @@ def _compile_component(
     strict: bool,
     default_attachment_kind: str,
     frame_resolver: _InlineFrameResolver,
+    attach_to_component_id: str | None = None,
 ) -> UIIRComponent:
     pos = _expect_obj(comp_obj["position"], "component.position")
     frame = pos.get("frame")
@@ -613,6 +649,8 @@ def _compile_component(
     comp_type = str(comp_obj["type"])
     props = comp_obj.get("props", {})
     style: dict[str, Any] = dict(props) if isinstance(props, dict) else {}
+    if isinstance(attach_to_component_id, str) and attach_to_component_id.strip():
+        style["attach_to_component_id"] = attach_to_component_id.strip()
     if auto_width:
         style["auto_size_width"] = True
     if auto_height:
@@ -800,6 +838,7 @@ def _validate_components(
 ) -> None:
     component_ids: set[str] = set()
     plane_ids: set[str] = set()
+    component_targets: dict[str, str] = {}
     if has_v2:
         planes = payload.get("planes", [])
         assert isinstance(planes, list)
@@ -845,31 +884,42 @@ def _validate_components(
             attachment_kind = comp_obj.get("attachment_kind")
             if attachment_kind is not None and attachment_kind not in {"plane", "camera_overlay"}:
                 raise PlanesValidationError(f"components[{i}].attachment_kind invalid")
-            attach_to = comp_obj.get("attach_to")
-            attach_to_norm: str | None = None
-            if attach_to is not None:
-                if not isinstance(attach_to, str) or not attach_to.strip():
-                    raise PlanesValidationError(f"components[{i}].attach_to must be a non-empty string")
-                attach_to_norm = attach_to.strip()
-                if attach_to_norm in {"camera_overlay", "camera"}:
-                    if attachment_kind == "plane":
-                        raise PlanesValidationError(
-                            f"components[{i}] has conflicting attachment_kind `plane` with attach_to `{attach_to_norm}`"
-                        )
-                else:
-                    if attach_to_norm not in plane_ids:
-                        raise PlanesValidationError(
-                            f"components[{i}].attach_to must reference an existing plane or `camera_overlay`/`camera`"
-                        )
-                    if attachment_kind == "camera_overlay":
-                        raise PlanesValidationError(
-                            f"components[{i}] has conflicting attachment_kind `camera_overlay` with plane attach_to"
-                        )
-            if strict and not isinstance(attachment_kind, str) and attach_to_norm is None:
+            target_kind, target_plane_id, target_component_id = _parse_attach_to_target(
+                comp_obj.get("attach_to"),
+                name=f"components[{i}].attach_to",
+            )
+            if target_kind == "plane":
+                assert target_plane_id is not None
+                if target_plane_id not in plane_ids:
+                    raise PlanesValidationError(
+                        f"components[{i}].attach_to must reference an existing plane or `camera`"
+                    )
+                if attachment_kind == "camera_overlay":
+                    raise PlanesValidationError(
+                        f"components[{i}] has conflicting attachment_kind `camera_overlay` with plane attach_to"
+                    )
+            elif target_kind == "component":
+                assert target_plane_id is not None
+                assert target_component_id is not None
+                if target_plane_id not in plane_ids:
+                    raise PlanesValidationError(
+                        f"components[{i}].attach_to references unknown plane `{target_plane_id}`"
+                    )
+                if attachment_kind == "camera_overlay":
+                    raise PlanesValidationError(
+                        f"components[{i}] has conflicting attachment_kind `camera_overlay` with component attach_to"
+                    )
+                component_targets[comp_id] = target_component_id
+            elif target_kind == "camera_overlay":
+                if attachment_kind == "plane":
+                    raise PlanesValidationError(
+                        f"components[{i}] has conflicting attachment_kind `plane` with camera attach_to"
+                    )
+            if strict and not isinstance(attachment_kind, str) and target_kind == "unspecified":
                 raise PlanesValidationError(
                     f"components[{i}] must define either attachment_kind or attach_to in strict v2 mode"
                 )
-            if isinstance(attachment_kind, str) and attachment_kind == "plane" and attach_to_norm is None:
+            if isinstance(attachment_kind, str) and attachment_kind == "plane" and target_kind == "unspecified":
                 raise PlanesValidationError(f"components[{i}].attach_to must reference an existing plane")
 
         functions = comp_obj.get("functions", {})
@@ -900,6 +950,21 @@ def _validate_components(
             scroll = _expect_obj(props.get("scroll", {}), f"components[{i}].props.scroll")
             _validate_numeric_or_unitized(scroll.get("x", 0.0), f"components[{i}].props.scroll.x")
             _validate_numeric_or_unitized(scroll.get("y", 0.0), f"components[{i}].props.scroll.y")
+
+    if has_v2:
+        for child_id, parent_id in component_targets.items():
+            if parent_id not in component_ids:
+                raise PlanesValidationError(f"attach_to references unknown component `{parent_id}`")
+            if parent_id == child_id:
+                raise PlanesValidationError(f"component attachment cycle detected at `{child_id}`")
+        for comp_id in component_targets:
+            seen: set[str] = set()
+            cursor = comp_id
+            while cursor in component_targets:
+                if cursor in seen:
+                    raise PlanesValidationError(f"component attachment cycle detected at `{cursor}`")
+                seen.add(cursor)
+                cursor = component_targets[cursor]
 
 
 def _resolve_route_activation(routes_raw: list[Any], planes: list[UIIRPlaneRef]) -> tuple[str | None, tuple[str, ...]]:

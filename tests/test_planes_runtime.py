@@ -612,6 +612,60 @@ def _build_plane_v2_text_default_anchor_frame_file(root: Path) -> Path:
     return plane_path
 
 
+def _build_plane_v2_component_attachment_file(root: Path) -> Path:
+    payload = {
+        "planes_protocol_version": "0.2.0-dev",
+        "app": {
+            "id": "x.v2.component_attach",
+            "title": "V2 Component Attach",
+            "icon": "assets/logo.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "planes": [
+            {
+                "id": "main",
+                "default_frame": "screen_tl",
+                "background": {"color": "#111111"},
+                "plane_global_z": 0,
+                "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 320}, "height": {"unit": "px", "value": 180}},
+            }
+        ],
+        "routes": [{"id": "main", "default": True, "active_planes": ["main"]}],
+        "components": [
+            {
+                "id": "parent",
+                "type": "text",
+                "attachment_kind": "plane",
+                "attach_to": "plane:main",
+                "component_local_z": 1,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 40, "y": 30, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 40}, "height": {"unit": "px", "value": 20}},
+                "props": {"text": "parent"},
+            },
+            {
+                "id": "child",
+                "type": "text",
+                "attach_to": "component:main#parent",
+                "component_local_z": 2,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 8, "y": 6, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 40}, "height": {"unit": "px", "value": 20}},
+                "props": {"text": "child"},
+            },
+        ],
+    }
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "logo.svg").write_text(
+        "<svg width=\"10\" height=\"10\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#ffffff\"/></svg>",
+        encoding="utf-8",
+    )
+    plane_path = root / "plane_v2_component_attach.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
 def _build_scroll_hook_plane_file(root: Path) -> Path:
     payload = {
         "planes_protocol_version": "0.1.0",
@@ -1861,8 +1915,8 @@ class PlanesRuntimeTests(unittest.TestCase):
                     {
                         "id": "inline_title",
                         "type": "text",
-                        "attachment_kind": "plane",
-                        "attach_to": "main",
+                        "attachment_kind": "camera_overlay",
+                        "attach_to": "camera",
                         "component_local_z": 1,
                         "blend_mode": "absolute_rgba",
                         "position": {
@@ -1888,6 +1942,20 @@ class PlanesRuntimeTests(unittest.TestCase):
             title = next(comp for comp in ctx.mounted if comp.component_id == "inline_title")
             self.assertAlmostEqual(float(title.position.x), 159.5, places=3)
             self.assertAlmostEqual(float(title.position.y), -0.5, places=3)
+
+    def test_runtime_resolves_component_attachment_target_offsets(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_v2_component_attachment_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            parent = next(comp for comp in ctx.mounted if comp.component_id == "parent")
+            child = next(comp for comp in ctx.mounted if comp.component_id == "child")
+            self.assertAlmostEqual(float(parent.position.x), 40.0, places=3)
+            self.assertAlmostEqual(float(parent.position.y), 30.0, places=3)
+            self.assertAlmostEqual(float(child.position.x), 48.0, places=3)
+            self.assertAlmostEqual(float(child.position.y), 36.0, places=3)
 
     def test_origin_refs_no_hit_test_regression(self) -> None:
         with tempfile.TemporaryDirectory() as td:
