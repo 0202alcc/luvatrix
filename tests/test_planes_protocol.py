@@ -263,6 +263,26 @@ class PlanesProtocolTests(unittest.TestCase):
         self.assertAlmostEqual(float(overlay_plane.resolved_position.x), 64.0)
         self.assertAlmostEqual(float(overlay_plane.resolved_position.y), 18.0)
 
+    def test_compile_accepts_inline_frame_object_relative_to_app_default(self) -> None:
+        payload = _base_payload_v2()
+        payload["app"]["default_frame"] = "cartesian_center"  # type: ignore[index]
+        payload["components"][1]["position"] = {  # type: ignore[index]
+            "x": 0,
+            "y": 0,
+            "frame": {
+                "origin": [0, "50vh"],
+                "basis_x": [1.0, 0.0],
+                "basis_y": [0.0, -1.0],
+            },
+        }
+        page = compile_planes_to_ui_ir(payload, matrix_width=640, matrix_height=360)
+        overlay = next(c for c in page.components if c.component_id == "title_overlay")
+        self.assertTrue(str(overlay.position.frame).startswith("inline_frame_"))
+        self.assertGreaterEqual(len(page.coordinate_frames), 1)
+        spec = page.coordinate_frames[0]
+        self.assertAlmostEqual(float(spec.origin[0]), 319.5, places=3)
+        self.assertAlmostEqual(float(spec.origin[1]), -0.5, places=3)
+
     def test_compile_v2_produces_planes_v2_ir(self) -> None:
         page = compile_planes_to_ui_ir(_base_payload_v2(), matrix_width=640, matrix_height=360)
         self.assertEqual(page.ir_version, "planes-v2")

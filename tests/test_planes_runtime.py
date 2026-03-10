@@ -1828,6 +1828,65 @@ class PlanesRuntimeTests(unittest.TestCase):
         self.assertAlmostEqual(float(title[1]), float(expected_x), places=3)
         self.assertAlmostEqual(float(title[2]), float(expected_y), places=3)
 
+    def test_runtime_resolves_inline_position_frame_object(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "assets").mkdir(parents=True, exist_ok=True)
+            (Path(td) / "assets" / "logo.svg").write_text(
+                "<svg width=\"10\" height=\"10\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#ffffff\"/></svg>",
+                encoding="utf-8",
+            )
+            payload = {
+                "planes_protocol_version": "0.2.0-dev",
+                "app": {
+                    "id": "x.inline.frame",
+                    "title": "Inline Frame Runtime",
+                    "icon": "assets/logo.svg",
+                    "default_frame": "cartesian_center",
+                    "web": {"tab_title": None, "tab_icon": None},
+                },
+                "planes": [
+                    {
+                        "id": "main",
+                        "default_frame": "screen_tl",
+                        "background": {"color": "#101010"},
+                        "plane_global_z": 0,
+                        "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+                        "size": {"width": {"unit": "px", "value": 320}, "height": {"unit": "px", "value": 180}},
+                    }
+                ],
+                "routes": [{"id": "main", "default": True, "active_planes": ["main"]}],
+                "components": [
+                    {
+                        "id": "inline_title",
+                        "type": "text",
+                        "attachment_kind": "plane",
+                        "attach_to": "main",
+                        "component_local_z": 1,
+                        "blend_mode": "absolute_rgba",
+                        "position": {
+                            "x": 0,
+                            "y": 0,
+                            "frame": {
+                                "origin": [0, "50vh"],
+                                "basis_x": [1.0, 0.0],
+                                "basis_y": [0.0, -1.0],
+                            },
+                        },
+                        "size": {"width": {"unit": "px", "value": 80}, "height": {"unit": "px", "value": 20}},
+                        "props": {"text": "inline"},
+                    }
+                ],
+            }
+            plane_path = Path(td) / "plane_inline_frame.json"
+            plane_path.write_text(json.dumps(payload), encoding="utf-8")
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            title = next(comp for comp in ctx.mounted if comp.component_id == "inline_title")
+            self.assertAlmostEqual(float(title.position.x), 159.5, places=3)
+            self.assertAlmostEqual(float(title.position.y), -0.5, places=3)
+
     def test_origin_refs_no_hit_test_regression(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             plane_path = _build_plane_file(Path(td))

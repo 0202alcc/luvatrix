@@ -6,6 +6,7 @@ from typing import Any
 
 from .ui_ir import (
     BoundingBoxSpec,
+    CoordinateFrameSpec,
     CoordinateRef,
     InteractionBinding,
     MatrixSpec,
@@ -37,6 +38,97 @@ SUPPORTED_HDI_HOOKS = {
     "on_rotate",
 }
 DEFAULT_COORD_FRAME = "cartesian_center"
+
+
+class _InlineFrameResolver:
+    def __init__(self, *, matrix_width: int, matrix_height: int, app_default_frame: str) -> None:
+        from luvatrix_core.core.coordinates import CoordinateFrameRegistry
+
+        self._matrix_width = int(matrix_width)
+        self._matrix_height = int(matrix_height)
+        self._app_default_frame = str(app_default_frame)
+        self._registry = CoordinateFrameRegistry(
+            width=max(1, int(matrix_width)),
+            height=max(1, int(matrix_height)),
+            default_frame="screen_tl",
+        )
+        self._frames_by_key: dict[tuple[float, float, float, float, float, float], str] = {}
+        self._specs: list[CoordinateFrameSpec] = []
+
+    def resolve_frame_id(
+        self,
+        raw: Any,
+        *,
+        name: str,
+        parent_w: float | None = None,
+        parent_h: float | None = None,
+    ) -> str:
+        if isinstance(raw, str):
+            if not raw.strip():
+                raise PlanesValidationError(f"{name} must be non-empty when string")
+            return str(raw)
+        frame_obj = _expect_obj(raw, name)
+        origin = _parse_pair(frame_obj.get("origin"), field_name=f"{name}.origin")
+        basis_x = _parse_pair(frame_obj.get("basis_x"), field_name=f"{name}.basis_x")
+        basis_y = _parse_pair(frame_obj.get("basis_y"), field_name=f"{name}.basis_y")
+        try:
+            basis_xf = (float(basis_x[0]), float(basis_x[1]))
+            basis_yf = (float(basis_y[0]), float(basis_y[1]))
+        except Exception as exc:  # noqa: BLE001
+            raise PlanesValidationError(f"{name}.basis_x/basis_y must contain numeric values") from exc
+        origin_x = _resolve_unitized_scalar(
+            origin[0],
+            viewport_w=self._matrix_width,
+            viewport_h=self._matrix_height,
+            parent_w=parent_w,
+            parent_h=parent_h,
+            axis="x",
+            name=f"{name}.origin[0]",
+        )
+        origin_y = _resolve_unitized_scalar(
+            origin[1],
+            viewport_w=self._matrix_width,
+            viewport_h=self._matrix_height,
+            parent_w=parent_w,
+            parent_h=parent_h,
+            axis="y",
+            name=f"{name}.origin[1]",
+        )
+        try:
+            tl_x, tl_y = self._registry.transform_point(
+                (float(origin_x), float(origin_y)),
+                from_frame=self._app_default_frame,
+                to_frame="screen_tl",
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise PlanesValidationError(
+                f"{name}.origin cannot be resolved from app.default_frame `{self._app_default_frame}`"
+            ) from exc
+        key = (
+            round(float(tl_x), 6),
+            round(float(tl_y), 6),
+            round(float(basis_xf[0]), 6),
+            round(float(basis_xf[1]), 6),
+            round(float(basis_yf[0]), 6),
+            round(float(basis_yf[1]), 6),
+        )
+        cached = self._frames_by_key.get(key)
+        if cached is not None:
+            return cached
+        frame_name = f"inline_frame_{len(self._specs):03d}"
+        self._frames_by_key[key] = frame_name
+        self._specs.append(
+            CoordinateFrameSpec(
+                name=frame_name,
+                origin=(float(tl_x), float(tl_y)),
+                basis_x=basis_xf,
+                basis_y=basis_yf,
+            )
+        )
+        return frame_name
+
+    def specs(self) -> tuple[CoordinateFrameSpec, ...]:
+        return tuple(self._specs)
 
 
 @dataclass(frozen=True)
@@ -225,6 +317,11 @@ def _compile_v0(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
     components_raw = payload["components"]
     app_default_frame = _resolve_app_default_frame(app)
     default_frame = str(plane.get("default_frame", app_default_frame))
+    frame_resolver = _InlineFrameResolver(
+        matrix_width=matrix_width,
+        matrix_height=matrix_height,
+        app_default_frame=app_default_frame,
+    )
     plane_id = str(plane["id"])
 
     components: list[UIIRComponent] = []
@@ -242,6 +339,7 @@ def _compile_v0(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
             plane_global_z=0,
             strict=False,
             default_attachment_kind="plane",
+            frame_resolver=frame_resolver,
         )
         components.append(component)
 
@@ -253,6 +351,7 @@ def _compile_v0(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
         aspect_mode="preserve" if aspect_mode == "preserve" else "stretch",
         default_frame=default_frame,
         background=str(_expect_obj(plane.get("background", {}), "plane.background").get("color", "#000000")),
+        coordinate_frames=frame_resolver.specs(),
         components=tuple(components),
         route=f"planes:{app.get('id', '')}",
     )
@@ -270,6 +369,11 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
         routes_raw = []
     if not isinstance(section_cuts_raw, list):
         section_cuts_raw = []
+    frame_resolver = _InlineFrameResolver(
+        matrix_width=matrix_width,
+        matrix_height=matrix_height,
+        app_default_frame=app_default_frame,
+    )
 
     plane_map: dict[str, UIIRPlaneRef] = {}
     ordered_planes: list[UIIRPlaneRef] = []
@@ -317,12 +421,23 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
         )
         pw = _resolve_dimension(size.get("width"), matrix_width, matrix_height)
         ph = _resolve_dimension(size.get("height"), matrix_width, matrix_height)
+        raw_pos_frame = pos.get("frame", frame)
+        pos_frame = (
+            frame_resolver.resolve_frame_id(
+                raw_pos_frame,
+                name=f"planes[{i}].position.frame",
+                parent_w=float(matrix_width),
+                parent_h=float(matrix_height),
+            )
+            if raw_pos_frame is not None
+            else frame
+        )
         plane_ref = UIIRPlaneRef(
             plane_id=plane_id,
             plane_global_z=plane_global_z,
             active=bool(plane_obj.get("active", True)),
-            resolved_position=CoordinateRef(x=px, y=py, frame=str(pos.get("frame", frame))),
-            resolved_bounds=BoundingBoxSpec(x=px, y=py, width=pw, height=ph, frame=str(pos.get("frame", frame))),
+            resolved_position=CoordinateRef(x=px, y=py, frame=str(pos_frame)),
+            resolved_bounds=BoundingBoxSpec(x=px, y=py, width=pw, height=ph, frame=str(pos_frame)),
             default_frame=frame,
         )
         plane_map[plane_id] = plane_ref
@@ -337,6 +452,7 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
     for i, raw in enumerate(section_cuts_raw):
         cut = _expect_obj(raw, f"section_cuts[{i}]")
         region = _expect_obj(cut.get("region"), f"section_cuts[{i}].region")
+        raw_region_frame = region.get("frame")
         section_cuts.append(
             UIIRSectionCut(
                 cut_id=_require_str(cut.get("id"), f"section_cuts[{i}].id"),
@@ -379,7 +495,16 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
                         axis="y",
                         name=f"section_cuts[{i}].region.height",
                     ),
-                    frame=None if region.get("frame") is None else str(region.get("frame")),
+                    frame=(
+                        None
+                        if raw_region_frame is None
+                        else frame_resolver.resolve_frame_id(
+                            raw_region_frame,
+                            name=f"section_cuts[{i}].region.frame",
+                            parent_w=float(matrix_width),
+                            parent_h=float(matrix_height),
+                        )
+                    ),
                 ),
                 enabled=bool(cut.get("enabled", True)),
             )
@@ -415,6 +540,7 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
             plane_global_z=plane_global_z,
             strict=True,
             default_attachment_kind=attachment_kind,
+            frame_resolver=frame_resolver,
         )
         components.append(component)
 
@@ -426,6 +552,7 @@ def _compile_v2(payload: dict[str, Any], *, matrix_width: int, matrix_height: in
         aspect_mode="preserve" if aspect_mode == "preserve" else "stretch",
         default_frame=default_frame,
         background=first_background,
+        coordinate_frames=frame_resolver.specs(),
         components=tuple(components),
         route=f"planes:{app.get('id', '')}",
         active_route_id=active_route_id,
@@ -449,11 +576,10 @@ def _compile_component(
     plane_global_z: int | None,
     strict: bool,
     default_attachment_kind: str,
+    frame_resolver: _InlineFrameResolver,
 ) -> UIIRComponent:
     pos = _expect_obj(comp_obj["position"], "component.position")
     frame = pos.get("frame")
-    if frame is not None and not isinstance(frame, str):
-        raise PlanesValidationError("component.position.frame must be string")
     size_obj = _expect_obj(comp_obj["size"], "component.size")
     width, auto_width = _resolve_component_dimension(
         size_obj.get("width"),
@@ -531,12 +657,21 @@ def _compile_component(
         axis="y",
         name="component.position.y",
     )
-    comp_frame = frame if isinstance(frame, str) else default_frame
+    comp_frame = (
+        default_frame
+        if frame is None
+        else frame_resolver.resolve_frame_id(
+            frame,
+            name="component.position.frame",
+            parent_w=parent_width,
+            parent_h=parent_height,
+        )
+    )
     world_bounds = BoundingBoxSpec(x=px, y=py, width=width, height=height, frame=comp_frame)
     return UIIRComponent(
         component_id=str(comp_obj["id"]),
         component_type=comp_type,
-        position=CoordinateRef(px, py, frame=frame),
+        position=CoordinateRef(px, py, frame=comp_frame),
         width=width,
         height=height,
         z_index=int(comp_obj.get("z_index", 0)),
@@ -591,6 +726,8 @@ def _validate_v2_payload(payload: dict[str, Any], *, strict: bool) -> None:
         position = _expect_obj(plane.get("position", {"x": 0.0, "y": 0.0}), f"planes[{i}].position")
         _validate_numeric_or_unitized(position.get("x", 0.0), f"planes[{i}].position.x")
         _validate_numeric_or_unitized(position.get("y", 0.0), f"planes[{i}].position.y")
+        if "frame" in position and position.get("frame") is not None:
+            _validate_frame_reference(position.get("frame"), f"planes[{i}].position.frame")
         size = _expect_obj(plane.get("size", {"width": {"unit": "px", "value": 0}, "height": {"unit": "px", "value": 0}}), f"planes[{i}].size")
         _validate_dimension_value(size.get("width"), f"planes[{i}].size.width", allow_auto=False)
         _validate_dimension_value(size.get("height"), f"planes[{i}].size.height", allow_auto=False)
@@ -615,6 +752,8 @@ def _validate_v2_payload(payload: dict[str, Any], *, strict: bool) -> None:
         _validate_numeric_or_unitized(region.get("y", 0.0), f"section_cuts[{i}].region.y")
         _validate_numeric_or_unitized(region.get("width", 0.0), f"section_cuts[{i}].region.width")
         _validate_numeric_or_unitized(region.get("height", 0.0), f"section_cuts[{i}].region.height")
+        if "frame" in region and region.get("frame") is not None:
+            _validate_frame_reference(region.get("frame"), f"section_cuts[{i}].region.frame")
 
     routes = payload.get("routes", [])
     if not isinstance(routes, list):
@@ -674,6 +813,8 @@ def _validate_components(
         position = _expect_obj(comp_obj.get("position"), f"components[{i}].position")
         _validate_numeric_or_unitized(position.get("x", 0.0), f"components[{i}].position.x")
         _validate_numeric_or_unitized(position.get("y", 0.0), f"components[{i}].position.y")
+        if "frame" in position and position.get("frame") is not None:
+            _validate_frame_reference(position.get("frame"), f"components[{i}].position.frame")
         size = _expect_obj(comp_obj.get("size"), f"components[{i}].size")
         _validate_dimension_value(size.get("width"), f"components[{i}].size.width", allow_auto=True)
         _validate_dimension_value(size.get("height"), f"components[{i}].size.height", allow_auto=True)
@@ -966,6 +1107,31 @@ def _validate_dimension_value(value: Any, name: str, *, allow_auto: bool) -> Non
     raw_value = spec.get("value")
     if not isinstance(raw_value, (int, float)):
         raise PlanesValidationError(f"{name}.value must be numeric")
+
+
+def _validate_frame_reference(value: Any, name: str) -> None:
+    if isinstance(value, str):
+        if value.strip():
+            return
+        raise PlanesValidationError(f"{name} must be non-empty when string")
+    frame_obj = _expect_obj(value, name)
+    origin = _parse_pair(frame_obj.get("origin"), field_name=f"{name}.origin")
+    basis_x = _parse_pair(frame_obj.get("basis_x"), field_name=f"{name}.basis_x")
+    basis_y = _parse_pair(frame_obj.get("basis_y"), field_name=f"{name}.basis_y")
+    _validate_numeric_or_unitized(origin[0], f"{name}.origin[0]")
+    _validate_numeric_or_unitized(origin[1], f"{name}.origin[1]")
+    for idx, raw in enumerate(basis_x):
+        if not isinstance(raw, (int, float)):
+            raise PlanesValidationError(f"{name}.basis_x[{idx}] must be numeric")
+    for idx, raw in enumerate(basis_y):
+        if not isinstance(raw, (int, float)):
+            raise PlanesValidationError(f"{name}.basis_y[{idx}] must be numeric")
+
+
+def _parse_pair(value: Any, *, field_name: str) -> tuple[Any, Any]:
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise PlanesValidationError(f"{field_name} must be [x, y]")
+    return (value[0], value[1])
 
 
 def _validate_anchor_value(value: Any, name: str) -> None:

@@ -485,6 +485,13 @@ class PlaneApp:
             height=int(self._ui_page.matrix.height),
             default_frame="screen_tl",
         )
+        for frame in self._ui_page.coordinate_frames:
+            self._coord_registry.define_frame(
+                name=str(frame.name),
+                origin=(float(frame.origin[0]), float(frame.origin[1])),
+                basis_x=(float(frame.basis_x[0]), float(frame.basis_x[1])),
+                basis_y=(float(frame.basis_y[0]), float(frame.basis_y[1])),
+            )
         self._initialize_viewport_scroll_state()
         self._initialize_plane_scroll_state()
         self._bg_color = _parse_hex_rgba(self._ui_page.background)
