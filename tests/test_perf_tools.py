@@ -5,6 +5,7 @@ import json
 import unittest
 
 from tools.perf.assert_thresholds import assert_thresholds
+from tools.perf.build_r041_drag_summary import build_summary
 from tools.perf.r041_go_no_go import evaluate_go_no_go
 from tools.perf.run_suite import run_suite
 
@@ -44,6 +45,10 @@ class PerfToolsTests(unittest.TestCase):
             self.assertGreaterEqual(float(result.get("p95_dirty_area_ratio", -1.0)), 0.0)
             self.assertGreaterEqual(float(result.get("incremental_present_pct", -1.0)), 0.0)
             self.assertGreaterEqual(float(result.get("full_present_pct", -1.0)), 0.0)
+            hot_path = result.get("hot_path_p95_ms", {})
+            self.assertIsInstance(hot_path, dict)
+            for key in ("input", "hit_test", "mount", "raster", "present"):
+                self.assertIn(key, hot_path)
 
     def test_assert_thresholds_contract(self) -> None:
         baseline = run_suite(
@@ -204,6 +209,19 @@ class PerfToolsTests(unittest.TestCase):
         self.assertEqual(verdict.get("decision"), "NO-GO")
         blockers = verdict.get("blockers", [])
         self.assertTrue(any("full_present_pct hard cap exceeded" in str(item) for item in blockers))
+
+    def test_r041_drag_summary_builder_extracts_hot_path(self) -> None:
+        perf = run_suite(
+            scenario="drag",
+            samples=8,
+            width=640,
+            height=360,
+            seed=1337,
+        )
+        summary = build_summary(perf)
+        self.assertEqual(summary.get("scenario"), "drag")
+        self.assertIsInstance(summary.get("hot_path_p95_ms"), dict)
+        self.assertIn(str(summary.get("top_hot_path_stage")), {"input", "hit_test", "mount", "raster", "present"})
 
 
 if __name__ == "__main__":
