@@ -152,7 +152,7 @@
         "Handoff intent: complete T-1001 for milestone AU-019 without breaking protocol or determinism constraints.",
         "Execution outline seed: Marketbook schema + ingestion adapter contract."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Marketbook schema + ingestion adapter contract."
@@ -186,7 +186,7 @@
         "Handoff intent: complete T-1002 for milestone AU-019 without breaking protocol or determinism constraints.",
         "Execution outline seed: Dedicated dynamic marketbook renderer (depth ladder, spread, imbalance traces)."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Dedicated dynamic marketbook renderer (depth ladder, spread, imbalance traces)."
@@ -220,7 +220,7 @@
         "Handoff intent: complete T-1003 for milestone AU-019 without breaking protocol or determinism constraints.",
         "Execution outline seed: Streaming update strategy + latency/perf budgets."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Archived",
       "task_type": "standard",
       "title": "Streaming update strategy + latency/perf budgets."
@@ -253,7 +253,7 @@
       "notes": [
         "Regression/safety docs now depend on marketbook renderer (T-1002) plus shared stream/latency primitives in T-821."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Regression/safety tests and operator docs."
@@ -284,7 +284,7 @@
         "Handoff intent: complete T-101 for milestone P-010 without breaking protocol or determinism constraints.",
         "Execution outline seed: Post artifact pack to mapped channels and pin baselines where allowed."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Post artifact pack to mapped channels and pin baselines where allowed."
@@ -317,7 +317,7 @@
         "Handoff intent: complete T-102 for milestone P-010 without breaking protocol or determinism constraints.",
         "Execution outline seed: Configure essential defaults for Carl-bot/sesh/MyRepoBot/Ticket Tool."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Configure essential defaults for Carl-bot/sesh/MyRepoBot/Ticket Tool."
@@ -350,7 +350,7 @@
         "Handoff intent: complete T-103 for milestone P-010 without breaking protocol or determinism constraints.",
         "Execution outline seed: Run rollout checker and publish pass report in #iteration-reviews."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Run rollout checker and publish pass report in #iteration-reviews."
@@ -379,7 +379,7 @@
         "validation_scope": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [],
       "done_gate": {
         "edge_case_tests_passed": true,
@@ -392,7 +392,7 @@
       "epic_id": "E-1101",
       "id": "T-1101",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Define canonical timeline/task schema for Gantt + Agile cards."
@@ -421,7 +421,7 @@
         "validation_scope": 41
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-1101"
       ],
@@ -436,7 +436,7 @@
       "epic_id": "E-1101",
       "id": "T-1102",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Build Luvatrix Gantt renderer (axis/status/dependency lanes)."
@@ -465,7 +465,7 @@
         "validation_scope": 41
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-1102"
       ],
@@ -480,7 +480,7 @@
       "epic_id": "E-1101",
       "id": "T-1103",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Build Luvatrix Agile board renderer (columns/swimlanes/blockers)."
@@ -509,7 +509,7 @@
         "validation_scope": 41
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-1103"
       ],
@@ -524,7 +524,7 @@
       "epic_id": "E-1101",
       "id": "T-1104",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add interaction layer (filter/zoom/scroll/click-through)."
@@ -553,7 +553,7 @@
         "validation_scope": 41
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-1104"
       ],
@@ -568,7 +568,7 @@
       "epic_id": "E-1101",
       "id": "T-1105",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add export adapters (ASCII/Markdown/PNG) and Discord payload compatibility."
@@ -597,7 +597,7 @@
         "validation_scope": 41
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-1105"
       ],
@@ -612,7 +612,7 @@
       "epic_id": "E-1101",
       "id": "T-1106",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add validation suite (render correctness + dependency integrity)."
@@ -641,7 +641,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-1101"
       ],
@@ -657,7 +657,7 @@
       "epic_id": "E-1102",
       "id": "T-1107",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Define Agile source-of-truth contract (tasks master + board registry + data workflow)."
@@ -686,7 +686,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-1107"
       ],
@@ -702,7 +702,7 @@
       "epic_id": "E-1102",
       "id": "T-1108",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Backfill milestone task indexes and create archived task ledger for historical milestones."
@@ -731,7 +731,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-1108"
       ],
@@ -747,7 +747,7 @@
       "epic_id": "E-1102",
       "id": "T-1109",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Implement milestone-task link validator enforcing active/archived resolution."
@@ -776,7 +776,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-1109"
       ],
@@ -792,7 +792,7 @@
       "epic_id": "E-1102",
       "id": "T-1110",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Build standardized endpoint-style planning API for safe milestone/task CRUD."
@@ -821,7 +821,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-1110"
       ],
@@ -837,7 +837,7 @@
       "epic_id": "E-1102",
       "id": "T-1111",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Document planning API usage and verify data-integrity smoke tests."
@@ -866,7 +866,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-1110"
       ],
@@ -882,7 +882,7 @@
       "epic_id": "E-1102",
       "id": "T-1112",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Consolidate Gantt markdown outputs into a single canonical milestones_gantt.md and retire legacy .txt/.md duplicates."
@@ -911,7 +911,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-1112"
       ],
@@ -927,7 +927,7 @@
       "epic_id": "E-1102",
       "id": "T-1113",
       "milestone_id": "APU-020",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Wire planning API apply path to auto-regenerate Gantt markdown/detailed markdown/PNG artifacts after successful writes."
@@ -956,7 +956,7 @@
         "validation_scope": 60
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [],
       "done_gate": {
         "edge_case_tests_passed": true,
@@ -970,7 +970,7 @@
       "epic_id": "E-201",
       "id": "T-201",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add complete variant-routing examples to protocol docs."
@@ -999,7 +999,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-201"
       ],
@@ -1015,7 +1015,7 @@
       "epic_id": "E-201",
       "id": "T-202",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add compatibility/deprecation matrix and migration notes."
@@ -1044,7 +1044,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-202"
       ],
@@ -1060,7 +1060,7 @@
       "epic_id": "E-201",
       "id": "T-203",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add operator runbook examples and troubleshooting appendix."
@@ -1089,7 +1089,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-203"
       ],
@@ -1105,7 +1105,7 @@
       "epic_id": "E-201",
       "id": "T-204",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Define App Protocol v2 superset wire spec with v1 backward-compatibility guarantees."
@@ -1134,7 +1134,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-204"
       ],
@@ -1150,7 +1150,7 @@
       "epic_id": "E-201",
       "id": "T-205",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Implement runtime adapter layer (python in-process baseline + process runtime hooks) for protocol v2 execution."
@@ -1180,7 +1180,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-205"
       ],
@@ -1196,7 +1196,7 @@
       "epic_id": "E-201",
       "id": "T-206",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Deliver Python-first protocol v2 process lane (stdio transport + reference worker SDK/client) while keeping v1 behavior unchanged."
@@ -1226,7 +1226,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-204"
       ],
@@ -1242,7 +1242,7 @@
       "epic_id": "E-201",
       "id": "T-207",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Extend app manifest/governance for v2 runtime fields with strict compatibility policy and v1-safe defaults."
@@ -1272,7 +1272,7 @@
         "validation_scope": 69
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-205",
         "T-206",
@@ -1290,7 +1290,7 @@
       "epic_id": "E-201",
       "id": "T-208",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add protocol v1/v2 conformance matrix and CI gates for adapter/runtime compatibility and deterministic render outputs."
@@ -1320,7 +1320,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-208"
       ],
@@ -1336,7 +1336,7 @@
       "epic_id": "E-201",
       "id": "T-209",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Publish v1-to-v2 migration guide and runbook updates for first-party app teams (Python-first, multi-language ready)."
@@ -1365,7 +1365,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-209"
       ],
@@ -1381,7 +1381,7 @@
       "epic_id": "E-201",
       "id": "T-210",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Finalize Planes Protocol v0 core schema (app/plane/component contracts, metadata inheritance, unit normalization)."
@@ -1415,7 +1415,7 @@
         "validation_scope": 60
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [],
       "done_gate": {
         "edge_case_tests_passed": true,
@@ -1434,7 +1434,7 @@
       "id": "T-2101",
       "impact_bucket": "XL",
       "milestone_id": "P-021",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Map exact per-frame copy chain across WindowMatrix, DisplayRuntime snapshot, and Vulkan upload stages."
@@ -1468,7 +1468,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2101"
       ],
@@ -1489,7 +1489,7 @@
       "id": "T-2102",
       "impact_bucket": "XL",
       "milestone_id": "P-021",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add baseline instrumentation counters/timers for copy bytes/count and CPU pack/map/memcpy timings."
@@ -1522,7 +1522,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2102"
       ],
@@ -1543,7 +1543,7 @@
       "id": "T-2103",
       "impact_bucket": "L",
       "milestone_id": "P-021",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add scenario harness coverage: idle, scroll-heavy, drag-heavy, and resize-stress."
@@ -1576,7 +1576,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2103"
       ],
@@ -1597,7 +1597,7 @@
       "id": "T-2104",
       "impact_bucket": "L",
       "milestone_id": "P-021",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Define baseline perf-gate thresholds and CI guard contracts."
@@ -1627,7 +1627,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-210"
       ],
@@ -1643,7 +1643,7 @@
       "epic_id": "E-201",
       "id": "T-211",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Standardize Planes interaction hooks against HDI-normalized phases and event payload contracts."
@@ -1673,7 +1673,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-210"
       ],
@@ -1689,7 +1689,7 @@
       "epic_id": "E-201",
       "id": "T-212",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Define Planes script registry and deterministic function target resolution (<script_id>::<function_name>) with strict-mode failures."
@@ -1719,7 +1719,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-210"
       ],
@@ -1735,7 +1735,7 @@
       "epic_id": "E-201",
       "id": "T-213",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Specify Planes viewport clipping and scroll-window semantics (coordinate remap, bounds, deterministic pan behavior)."
@@ -1765,7 +1765,7 @@
         "validation_scope": 66
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-210",
         "T-213"
@@ -1782,7 +1782,7 @@
       "epic_id": "E-201",
       "id": "T-214",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Define Planes Gantt+Agile feature profile and status-theming contract for first-party planning app templates."
@@ -1812,7 +1812,7 @@
         "validation_scope": 72
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-211",
         "T-212",
@@ -1831,7 +1831,7 @@
       "epic_id": "E-201",
       "id": "T-215",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Implement deterministic compiler mapping from Planes JSON to shared UI IR (draw/hit-test ordering + frame transforms)."
@@ -1861,7 +1861,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-215"
       ],
@@ -1877,7 +1877,7 @@
       "epic_id": "E-201",
       "id": "T-216",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add Planes strict/permissive schema validation and conformance tests (including v1/v2 protocol integration gates)."
@@ -1907,7 +1907,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-216"
       ],
@@ -1923,7 +1923,7 @@
       "epic_id": "E-201",
       "id": "T-217",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Implement first-party Planes runtime loader API (load_plane_app) so apps can run from plane.json without custom compile/render boilerplate."
@@ -1953,7 +1953,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-217"
       ],
@@ -1969,7 +1969,7 @@
       "epic_id": "E-201",
       "id": "T-218",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Refactor planes_v2_poc example to tiny load_plane_app(...) pattern using framework-managed Planes compile/render pipeline."
@@ -1999,7 +1999,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-218"
       ],
@@ -2015,7 +2015,7 @@
       "epic_id": "E-201",
       "id": "T-219",
       "milestone_id": "F-011",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add Planes runtime tests/docs for handler dispatch, viewport semantics, and proof command coverage."
@@ -2048,7 +2048,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2102"
       ],
@@ -2071,7 +2071,7 @@
       "impact_bucket": "XL",
       "milestone_id": "R-022",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Refactor WindowMatrix commit path to avoid full-frame clone for localized writes."
@@ -2104,7 +2104,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2201"
       ],
@@ -2127,7 +2127,7 @@
       "impact_bucket": "XXL",
       "milestone_id": "R-022",
       "rollback_strategy": "Feature flag + dual-path execution and fast rollback to previous stable implementation on regression detection.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Introduce safe revisioned or double-buffer snapshot strategy to reduce DisplayRuntime clone overhead."
@@ -2160,7 +2160,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2102"
       ],
@@ -2183,7 +2183,7 @@
       "impact_bucket": "XL",
       "milestone_id": "R-022",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Refactor Vulkan upload prep to minimize Python-level pack/copy overhead with contiguous memory views."
@@ -2216,7 +2216,7 @@
         "validation_scope": 69
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2201",
         "T-2202",
@@ -2241,7 +2241,7 @@
       "impact_bucket": "L",
       "milestone_id": "R-022",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add frame correctness + revision ordering parity tests for copy-elimination path."
@@ -2275,7 +2275,7 @@
         "validation_scope": 51
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2102"
       ],
@@ -2297,7 +2297,7 @@
       "impact_bucket": "L",
       "milestone_id": "U-017",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Audit and reduce frequent FullRewrite submissions in interactive paths."
@@ -2331,7 +2331,7 @@
         "validation_scope": 51
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2301"
       ],
@@ -2353,7 +2353,7 @@
       "impact_bucket": "L",
       "milestone_id": "U-017",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Strengthen ShiftFrame + ReplaceRect strategy for scroll-heavy workflows."
@@ -2387,7 +2387,7 @@
         "validation_scope": 51
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2302"
       ],
@@ -2409,7 +2409,7 @@
       "impact_bucket": "L",
       "milestone_id": "U-017",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Enforce incremental-present policy gate with explicit invalidation escape hatch."
@@ -2443,7 +2443,7 @@
         "validation_scope": 51
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2303"
       ],
@@ -2465,7 +2465,7 @@
       "impact_bucket": "L",
       "milestone_id": "U-017",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add dirty-rect telemetry (count, dirty-area ratio, incremental/full percentage)."
@@ -2499,7 +2499,7 @@
         "validation_scope": 51
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2304"
       ],
@@ -2521,7 +2521,7 @@
       "impact_bucket": "L",
       "milestone_id": "U-017",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add viewport/scroll visual artifact regression suite."
@@ -2555,7 +2555,7 @@
         "validation_scope": 71
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2203"
       ],
@@ -2577,7 +2577,7 @@
       "impact_bucket": "XL",
       "milestone_id": "R-023",
       "rollback_strategy": "Feature flag + dual-path execution and fast rollback to previous stable implementation on regression detection.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Implement/verify persistent mapped staging memory lifecycle."
@@ -2611,7 +2611,7 @@
         "validation_scope": 71
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2401"
       ],
@@ -2633,7 +2633,7 @@
       "impact_bucket": "L",
       "milestone_id": "R-023",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Reduce repeated allocation/reallocation churn for transfer resources."
@@ -2667,7 +2667,7 @@
         "validation_scope": 71
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2402"
       ],
@@ -2689,7 +2689,7 @@
       "impact_bucket": "L",
       "milestone_id": "R-023",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Minimize per-frame format conversion and clipping overhead where safe."
@@ -2723,7 +2723,7 @@
         "validation_scope": 71
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2403"
       ],
@@ -2745,7 +2745,7 @@
       "impact_bucket": "M",
       "milestone_id": "R-023",
       "rollback_strategy": "Feature flag + dual-path execution and fast rollback to previous stable implementation on regression detection.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Harden swapchain recreation paths to avoid avoidable fallback/latency spikes."
@@ -2779,7 +2779,7 @@
         "validation_scope": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2102"
       ],
@@ -2801,7 +2801,7 @@
       "impact_bucket": "L",
       "milestone_id": "F-024",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Profile sensor provider cost/jitter and classify fast-path vs cached metadata providers."
@@ -2835,7 +2835,7 @@
         "validation_scope": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2501"
       ],
@@ -2857,7 +2857,7 @@
       "impact_bucket": "L",
       "milestone_id": "F-024",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Introduce TTL caching for slow-changing metadata providers."
@@ -2891,7 +2891,7 @@
         "validation_scope": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2501"
       ],
@@ -2913,7 +2913,7 @@
       "impact_bucket": "XL",
       "milestone_id": "F-024",
       "rollback_strategy": "Feature flag + dual-path execution and fast rollback to previous stable implementation on regression detection.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Replace high-cost subprocess sensor reads with direct/native API access where feasible."
@@ -2947,7 +2947,7 @@
         "validation_scope": 41
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2502",
         "T-2503"
@@ -2970,7 +2970,7 @@
       "impact_bucket": "L",
       "milestone_id": "F-024",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Enforce capability/consent/audit parity tests for sensor modernization."
@@ -3003,7 +3003,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2102"
       ],
@@ -3026,7 +3026,7 @@
       "impact_bucket": "L",
       "milestone_id": "R-025",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Profile HDIThread/event queue behavior under idle and burst input."
@@ -3059,7 +3059,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2601"
       ],
@@ -3082,7 +3082,7 @@
       "impact_bucket": "L",
       "milestone_id": "R-025",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Tune coalescing and max-event processing policy for pointer/scroll bursts."
@@ -3115,7 +3115,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2601"
       ],
@@ -3138,7 +3138,7 @@
       "impact_bucket": "L",
       "milestone_id": "R-025",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Skip unnecessary render-loop work when no frame state changes are pending."
@@ -3171,7 +3171,7 @@
         "validation_scope": 66
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2602",
         "T-2603"
@@ -3195,7 +3195,7 @@
       "impact_bucket": "M",
       "milestone_id": "R-025",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add deterministic event normalization/ordering regression tests and latency telemetry."
@@ -3228,7 +3228,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2303"
       ],
@@ -3250,7 +3250,7 @@
       "impact_bucket": "M",
       "milestone_id": "F-011",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Document protocol semantics for incremental-present policy and invalidation boundaries."
@@ -3283,7 +3283,7 @@
         "validation_scope": 63
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2504"
       ],
@@ -3305,7 +3305,7 @@
       "impact_bucket": "M",
       "milestone_id": "F-011",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Document sensor fast-path/cached-path semantics and TTL behavior in protocol docs."
@@ -3338,7 +3338,7 @@
         "validation_scope": 72
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-2404",
         "T-2604",
@@ -3363,7 +3363,7 @@
       "impact_bucket": "M",
       "milestone_id": "F-011",
       "rollback_strategy": "Feature flag default-off; retain previous path and allow runtime rollback to legacy behavior.",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Publish compatibility/migration notes for performance-path changes with determinism guarantees."
@@ -3399,15 +3399,15 @@
         "dropped_frame_ratio_max": 0.01,
         "frame_time_ms": {
           "p50_max": 16.7,
-          "p95_max": 25.0,
+          "p95_max": 25,
           "p99_max": 33.3
         },
         "incremental_present_ratio_min": 0.9,
         "input_to_present_ms": {
           "p95_max": 33.3,
-          "p99_max": 50.0
+          "p99_max": 50
         },
-        "resize_recovery_sec_max": 1.0,
+        "resize_recovery_sec_max": 1,
         "resize_stress_dropped_frame_ratio_max": 0.02
       },
       "board_refs": [
@@ -3516,7 +3516,7 @@
       "description": "Prove copy-elimination refactors preserve ownership invariants and determinism without aliasing/mutation regressions.",
       "determinism_replay_policy": {
         "allowed_mismatch_count": 0,
-        "invariants_pass_rate_required": 1.0,
+        "invariants_pass_rate_required": 1,
         "required_exact_match": [
           "event_ordering_digest",
           "revision_sequence_digest"
@@ -4925,7 +4925,7 @@
         "Handoff intent: complete T-301 for milestone R-012 without breaking protocol or determinism constraints.",
         "Execution outline seed: Collect and classify top swapchain/surface/fence failure modes."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Collect and classify top swapchain/surface/fence failure modes."
@@ -4958,7 +4958,7 @@
         "Handoff intent: complete T-302 for milestone R-012 without breaking protocol or determinism constraints.",
         "Execution outline seed: Add targeted regression tests for each failure class."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Add targeted regression tests for each failure class."
@@ -4991,7 +4991,7 @@
         "Handoff intent: complete T-303 for milestone R-012 without breaking protocol or determinism constraints.",
         "Execution outline seed: Implement resiliency fixes and fallback parity checks."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Implement resiliency fixes and fallback parity checks."
@@ -5024,7 +5024,7 @@
         "Handoff intent: complete T-304 for milestone R-012 without breaking protocol or determinism constraints.",
         "Execution outline seed: Run stability soak and publish defect burn-down."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Run stability soak and publish defect burn-down."
@@ -7366,7 +7366,7 @@
         "validation_scope": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [],
       "done_gate": {
         "edge_case_tests_passed": true,
@@ -7383,7 +7383,7 @@
         "Handoff intent: complete T-401 for milestone P-013 without breaking protocol or determinism constraints.",
         "Execution outline seed: Define deterministic gate ownership and required pass criteria."
       ],
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Define deterministic gate ownership and required pass criteria."
@@ -7412,7 +7412,7 @@
         "validation_scope": 41
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-401"
       ],
@@ -7431,7 +7431,7 @@
         "Handoff intent: complete T-402 for milestone P-013 without breaking protocol or determinism constraints.",
         "Execution outline seed: Add flaky test quarantine + remediation workflow."
       ],
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add flaky test quarantine + remediation workflow."
@@ -7460,7 +7460,7 @@
         "validation_scope": 41
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-401"
       ],
@@ -7479,7 +7479,7 @@
         "Handoff intent: complete T-403 for milestone P-013 without breaking protocol or determinism constraints.",
         "Execution outline seed: Improve smoke signal visibility and artifact links."
       ],
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Improve smoke signal visibility and artifact links."
@@ -9344,7 +9344,7 @@
         "Handoff intent: complete T-501 for milestone F-014 without breaking protocol or determinism constraints.",
         "Execution outline seed: Define retention policy defaults and rationale."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Define retention policy defaults and rationale."
@@ -9377,7 +9377,7 @@
         "Handoff intent: complete T-502 for milestone F-014 without breaking protocol or determinism constraints.",
         "Execution outline seed: Validate prune/report workflows under realistic load."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Validate prune/report workflows under realistic load."
@@ -9410,7 +9410,7 @@
         "Handoff intent: complete T-503 for milestone F-014 without breaking protocol or determinism constraints.",
         "Execution outline seed: Publish operational playbook for retention management."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Publish operational playbook for retention management."
@@ -9441,7 +9441,7 @@
         "Handoff intent: complete T-601 for milestone P-015 without breaking protocol or determinism constraints.",
         "Execution outline seed: Assemble milestone completion evidence packet."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Assemble milestone completion evidence packet."
@@ -9474,7 +9474,7 @@
         "Handoff intent: complete T-602 for milestone P-015 without breaking protocol or determinism constraints.",
         "Execution outline seed: Review unresolved risks/defects and required mitigations."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Review unresolved risks/defects and required mitigations."
@@ -9507,7 +9507,7 @@
         "Handoff intent: complete T-603 for milestone P-015 without breaking protocol or determinism constraints.",
         "Execution outline seed: Publish go/no-go recommendation with rationale and decision log links."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Publish go/no-go recommendation with rationale and decision log links."
@@ -9538,7 +9538,7 @@
         "Handoff intent: complete T-701 for milestone ARU-016 without breaking protocol or determinism constraints.",
         "Execution outline seed: Add platform-aware runtime path: macOS windowed + non-macOS headless."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Add platform-aware runtime path: macOS windowed + non-macOS headless."
@@ -9571,7 +9571,7 @@
         "Handoff intent: complete T-702 for milestone ARU-016 without breaking protocol or determinism constraints.",
         "Execution outline seed: Keep animation/frame behavior identical across platform paths."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Keep animation/frame behavior identical across platform paths."
@@ -9604,7 +9604,7 @@
         "Handoff intent: complete T-703 for milestone ARU-016 without breaking protocol or determinism constraints.",
         "Execution outline seed: Add non-macOS system telemetry providers and unavailable fallbacks."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Add non-macOS system telemetry providers and unavailable fallbacks."
@@ -9638,7 +9638,7 @@
         "Handoff intent: complete T-704 for milestone ARU-016 without breaking protocol or determinism constraints.",
         "Execution outline seed: Update tests/docs and validate no regression in dashboard formatting."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Update tests/docs and validate no regression in dashboard formatting."
@@ -9669,7 +9669,7 @@
         "Handoff intent: complete T-801 for milestone U-021 without breaking protocol or determinism constraints.",
         "Execution outline seed: Sideways x-axis rule labels for long names with readable wrapping/fallbacks."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Sideways x-axis rule labels for long names with readable wrapping/fallbacks."
@@ -9702,7 +9702,7 @@
         "Handoff intent: complete T-802 for milestone U-021 without breaking protocol or determinism constraints.",
         "Execution outline seed: Bar chart renderer support (static + interactive parity)."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Bar chart renderer support (static + interactive parity)."
@@ -9735,7 +9735,7 @@
         "Handoff intent: complete T-803 for milestone U-021 without breaking protocol or determinism constraints.",
         "Execution outline seed: Multiple plot support (subplot-like layout orchestration)."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Multiple plot support (subplot-like layout orchestration)."
@@ -9847,7 +9847,7 @@
         "Merged scope from former T-1003 to remove overlap between plot primitives and stream budget strategy.",
         "Deliver incremental redraw windows, axis rescale policy, stream cadence hooks, and baseline latency/perf budget contracts for downstream renderers."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Dynamic data plotting primitives + streaming cadence/latency budget hooks."
@@ -9880,7 +9880,7 @@
         "Handoff intent: complete T-822 for milestone U-021 without breaking protocol or determinism constraints.",
         "Execution outline seed: Financial visualization profile pack (OHLC/candles/volume overlays) for downstream marketbook rendering."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Financial visualization profile pack (OHLC/candles/volume overlays) for downstream marketbook rendering."
@@ -10042,7 +10042,7 @@
         "validation_scope": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-836"
       ],
@@ -10060,7 +10060,7 @@
       ],
       "id": "T-837",
       "milestone_id": "U-017",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add pre-rasterized bitmap cache path for stable SVG/text components during camera scrolling."
@@ -10092,7 +10092,7 @@
         "validation_scope": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-837"
       ],
@@ -10110,7 +10110,7 @@
       ],
       "id": "T-838",
       "milestone_id": "U-017",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Add frame-paced scroll scheduler (coalesced input -> one render cadence update)."
@@ -10142,7 +10142,7 @@
         "validation_scope": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-838"
       ],
@@ -10160,7 +10160,7 @@
       ],
       "id": "T-839",
       "milestone_id": "U-017",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Decouple input ingestion from render thread using deterministic intent queue handoff."
@@ -10192,7 +10192,7 @@
         "validation_scope": 38
       },
       "cost_confidence": 0.35,
-      "cost_score": 0.0,
+      "cost_score": 0,
       "depends_on": [
         "T-839"
       ],
@@ -10211,7 +10211,7 @@
       ],
       "id": "T-840",
       "milestone_id": "U-017",
-      "stage_multiplier_applied": 0.0,
+      "stage_multiplier_applied": 0,
       "status": "Done",
       "task_type": "standard",
       "title": "Finalize scroll performance validation pack (latency/jitter budgets + visual artifact regression gates)."
@@ -10242,7 +10242,7 @@
         "Handoff intent: complete T-901 for milestone AU-018 without breaking protocol or determinism constraints.",
         "Execution outline seed: Calendar app component (day/week/month views + event rendering contract)."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Calendar app component (day/week/month views + event rendering contract)."
@@ -10275,10 +10275,105 @@
         "Handoff intent: complete T-902 for milestone AU-018 without breaking protocol or determinism constraints.",
         "Execution outline seed: Calendar workflow integration with data workspace navigation/state sync."
       ],
-      "stage_multiplier_applied": 1.0,
+      "stage_multiplier_applied": 1,
       "status": "Backlog",
       "task_type": "standard",
       "title": "Calendar workflow integration with data workspace navigation/state sync."
+    },
+    {
+      "id": "T-4820",
+      "milestone_id": "R-041",
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "[CLOSEOUT HARNESS] Rendering lag benchmark contract and go-no-go harness",
+      "board_refs": [
+        "milestone:R-041",
+        "team:runtime",
+        "specialist:qa"
+      ],
+      "depends_on": [],
+      "notes": [
+        "Define canonical lag benchmark scenes and command bundle for R-041.",
+        "Specify frame-time, jitter, and invalidation telemetry thresholds that must pass before milestone closeout."
+      ]
+    },
+    {
+      "id": "T-4821",
+      "milestone_id": "R-041",
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Profile drag-render hot path and attribute lag sources",
+      "board_refs": [
+        "milestone:R-041",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "depends_on": [
+        "T-4820"
+      ],
+      "notes": [
+        "Instrument drag scenarios to split cost across input, hit-test, mount, raster, and present phases.",
+        "Produce before baseline artifacts for shader-heavy button interactions and identify top contributors."
+      ]
+    },
+    {
+      "id": "T-4822",
+      "milestone_id": "R-041",
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Implement interaction-time adaptive quality for stained glass button",
+      "board_refs": [
+        "milestone:R-041",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "depends_on": [
+        "T-4821"
+      ],
+      "notes": [
+        "Apply temporary low-cost material path while pointer drag is active and restore full quality on release.",
+        "Preserve visual identity while reducing per-frame convolution and refraction cost during interaction."
+      ]
+    },
+    {
+      "id": "T-4823",
+      "milestone_id": "R-041",
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Add backdrop caching and ROI downsample path for button shader pipeline",
+      "board_refs": [
+        "milestone:R-041",
+        "team:runtime",
+        "specialist:development"
+      ],
+      "depends_on": [
+        "T-4821"
+      ],
+      "notes": [
+        "Cache reusable backdrop samples when underlying content is unchanged.",
+        "Use bounded ROI and optional half-resolution filter path to reduce blur and refraction workload."
+      ]
+    },
+    {
+      "id": "T-4824",
+      "milestone_id": "R-041",
+      "status": "Intake",
+      "task_type": "standard",
+      "title": "Perf and regression gates for no-lag guarantee",
+      "board_refs": [
+        "milestone:R-041",
+        "team:platform-ci",
+        "specialist:qa"
+      ],
+      "depends_on": [
+        "T-4820",
+        "T-4822",
+        "T-4823"
+      ],
+      "notes": [
+        "Add tests and perf assertions for drag compose mode, dirty-rect efficiency, and frame budget targets.",
+        "Gate closeout on deterministic behavior and no regressions in origin refs, overlay, and input routing."
+      ]
     }
   ],
   "legacy_status_values": [
