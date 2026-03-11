@@ -1,0 +1,20 @@
+{
+  "blockers": [],
+  "checks": {
+    "deterministic": true,
+    "dirty_rect_efficiency_improved": true,
+    "frame_budget": true,
+    "input_to_present_budget": true,
+    "jitter_budget": true,
+    "no_full_frame_drag": true
+  },
+  "decision": "GO",
+  "metrics": {
+    "baseline_p95_dirty_area_ratio": 1.101858125,
+    "full_present_pct": 0.0,
+    "jitter_ms": 0.07699355,
+    "p95_dirty_area_ratio": 1.0,
+    "p95_frame_total_ms": 0.22513955,
+    "p95_input_to_present_ms": 16.666666666666668
+  }
+}

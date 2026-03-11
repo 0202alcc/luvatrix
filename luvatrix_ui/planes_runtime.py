@@ -1496,18 +1496,22 @@ class PlaneApp:
         if component_id != self._drag_active_component_id:
             return resolved_props, False
         out = dict(resolved_props)
-        kernel = max(3, int(round(float(out.get("kernel_size", 5)) * 0.6)))
+        kernel = max(3, int(round(float(out.get("kernel_size", 5)) * 0.4)))
         if kernel % 2 == 0:
             kernel += 1
         out["kernel_size"] = kernel
-        out["sigma_px"] = max(0.5, float(out.get("sigma_px", 1.0)) * 0.68)
-        out["convolution_strength"] = max(0.0, float(out.get("convolution_strength", 0.2)) * 0.58)
-        out["scatter_sigma_px"] = max(0.0, float(out.get("scatter_sigma_px", 0.0)) * 0.45)
-        out["refract_px"] = max(0.0, float(out.get("refract_px", 1.0)) * 0.62)
-        out["chromatic_aberration_px"] = max(0.0, float(out.get("chromatic_aberration_px", 0.02)) * 0.55)
+        out["sigma_px"] = max(0.35, float(out.get("sigma_px", 1.0)) * 0.38)
+        out["convolution_strength"] = max(0.0, float(out.get("convolution_strength", 0.2)) * 0.24)
+        out["scatter_sigma_px"] = max(0.0, float(out.get("scatter_sigma_px", 0.0)) * 0.2)
+        out["refract_px"] = max(0.0, float(out.get("refract_px", 1.0)) * 0.3)
+        out["chromatic_aberration_px"] = max(0.0, float(out.get("chromatic_aberration_px", 0.02)) * 0.2)
+        out["edge_highlight_alpha"] = float(out.get("edge_highlight_alpha", 0.0)) * 0.35
+        out["depth_highlight_alpha"] = float(out.get("depth_highlight_alpha", 0.0)) * 0.2
+        out["depth_shadow_alpha"] = float(out.get("depth_shadow_alpha", 0.0)) * 0.2
+        out["rim_darken_alpha"] = float(out.get("rim_darken_alpha", 0.0)) * 0.2
         out["backdrop_cache_enabled"] = True
-        out["roi_inset_px"] = max(float(out.get("roi_inset_px", 0.0)), 2.0)
-        out["downsample_factor"] = max(2, int(out.get("downsample_factor", 2)))
+        out["roi_inset_px"] = max(float(out.get("roi_inset_px", 0.0)), 4.0)
+        out["downsample_factor"] = max(4, int(out.get("downsample_factor", 4)))
         return out, True
 
     @staticmethod

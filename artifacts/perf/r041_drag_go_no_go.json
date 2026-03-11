@@ -1,0 +1,25 @@
+{
+  "blockers": [],
+  "decision": "GO",
+  "deterministic": true,
+  "go_threshold": 90.0,
+  "metric_scores": {
+    "dirty_rect_efficiency": 42.0,
+    "frame_latency": 100.0,
+    "incremental_present": 100.0,
+    "input_to_present": 100.0,
+    "jitter": 100.0
+  },
+  "metrics": {
+    "full_present_pct": 0.0,
+    "incremental_present_pct": 100.0,
+    "jitter_ms": 0.07699355,
+    "p95_dirty_area_ratio": 1.0,
+    "p95_frame_total_ms": 0.22513955,
+    "p95_input_to_present_ms": 16.666666666666668,
+    "p99_frame_total_ms": 0.9588349399999944
+  },
+  "milestone_id": "R-041",
+  "scenario": "drag",
+  "score": 91.3
+}
