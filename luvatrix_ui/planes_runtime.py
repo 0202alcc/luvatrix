@@ -95,6 +95,7 @@ class PlaneApp:
         self.state.setdefault("incremental_present_enabled", self._incremental_present_enabled_default)
         self.state.setdefault("scroll_bitmap_cache_enabled", self._scroll_bitmap_cache_enabled_default)
         self.state.setdefault("scroll_scheduler_enabled", self._scroll_scheduler_enabled_default)
+        self.state.setdefault("adaptive_drag_quality_enabled", True)
         self.state.setdefault("origin_refs_enabled", self._origin_refs_enabled_default)
         self.state.setdefault("intent_queue_enabled", self._intent_queue_enabled_default)
         self.state.setdefault("planes_v2_schema_enabled", self._planes_v2_rollout_flags.schema_enabled)
@@ -277,6 +278,8 @@ class PlaneApp:
                 "idle_skipped_frames": int(counters.get("idle_skipped_frames", 0)),
                 "incremental_present_enabled": bool(self._incremental_present_enabled()),
                 "scroll_bitmap_cache_enabled": bool(self._scroll_bitmap_cache_enabled()),
+                "adaptive_drag_quality_enabled": bool(self._drag_adaptive_quality_enabled()),
+                "adaptive_drag_quality_active_buttons": int(self._frame_counts.get("adaptive_drag_quality_active_buttons", 0)),
                 "bitmap_cache_hits": 0,
                 "bitmap_cache_misses": 0,
                 "bitmap_cache_entry_count": 0,
@@ -429,6 +432,8 @@ class PlaneApp:
             "idle_skipped_frames": int(counters.get("idle_skipped_frames", 0)),
             "incremental_present_enabled": bool(self._incremental_present_enabled()),
             "scroll_bitmap_cache_enabled": bool(self._scroll_bitmap_cache_enabled()),
+            "adaptive_drag_quality_enabled": bool(self._drag_adaptive_quality_enabled()),
+            "adaptive_drag_quality_active_buttons": int(self._frame_counts.get("adaptive_drag_quality_active_buttons", 0)),
             "bitmap_cache_hits": 0,
             "bitmap_cache_misses": 0,
             "bitmap_cache_entry_count": 0,
@@ -1386,6 +1391,14 @@ class PlaneApp:
         props: dict[str, Any],
     ) -> StainedGlassButtonComponent:
         resolved_props = _resolve_button_material_props(props, width=width, height=height)
+        resolved_props, adaptive_quality_active = self._apply_drag_adaptive_quality(
+            component_id=component_id,
+            resolved_props=resolved_props,
+        )
+        if adaptive_quality_active:
+            self._frame_counts["adaptive_drag_quality_active_buttons"] = int(
+                self._frame_counts.get("adaptive_drag_quality_active_buttons", 0)
+            ) + 1
         kernel_size = int(resolved_props.get("kernel_size", 9))
         if kernel_size % 2 == 0:
             kernel_size += 1
@@ -1457,6 +1470,28 @@ class PlaneApp:
         self._retained_mount_cache[component_id] = (key, component)
         self._frame_counts["retained_components_new"] = int(self._frame_counts.get("retained_components_new", 0)) + 1
         return component
+
+    def _apply_drag_adaptive_quality(
+        self,
+        *,
+        component_id: str,
+        resolved_props: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
+        if not self._drag_adaptive_quality_enabled():
+            return resolved_props, False
+        if component_id != self._drag_active_component_id:
+            return resolved_props, False
+        out = dict(resolved_props)
+        kernel = max(3, int(round(float(out.get("kernel_size", 5)) * 0.6)))
+        if kernel % 2 == 0:
+            kernel += 1
+        out["kernel_size"] = kernel
+        out["sigma_px"] = max(0.5, float(out.get("sigma_px", 1.0)) * 0.68)
+        out["convolution_strength"] = max(0.0, float(out.get("convolution_strength", 0.2)) * 0.58)
+        out["scatter_sigma_px"] = max(0.0, float(out.get("scatter_sigma_px", 0.0)) * 0.45)
+        out["refract_px"] = max(0.0, float(out.get("refract_px", 1.0)) * 0.62)
+        out["chromatic_aberration_px"] = max(0.0, float(out.get("chromatic_aberration_px", 0.02)) * 0.55)
+        return out, True
 
     @staticmethod
     def _build_scrollbar_markup(width: int, height: int, fill_hex: str) -> str:
@@ -1690,6 +1725,7 @@ class PlaneApp:
             "origin_reference_primitives": 0,
             "pointer_move_events": 0,
             "non_scroll_non_pointer_events": 0,
+            "adaptive_drag_quality_active_buttons": 0,
         }
 
     def _hit_index_active_planes(self) -> tuple[str, ...]:
@@ -2259,6 +2295,12 @@ class PlaneApp:
         if isinstance(raw, bool):
             return raw
         return bool(self._scroll_bitmap_cache_enabled_default)
+
+    def _drag_adaptive_quality_enabled(self) -> bool:
+        raw = self.state.get("adaptive_drag_quality_enabled")
+        if isinstance(raw, bool):
+            return raw
+        return True
 
     def _scroll_scheduler_enabled(self) -> bool:
         raw = self.state.get("scroll_scheduler_enabled")

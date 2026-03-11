@@ -175,6 +175,43 @@ def _build_theme_background_plane_file(root: Path) -> Path:
     return plane_path
 
 
+def _build_stained_button_plane_file(root: Path) -> Path:
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "logo.svg").write_text(
+        "<svg width=\"10\" height=\"10\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#ffffff\"/></svg>",
+        encoding="utf-8",
+    )
+    payload = {
+        "planes_protocol_version": "0.1.0",
+        "app": {
+            "id": "x",
+            "title": "Button Demo",
+            "icon": "assets/logo.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "plane": {"id": "main", "default_frame": "screen_tl", "background": {"color": "#112233"}},
+        "scripts": [{"id": "handlers", "lang": "python", "src": "scripts/handlers.py"}],
+        "components": [
+            {
+                "id": "cta",
+                "type": "button",
+                "position": {"x": 10, "y": 10},
+                "size": {"width": {"unit": "px", "value": 120}, "height": {"unit": "px", "value": 40}},
+                "z_index": 2,
+                "functions": {"on_press_single": "handlers::open"},
+                "props": {
+                    "draggable": True,
+                    "label": "Drag",
+                    "material_profile": "stained_glass_red_v2",
+                },
+            }
+        ],
+    }
+    plane_path = root / "plane.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
 def _build_scroll_plane_file(root: Path) -> Path:
     (root / "assets").mkdir(parents=True, exist_ok=True)
     (root / "assets" / "canvas.svg").write_text(
@@ -1027,6 +1064,124 @@ class PlanesRuntimeTests(unittest.TestCase):
             perf = app.state.get("perf", {})
             self.assertEqual(str(perf.get("compose_mode")), "partial_dirty")
             self.assertEqual(bool(perf.get("invalidation_escape_hatch_used")), False)
+
+    def test_drag_adaptive_quality_reduces_button_shader_cost_during_active_drag(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_stained_button_plane_file(Path(td))
+            app = PlaneApp(plane_path, handlers={})
+            app.register_handler("handlers::open", lambda event_ctx, state: None)
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            baseline_button = next((comp for comp in ctx.mounted if comp.component_id == "cta"), None)
+            self.assertIsNotNone(baseline_button)
+            assert baseline_button is not None
+            baseline_conv = float(baseline_button.convolution_strength)
+            baseline_refract = float(baseline_button.refract_px)
+            baseline_chroma = float(baseline_button.chromatic_aberration_px)
+            ctx.mounted = []
+
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="click",
+                    status="OK",
+                    payload={"x": 15.0, "y": 15.0, "phase": "down"},
+                )
+            )
+            ctx.queue(
+                HDIEvent(
+                    event_id=2,
+                    ts_ns=2,
+                    window_id="w",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload={"x": 80.0, "y": 40.0, "phase": "drag"},
+                )
+            )
+            app.loop(ctx, 0.016)
+            drag_button = next((comp for comp in ctx.mounted if comp.component_id == "cta"), None)
+            self.assertIsNotNone(drag_button)
+            assert drag_button is not None
+            self.assertLess(float(drag_button.convolution_strength), baseline_conv)
+            self.assertLess(float(drag_button.refract_px), baseline_refract)
+            self.assertLess(float(drag_button.chromatic_aberration_px), baseline_chroma)
+            perf = app.state.get("perf", {})
+            self.assertTrue(bool(perf.get("adaptive_drag_quality_enabled", False)))
+            self.assertGreaterEqual(int(perf.get("adaptive_drag_quality_active_buttons", 0)), 1)
+
+    def test_drag_adaptive_quality_restores_after_drag_release(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_stained_button_plane_file(Path(td))
+            app = PlaneApp(plane_path, handlers={})
+            app.register_handler("handlers::open", lambda event_ctx, state: None)
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            baseline_button = next((comp for comp in ctx.mounted if comp.component_id == "cta"), None)
+            self.assertIsNotNone(baseline_button)
+            assert baseline_button is not None
+            baseline_conv = float(baseline_button.convolution_strength)
+            ctx.mounted = []
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="click",
+                    status="OK",
+                    payload={"x": 15.0, "y": 15.0, "phase": "down"},
+                )
+            )
+            ctx.queue(
+                HDIEvent(
+                    event_id=2,
+                    ts_ns=2,
+                    window_id="w",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload={"x": 80.0, "y": 40.0, "phase": "drag"},
+                )
+            )
+            ctx.queue(
+                HDIEvent(
+                    event_id=3,
+                    ts_ns=3,
+                    window_id="w",
+                    device="mouse",
+                    event_type="click",
+                    status="OK",
+                    payload={"x": 80.0, "y": 40.0, "phase": "up"},
+                )
+            )
+            app.loop(ctx, 0.016)
+            ctx.mounted = []
+            app.state["force_full_invalidation"] = True
+            app.state["force_full_invalidation_reason"] = "adaptive_quality_restore_test"
+            ctx.queue(
+                HDIEvent(
+                    event_id=4,
+                    ts_ns=4,
+                    window_id="w",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload={"x": 82.0, "y": 42.0, "phase": "single"},
+                )
+            )
+            app.loop(ctx, 0.016)
+            restored_button = next((comp for comp in ctx.mounted if comp.component_id == "cta"), None)
+            self.assertIsNotNone(restored_button)
+            assert restored_button is not None
+            self.assertAlmostEqual(float(restored_button.convolution_strength), baseline_conv, places=6)
+            perf = app.state.get("perf", {})
+            self.assertEqual(int(perf.get("adaptive_drag_quality_active_buttons", 0)), 0)
 
     def test_plane_runtime_builtin_viewport_scroll_updates_camera_offset(self) -> None:
         with tempfile.TemporaryDirectory() as td:
