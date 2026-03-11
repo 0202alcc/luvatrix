@@ -76,10 +76,18 @@ class MacOSMenuIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "debug_menu"
             backend.configure_debug_menu(app_id="examples.app", profile=self._profile(), artifact_dir=out)
+            backend._write_png_bytes_to_clipboard = lambda _png: True  # type: ignore[attr-defined]
             result = backend.dispatch_debug_menu_action("debug.menu.capture.screenshot.clipboard")
             self.assertEqual(result.status, "EXECUTED")
             events = (out / "events.jsonl").read_text(encoding="utf-8").splitlines()
             self.assertTrue(any("debug.menu.capture.screenshot.clipboard" in line for line in events))
+            payload = next(
+                data
+                for data in (json.loads(line) for line in events)
+                if data.get("action_id") == "debug.menu.capture.screenshot.clipboard"
+                and data.get("status") == "HANDLER_EXECUTED"
+            )
+            self.assertEqual(payload.get("clipboard_write"), "OK")
             captures = out / "captures"
             self.assertFalse(captures.exists())
 

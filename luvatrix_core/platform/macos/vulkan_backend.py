@@ -1529,6 +1529,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         provenance_id = self._frame_digest(frame)
         png_bytes = self._encode_png_rgba_bytes(frame)
         self._last_clipboard_png_size = len(png_bytes)
+        clipboard_write = "OK" if self._write_png_bytes_to_clipboard(png_bytes) else "UNAVAILABLE"
         self._append_debug_menu_event(
             {
                 "action_id": "debug.menu.capture.screenshot.clipboard",
@@ -1537,8 +1538,32 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
                 "captured_at_utc": captured_at,
                 "provenance_id": provenance_id,
                 "clipboard_bytes": self._last_clipboard_png_size,
+                "clipboard_write": clipboard_write,
             }
         )
+
+    def _write_png_bytes_to_clipboard(self, png_bytes: bytes) -> bool:
+        if not png_bytes:
+            return False
+        try:
+            from AppKit import NSPasteboard  # type: ignore
+            try:
+                from AppKit import NSPasteboardTypePNG  # type: ignore
+            except Exception:
+                NSPasteboardTypePNG = "public.png"
+            from Foundation import NSData  # type: ignore
+        except Exception:
+            return False
+        try:
+            pasteboard = NSPasteboard.generalPasteboard()
+            if pasteboard is None:
+                return False
+            pasteboard.clearContents()
+            data = NSData.dataWithBytes_length_(png_bytes, len(png_bytes))
+            return bool(pasteboard.setData_forType_(data, NSPasteboardTypePNG))
+        except Exception:  # noqa: BLE001
+            LOGGER.exception("clipboard screenshot write failed")
+            return False
 
     def _handle_debug_recording_toggle(self) -> None:
         now_utc = self._now_utc()

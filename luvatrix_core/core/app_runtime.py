@@ -14,6 +14,7 @@ import torch
 
 from luvatrix_ui.component_schema import ComponentBase, DisplayableArea
 from luvatrix_ui.controls.svg_component import SVGComponent
+from luvatrix_ui.controls.stained_glass_button import StainedGlassButtonComponent, StainedGlassButtonRenderBatch
 from luvatrix_ui.controls.svg_renderer import SVGRenderBatch
 from luvatrix_ui.text.component import TextComponent
 from luvatrix_ui.text.renderer import TextLayoutMetrics, TextMeasureRequest, TextRenderBatch
@@ -58,6 +59,9 @@ class AppUIRenderer(Protocol):
         ...
 
     def draw_svg_batch(self, batch: SVGRenderBatch) -> None:
+        ...
+
+    def draw_stained_glass_button_batch(self, batch: StainedGlassButtonRenderBatch) -> None:
         ...
 
     def end_frame(self) -> torch.Tensor:
@@ -273,6 +277,10 @@ class AppContext:
                 if isinstance(component, SVGComponent):
                     command, _ = component.layout()
                     renderer.draw_svg_batch(SVGRenderBatch(commands=(command,)))
+                    continue
+                if isinstance(component, StainedGlassButtonComponent):
+                    command, _ = component.layout()
+                    renderer.draw_stained_glass_button_batch(StainedGlassButtonRenderBatch(commands=(command,)))
                     continue
                 raise NotImplementedError(f"unsupported component type for ui frame: {type(component)!r}")
             frame = renderer.end_frame()

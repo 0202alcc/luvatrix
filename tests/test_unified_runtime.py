@@ -88,6 +88,27 @@ class _CriticalEnergySafety:
 
 
 class UnifiedRuntimeTests(unittest.TestCase):
+    def test_origin_refs_toggle_setter_forces_full_invalidation(self) -> None:
+        class _Lifecycle:
+            def __init__(self) -> None:
+                self.state = {"origin_refs_enabled": False}
+
+        runtime = UnifiedRuntime(
+            matrix=WindowMatrix(height=1, width=1),
+            target=_RecordingTarget(),
+            hdi=HDIThread(source=_NoopHDISource()),
+            sensor_manager=_FakeSensorManager(),
+            capability_decider=lambda _cap: True,
+        )
+        lifecycle = _Lifecycle()
+        setter = runtime._build_origin_refs_state_setter(lifecycle)  # type: ignore[attr-defined]
+        self.assertIsNotNone(setter)
+        assert setter is not None
+        self.assertTrue(setter())
+        self.assertTrue(bool(lifecycle.state["origin_refs_enabled"]))
+        self.assertTrue(bool(lifecycle.state["force_full_invalidation"]))
+        self.assertEqual(lifecycle.state["force_full_invalidation_reason"], "debug-menu-origin-refs-toggle")
+
     def test_unified_runtime_runs_app_and_presents_frames(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             app_dir = Path(td)

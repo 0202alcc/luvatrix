@@ -21,17 +21,11 @@
       "position": {
         "x": 0,
         "y": 0,
-        "frame": "cartesian_center"
+        "frame": "screen_tl"
       },
       "size": {
-        "width": {
-          "unit": "px",
-          "value": 960
-        },
-        "height": {
-          "unit": "px",
-          "value": 540
-        }
+        "width": "100vw",
+        "height": "100vh"
       }
     }
   ],
@@ -54,18 +48,18 @@
     {
       "id": "title_text",
       "type": "text",
-      "attachment_kind": "camera_overlay",
-      "component_local_z": 90,
+      "attach_to": "plane:main",
+      "component_local_z": 0,
       "blend_mode": "absolute_rgba",
       "position": {
-        "x": 0,
-        "y": 0,
-        "frame": "cartesian_center"
+        "x": "50vw",
+        "y": "10vh",
+        "frame": "screen_tl"
       },
       "anchor": {
-        "x": 0,
+        "x": "50%",
         "y": 0,
-        "frame_reference": "cartesian_center"
+        "frame_reference": "screen_tl"
       },
       "size": {
         "width": "auto",
@@ -76,6 +70,60 @@
         "font_size_px": 54,
         "color_hex": "#5B1210",
         "text_origin_mode": "frame_reference"
+      }
+    },
+    {
+      "id": "subtitle_text",
+      "type": "text",
+      "attach_to": "plane:main",
+      "component_local_z": 0,
+      "blend_mode": "absolute_rgba",
+      "position": {
+        "x": "50vw",
+        "y": "24vh",
+        "frame": "screen_tl"
+      },
+      "anchor": {
+        "x": "50%",
+        "y": 0,
+        "frame_reference": "screen_tl"
+      },
+      "size": {
+        "width": "auto",
+        "height": "auto"
+      },
+      "props": {
+        "text": "Welcome to the world of Planes!",
+        "font_size_px": 27,
+        "color_hex": "#9A3A34",
+        "text_origin_mode": "frame_reference"
+      }
+    },
+    {
+      "id": "stained_glass_button",
+      "type": "button",
+      "attach_to": "plane:main",
+      "component_local_z": 6,
+      "blend_mode": "delta_rgba",
+      "position": {
+        "x": "50vw",
+        "y": "10vh",
+        "frame": "screen_tl"
+      },
+      "anchor": {
+        "x": "50%",
+        "y": 0,
+        "frame_reference": "screen_tl"
+      },
+      "size": {
+        "width": 280,
+        "height": 84
+      },
+      "props": {
+        "material_profile": "water_button",
+        "draggable": true,
+        "label": "Stained Glass",
+        "label_color_hex": "#FFF6F4"
       }
     }
   ]

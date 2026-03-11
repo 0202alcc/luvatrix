@@ -13,7 +13,7 @@ from luvatrix_core.core.app_runtime import AppContext
 from luvatrix_core.core.hdi_thread import HDIEvent
 from luvatrix_core.core.sensor_manager import SensorSample
 from luvatrix_core.core.window_matrix import WindowMatrix
-from luvatrix_ui.planes_runtime import PlaneApp, load_plane_app
+from luvatrix_ui.planes_runtime import PlaneApp, _resolve_button_material_props, load_plane_app
 
 
 @dataclass
@@ -612,6 +612,60 @@ def _build_plane_v2_text_default_anchor_frame_file(root: Path) -> Path:
     return plane_path
 
 
+def _build_plane_v2_component_attachment_file(root: Path) -> Path:
+    payload = {
+        "planes_protocol_version": "0.2.0-dev",
+        "app": {
+            "id": "x.v2.component_attach",
+            "title": "V2 Component Attach",
+            "icon": "assets/logo.svg",
+            "web": {"tab_title": None, "tab_icon": None},
+        },
+        "planes": [
+            {
+                "id": "main",
+                "default_frame": "screen_tl",
+                "background": {"color": "#111111"},
+                "plane_global_z": 0,
+                "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 320}, "height": {"unit": "px", "value": 180}},
+            }
+        ],
+        "routes": [{"id": "main", "default": True, "active_planes": ["main"]}],
+        "components": [
+            {
+                "id": "parent",
+                "type": "text",
+                "attachment_kind": "plane",
+                "attach_to": "plane:main",
+                "component_local_z": 1,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 40, "y": 30, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 40}, "height": {"unit": "px", "value": 20}},
+                "props": {"text": "parent"},
+            },
+            {
+                "id": "child",
+                "type": "text",
+                "attach_to": "component:main#parent",
+                "component_local_z": 2,
+                "blend_mode": "absolute_rgba",
+                "position": {"x": 8, "y": 6, "frame": "screen_tl"},
+                "size": {"width": {"unit": "px", "value": 40}, "height": {"unit": "px", "value": 20}},
+                "props": {"text": "child"},
+            },
+        ],
+    }
+    (root / "assets").mkdir(parents=True, exist_ok=True)
+    (root / "assets" / "logo.svg").write_text(
+        "<svg width=\"10\" height=\"10\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#ffffff\"/></svg>",
+        encoding="utf-8",
+    )
+    plane_path = root / "plane_v2_component_attach.json"
+    plane_path.write_text(json.dumps(payload), encoding="utf-8")
+    return plane_path
+
+
 def _build_scroll_hook_plane_file(root: Path) -> Path:
     payload = {
         "planes_protocol_version": "0.1.0",
@@ -874,6 +928,105 @@ class PlanesRuntimeTests(unittest.TestCase):
             app.loop(ctx, 0.016)
             self.assertEqual(calls, [("on_press_single", "title")])
             self.assertEqual(app.state.get("clicked"), "title")
+
+    def test_plane_runtime_drag_activates_from_click_down_for_draggable_component(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_file(Path(td))
+            payload = json.loads(plane_path.read_text(encoding="utf-8"))
+            payload["components"][0]["props"]["draggable"] = True
+            plane_path.write_text(json.dumps(payload), encoding="utf-8")
+            app = PlaneApp(plane_path, handlers={})
+            app.register_handler("handlers::open", lambda event_ctx, state: None)
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="click",
+                    status="OK",
+                    payload={"x": 20.0, "y": 20.0, "phase": "down"},
+                )
+            )
+            ctx.queue(
+                HDIEvent(
+                    event_id=2,
+                    ts_ns=2,
+                    window_id="w",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload={"x": 100.0, "y": 80.0},
+                )
+            )
+            ctx.queue(
+                HDIEvent(
+                    event_id=3,
+                    ts_ns=3,
+                    window_id="w",
+                    device="mouse",
+                    event_type="click",
+                    status="OK",
+                    payload={"x": 100.0, "y": 80.0, "phase": "up"},
+                )
+            )
+            app.loop(ctx, 0.016)
+            override = app._drag_position_overrides.get("title")
+            self.assertIsNotNone(override)
+            assert override is not None
+            self.assertAlmostEqual(float(override[0]), 90.0, places=6)
+            self.assertAlmostEqual(float(override[1]), 70.0, places=6)
+
+    def test_native_button_material_profile_resolves_defaults(self) -> None:
+        props = _resolve_button_material_props({"material_profile": "water_button"}, width=280.0, height=84.0)
+        self.assertAlmostEqual(float(props["kernel_size"]), 7.0, places=6)
+        self.assertAlmostEqual(float(props["refract_px"]), 4.4, places=6)
+        self.assertAlmostEqual(float(props["label_font_weight"]), 800.0, places=6)
+
+    def test_native_button_label_size_uses_height_ratio(self) -> None:
+        props = _resolve_button_material_props({"material_profile": "water_button"}, width=320.0, height=96.0)
+        self.assertAlmostEqual(float(props["label_font_size_px"]), 32.0, places=4)
+
+    def test_drag_move_uses_partial_dirty_invalidation_not_full_frame_escape_hatch(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_file(Path(td))
+            payload = json.loads(plane_path.read_text(encoding="utf-8"))
+            payload["components"][0]["props"]["draggable"] = True
+            plane_path.write_text(json.dumps(payload), encoding="utf-8")
+            app = PlaneApp(plane_path, handlers={})
+            app.register_handler("handlers::open", lambda event_ctx, state: None)
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            ctx.mounted = []
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="click",
+                    status="OK",
+                    payload={"x": 20.0, "y": 20.0, "phase": "down"},
+                )
+            )
+            ctx.queue(
+                HDIEvent(
+                    event_id=2,
+                    ts_ns=2,
+                    window_id="w",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload={"x": 100.0, "y": 80.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(str(perf.get("compose_mode")), "partial_dirty")
+            self.assertEqual(bool(perf.get("invalidation_escape_hatch_used")), False)
 
     def test_plane_runtime_builtin_viewport_scroll_updates_camera_offset(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -1797,20 +1950,111 @@ class PlanesRuntimeTests(unittest.TestCase):
             mixed_on_ids = [str(comp.component_id) for comp in mixed_ctx.mounted]
             self.assertNotEqual(mixed_off_ids, mixed_on_ids)
 
-        hello_plane_path = Path(__file__).resolve().parents[1] / "examples" / "planes_v2" / "hello_plane" / "plane.json"
-        hello_app = load_plane_app(hello_plane_path, handlers={})
-        hello_ctx = _FakeCtx(width=320, height=180)
-        hello_app.init(hello_ctx)
-        hello_app.state["origin_refs_enabled"] = False
-        hello_app.loop(hello_ctx, 0.016)
-        hello_off_ids = [str(comp.component_id) for comp in hello_ctx.mounted]
-        hello_app.state["origin_refs_enabled"] = True
-        hello_app.state["force_full_invalidation"] = True
-        hello_app.state["force_full_invalidation_reason"] = "origin-refs-visual-hello"
-        hello_ctx.mounted = []
-        hello_app.loop(hello_ctx, 0.016)
-        hello_on_ids = [str(comp.component_id) for comp in hello_ctx.mounted]
-        self.assertNotEqual(hello_off_ids, hello_on_ids)
+        with tempfile.TemporaryDirectory() as td:
+            cart_plane_path = _build_plane_v2_cartesian_center_file(Path(td))
+            cart_app = load_plane_app(cart_plane_path, handlers={})
+            cart_ctx = _FakeCtx(width=320, height=180)
+            cart_app.init(cart_ctx)
+            cart_app.state["origin_refs_enabled"] = False
+            cart_app.loop(cart_ctx, 0.016)
+            cart_off_ids = [str(comp.component_id) for comp in cart_ctx.mounted]
+            cart_app.state["origin_refs_enabled"] = True
+            cart_app.state["force_full_invalidation"] = True
+            cart_app.state["force_full_invalidation_reason"] = "origin-refs-visual-cartesian"
+            cart_ctx.mounted = []
+            cart_app.loop(cart_ctx, 0.016)
+            cart_on_ids = [str(comp.component_id) for comp in cart_ctx.mounted]
+            self.assertNotEqual(cart_off_ids, cart_on_ids)
+
+    def test_origin_refs_use_component_anchor_for_hello_plane_title(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_v2_cartesian_center_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            entities = app._origin_reference_entities()  # type: ignore[attr-defined]
+            title = next(item for item in entities if item[0] == "title")
+            expected_x, expected_y = app._transform_point_between_frames(  # type: ignore[attr-defined]
+                0.0,
+                0.0,
+                from_frame="cartesian_center",
+                to_frame="screen_tl",
+            )
+            self.assertAlmostEqual(float(title[1]), float(expected_x), places=3)
+            self.assertAlmostEqual(float(title[2]), float(expected_y), places=3)
+
+    def test_runtime_resolves_inline_position_frame_object(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "assets").mkdir(parents=True, exist_ok=True)
+            (Path(td) / "assets" / "logo.svg").write_text(
+                "<svg width=\"10\" height=\"10\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#ffffff\"/></svg>",
+                encoding="utf-8",
+            )
+            payload = {
+                "planes_protocol_version": "0.2.0-dev",
+                "app": {
+                    "id": "x.inline.frame",
+                    "title": "Inline Frame Runtime",
+                    "icon": "assets/logo.svg",
+                    "default_frame": "cartesian_center",
+                    "web": {"tab_title": None, "tab_icon": None},
+                },
+                "planes": [
+                    {
+                        "id": "main",
+                        "default_frame": "screen_tl",
+                        "background": {"color": "#101010"},
+                        "plane_global_z": 0,
+                        "position": {"x": 0, "y": 0, "frame": "screen_tl"},
+                        "size": {"width": {"unit": "px", "value": 320}, "height": {"unit": "px", "value": 180}},
+                    }
+                ],
+                "routes": [{"id": "main", "default": True, "active_planes": ["main"]}],
+                "components": [
+                    {
+                        "id": "inline_title",
+                        "type": "text",
+                        "attachment_kind": "camera_overlay",
+                        "attach_to": "camera",
+                        "component_local_z": 1,
+                        "blend_mode": "absolute_rgba",
+                        "position": {
+                            "x": 0,
+                            "y": 0,
+                            "frame": {
+                                "origin": [0, "50vh"],
+                                "basis_x": [1.0, 0.0],
+                                "basis_y": [0.0, -1.0],
+                            },
+                        },
+                        "size": {"width": {"unit": "px", "value": 80}, "height": {"unit": "px", "value": 20}},
+                        "props": {"text": "inline"},
+                    }
+                ],
+            }
+            plane_path = Path(td) / "plane_inline_frame.json"
+            plane_path.write_text(json.dumps(payload), encoding="utf-8")
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            title = next(comp for comp in ctx.mounted if comp.component_id == "inline_title")
+            self.assertAlmostEqual(float(title.position.x), 159.5, places=3)
+            self.assertAlmostEqual(float(title.position.y), -0.5, places=3)
+
+    def test_runtime_resolves_component_attachment_target_offsets(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_v2_component_attachment_file(Path(td))
+            app = load_plane_app(plane_path, handlers={})
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            parent = next(comp for comp in ctx.mounted if comp.component_id == "parent")
+            child = next(comp for comp in ctx.mounted if comp.component_id == "child")
+            self.assertAlmostEqual(float(parent.position.x), 40.0, places=3)
+            self.assertAlmostEqual(float(parent.position.y), 30.0, places=3)
+            self.assertAlmostEqual(float(child.position.x), 48.0, places=3)
+            self.assertAlmostEqual(float(child.position.y), 36.0, places=3)
 
     def test_origin_refs_no_hit_test_regression(self) -> None:
         with tempfile.TemporaryDirectory() as td:

@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from luvatrix_core.core.coordinates import CoordinateFrameRegistry
 from luvatrix_ui.component_schema import CoordinatePoint
+from luvatrix_ui.controls.stained_glass_button import StainedGlassButtonComponent
 from luvatrix_ui.controls.svg_component import SVGComponent
 from luvatrix_ui.planes_protocol import compile_planes_to_ui_ir, resolve_web_metadata
 from luvatrix_ui.ui_ir import BoundingBoxSpec
@@ -121,6 +122,7 @@ class PlaneApp:
         self._frame_counts: dict[str, int] = {}
         self._retained_mount_cache: dict[str, tuple[tuple[Any, ...], Any]] = {}
         self._layout_position_cache: dict[str, tuple[tuple[Any, ...], tuple[float, float]]] = {}
+        self._layout_resolve_stack: set[str] = set()
         self._interaction_bounds_cache: dict[str, tuple[tuple[Any, ...], Any]] = {}
         self._layout_cache_signature: tuple[tuple[float, float], tuple[str, ...]] | None = None
         self._auto_component_size: dict[str, tuple[float, float]] = {}
@@ -138,11 +140,15 @@ class PlaneApp:
         self._hit_spatial_index: dict[tuple[int, int], list[Any]] = {}
         self._hit_index_all: list[Any] = []
         self._hit_index_signature: tuple[tuple[float, float], tuple[tuple[str, float, float], ...], tuple[str, ...]] | None = None
-        self._last_dirty_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]] | None = None
+        self._drag_position_overrides: dict[str, tuple[float, float]] = {}
+        self._drag_active_component_id: str | None = None
+        self._drag_pointer_offset: tuple[float, float] = (0.0, 0.0)
+        self._last_dirty_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...], tuple[tuple[str, float, float], ...]] | None = None
         self._last_plane_scroll: tuple[float, float] | None = None
         self._scroll_shift_residual: tuple[float, float] = (0.0, 0.0)
         self._frame_scroll_shift: tuple[int, int] | None = None
         self._event_pointer_dirty_rects: list[tuple[int, int, int, int]] = []
+        self._drag_dirty_rects: list[tuple[int, int, int, int]] = []
         self._intent_queue: deque[Any] = deque()
         self._event_batch_base = _env_int("LUVATRIX_EVENT_BATCH_BASE", default=128, min_value=1, max_value=4096)
         self._event_batch_max = _env_int("LUVATRIX_EVENT_BATCH_MAX", default=512, min_value=1, max_value=4096)
@@ -358,7 +364,7 @@ class PlaneApp:
                 mounted += 1
                 continue
             frame = component.resolved_frame(self._ui_page.default_frame)
-            if component.component_type in {"text", "svg"}:
+            if component.component_type in {"text", "svg", "button"}:
                 mount_plan.append((str(component.component_type), component, resolved_x, resolved_y, frame))
                 continue
             # viewport and other component types are validated at compile-time.
@@ -485,6 +491,13 @@ class PlaneApp:
             height=int(self._ui_page.matrix.height),
             default_frame="screen_tl",
         )
+        for frame in self._ui_page.coordinate_frames:
+            self._coord_registry.define_frame(
+                name=str(frame.name),
+                origin=(float(frame.origin[0]), float(frame.origin[1])),
+                basis_x=(float(frame.basis_x[0]), float(frame.basis_x[1])),
+                basis_y=(float(frame.basis_y[0]), float(frame.basis_y[1])),
+            )
         self._initialize_viewport_scroll_state()
         self._initialize_plane_scroll_state()
         self._bg_color = _parse_hex_rgba(self._ui_page.background)
@@ -565,6 +578,7 @@ class PlaneApp:
                 continue
             if event.event_type == "pointer_move":
                 self._frame_counts["pointer_move_events"] = int(self._frame_counts.get("pointer_move_events", 0)) + 1
+                self._update_drag_from_pointer(payload)
                 self._dispatch_hover(payload, dt)
                 if str(payload.get("phase", "")).lower() == "drag":
                     rect = self._event_pointer_dirty_rect(payload, margin_px=18)
@@ -576,6 +590,8 @@ class PlaneApp:
             ) + 1
             hook = _hook_for_event(event.event_type, payload)
             target_component = self._pick_component_for_event(payload)
+            if event.event_type in {"press", "click", "tap"}:
+                self._update_drag_from_press(event.event_type, payload, target_component)
             rect = self._event_pointer_dirty_rect(payload, margin_px=18)
             if rect is not None:
                 self._event_pointer_dirty_rects.append(rect)
@@ -690,6 +706,57 @@ class PlaneApp:
             self._invoke_bindings(new_target, "on_hover_start", "pointer_move", payload, dt)
         self.state["hover_component_id"] = new_id
 
+    @staticmethod
+    def _component_draggable(component) -> bool:
+        props = component.style if isinstance(component.style, dict) else {}
+        if isinstance(props.get("draggable"), bool):
+            return bool(props.get("draggable"))
+        return str(getattr(component, "component_type", "")) == "button"
+
+    def _update_drag_from_press(self, event_type: str, payload: dict[str, Any], target_component) -> None:
+        if event_type not in {"press", "click", "tap"}:
+            return
+        phase = str(payload.get("phase", "")).lower()
+        if phase in {"down", "start", "begin", "began"}:
+            if target_component is None or not self._component_draggable(target_component):
+                return
+            xy = self._extract_event_xy(payload)
+            if xy is None:
+                return
+            tx, ty = self._resolved_position(target_component)
+            self._drag_active_component_id = str(target_component.component_id)
+            self._drag_pointer_offset = (float(xy[0] - tx), float(xy[1] - ty))
+            return
+        if phase in {"up", "end", "ended", "cancel", "hold_end"}:
+            self._drag_active_component_id = None
+            self._drag_pointer_offset = (0.0, 0.0)
+
+    def _update_drag_from_pointer(self, payload: dict[str, Any]) -> None:
+        drag_id = self._drag_active_component_id
+        if not isinstance(drag_id, str) or not drag_id:
+            return
+        component = self._component_index.get(drag_id)
+        if component is None:
+            return
+        xy = self._extract_event_xy(payload)
+        if xy is None:
+            return
+        prev_x, prev_y = self._resolved_position(component)
+        ox, oy = self._drag_pointer_offset
+        nx = float(xy[0] - ox)
+        ny = float(xy[1] - oy)
+        prev = self._drag_position_overrides.get(drag_id)
+        if prev is not None and abs(prev[0] - nx) <= 1e-6 and abs(prev[1] - ny) <= 1e-6:
+            return
+        prev_rect = self._component_dirty_rect_at_position(component, x=prev_x, y=prev_y, margin_px=2)
+        self._drag_position_overrides[drag_id] = (nx, ny)
+        next_rect = self._component_dirty_rect_at_position(component, x=nx, y=ny, margin_px=2)
+        if prev_rect is not None:
+            self._drag_dirty_rects.append(prev_rect)
+        if next_rect is not None:
+            self._drag_dirty_rects.append(next_rect)
+        self._refresh_hit_test_index()
+
     def _pick_component_for_event(self, payload: dict[str, Any]):
         if self._ui_page is None:
             return None
@@ -785,12 +852,20 @@ class PlaneApp:
         return None
 
     def _extract_xy_from_payload(self, payload: dict[str, Any]) -> tuple[float, float] | None:
-        if "x" not in payload or "y" not in payload:
-            return None
-        try:
-            return (float(payload["x"]), float(payload["y"]))
-        except (TypeError, ValueError):
-            return None
+        candidate_pairs = (
+            ("x", "y"),
+            ("screen_x", "screen_y"),
+            ("content_x", "content_y"),
+            ("window_x", "window_y"),
+        )
+        for x_key, y_key in candidate_pairs:
+            if x_key not in payload or y_key not in payload:
+                continue
+            try:
+                return (float(payload[x_key]), float(payload[y_key]))
+            except (TypeError, ValueError):
+                continue
+        return None
 
     def _event_pointer_dirty_rect(self, payload: dict[str, Any], *, margin_px: int) -> tuple[int, int, int, int] | None:
         xy = self._extract_event_xy(payload)
@@ -886,12 +961,24 @@ class PlaneApp:
 
     def _resolved_position(self, component) -> tuple[float, float]:
         self._ensure_layout_cache_state()
+        component_id = str(component.component_id)
+        if component_id in self._layout_resolve_stack:
+            x, y = self._resolved_position_base(component, skip_component_attachment=True)
+            if not (self._is_overlay_attached(component) or self._is_camera_fixed(component)):
+                plane_x, plane_y = self._plane_scroll_position()
+                x -= plane_x
+                y -= plane_y
+            return (x, y)
         key = self._resolved_position_cache_key(component)
         cached = self._layout_position_cache.get(component.component_id)
         if cached is not None and cached[0] == key:
             self._frame_counts["layout_cache_hits"] = int(self._frame_counts.get("layout_cache_hits", 0)) + 1
             return cached[1]
-        x, y = self._resolved_position_base(component)
+        self._layout_resolve_stack.add(component_id)
+        try:
+            x, y = self._resolved_position_base(component)
+        finally:
+            self._layout_resolve_stack.discard(component_id)
         if not (self._is_overlay_attached(component) or self._is_camera_fixed(component)):
             plane_x, plane_y = self._plane_scroll_position()
             x -= plane_x
@@ -918,6 +1005,23 @@ class PlaneApp:
         else:
             plane_frame = ""
         component_frame = component.resolved_frame(self._ui_page.default_frame) if self._ui_page is not None else ""
+        parent_attach_id = props.get("attach_to_component_id")
+        if isinstance(parent_attach_id, str):
+            parent_component = self._component_index.get(parent_attach_id)
+            if parent_component is not None:
+                parent_props = parent_component.style if isinstance(parent_component.style, dict) else {}
+                parent_sig = (
+                    parent_attach_id,
+                    float(parent_component.position.x),
+                    float(parent_component.position.y),
+                    str(parent_component.position.frame or ""),
+                    parent_props.get("anchor_x"),
+                    parent_props.get("anchor_y"),
+                )
+            else:
+                parent_sig = (str(parent_attach_id), "missing")
+        else:
+            parent_sig = ("",)
         return (
             float(component.position.x),
             float(component.position.y),
@@ -939,6 +1043,8 @@ class PlaneApp:
             str(props.get("align", "")),
             str(props.get("v_align", "")),
             float(props.get("margin_bottom_px", 0.0)),
+            parent_sig,
+            self._drag_position_overrides.get(str(component.component_id), None),
         )
 
     def _resolved_interaction_bounds(self, component):
@@ -1037,6 +1143,16 @@ class PlaneApp:
             if component.asset is not None:
                 asset_src = str(component.asset.source)
             return ("svg", asset_src, round(float(component.opacity), 4))
+        if kind == "button":
+            props = component.style if isinstance(component.style, dict) else {}
+            return (
+                "button",
+                int(round(float(component.width))),
+                int(round(float(component.height))),
+                int(props.get("kernel_size", 9)),
+                round(float(props.get("sigma_px", 3.0)), 3),
+                round(float(component.opacity), 4),
+            )
         props = component.style if isinstance(component.style, dict) else {}
         return (
             "text",
@@ -1096,6 +1212,24 @@ class PlaneApp:
                             color_hex=color_hex,
                             opacity=float(component.opacity),
                             max_width_px=max_width_px,
+                        )
+                    )
+                    self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_start_ns)
+                    mounted += 1
+                    continue
+                if kind == "button":
+                    props = component.style if isinstance(component.style, dict) else {}
+                    mount_start_ns = time.perf_counter_ns()
+                    ctx.mount_component(
+                        self._retained_stained_glass_button_component(
+                            component_id=component.component_id,
+                            x=resolved_x,
+                            y=resolved_y,
+                            frame=frame,
+                            width=float(component.width),
+                            height=float(component.height),
+                            opacity=float(component.opacity),
+                            props=props,
                         )
                     )
                     self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_start_ns)
@@ -1234,6 +1368,91 @@ class PlaneApp:
             width=float(width),
             height=float(height),
             opacity=float(opacity),
+        )
+        self._retained_mount_cache[component_id] = (key, component)
+        self._frame_counts["retained_components_new"] = int(self._frame_counts.get("retained_components_new", 0)) + 1
+        return component
+
+    def _retained_stained_glass_button_component(
+        self,
+        *,
+        component_id: str,
+        x: float,
+        y: float,
+        frame: str,
+        width: float,
+        height: float,
+        opacity: float,
+        props: dict[str, Any],
+    ) -> StainedGlassButtonComponent:
+        resolved_props = _resolve_button_material_props(props, width=width, height=height)
+        kernel_size = int(resolved_props.get("kernel_size", 9))
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+        tint = _parse_tint_delta_rgba(resolved_props.get("tint_delta_rgba", (16, 20, 26, 0)))
+        color_filter = _parse_color_filter_rgb(resolved_props.get("color_filter_rgb", (1.12, 0.56, 0.52)))
+        label_font_weight = int(resolved_props.get("label_font_weight", resolved_props.get("font_weight", 400)))
+        label_font_weight = max(1, min(1000, label_font_weight))
+        label_font_size_px = float(resolved_props.get("label_font_size_px", resolved_props.get("font_size_px", 20.0)))
+        key: tuple[Any, ...] = (
+            "button",
+            round(float(x), 4),
+            round(float(y), 4),
+            frame,
+            round(float(width), 4),
+            round(float(height), 4),
+            round(float(opacity), 4),
+            round(float(resolved_props.get("corner_radius_px", 18.0)), 2),
+            kernel_size,
+            round(float(resolved_props.get("sigma_px", 3.0)), 2),
+            round(float(resolved_props.get("convolution_strength", 1.0)), 2),
+            round(float(resolved_props.get("scatter_sigma_px", 2.5)), 2),
+            round(float(resolved_props.get("refract_px", 2.0)), 2),
+            round(float(resolved_props.get("refract_calm_radius", 0.58)), 3),
+            round(float(resolved_props.get("refract_transition", 0.08)), 3),
+            round(float(resolved_props.get("chromatic_aberration_px", 0.5)), 2),
+            tint,
+            color_filter,
+            round(float(resolved_props.get("pane_mix", 0.42)), 3),
+            round(float(resolved_props.get("edge_highlight_alpha", 0.4)), 3),
+            round(float(resolved_props.get("depth_highlight_alpha", 0.28)), 3),
+            round(float(resolved_props.get("depth_shadow_alpha", 0.34)), 3),
+            round(float(resolved_props.get("rim_darken_alpha", 0.2)), 3),
+            str(resolved_props.get("label", resolved_props.get("text", ""))),
+            str(resolved_props.get("label_color_hex", "#FFF8EE")),
+            label_font_weight,
+            round(float(label_font_size_px), 2),
+        )
+        cached_entry = self._retained_mount_cache.get(component_id)
+        if cached_entry is not None and cached_entry[0] == key and isinstance(cached_entry[1], StainedGlassButtonComponent):
+            self._frame_counts["retained_components_reused"] = int(self._frame_counts.get("retained_components_reused", 0)) + 1
+            return cached_entry[1]
+        component = StainedGlassButtonComponent(
+            component_id=component_id,
+            position=CoordinatePoint(float(x), float(y), frame),
+            width=float(width),
+            height=float(height),
+            opacity=float(opacity),
+            corner_radius_px=float(resolved_props.get("corner_radius_px", 18.0)),
+            kernel_size=kernel_size,
+            sigma_px=float(resolved_props.get("sigma_px", 3.0)),
+            convolution_strength=float(resolved_props.get("convolution_strength", 1.0)),
+            scatter_sigma_px=float(resolved_props.get("scatter_sigma_px", 2.5)),
+            refract_px=float(resolved_props.get("refract_px", 2.0)),
+            refract_calm_radius=float(resolved_props.get("refract_calm_radius", 0.58)),
+            refract_transition=float(resolved_props.get("refract_transition", 0.08)),
+            chromatic_aberration_px=float(resolved_props.get("chromatic_aberration_px", 0.5)),
+            tint_delta_rgba=tint,
+            color_filter_rgb=color_filter,
+            pane_mix=float(resolved_props.get("pane_mix", 0.42)),
+            edge_highlight_alpha=float(resolved_props.get("edge_highlight_alpha", 0.4)),
+            depth_highlight_alpha=float(resolved_props.get("depth_highlight_alpha", 0.28)),
+            depth_shadow_alpha=float(resolved_props.get("depth_shadow_alpha", 0.34)),
+            rim_darken_alpha=float(resolved_props.get("rim_darken_alpha", 0.2)),
+            label=str(resolved_props.get("label", resolved_props.get("text", ""))),
+            label_color_hex=str(resolved_props.get("label_color_hex", "#FFF8EE")),
+            label_font=FontSpec(weight=label_font_weight),
+            label_font_size_px=float(label_font_size_px),
         )
         self._retained_mount_cache[component_id] = (key, component)
         self._frame_counts["retained_components_new"] = int(self._frame_counts.get("retained_components_new", 0)) + 1
@@ -1386,9 +1605,25 @@ class PlaneApp:
                 continue
             if not self._component_is_active(component):
                 continue
-            cx, cy = self._resolved_position(component)
+            cx, cy = self._component_origin_reference_point(component)
             points.append((component.component_id, float(cx), float(cy)))
         return points
+
+    def _component_origin_reference_point(self, component) -> tuple[float, float]:
+        if self._ui_page is None:
+            return self._resolved_position(component)
+        props = component.style if isinstance(component.style, dict) else {}
+        layout_w, layout_h = self._component_layout_size(component, props=props)
+        anchor_x_px, anchor_y_px = self._resolve_anchor_offset_px(
+            component=component,
+            layout_w=float(layout_w),
+            layout_h=float(layout_h),
+            viewport_w=float(self._ui_page.matrix.width),
+            viewport_h=float(self._ui_page.matrix.height),
+            props=props,
+        )
+        resolved_x, resolved_y = self._resolved_position(component)
+        return (float(resolved_x + anchor_x_px), float(resolved_y + anchor_y_px))
 
     @staticmethod
     def _origin_axis_svg(*, axis_length: float, color_hex: str, horizontal: bool) -> str:
@@ -1420,6 +1655,7 @@ class PlaneApp:
     def _begin_perf_frame(self) -> None:
         self._frame_perf = {}
         self._event_pointer_dirty_rects = []
+        self._drag_dirty_rects = []
         self._frame_counts = {
             "events_polled": 0,
             "events_processed": 0,
@@ -1467,7 +1703,12 @@ class PlaneApp:
     def _hit_index_signature_current(
         self,
     ) -> tuple[tuple[float, float], tuple[tuple[str, float, float], ...], tuple[str, ...]]:
-        return (self._plane_scroll_position(), self._viewport_scroll_snapshot(), self._hit_index_active_planes())
+        return (
+            self._plane_scroll_position(),
+            self._viewport_scroll_snapshot(),
+            self._hit_index_active_planes(),
+            self._drag_override_snapshot(),
+        )
 
     def _refresh_hit_test_index(self, *, force: bool = False) -> None:
         if self._ui_page is None:
@@ -1516,11 +1757,20 @@ class PlaneApp:
             return candidates
         return self._hit_index_all
 
-    def _current_dirty_signature(self) -> tuple[str, str | None, tuple[tuple[str, float, float], ...]]:
+    def _current_dirty_signature(
+        self,
+    ) -> tuple[str, str | None, tuple[tuple[str, float, float], ...], tuple[tuple[str, float, float], ...]]:
         theme = str(self.state.get("active_theme", "default"))
         hover = self.state.get("hover_component_id")
         hover_id = str(hover) if isinstance(hover, str) else None
-        return (theme, hover_id, self._viewport_scroll_snapshot())
+        return (theme, hover_id, self._viewport_scroll_snapshot(), self._drag_override_snapshot())
+
+    def _drag_override_snapshot(self) -> tuple[tuple[str, float, float], ...]:
+        if not self._drag_position_overrides:
+            return ()
+        out = [(cid, float(pos[0]), float(pos[1])) for cid, pos in self._drag_position_overrides.items()]
+        out.sort(key=lambda item: item[0])
+        return tuple(out)
 
     def _viewport_scroll_snapshot(self) -> tuple[tuple[str, float, float], ...]:
         raw = self.state.get("viewport_scroll")
@@ -1545,8 +1795,8 @@ class PlaneApp:
         *,
         pre_plane_scroll: tuple[float, float],
         post_plane_scroll: tuple[float, float],
-        pre_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]],
-        post_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]],
+        pre_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...], tuple[tuple[str, float, float], ...]],
+        post_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...], tuple[tuple[str, float, float], ...]],
         events_processed: int,
     ) -> list[tuple[int, int, int, int]]:
         if self._ui_page is None:
@@ -1602,6 +1852,8 @@ class PlaneApp:
             )
         if self._event_pointer_dirty_rects:
             dirty_rects.extend(self._event_pointer_dirty_rects)
+        if self._drag_dirty_rects:
+            dirty_rects.extend(self._drag_dirty_rects)
         if not plane_changed:
             normalized = self._normalize_local_dirty_rects(dirty_rects, view_w=view_w, view_h=view_h)
             if normalized:
@@ -1720,6 +1972,16 @@ class PlaneApp:
 
     def _component_dirty_rect(self, component, *, margin_px: int) -> tuple[int, int, int, int] | None:
         x, y = self._resolved_position(component)
+        return self._component_dirty_rect_at_position(component, x=x, y=y, margin_px=margin_px)
+
+    def _component_dirty_rect_at_position(
+        self,
+        component,
+        *,
+        x: float,
+        y: float,
+        margin_px: int,
+    ) -> tuple[int, int, int, int] | None:
         bounds = self._resolved_interaction_bounds(component)
         props = component.style if isinstance(component.style, dict) else {}
         layout_w, layout_h = self._component_layout_size(component, props=props)
@@ -1755,8 +2017,8 @@ class PlaneApp:
         *,
         pre_plane_scroll: tuple[float, float],
         post_plane_scroll: tuple[float, float],
-        pre_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]],
-        post_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...]],
+        pre_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...], tuple[tuple[str, float, float], ...]],
+        post_signature: tuple[str, str | None, tuple[tuple[str, float, float], ...], tuple[tuple[str, float, float], ...]],
     ) -> tuple[int, int] | None:
         _ = (pre_plane_scroll, post_plane_scroll, pre_signature, post_signature)
         return self._frame_scroll_shift
@@ -2071,7 +2333,7 @@ class PlaneApp:
     def _ns_to_ms(value_ns: float) -> float:
         return float(value_ns) / 1_000_000.0
 
-    def _resolved_position_base(self, component) -> tuple[float, float]:
+    def _resolved_position_base(self, component, *, skip_component_attachment: bool = False) -> tuple[float, float]:
         if self._ui_page is None:
             return (float(component.position.x), float(component.position.y))
         component_frame = component.resolved_frame(self._ui_page.default_frame)
@@ -2096,6 +2358,20 @@ class PlaneApp:
                         )
                     x += plane_x
                     y += plane_y
+            if not skip_component_attachment:
+                parent_attach_id = props.get("attach_to_component_id")
+                if isinstance(parent_attach_id, str) and parent_attach_id:
+                    parent_component = self._component_index.get(parent_attach_id)
+                    if parent_component is not None and parent_component is not component:
+                        parent_sx, parent_sy = self._component_origin_reference_point(parent_component)
+                        parent_x, parent_y = self._transform_point_between_frames(
+                            parent_sx,
+                            parent_sy,
+                            from_frame="screen_tl",
+                            to_frame=component_frame,
+                        )
+                        x += float(parent_x)
+                        y += float(parent_y)
         x, y = self._transform_point_to_screen_tl(x, y, from_frame=component_frame)
         align = str(props.get("align", "")).lower()
         if align == "center":
@@ -2114,6 +2390,10 @@ class PlaneApp:
         )
         x -= anchor_x_px
         y -= anchor_y_px
+        override = self._drag_position_overrides.get(str(component.component_id))
+        if override is not None:
+            x = float(override[0])
+            y = float(override[1])
         return (x, y)
 
     def _resolve_anchor_offset_px(
@@ -2849,6 +3129,160 @@ def _event_id_digest(event_ids: list[int]) -> str:
         h ^= int(event_id) & 0xFFFFFFFFFFFFFFFF
         h = (h * 1099511628211) & 0xFFFFFFFFFFFFFFFF
     return f"{h:016x}"
+
+
+_NATIVE_BUTTON_MATERIAL_PRESETS: dict[str, dict[str, Any]] = {
+    "water_button": {
+        "kernel_size": 7,
+        "sigma_px": 2.2,
+        "convolution_strength": 0.5,
+        "scatter_sigma_px": 0.25,
+        "refract_px": 4.4,
+        "refract_calm_radius": 0.92,
+        "refract_transition": 0.02,
+        "chromatic_aberration_px": 0.16,
+        "tint_delta_rgba": [46, -26, -30, 0],
+        "color_filter_rgb": [1.22, 0.76, 0.74],
+        "pane_mix": 0.34,
+        "edge_highlight_alpha": 0.52,
+        "depth_highlight_alpha": 0.2,
+        "depth_shadow_alpha": 0.24,
+        "rim_darken_alpha": 0.18,
+        "label_font_weight": 800,
+        "label_font_size_ratio": 0.333333,
+    },
+    "stained_glass_red_v1": {
+        "kernel_size": 5,
+        "sigma_px": 1.35,
+        "convolution_strength": 0.36,
+        "scatter_sigma_px": 0.08,
+        "refract_px": 1.45,
+        "chromatic_aberration_px": 0.05,
+        "tint_delta_rgba": [92, 16, 14, 0],
+        "edge_highlight_alpha": 0.74,
+        "label_font_weight": 700,
+        "label_font_size_ratio": 0.333333,
+    },
+    "stained_glass_red_v2": {
+        "kernel_size": 3,
+        "sigma_px": 0.9,
+        "convolution_strength": 0.2,
+        "scatter_sigma_px": 0.0,
+        "refract_px": 1.2,
+        "chromatic_aberration_px": 0.02,
+        "tint_delta_rgba": [138, -86, -96, 0],
+        "color_filter_rgb": [1.6, 0.3, 0.28],
+        "pane_mix": 0.78,
+        "edge_highlight_alpha": 0.7,
+        "depth_highlight_alpha": 0.34,
+        "depth_shadow_alpha": 0.46,
+        "rim_darken_alpha": 0.36,
+        "label_font_weight": 700,
+        "label_font_size_ratio": 0.333333,
+    },
+    "stained_glass_red_v3": {
+        "kernel_size": 3,
+        "sigma_px": 0.75,
+        "convolution_strength": 0.14,
+        "scatter_sigma_px": 0.0,
+        "refract_px": 1.1,
+        "chromatic_aberration_px": 0.01,
+        "tint_delta_rgba": [162, -108, -120, 0],
+        "color_filter_rgb": [1.78, 0.22, 0.2],
+        "pane_mix": 0.88,
+        "edge_highlight_alpha": 0.74,
+        "depth_highlight_alpha": 0.42,
+        "depth_shadow_alpha": 0.58,
+        "rim_darken_alpha": 0.44,
+        "label_font_weight": 700,
+        "label_font_size_ratio": 0.333333,
+    },
+    "y2k_button": {
+        "kernel_size": 3,
+        "sigma_px": 0.75,
+        "convolution_strength": 0.14,
+        "scatter_sigma_px": 0.0,
+        "refract_px": 1.1,
+        "chromatic_aberration_px": 0.01,
+        "tint_delta_rgba": [162, -108, -120, 0],
+        "color_filter_rgb": [1.78, 0.22, 0.2],
+        "pane_mix": 0.88,
+        "edge_highlight_alpha": 0.74,
+        "depth_highlight_alpha": 0.42,
+        "depth_shadow_alpha": 0.58,
+        "rim_darken_alpha": 0.44,
+        "label_font_weight": 700,
+        "label_font_size_ratio": 0.333333,
+    },
+    "liquid_glass_red_v1": {
+        "kernel_size": 5,
+        "sigma_px": 1.55,
+        "convolution_strength": 0.22,
+        "scatter_sigma_px": 0.22,
+        "refract_px": 2.35,
+        "chromatic_aberration_px": 0.08,
+        "tint_delta_rgba": [92, -36, -44, 0],
+        "color_filter_rgb": [1.28, 0.74, 0.7],
+        "pane_mix": 0.54,
+        "edge_highlight_alpha": 0.82,
+        "depth_highlight_alpha": 0.46,
+        "depth_shadow_alpha": 0.0,
+        "rim_darken_alpha": 0.0,
+        "label_font_weight": 700,
+        "label_font_size_ratio": 0.333333,
+    },
+}
+
+
+def _resolve_button_material_props(props: dict[str, Any], *, width: float, height: float) -> dict[str, Any]:
+    _ = width
+    material_profile = str(props.get("material_profile", "water_button")).strip() or "water_button"
+    merged: dict[str, Any] = dict(_NATIVE_BUTTON_MATERIAL_PRESETS.get(material_profile, {}))
+    custom_profiles = props.get("profile_presets")
+    if isinstance(custom_profiles, dict):
+        override = custom_profiles.get(material_profile)
+        if isinstance(override, dict):
+            merged.update(override)
+    for key, value in props.items():
+        if key == "profile_presets":
+            continue
+        merged[key] = value
+    if "label_font_weight" not in merged and "font_weight" in merged:
+        merged["label_font_weight"] = merged["font_weight"]
+    if "label_font_size_px" not in merged:
+        ratio_raw = merged.get("label_font_size_ratio", merged.get("font_size_ratio"))
+        if ratio_raw is not None:
+            try:
+                ratio = max(0.01, float(ratio_raw))
+                basis = max(1.0, float(height))
+                merged["label_font_size_px"] = basis * ratio
+            except (TypeError, ValueError):
+                pass
+    return merged
+
+
+def _parse_tint_delta_rgba(raw: Any) -> tuple[float, float, float, float]:
+    if not isinstance(raw, (list, tuple)) or len(raw) < 4:
+        return (16.0, 20.0, 26.0, 0.0)
+    out: list[float] = []
+    for idx in range(4):
+        try:
+            out.append(float(raw[idx]))
+        except (TypeError, ValueError, IndexError):
+            out.append(0.0)
+    return (out[0], out[1], out[2], out[3])
+
+
+def _parse_color_filter_rgb(raw: Any) -> tuple[float, float, float]:
+    if not isinstance(raw, (list, tuple)) or len(raw) < 3:
+        return (1.12, 0.56, 0.52)
+    out: list[float] = []
+    for idx in range(3):
+        try:
+            out.append(float(raw[idx]))
+        except (TypeError, ValueError, IndexError):
+            out.append(1.0)
+    return (max(0.0, out[0]), max(0.0, out[1]), max(0.0, out[2]))
 
 
 def _parse_hex_rgba(value: str) -> tuple[int, int, int, int]:

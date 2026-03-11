@@ -173,6 +173,8 @@ class UnifiedRuntime:
             current = bool(raw_state.get("origin_refs_enabled", False))
             next_value = not current
             raw_state["origin_refs_enabled"] = next_value
+            raw_state["force_full_invalidation"] = True
+            raw_state["force_full_invalidation_reason"] = "debug-menu-origin-refs-toggle"
             return next_value
 
         return _toggle
