@@ -13,6 +13,7 @@ from luvatrix_core.core.sensor_manager import SensorSample
 from luvatrix_core.core.ui_frame_renderer import MatrixUIFrameRenderer
 from luvatrix_core.core.window_matrix import WindowMatrix
 from luvatrix_ui.component_schema import CoordinatePoint
+from luvatrix_ui.controls.stained_glass_button import StainedGlassButtonComponent
 from luvatrix_ui.controls.svg_component import SVGComponent
 from luvatrix_ui.text.component import TextComponent
 from luvatrix_ui.text.renderer import FontSpec, TextAppearance, TextSizeSpec
@@ -165,6 +166,59 @@ class MatrixUIFrameRendererTests(unittest.TestCase):
         self.assertGreater(metrics.width_px, 0.0)
         frame = renderer.end_frame()
         self.assertEqual(tuple(frame.shape), (40, 60, 4))
+
+    def test_stained_glass_backdrop_cache_hits_on_repeated_frame(self) -> None:
+        from luvatrix_ui.component_schema import DisplayableArea
+
+        renderer = MatrixUIFrameRenderer()
+        area = DisplayableArea(content_width_px=80, content_height_px=50)
+        button = StainedGlassButtonComponent(
+            component_id="cta",
+            position=CoordinatePoint(8.0, 6.0, "screen_tl"),
+            width=40.0,
+            height=24.0,
+            label="go",
+            backdrop_cache_enabled=True,
+            roi_inset_px=0.0,
+            downsample_factor=1,
+        )
+
+        renderer.begin_frame(area, clear_color=(10, 20, 30, 255))
+        button.render(renderer)
+        renderer.end_frame()
+        first = renderer.consume_stained_glass_cache_stats()
+
+        renderer.begin_frame(area, clear_color=(10, 20, 30, 255))
+        button.render(renderer)
+        renderer.end_frame()
+        second = renderer.consume_stained_glass_cache_stats()
+
+        self.assertGreaterEqual(int(first.get("misses", 0)), 1)
+        self.assertGreaterEqual(int(second.get("hits", 0)), 1)
+        self.assertGreaterEqual(int(second.get("entry_count", 0)), 1)
+
+    def test_stained_glass_downsample_and_roi_path_renders(self) -> None:
+        from luvatrix_ui.component_schema import DisplayableArea
+
+        renderer = MatrixUIFrameRenderer()
+        area = DisplayableArea(content_width_px=120, content_height_px=80)
+        button = StainedGlassButtonComponent(
+            component_id="cta",
+            position=CoordinatePoint(10.0, 10.0, "screen_tl"),
+            width=80.0,
+            height=48.0,
+            label="drag",
+            backdrop_cache_enabled=True,
+            roi_inset_px=3.0,
+            downsample_factor=2,
+        )
+        renderer.begin_frame(area, clear_color=(30, 40, 50, 255))
+        button.render(renderer)
+        frame = renderer.end_frame()
+        stats = renderer.consume_stained_glass_cache_stats()
+        self.assertEqual(tuple(frame.shape), (80, 120, 4))
+        self.assertGreater(int(frame[:, :, :3].sum().item()), 0)
+        self.assertGreaterEqual(int(stats.get("misses", 0)), 1)
 
     def test_app_context_finalizes_mixed_text_and_svg_components(self) -> None:
         matrix = WindowMatrix(24, 24)

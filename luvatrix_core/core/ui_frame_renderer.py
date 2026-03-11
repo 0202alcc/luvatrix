@@ -58,8 +58,14 @@ class MatrixUIFrameRenderer:
     _bitmap_cache_max_pixels: int = field(default_factory=lambda: _env_int("LUVATRIX_SCROLL_BITMAP_CACHE_MAX_PIXELS", 2_000_000, 4096, 16_000_000))
     _svg_bitmap_cache: OrderedDict[tuple[Any, ...], torch.Tensor] = field(default_factory=OrderedDict)
     _text_bitmap_cache: OrderedDict[tuple[Any, ...], torch.Tensor] = field(default_factory=OrderedDict)
+    _stained_glass_backdrop_cache: OrderedDict[tuple[Any, ...], tuple[str, torch.Tensor]] = field(default_factory=OrderedDict)
+    _stained_glass_cache_max_entries: int = field(
+        default_factory=lambda: _env_int("LUVATRIX_STAINED_GLASS_CACHE_MAX_ENTRIES", 64, 1, 1024)
+    )
     _bitmap_cache_hits: int = 0
     _bitmap_cache_misses: int = 0
+    _stained_glass_cache_hits: int = 0
+    _stained_glass_cache_misses: int = 0
 
     def begin_frame(self, display: DisplayableArea, clear_color: tuple[int, int, int, int]) -> None:
         self._display = display
@@ -76,6 +82,8 @@ class MatrixUIFrameRenderer:
         self._grid_y = torch.arange(height, dtype=torch.float32).unsqueeze(1).expand(height, width)
         self._bitmap_cache_hits = 0
         self._bitmap_cache_misses = 0
+        self._stained_glass_cache_hits = 0
+        self._stained_glass_cache_misses = 0
 
     def set_bitmap_cache_enabled(self, enabled: bool) -> None:
         self._bitmap_cache_enabled_override = bool(enabled)
@@ -86,6 +94,13 @@ class MatrixUIFrameRenderer:
             "hits": int(self._bitmap_cache_hits),
             "misses": int(self._bitmap_cache_misses),
             "entry_count": int(len(self._svg_bitmap_cache) + len(self._text_bitmap_cache)),
+        }
+
+    def consume_stained_glass_cache_stats(self) -> dict[str, int]:
+        return {
+            "hits": int(self._stained_glass_cache_hits),
+            "misses": int(self._stained_glass_cache_misses),
+            "entry_count": int(len(self._stained_glass_backdrop_cache)),
         }
 
     def prepare_font(self, font: FontSpec, *, size_px: float, charset: str) -> None:
@@ -349,22 +364,41 @@ class MatrixUIFrameRenderer:
         y1 = min(int(self._frame.shape[0]), y + h)
         if x1 <= x0 or y1 <= y0:
             return
-        backdrop = self._frame[y0:y1, x0:x1].to(torch.float32)
+        roi_inset_px = max(0, int(round(float(command.roi_inset_px))))
+        rx0 = min(x1 - 1, max(x0, x0 + roi_inset_px))
+        ry0 = min(y1 - 1, max(y0, y0 + roi_inset_px))
+        rx1 = max(rx0 + 1, min(x1, x1 - roi_inset_px))
+        ry1 = max(ry0 + 1, min(y1, y1 - roi_inset_px))
+        backdrop = self._frame[ry0:ry1, rx0:rx1].to(torch.float32)
         patch_h = int(backdrop.shape[0])
         patch_w = int(backdrop.shape[1])
-        rgb = backdrop[:, :, 0:3].permute(2, 0, 1).unsqueeze(0) / 255.0
-        base = rgb
+        if patch_h <= 0 or patch_w <= 0:
+            return
+        base = backdrop[:, :, 0:3].permute(2, 0, 1).unsqueeze(0) / 255.0
+        downsample_factor = max(1, int(command.downsample_factor))
+        process_base = base
+        if downsample_factor > 1 and patch_h >= 4 and patch_w >= 4:
+            target_h = max(2, int(round(float(patch_h) / float(downsample_factor))))
+            target_w = max(2, int(round(float(patch_w) / float(downsample_factor))))
+            process_base = F.interpolate(base, size=(target_h, target_w), mode="bilinear", align_corners=False)
+        proc_h = int(process_base.shape[-2])
+        proc_w = int(process_base.shape[-1])
 
         kernel_size = max(3, int(command.kernel_size))
         if kernel_size % 2 == 0:
             kernel_size += 1
+        if downsample_factor > 1:
+            kernel_size = max(3, int(round(float(kernel_size) / float(downsample_factor))))
+            if kernel_size % 2 == 0:
+                kernel_size += 1
         sigma = max(0.1, float(command.sigma_px))
-        center_gain, edge_gain = self._radial_weight_maps(h=patch_h, w=patch_w, device=base.device)
+        if downsample_factor > 1:
+            sigma = max(0.1, sigma / float(downsample_factor))
         edge_proximity = self._rounded_rect_edge_proximity(
-            h=patch_h,
-            w=patch_w,
+            h=proc_h,
+            w=proc_w,
             corner_radius_px=float(command.corner_radius_px),
-            device=base.device,
+            device=process_base.device,
         )
         calm = max(0.0, min(1.0, float(command.refract_calm_radius)))
         transition = max(0.01, float(command.refract_transition))
@@ -375,16 +409,18 @@ class MatrixUIFrameRenderer:
         if edge_kernel_size % 2 == 0:
             edge_kernel_size += 1
         edge_sigma = sigma * (float(edge_kernel_size) / float(kernel_size)) * 1.15
-        blur_center = self._gaussian_blur_rgb(base, kernel_size=kernel_size, sigma=sigma)
-        blur_edge = self._gaussian_blur_rgb(base, kernel_size=edge_kernel_size, sigma=edge_sigma)
+        blur_center = self._gaussian_blur_rgb(process_base, kernel_size=kernel_size, sigma=sigma)
+        blur_edge = self._gaussian_blur_rgb(process_base, kernel_size=edge_kernel_size, sigma=edge_sigma)
         blurred = torch.clamp(blur_center * (1.0 - edge_sigmoid) + blur_edge * edge_sigmoid, 0.0, 1.0)
 
         strength = max(0.0, float(command.convolution_strength))
         inv_center_conv_gain = edge_sigmoid
-        scattered = torch.clamp(base + (blurred - base) * (strength * inv_center_conv_gain), 0.0, 1.0)
+        scattered = torch.clamp(process_base + (blurred - process_base) * (strength * inv_center_conv_gain), 0.0, 1.0)
 
         scatter_sigma = max(0.0, float(command.scatter_sigma_px))
         if scatter_sigma > 0.05:
+            if downsample_factor > 1:
+                scatter_sigma = max(0.05, scatter_sigma / float(downsample_factor))
             scatter_kernel = max(3, int(round(scatter_sigma * 2.0)) * 2 + 1)
             scatter_blur = self._gaussian_blur_rgb(scattered, kernel_size=scatter_kernel, sigma=max(0.1, scatter_sigma))
             edge_mix = torch.clamp(inv_center_conv_gain * 0.9, 0.0, 1.0)
@@ -394,6 +430,9 @@ class MatrixUIFrameRenderer:
         refract_calm_radius = float(command.refract_calm_radius)
         refract_transition = float(command.refract_transition)
         chroma_px = float(command.chromatic_aberration_px)
+        if downsample_factor > 1:
+            refract_px = refract_px / float(downsample_factor)
+            chroma_px = chroma_px / float(downsample_factor)
         refracted = self._refract_with_aberration(
             scattered,
             refract_px=refract_px,
@@ -409,14 +448,22 @@ class MatrixUIFrameRenderer:
         filtered = torch.clamp(refracted * filter_rgb, 0.0, 1.0)
         pane_mix = max(0.0, min(1.0, float(command.pane_mix)))
         pane = torch.clamp(refracted * (1.0 - pane_mix) + filtered * pane_mix, 0.0, 1.0)
+        if downsample_factor > 1 and (proc_h != patch_h or proc_w != patch_w):
+            pane = F.interpolate(pane, size=(patch_h, patch_w), mode="bilinear", align_corners=False)
 
         mask = self._rounded_rect_mask(h=patch_h, w=patch_w, radius=float(command.corner_radius_px))
         alpha = mask * max(0.0, min(1.0, float(command.opacity)))
         _, _, gy = self._radial_and_y_maps(h=patch_h, w=patch_w, device=base.device)
+        edge_proximity_full = self._rounded_rect_edge_proximity(
+            h=patch_h,
+            w=patch_w,
+            corner_radius_px=float(command.corner_radius_px),
+            device=base.device,
+        )
 
         # Depth cues are restricted to a thin rounded-rect perimeter ring so the interior
         # remains optically clear while edges read as a raised prism.
-        depth_edge_gate = self._edge_sigmoid_gate(edge_proximity, edge_start=0.955, transition=0.009) * mask
+        depth_edge_gate = self._edge_sigmoid_gate(edge_proximity_full, edge_start=0.955, transition=0.009) * mask
         top_gloss = (
             depth_edge_gate
             * torch.pow(torch.clamp(1.0 - gy, 0.0, 1.0), 1.35)
@@ -448,14 +495,45 @@ class MatrixUIFrameRenderer:
             out_patch = edge_color * (edge * edge_alpha).unsqueeze(-1) + out_patch * (1.0 - (edge * edge_alpha).unsqueeze(-1))
             out_rgba[:, :, 0:3] = torch.clamp(out_patch * 255.0, 0.0, 255.0)
 
-        self._frame[y0:y1, x0:x1] = out_rgba.to(torch.uint8)
+        out_patch = out_rgba.to(torch.uint8)
+        if bool(command.backdrop_cache_enabled):
+            cache_key = (
+                str(command.component_id),
+                int(rx0),
+                int(ry0),
+                int(rx1),
+                int(ry1),
+                int(downsample_factor),
+                int(kernel_size),
+                round(float(command.sigma_px), 4),
+                round(float(command.convolution_strength), 4),
+                round(float(command.scatter_sigma_px), 4),
+                round(float(command.refract_px), 4),
+                round(float(command.chromatic_aberration_px), 4),
+                round(float(command.corner_radius_px), 4),
+                round(float(command.opacity), 4),
+            )
+            backdrop_digest = hashlib.sha256(backdrop.to(torch.uint8).contiguous().cpu().numpy().tobytes()).hexdigest()
+            cached = self._stained_glass_backdrop_cache.get(cache_key)
+            if cached is not None and cached[0] == backdrop_digest:
+                self._stained_glass_cache_hits += 1
+                self._stained_glass_backdrop_cache.move_to_end(cache_key)
+                out_patch = cached[1].clone()
+            else:
+                self._stained_glass_cache_misses += 1
+                self._stained_glass_backdrop_cache[cache_key] = (backdrop_digest, out_patch.clone())
+                self._stained_glass_backdrop_cache.move_to_end(cache_key)
+                while len(self._stained_glass_backdrop_cache) > int(self._stained_glass_cache_max_entries):
+                    self._stained_glass_backdrop_cache.popitem(last=False)
+
+        self._frame[ry0:ry1, rx0:rx1] = out_patch
 
         label = str(command.label)
         if label.strip():
             self._draw_button_label(
                 text=label,
-                x=float(x0),
-                y=float(y0),
+                x=float(rx0),
+                y=float(ry0),
                 w=float(patch_w),
                 h=float(patch_h),
                 color_hex=str(command.label_color_hex),

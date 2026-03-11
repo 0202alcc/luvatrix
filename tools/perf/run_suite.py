@@ -277,6 +277,11 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int, se
     queue_present_ms: list[float] = []
     swapchain_recreate_counts: list[int] = []
     dirty_area_ratios: list[float] = []
+    timing_input_ms: list[float] = []
+    timing_hit_test_ms: list[float] = []
+    timing_mount_ms: list[float] = []
+    timing_raster_ms: list[float] = []
+    timing_present_ms: list[float] = []
     events_processed: list[int] = []
     event_budgets: list[int] = []
     pending_after_frame: list[int] = []
@@ -424,6 +429,11 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int, se
         queue_present_ms.append(float(copy_timing.get("queue_present", 0.0)))
         swapchain_recreate_counts.append(int(perf.get("swapchain_recreate_count", 0)))
         dirty_area_ratios.append(float(perf.get("dirty_rect_area_ratio", 0.0)))
+        timing_input_ms.append(float(timing.get("input", 0.0)))
+        timing_hit_test_ms.append(float(timing.get("hit_test", 0.0)))
+        timing_mount_ms.append(float(timing.get("mount", 0.0)))
+        timing_raster_ms.append(float(timing.get("raster", 0.0)))
+        timing_present_ms.append(float(timing.get("present", 0.0)))
         events_processed.append(int(perf.get("events_processed", 0)))
         event_budgets.append(int(perf.get("event_budget", 0)))
         pending_after_frame.append(int(perf.get("event_queue_pending_after", 0)))
@@ -454,6 +464,18 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int, se
     presented_frames = int(incremental_frames + full_frames)
     incremental_pct = (float(incremental_frames) * 100.0 / float(presented_frames)) if presented_frames > 0 else 0.0
     full_pct = (float(full_frames) * 100.0 / float(presented_frames)) if presented_frames > 0 else 0.0
+    hot_path_p95_ms = {
+        "input": float(_percentile(timing_input_ms, 95.0)),
+        "hit_test": float(_percentile(timing_hit_test_ms, 95.0)),
+        "mount": float(_percentile(timing_mount_ms, 95.0)),
+        "raster": float(_percentile(timing_raster_ms, 95.0)),
+        "present": float(_percentile(timing_present_ms, 95.0)),
+    }
+    hot_path_total = float(sum(hot_path_p95_ms.values()))
+    if hot_path_total > 0.0:
+        hot_path_share_pct = {k: float(v * 100.0 / hot_path_total) for k, v in hot_path_p95_ms.items()}
+    else:
+        hot_path_share_pct = {k: 0.0 for k in hot_path_p95_ms}
     return {
         "samples": int(samples),
         "p95_frame_total_ms": float(p95_ms),
@@ -493,6 +515,8 @@ def _run_scenario_trial(scenario: str, samples: int, width: int, height: int, se
         "p95_input_to_present_ms": float(_percentile(ctx.input_to_present_ms, 95.0)),
         "p99_input_to_present_ms": float(_percentile(ctx.input_to_present_ms, 99.0)),
         "input_to_present_ms_trace": [float(v) for v in ctx.input_to_present_ms],
+        "hot_path_p95_ms": hot_path_p95_ms,
+        "hot_path_share_pct": hot_path_share_pct,
         "app_reinit_count": int(app_reinit_count),
         "resize_recovery_samples_ms": [float(v) for v in resize_recovery_samples_ms],
         "resize_recovery_sec": (

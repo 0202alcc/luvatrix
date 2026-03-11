@@ -36,6 +36,9 @@ class StainedGlassButtonRenderCommand:
     label_color_hex: str = "#FFF8EE"
     label_font: FontSpec = field(default_factory=FontSpec)
     label_font_size_px: float = 20.0
+    backdrop_cache_enabled: bool = True
+    roi_inset_px: float = 0.0
+    downsample_factor: int = 1
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,9 @@ class StainedGlassButtonComponent(ComponentBase):
     label_color_hex: str = "#FFF8EE"
     label_font: FontSpec = field(default_factory=FontSpec)
     label_font_size_px: float = 20.0
+    backdrop_cache_enabled: bool = True
+    roi_inset_px: float = 0.0
+    downsample_factor: int = 1
     _visual_bounds_cache: BoundingBox | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -85,6 +91,8 @@ class StainedGlassButtonComponent(ComponentBase):
             raise ValueError("StainedGlassButtonComponent kernel_size must be >= 3")
         if self.kernel_size % 2 == 0:
             raise ValueError("StainedGlassButtonComponent kernel_size must be odd")
+        if self.downsample_factor < 1:
+            raise ValueError("StainedGlassButtonComponent downsample_factor must be >= 1")
 
     def _resolved_frame(self) -> str:
         return self.position.frame or self.default_frame
@@ -119,6 +127,9 @@ class StainedGlassButtonComponent(ComponentBase):
             label_color_hex=self.label_color_hex,
             label_font=self.label_font,
             label_font_size_px=self.label_font_size_px,
+            backdrop_cache_enabled=bool(self.backdrop_cache_enabled),
+            roi_inset_px=float(self.roi_inset_px),
+            downsample_factor=int(self.downsample_factor),
         )
         bounds = BoundingBox(
             x=self.position.x,

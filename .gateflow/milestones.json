@@ -39,7 +39,7 @@
       "descriptions": [
         "macOS-first app manifest debug policy controls with backward compatibility and P-026 non-regression gates; non-mac policies are explicit capability stubs until expansion."
       ],
-      "emoji": "\ud83e\udde9",
+      "emoji": "🧩",
       "end_week": 35,
       "id": "A-037",
       "lifecycle_events": [
@@ -114,7 +114,7 @@
       "descriptions": [
         "Implement and validate 10 concrete training example apps under examples/app_protocol/ with deterministic outputs and debug-tooling evidence."
       ],
-      "emoji": "\ud83e\uddea",
+      "emoji": "🧪",
       "end_week": 15,
       "go_no_go": {
         "message": "GO corrective pass: full interactive app behaviors implemented; exact required command bundle passes.",
@@ -195,7 +195,7 @@
       "descriptions": [
         "Must comply with first-party Luvatrix App Protocol contracts."
       ],
-      "emoji": "\ud83e\udded",
+      "emoji": "🧭",
       "end_week": 13,
       "id": "APU-020",
       "legacy_id": "M-011",
@@ -278,7 +278,7 @@
       "descriptions": [
         "Deliver milestone outcome: Cross-platform full-suite interactive generalization."
       ],
-      "emoji": "\ud83c\udf10",
+      "emoji": "🌐",
       "end_week": 4,
       "id": "ARU-016",
       "legacy_id": "M-007",
@@ -335,7 +335,7 @@
       "descriptions": [
         "Deliver milestone outcome: Data workspace UI (calendar app)."
       ],
-      "emoji": "\ud83d\uddd3\ufe0f",
+      "emoji": "🗓️",
       "end_week": 9,
       "id": "AU-018",
       "legacy_id": "M-009",
@@ -390,7 +390,7 @@
       "descriptions": [
         "Deliver milestone outcome: Custom marketbook dynamic plotting system (integrated with U-021 plots module)."
       ],
-      "emoji": "\ud83d\udcc8",
+      "emoji": "📈",
       "end_week": 12,
       "id": "AU-019",
       "legacy_id": "M-010",
@@ -453,7 +453,7 @@
       "descriptions": [
         "Deliver milestone outcome: Core package transition and repository cleanup."
       ],
-      "emoji": "\ud83e\uddec",
+      "emoji": "🧬",
       "end_week": 1,
       "id": "F-001",
       "legacy_id": "H-001",
@@ -509,7 +509,7 @@
       "descriptions": [
         "Deliver milestone outcome: Runtime safety controller and audit pipeline hardening."
       ],
-      "emoji": "\u26a1",
+      "emoji": "⚡",
       "end_week": 1,
       "id": "F-003",
       "legacy_id": "H-003",
@@ -565,7 +565,7 @@
       "descriptions": [
         "Deliver milestone outcome: App protocol docs finalized."
       ],
-      "emoji": "\ud83d\udcdc",
+      "emoji": "📜",
       "end_week": 3,
       "id": "F-011",
       "legacy_id": "M-002",
@@ -658,7 +658,7 @@
       "descriptions": [
         "Deliver milestone outcome: Audit retention lifecycle."
       ],
-      "emoji": "\ud83d\udee1\ufe0f",
+      "emoji": "🛡️",
       "end_week": 7,
       "id": "F-014",
       "legacy_id": "M-005",
@@ -714,7 +714,7 @@
       "descriptions": [
         "Deliver milestone outcome: Sensor backend performance modernization."
       ],
-      "emoji": "\ud83d\udef0\ufe0f",
+      "emoji": "🛰️",
       "end_week": 17,
       "id": "F-024",
       "lifecycle_events": [
@@ -782,7 +782,7 @@
       "descriptions": [
         "Productize Planes v2 split-file protocol with canonical basis and deterministic rules while preserving app API compatibility."
       ],
-      "emoji": "\ud83e\uddf1",
+      "emoji": "🧱",
       "end_week": 17,
       "go_no_go": {
         "message": "GO: All F-027 tasks are Done, closeout packet validated, training blockers cleared, and required CI checks passed.",
@@ -852,7 +852,7 @@
       "descriptions": [
         "Implement strict schema and cross-file invariant validators for split-file Planes v2."
       ],
-      "emoji": "\u2705",
+      "emoji": "✅",
       "end_week": 18,
       "go_no_go": {
         "message": "Final closeout confirmed after GO re-review",
@@ -924,7 +924,7 @@
       "descriptions": [
         "Preserve existing app behavior through monolith adapter and controlled migration to canonical k_hat ordering semantics."
       ],
-      "emoji": "\ud83d\udd01",
+      "emoji": "🔁",
       "end_week": 23,
       "go_no_go": {
         "message": "GO: All F-031 tasks closed, conformance and debug evidence checks passed, and canonical closeout packet validated.",
@@ -990,7 +990,7 @@
       "descriptions": [
         "macOS-first debug menu foundation with crash-proof handling, standardized capability IDs, and explicit non-mac capability stubs for cross-platform-safe contracts."
       ],
-      "emoji": "\ud83d\udee1\ufe0f",
+      "emoji": "🛡️",
       "end_week": 29,
       "id": "F-034",
       "lifecycle_events": [
@@ -1057,7 +1057,7 @@
       "descriptions": [
         "Ship unified notify.send/cancel/capabilities across macOS/Windows/Linux/Web with strict compatibility and deterministic behavior preservation."
       ],
-      "emoji": "\ud83d\udd14",
+      "emoji": "🔔",
       "end_week": 24,
       "id": "F-038",
       "lifecycle_events": [
@@ -1128,7 +1128,7 @@
         "Decouple planning domain services from hardcoded `ops/planning/*` paths.",
         "Introduce storage-root abstraction and renderer interface seams."
       ],
-      "emoji": "\ud83e\uddf1",
+      "emoji": "🧱",
       "end_week": 49,
       "id": "F-041",
       "lifecycle_events": [
@@ -1197,7 +1197,7 @@
         "Implement resource-first CLI and `gateflow init` scaffold on extracted services.",
         "Preserve endpoint compatibility via temporary `api METHOD /resource` shim."
       ],
-      "emoji": "\ud83d\udee0\ufe0f",
+      "emoji": "🛠️",
       "end_week": 52,
       "id": "F-042",
       "lifecycle_events": [
@@ -1266,7 +1266,7 @@
         "Move stabilized modules into standalone `gateflow` package/repo.",
         "Provide install path and pre-release distribution docs."
       ],
-      "emoji": "\ud83d\udce6",
+      "emoji": "📦",
       "end_week": 57,
       "id": "F-045",
       "lifecycle_events": [
@@ -1335,7 +1335,7 @@
         "Implement deterministic migration from `ops/planning/*` to `.gateflow/*`.",
         "Add mismatch reporting and remediation guidance."
       ],
-      "emoji": "\ud83d\udd04",
+      "emoji": "🔄",
       "end_week": 59,
       "id": "F-046",
       "lifecycle_events": [
@@ -1403,7 +1403,7 @@
       "descriptions": [
         "Deliver milestone outcome: Platform variant routing and HDI phase standardization."
       ],
-      "emoji": "\ud83e\udded",
+      "emoji": "🧭",
       "end_week": 1,
       "id": "FR-004",
       "legacy_id": "H-004",
@@ -1459,7 +1459,7 @@
       "descriptions": [
         "Deliver milestone outcome: Discord ops consolidation under /discord."
       ],
-      "emoji": "\ud83d\uddc2\ufe0f",
+      "emoji": "🗂️",
       "end_week": 1,
       "id": "P-008",
       "legacy_id": "H-008",
@@ -1514,7 +1514,7 @@
       "descriptions": [
         "Deliver milestone outcome: Discord governance artifacts and onboarding system."
       ],
-      "emoji": "\ud83e\uddf1",
+      "emoji": "🧱",
       "end_week": 2,
       "id": "P-010",
       "legacy_id": "M-001",
@@ -1570,7 +1570,7 @@
       "descriptions": [
         "Owns deterministic gate ownership plus feature-specific non-regression conformance packs feeding milestone closeouts."
       ],
-      "emoji": "\ud83e\uddea",
+      "emoji": "🧪",
       "end_week": 6,
       "id": "P-013",
       "legacy_id": "M-004",
@@ -1633,7 +1633,7 @@
       "descriptions": [
         "Deliver milestone outcome: Production-hardening go/no-go review."
       ],
-      "emoji": "\ud83d\ude80",
+      "emoji": "🚀",
       "end_week": 10,
       "id": "P-015",
       "legacy_id": "M-006",
@@ -1689,7 +1689,7 @@
       "descriptions": [
         "Deliver milestone outcome: Performance baseline and telemetry gates."
       ],
-      "emoji": "\ud83d\udccf",
+      "emoji": "📏",
       "end_week": 14,
       "id": "P-021",
       "lifecycle_events": [
@@ -1775,7 +1775,7 @@
       "descriptions": [
         "All closeout tasks complete with consolidated evidence package."
       ],
-      "emoji": "\u2705",
+      "emoji": "✅",
       "end_week": 14,
       "id": "P-026",
       "lifecycle_events": [
@@ -1916,7 +1916,7 @@
       "descriptions": [
         "Rollout controls, P-026 non-regression evidence gate, and final go/no-go closeout packet for Planes v2 switchover."
       ],
-      "emoji": "\ud83d\udea6",
+      "emoji": "🚦",
       "end_week": 24,
       "go_no_go": {
         "message": "GO reaffirmed after closeout packet evidence table/training mapping refresh",
@@ -1982,7 +1982,7 @@
         "Lock v1 command contract and data contract for GateFlow standalone CLI.",
         "Freeze `.gateflow/` canonical schema and profile boundaries before refactor starts."
       ],
-      "emoji": "\ud83e\udded",
+      "emoji": "🧭",
       "end_week": 46,
       "id": "P-040",
       "lifecycle_events": [
@@ -2051,7 +2051,7 @@
         "Preserve GateFlow quality checks with configurable branch guard and validation surfaces.",
         "Move closeout harness policy to warning-level for v1 with future escalation option."
       ],
-      "emoji": "\ud83d\udee1\ufe0f",
+      "emoji": "🛡️",
       "end_week": 54,
       "id": "P-044",
       "lifecycle_events": [
@@ -2114,7 +2114,7 @@
         "Adopt standalone gateflow CLI in Luvatrix with wrappers and deprecation notices.",
         "Keep planning continuity while shifting operational commands."
       ],
-      "emoji": "\ud83d\ude9a",
+      "emoji": "🚚",
       "end_week": 61,
       "id": "P-047",
       "lifecycle_events": [
@@ -2178,7 +2178,7 @@
         "Decommission ops/planning as active ledger and eliminate dual-state drift.",
         "Make .gateflow the only source for planning state and closeout decisions."
       ],
-      "emoji": "\ud83d\udcda",
+      "emoji": "📚",
       "end_week": 56,
       "go_no_go": {
         "message": "GO: .gateflow canonicalization complete; required gateflow validations passed; ops/planning frozen legacy",
@@ -2248,7 +2248,7 @@
       "descriptions": [
         "Deliver milestone outcome: macOS visual runtime foundation merged to main."
       ],
-      "emoji": "\ud83d\udda5\ufe0f",
+      "emoji": "🖥️",
       "end_week": 1,
       "id": "R-002",
       "legacy_id": "H-002",
@@ -2304,7 +2304,7 @@
       "descriptions": [
         "Deliver milestone outcome: Rendering fallback, smoke docs, and GPU blit path."
       ],
-      "emoji": "\ud83c\udfaf",
+      "emoji": "🎯",
       "end_week": 1,
       "id": "R-005",
       "legacy_id": "H-005",
@@ -2359,7 +2359,7 @@
       "descriptions": [
         "Deliver milestone outcome: Vulkan stabilization."
       ],
-      "emoji": "\ud83c\udfae",
+      "emoji": "🎮",
       "end_week": 6,
       "id": "R-012",
       "legacy_id": "M-003",
@@ -2417,7 +2417,7 @@
       "descriptions": [
         "Deliver milestone outcome: Render copy elimination."
       ],
-      "emoji": "\ud83e\uddec",
+      "emoji": "🧬",
       "end_week": 16,
       "id": "R-022",
       "lifecycle_events": [
@@ -2474,7 +2474,7 @@
       "descriptions": [
         "Deliver milestone outcome: Vulkan transfer path efficiency."
       ],
-      "emoji": "\ud83d\ude9a",
+      "emoji": "🚚",
       "end_week": 17,
       "id": "R-023",
       "lifecycle_events": [
@@ -2530,7 +2530,7 @@
       "descriptions": [
         "Deliver milestone outcome: Event loop and input scheduling tightening."
       ],
-      "emoji": "\ud83c\udf9b\ufe0f",
+      "emoji": "🎛️",
       "end_week": 16,
       "id": "R-025",
       "lifecycle_events": [
@@ -2599,7 +2599,7 @@
       "descriptions": [
         "Optimization-only phase after rollout gates pass; focuses on throughput and latency improvements under determinism/compatibility guardrails."
       ],
-      "emoji": "\ud83d\udcc8",
+      "emoji": "📈",
       "end_week": 27,
       "go_no_go": {
         "message": "Reconfirm GO close for milestone replay with training evidence mapping",
@@ -2663,7 +2663,7 @@
       "descriptions": [
         "macOS-first input replay, frame-step, perf HUD, and exportable debug bundles with deterministic evidence; non-mac kept as explicit capability stubs."
       ],
-      "emoji": "\ud83c\udf9b\ufe0f",
+      "emoji": "🎛️",
       "end_week": 33,
       "id": "R-036",
       "lifecycle_events": [
@@ -2742,7 +2742,7 @@
       "descriptions": [
         "Wire existing debug contracts into live AppKit menu behavior for macOS example apps with crash-safe dispatch, policy enforcement, and deterministic smoke evidence."
       ],
-      "emoji": "\ud83c\udf4e",
+      "emoji": "🍎",
       "end_week": 39,
       "id": "R-039",
       "lifecycle_events": [
@@ -2827,7 +2827,7 @@
       "descriptions": [
         "Convert currently exposed macOS Debug menu actions from safe stubs into real runtime functionality while preserving crash safety, determinism, and compatibility."
       ],
-      "emoji": "\ud83e\uddf0",
+      "emoji": "🧰",
       "end_week": 44,
       "id": "R-040",
       "lifecycle_events": [
@@ -2900,7 +2900,7 @@
       "descriptions": [
         "Deliver milestone outcome: Packaging metadata and Vulkan runtime preflight guidance."
       ],
-      "emoji": "\ud83d\udce6",
+      "emoji": "📦",
       "end_week": 1,
       "id": "RF-009",
       "legacy_id": "H-009",
@@ -2960,7 +2960,7 @@
       "descriptions": [
         "Integrate runtime to consume canonical IR only with deterministic composition/order/hit-test behavior."
       ],
-      "emoji": "\u2699\ufe0f",
+      "emoji": "⚙️",
       "end_week": 22,
       "go_no_go": {
         "message": "GO: RF-030 is merged to main with required checks passing; milestone close synced on canonical branch.",
@@ -3027,7 +3027,7 @@
       "descriptions": [
         "Deliver milestone outcome: Plot stabilization and stream simulation integration."
       ],
-      "emoji": "\ud83d\udd0c",
+      "emoji": "🔌",
       "end_week": 1,
       "id": "U-007",
       "legacy_id": "H-007",
@@ -3082,7 +3082,7 @@
       "descriptions": [
         "Deliver milestone outcome: UI/UX foundations (text, SVG, table, scrolling, interaction surfaces)."
       ],
-      "emoji": "\ud83d\udcca",
+      "emoji": "📊",
       "end_week": 9,
       "id": "U-017",
       "legacy_id": "M-008",
@@ -3166,7 +3166,7 @@
       "descriptions": [
         "Foundational plotting capabilities shared by downstream apps, including viewport/scroll behavior and stream cadence/latency primitives."
       ],
-      "emoji": "\ud83d\udcc9",
+      "emoji": "📉",
       "end_week": 11,
       "id": "U-021",
       "lifecycle_events": [
@@ -3225,7 +3225,7 @@
       "descriptions": [
         "macOS-first screenshot/record tooling and visual overlays with deterministic metadata; non-mac paths remain explicit stubs/capability-declared for safe expansion."
       ],
-      "emoji": "\ud83d\uddbc\ufe0f",
+      "emoji": "🖼️",
       "end_week": 31,
       "id": "U-035",
       "lifecycle_events": [
@@ -3299,7 +3299,7 @@
         "Replace generation path with markdown/ascii rendering only for v1.",
         "Remove PNG/matplotlib dependency from v1 execution path."
       ],
-      "emoji": "\ud83d\udcdd",
+      "emoji": "📝",
       "end_week": 52,
       "id": "U-043",
       "lifecycle_events": [
@@ -3367,7 +3367,7 @@
       "descriptions": [
         "Deliver milestone outcome: Interactive plot module and UI IR integration."
       ],
-      "emoji": "\ud83d\udcc8",
+      "emoji": "📈",
       "end_week": 1,
       "id": "UF-006",
       "legacy_id": "H-006",
@@ -3427,7 +3427,7 @@
       "descriptions": [
         "Compile split files and monolith adapter into canonical Planes IR with deterministic parity guarantees."
       ],
-      "emoji": "\ud83e\udde0",
+      "emoji": "🧠",
       "end_week": 20,
       "go_no_go": {
         "message": "GO: all UF-029 tasks are Done, canonical IR parity digest checks pass for split-vs-monolith and overlay semantics, and GateFlow validations are green.",
@@ -3456,6 +3456,74 @@
         "T-3407",
         "T-3408",
         "T-3409"
+      ]
+    },
+    {
+      "id": "R-041",
+      "name": "Rendering Responsiveness Hardening (No-Lag Milestone)",
+      "emoji": "⚡",
+      "status": "In Progress",
+      "start_week": 11,
+      "end_week": 15,
+      "descriptions": [
+        "Eliminate interactive rendering lag in Planes runtime with measurable frame-time and jitter targets, prioritizing drag-move responsiveness for shader-heavy components."
+      ],
+      "success_criteria": [
+        "Interactive drag-move on button-heavy scenes is perceptually smooth on target macOS hardware.",
+        "Perf telemetry shows sustained frame-time and jitter within defined budget under drag workload.",
+        "No functional regressions in hit-test, determinism, or debug overlay behavior."
+      ],
+      "ci_required_checks": [
+        "PYTHONPATH=. uv run --with pytest pytest tests -k \"planes_runtime or origin_refs or debug_overlay or debug_menu_dispatch\" -q",
+        "UV_TOOL_DIR=.uv-tools UV_CACHE_DIR=.uv-cache uvx --from gateflow==1.0.0 gateflow --root . validate links",
+        "UV_TOOL_DIR=.uv-tools UV_CACHE_DIR=.uv-cache uvx --from gateflow==1.0.0 gateflow --root . validate closeout"
+      ],
+      "closeout_criteria": {
+        "metric_id": "r-041-closeout-v1",
+        "metric_description": "Rendering responsiveness and interaction smoothness score for lag elimination.",
+        "score_formula": "0.35*drag_latency + 0.25*frame_jitter + 0.20*dirty_rect_efficiency + 0.20*regression_safety",
+        "score_components": [
+          "drag_latency",
+          "frame_jitter",
+          "dirty_rect_efficiency",
+          "regression_safety"
+        ],
+        "go_threshold": 90,
+        "hard_no_go_conditions": [
+          "drag scenarios still trigger full-frame invalidation on pointer move",
+          "p95 frame time exceeds budget in drag scenario",
+          "any hit-test-input-routing regression introduced",
+          "determinism digest mismatch in replay-sensitive flows"
+        ],
+        "required_commands": [
+          "PYTHONPATH=. uv run --with pytest pytest tests -k \"planes_runtime or origin_refs or debug_overlay or debug_menu_dispatch\" -q",
+          "PYTHONPATH=. uv run python tools/perf/run_suite.py --scenario drag --out artifacts/perf/r041_drag.json",
+          "PYTHONPATH=. uv run python ops/ci/r040_macos_debug_menu_functional_smoke.py",
+          "UV_TOOL_DIR=.uv-tools UV_CACHE_DIR=.uv-cache uvx --from gateflow==1.0.0 gateflow --root . validate links",
+          "UV_TOOL_DIR=.uv-tools UV_CACHE_DIR=.uv-cache uvx --from gateflow==1.0.0 gateflow --root . validate closeout"
+        ],
+        "required_evidence": [
+          ".gateflow/closeout/r-041_closeout.md",
+          "drag scenario perf artifact with p95-jitter summary",
+          "before-after perf comparison for button drag path",
+          "regression test outputs for hit-test and overlay behavior"
+        ],
+        "rubric_version": "closeout_rubric_v1"
+      },
+      "task_ids": [
+        "T-4820",
+        "T-4821",
+        "T-4822",
+        "T-4823",
+        "T-4824"
+      ],
+      "lifecycle_events": [
+        {
+          "date": "2026-03-11",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "milestone created to eliminate rendering lag with explicit perf closeout gates"
+        }
       ]
     }
   ],

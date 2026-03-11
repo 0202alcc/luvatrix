@@ -95,6 +95,7 @@ class PlaneApp:
         self.state.setdefault("incremental_present_enabled", self._incremental_present_enabled_default)
         self.state.setdefault("scroll_bitmap_cache_enabled", self._scroll_bitmap_cache_enabled_default)
         self.state.setdefault("scroll_scheduler_enabled", self._scroll_scheduler_enabled_default)
+        self.state.setdefault("adaptive_drag_quality_enabled", True)
         self.state.setdefault("origin_refs_enabled", self._origin_refs_enabled_default)
         self.state.setdefault("intent_queue_enabled", self._intent_queue_enabled_default)
         self.state.setdefault("planes_v2_schema_enabled", self._planes_v2_rollout_flags.schema_enabled)
@@ -202,7 +203,7 @@ class PlaneApp:
             dirty_rects = [(0, 0, int(self._ui_page.matrix.width), int(self._ui_page.matrix.height))]
             scroll_shift = None
         dirty_count = int(len(dirty_rects))
-        dirty_area = int(sum((w * h) for (_, _, w, h) in dirty_rects))
+        dirty_area = int(self._dirty_rect_union_area(dirty_rects))
         full_area = (
             int(self._ui_page.matrix.width) * int(self._ui_page.matrix.height)
             if self._ui_page is not None
@@ -277,9 +278,14 @@ class PlaneApp:
                 "idle_skipped_frames": int(counters.get("idle_skipped_frames", 0)),
                 "incremental_present_enabled": bool(self._incremental_present_enabled()),
                 "scroll_bitmap_cache_enabled": bool(self._scroll_bitmap_cache_enabled()),
+                "adaptive_drag_quality_enabled": bool(self._drag_adaptive_quality_enabled()),
+                "adaptive_drag_quality_active_buttons": int(self._frame_counts.get("adaptive_drag_quality_active_buttons", 0)),
                 "bitmap_cache_hits": 0,
                 "bitmap_cache_misses": 0,
                 "bitmap_cache_entry_count": 0,
+                "backdrop_cache_hits": 0,
+                "backdrop_cache_misses": 0,
+                "backdrop_cache_entry_count": 0,
                 "invalidation_escape_hatch_used": bool(invalidation_escape_hatch_used),
                 "invalidation_escape_hatch_reason": invalidation_escape_hatch_reason,
                 "copy_count": 0,
@@ -308,6 +314,7 @@ class PlaneApp:
                 },
             }
             self._merge_renderer_bitmap_cache_stats()
+            self._merge_renderer_stained_glass_cache_stats()
             return
         if compose_mode == "full_frame":
             self._reset_scroll_shift_residual()
@@ -429,9 +436,14 @@ class PlaneApp:
             "idle_skipped_frames": int(counters.get("idle_skipped_frames", 0)),
             "incremental_present_enabled": bool(self._incremental_present_enabled()),
             "scroll_bitmap_cache_enabled": bool(self._scroll_bitmap_cache_enabled()),
+            "adaptive_drag_quality_enabled": bool(self._drag_adaptive_quality_enabled()),
+            "adaptive_drag_quality_active_buttons": int(self._frame_counts.get("adaptive_drag_quality_active_buttons", 0)),
             "bitmap_cache_hits": 0,
             "bitmap_cache_misses": 0,
             "bitmap_cache_entry_count": 0,
+            "backdrop_cache_hits": 0,
+            "backdrop_cache_misses": 0,
+            "backdrop_cache_entry_count": 0,
             "invalidation_escape_hatch_used": bool(invalidation_escape_hatch_used),
             "invalidation_escape_hatch_reason": invalidation_escape_hatch_reason,
             "copy_count": int(estimated_copy.get("copy_count", 0)),
@@ -462,6 +474,7 @@ class PlaneApp:
         ctx.finalize_ui_frame()
         self._merge_ctx_copy_telemetry(ctx)
         self._merge_renderer_bitmap_cache_stats()
+        self._merge_renderer_stained_glass_cache_stats()
         self._add_perf_ns("present_ns", time.perf_counter_ns() - present_start_ns)
         self._add_perf_ns("frame_total_ns", time.perf_counter_ns() - frame_start_ns)
         perf = self.state.get("perf")
@@ -1386,6 +1399,14 @@ class PlaneApp:
         props: dict[str, Any],
     ) -> StainedGlassButtonComponent:
         resolved_props = _resolve_button_material_props(props, width=width, height=height)
+        resolved_props, adaptive_quality_active = self._apply_drag_adaptive_quality(
+            component_id=component_id,
+            resolved_props=resolved_props,
+        )
+        if adaptive_quality_active:
+            self._frame_counts["adaptive_drag_quality_active_buttons"] = int(
+                self._frame_counts.get("adaptive_drag_quality_active_buttons", 0)
+            ) + 1
         kernel_size = int(resolved_props.get("kernel_size", 9))
         if kernel_size % 2 == 0:
             kernel_size += 1
@@ -1422,6 +1443,9 @@ class PlaneApp:
             str(resolved_props.get("label_color_hex", "#FFF8EE")),
             label_font_weight,
             round(float(label_font_size_px), 2),
+            bool(resolved_props.get("backdrop_cache_enabled", True)),
+            round(float(resolved_props.get("roi_inset_px", 0.0)), 3),
+            int(resolved_props.get("downsample_factor", 1)),
         )
         cached_entry = self._retained_mount_cache.get(component_id)
         if cached_entry is not None and cached_entry[0] == key and isinstance(cached_entry[1], StainedGlassButtonComponent):
@@ -1453,10 +1477,42 @@ class PlaneApp:
             label_color_hex=str(resolved_props.get("label_color_hex", "#FFF8EE")),
             label_font=FontSpec(weight=label_font_weight),
             label_font_size_px=float(label_font_size_px),
+            backdrop_cache_enabled=bool(resolved_props.get("backdrop_cache_enabled", True)),
+            roi_inset_px=float(resolved_props.get("roi_inset_px", 0.0)),
+            downsample_factor=max(1, int(resolved_props.get("downsample_factor", 1))),
         )
         self._retained_mount_cache[component_id] = (key, component)
         self._frame_counts["retained_components_new"] = int(self._frame_counts.get("retained_components_new", 0)) + 1
         return component
+
+    def _apply_drag_adaptive_quality(
+        self,
+        *,
+        component_id: str,
+        resolved_props: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
+        if not self._drag_adaptive_quality_enabled():
+            return resolved_props, False
+        if component_id != self._drag_active_component_id:
+            return resolved_props, False
+        out = dict(resolved_props)
+        kernel = max(3, int(round(float(out.get("kernel_size", 5)) * 0.4)))
+        if kernel % 2 == 0:
+            kernel += 1
+        out["kernel_size"] = kernel
+        out["sigma_px"] = max(0.35, float(out.get("sigma_px", 1.0)) * 0.38)
+        out["convolution_strength"] = max(0.0, float(out.get("convolution_strength", 0.2)) * 0.24)
+        out["scatter_sigma_px"] = max(0.0, float(out.get("scatter_sigma_px", 0.0)) * 0.2)
+        out["refract_px"] = max(0.0, float(out.get("refract_px", 1.0)) * 0.3)
+        out["chromatic_aberration_px"] = max(0.0, float(out.get("chromatic_aberration_px", 0.02)) * 0.2)
+        out["edge_highlight_alpha"] = float(out.get("edge_highlight_alpha", 0.0)) * 0.35
+        out["depth_highlight_alpha"] = float(out.get("depth_highlight_alpha", 0.0)) * 0.2
+        out["depth_shadow_alpha"] = float(out.get("depth_shadow_alpha", 0.0)) * 0.2
+        out["rim_darken_alpha"] = float(out.get("rim_darken_alpha", 0.0)) * 0.2
+        out["backdrop_cache_enabled"] = True
+        out["roi_inset_px"] = max(float(out.get("roi_inset_px", 0.0)), 4.0)
+        out["downsample_factor"] = max(4, int(out.get("downsample_factor", 4)))
+        return out, True
 
     @staticmethod
     def _build_scrollbar_markup(width: int, height: int, fill_hex: str) -> str:
@@ -1690,6 +1746,7 @@ class PlaneApp:
             "origin_reference_primitives": 0,
             "pointer_move_events": 0,
             "non_scroll_non_pointer_events": 0,
+            "adaptive_drag_quality_active_buttons": 0,
         }
 
     def _hit_index_active_planes(self) -> tuple[str, ...]:
@@ -2188,6 +2245,65 @@ class PlaneApp:
         x, y, w, h = dirty_rects[0]
         return x == 0 and y == 0 and w == int(self._ui_page.matrix.width) and h == int(self._ui_page.matrix.height)
 
+    @staticmethod
+    def _dirty_rect_union_area(dirty_rects: list[tuple[int, int, int, int]]) -> int:
+        if not dirty_rects:
+            return 0
+        events: list[tuple[int, int, int, int]] = []
+        for x, y, w, h in dirty_rects:
+            wi = max(0, int(w))
+            hi = max(0, int(h))
+            if wi <= 0 or hi <= 0:
+                continue
+            xi = int(x)
+            yi = int(y)
+            events.append((yi, 1, xi, xi + wi))
+            events.append((yi + hi, -1, xi, xi + wi))
+        if not events:
+            return 0
+        events.sort(key=lambda item: (item[0], -item[1]))
+        active: list[tuple[int, int]] = []
+        area = 0
+        prev_y = events[0][0]
+        idx = 0
+        while idx < len(events):
+            y = events[idx][0]
+            dy = int(y - prev_y)
+            if dy > 0 and active:
+                merged_width = 0
+                cur_start: int | None = None
+                cur_end: int | None = None
+                for start, end in sorted(active):
+                    if end <= start:
+                        continue
+                    if cur_start is None:
+                        cur_start = start
+                        cur_end = end
+                        continue
+                    assert cur_end is not None
+                    if start > cur_end:
+                        merged_width += int(cur_end - cur_start)
+                        cur_start = start
+                        cur_end = end
+                    else:
+                        cur_end = max(cur_end, end)
+                if cur_start is not None and cur_end is not None:
+                    merged_width += int(cur_end - cur_start)
+                area += int(max(0, merged_width)) * dy
+            while idx < len(events) and events[idx][0] == y:
+                _, kind, start, end = events[idx]
+                interval = (start, end)
+                if kind > 0:
+                    active.append(interval)
+                else:
+                    try:
+                        active.remove(interval)
+                    except ValueError:
+                        pass
+                idx += 1
+            prev_y = y
+        return max(0, int(area))
+
     def _estimate_copy_telemetry(
         self,
         *,
@@ -2248,6 +2364,20 @@ class PlaneApp:
         perf["bitmap_cache_misses"] = int(payload.get("misses", perf.get("bitmap_cache_misses", 0)))
         perf["bitmap_cache_entry_count"] = int(payload.get("entry_count", perf.get("bitmap_cache_entry_count", 0)))
 
+    def _merge_renderer_stained_glass_cache_stats(self) -> None:
+        perf = self.state.get("perf")
+        if not isinstance(perf, dict):
+            return
+        consumer = getattr(self._renderer, "consume_stained_glass_cache_stats", None)
+        if not callable(consumer):
+            return
+        payload = consumer()
+        if not isinstance(payload, dict):
+            return
+        perf["backdrop_cache_hits"] = int(payload.get("hits", perf.get("backdrop_cache_hits", 0)))
+        perf["backdrop_cache_misses"] = int(payload.get("misses", perf.get("backdrop_cache_misses", 0)))
+        perf["backdrop_cache_entry_count"] = int(payload.get("entry_count", perf.get("backdrop_cache_entry_count", 0)))
+
     def _incremental_present_enabled(self) -> bool:
         raw = self.state.get("incremental_present_enabled")
         if isinstance(raw, bool):
@@ -2259,6 +2389,12 @@ class PlaneApp:
         if isinstance(raw, bool):
             return raw
         return bool(self._scroll_bitmap_cache_enabled_default)
+
+    def _drag_adaptive_quality_enabled(self) -> bool:
+        raw = self.state.get("adaptive_drag_quality_enabled")
+        if isinstance(raw, bool):
+            return raw
+        return True
 
     def _scroll_scheduler_enabled(self) -> bool:
         raw = self.state.get("scroll_scheduler_enabled")
@@ -3258,6 +3394,9 @@ def _resolve_button_material_props(props: dict[str, Any], *, width: float, heigh
                 merged["label_font_size_px"] = basis * ratio
             except (TypeError, ValueError):
                 pass
+    merged.setdefault("backdrop_cache_enabled", True)
+    merged.setdefault("roi_inset_px", 0.0)
+    merged.setdefault("downsample_factor", 1)
     return merged
 
 

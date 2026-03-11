@@ -5,6 +5,9 @@ import json
 import unittest
 
 from tools.perf.assert_thresholds import assert_thresholds
+from tools.perf.build_r041_drag_summary import build_summary
+from tools.perf.r041_go_no_go import evaluate_go_no_go
+from tools.perf.r041_no_lag_gate import evaluate_no_lag_gate
 from tools.perf.run_suite import run_suite
 
 
@@ -43,6 +46,10 @@ class PerfToolsTests(unittest.TestCase):
             self.assertGreaterEqual(float(result.get("p95_dirty_area_ratio", -1.0)), 0.0)
             self.assertGreaterEqual(float(result.get("incremental_present_pct", -1.0)), 0.0)
             self.assertGreaterEqual(float(result.get("full_present_pct", -1.0)), 0.0)
+            hot_path = result.get("hot_path_p95_ms", {})
+            self.assertIsInstance(hot_path, dict)
+            for key in ("input", "hit_test", "mount", "raster", "present"):
+                self.assertIn(key, hot_path)
 
     def test_assert_thresholds_contract(self) -> None:
         baseline = run_suite(
@@ -126,6 +133,146 @@ class PerfToolsTests(unittest.TestCase):
         self.assertEqual(self._trace_fingerprint(run_a), self._trace_fingerprint(run_b))
         self.assertNotEqual(self._trace_fingerprint(run_a), self._trace_fingerprint(run_c))
         self.assertEqual(run_a.get("provenance", {}).get("seed_list", []), [1337])
+
+    def test_r041_go_no_go_harness_returns_contract_shape(self) -> None:
+        perf = run_suite(
+            scenario="drag",
+            samples=8,
+            width=640,
+            height=360,
+            seed=1337,
+        )
+        contract = {
+            "milestone_id": "R-041",
+            "scenario": "drag",
+            "thresholds": {
+                "p95_frame_total_ms_max": 1000.0,
+                "p99_frame_total_ms_max": 1000.0,
+                "jitter_ms_max": 1000.0,
+                "p95_input_to_present_ms_max": 1000.0,
+                "full_present_pct_max": 100.0,
+                "p95_dirty_area_ratio_max": 1.0,
+            },
+            "weights": {
+                "frame_latency": 0.35,
+                "jitter": 0.2,
+                "input_to_present": 0.2,
+                "dirty_rect_efficiency": 0.15,
+                "incremental_present": 0.1,
+            },
+            "go_threshold": 10.0,
+        }
+        verdict = evaluate_go_no_go(perf_summary=perf, contract=contract)
+        self.assertEqual(verdict.get("milestone_id"), "R-041")
+        self.assertEqual(verdict.get("scenario"), "drag")
+        self.assertIn(verdict.get("decision"), {"GO", "NO-GO"})
+        self.assertIsInstance(verdict.get("metric_scores"), dict)
+        self.assertIsInstance(verdict.get("blockers"), list)
+
+    def test_r041_go_no_go_blocks_on_hard_caps(self) -> None:
+        perf = {
+            "scenarios": {
+                "drag": {
+                    "deterministic": True,
+                    "result": {
+                        "p95_frame_total_ms": 25.0,
+                        "p99_frame_total_ms": 30.0,
+                        "jitter_ms": 4.0,
+                        "p95_input_to_present_ms": 50.0,
+                        "full_present_pct": 25.0,
+                        "incremental_present_pct": 75.0,
+                        "p95_dirty_area_ratio": 0.3,
+                    },
+                }
+            }
+        }
+        contract = {
+            "milestone_id": "R-041",
+            "scenario": "drag",
+            "thresholds": {
+                "p95_frame_total_ms_max": 16.7,
+                "p99_frame_total_ms_max": 22.0,
+                "jitter_ms_max": 5.5,
+                "p95_input_to_present_ms_max": 33.4,
+                "full_present_pct_max": 8.0,
+                "p95_dirty_area_ratio_max": 0.42,
+            },
+            "weights": {
+                "frame_latency": 0.35,
+                "jitter": 0.2,
+                "input_to_present": 0.2,
+                "dirty_rect_efficiency": 0.15,
+                "incremental_present": 0.1,
+            },
+            "go_threshold": 90.0,
+        }
+        verdict = evaluate_go_no_go(perf_summary=perf, contract=contract)
+        self.assertEqual(verdict.get("decision"), "NO-GO")
+        blockers = verdict.get("blockers", [])
+        self.assertTrue(any("full_present_pct hard cap exceeded" in str(item) for item in blockers))
+
+    def test_r041_drag_summary_builder_extracts_hot_path(self) -> None:
+        perf = run_suite(
+            scenario="drag",
+            samples=8,
+            width=640,
+            height=360,
+            seed=1337,
+        )
+        summary = build_summary(perf)
+        self.assertEqual(summary.get("scenario"), "drag")
+        self.assertIsInstance(summary.get("hot_path_p95_ms"), dict)
+        self.assertIn(str(summary.get("top_hot_path_stage")), {"input", "hit_test", "mount", "raster", "present"})
+
+    def test_r041_no_lag_gate_go_when_budgets_pass(self) -> None:
+        perf = {
+            "scenarios": {
+                "drag": {
+                    "deterministic": True,
+                    "result": {
+                        "p95_frame_total_ms": 12.0,
+                        "jitter_ms": 2.0,
+                        "p95_input_to_present_ms": 20.0,
+                        "full_present_pct": 3.0,
+                        "p95_dirty_area_ratio": 0.25,
+                    },
+                }
+            }
+        }
+        baseline = {"p95_dirty_area_ratio": 0.3}
+        contract = {
+            "thresholds": {
+                "p95_frame_total_ms_max": 16.7,
+                "jitter_ms_max": 5.5,
+                "p95_input_to_present_ms_max": 33.4,
+                "full_present_pct_max": 8.0,
+            }
+        }
+        verdict = evaluate_no_lag_gate(perf_summary=perf, baseline_summary=baseline, contract=contract)
+        self.assertEqual(verdict.get("decision"), "GO")
+        self.assertEqual(verdict.get("blockers"), [])
+
+    def test_r041_no_lag_gate_no_go_when_dirty_rect_regresses(self) -> None:
+        perf = {
+            "scenarios": {
+                "drag": {
+                    "deterministic": True,
+                    "result": {
+                        "p95_frame_total_ms": 12.0,
+                        "jitter_ms": 2.0,
+                        "p95_input_to_present_ms": 20.0,
+                        "full_present_pct": 3.0,
+                        "p95_dirty_area_ratio": 0.8,
+                    },
+                }
+            }
+        }
+        baseline = {"p95_dirty_area_ratio": 0.3}
+        contract = {"thresholds": {}}
+        verdict = evaluate_no_lag_gate(perf_summary=perf, baseline_summary=baseline, contract=contract)
+        self.assertEqual(verdict.get("decision"), "NO-GO")
+        blockers = verdict.get("blockers", [])
+        self.assertIn("dirty_rect_efficiency_improved", blockers)
 
 
 if __name__ == "__main__":
