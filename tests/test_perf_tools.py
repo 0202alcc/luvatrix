@@ -7,6 +7,7 @@ import unittest
 from tools.perf.assert_thresholds import assert_thresholds
 from tools.perf.build_r041_drag_summary import build_summary
 from tools.perf.r041_go_no_go import evaluate_go_no_go
+from tools.perf.r041_no_lag_gate import evaluate_no_lag_gate
 from tools.perf.run_suite import run_suite
 
 
@@ -222,6 +223,56 @@ class PerfToolsTests(unittest.TestCase):
         self.assertEqual(summary.get("scenario"), "drag")
         self.assertIsInstance(summary.get("hot_path_p95_ms"), dict)
         self.assertIn(str(summary.get("top_hot_path_stage")), {"input", "hit_test", "mount", "raster", "present"})
+
+    def test_r041_no_lag_gate_go_when_budgets_pass(self) -> None:
+        perf = {
+            "scenarios": {
+                "drag": {
+                    "deterministic": True,
+                    "result": {
+                        "p95_frame_total_ms": 12.0,
+                        "jitter_ms": 2.0,
+                        "p95_input_to_present_ms": 20.0,
+                        "full_present_pct": 3.0,
+                        "p95_dirty_area_ratio": 0.25,
+                    },
+                }
+            }
+        }
+        baseline = {"p95_dirty_area_ratio": 0.3}
+        contract = {
+            "thresholds": {
+                "p95_frame_total_ms_max": 16.7,
+                "jitter_ms_max": 5.5,
+                "p95_input_to_present_ms_max": 33.4,
+                "full_present_pct_max": 8.0,
+            }
+        }
+        verdict = evaluate_no_lag_gate(perf_summary=perf, baseline_summary=baseline, contract=contract)
+        self.assertEqual(verdict.get("decision"), "GO")
+        self.assertEqual(verdict.get("blockers"), [])
+
+    def test_r041_no_lag_gate_no_go_when_dirty_rect_regresses(self) -> None:
+        perf = {
+            "scenarios": {
+                "drag": {
+                    "deterministic": True,
+                    "result": {
+                        "p95_frame_total_ms": 12.0,
+                        "jitter_ms": 2.0,
+                        "p95_input_to_present_ms": 20.0,
+                        "full_present_pct": 3.0,
+                        "p95_dirty_area_ratio": 0.8,
+                    },
+                }
+            }
+        }
+        baseline = {"p95_dirty_area_ratio": 0.3}
+        contract = {"thresholds": {}}
+        verdict = evaluate_no_lag_gate(perf_summary=perf, baseline_summary=baseline, contract=contract)
+        self.assertEqual(verdict.get("decision"), "NO-GO")
+        blockers = verdict.get("blockers", [])
+        self.assertIn("dirty_rect_efficiency_improved", blockers)
 
 
 if __name__ == "__main__":

@@ -203,7 +203,7 @@ class PlaneApp:
             dirty_rects = [(0, 0, int(self._ui_page.matrix.width), int(self._ui_page.matrix.height))]
             scroll_shift = None
         dirty_count = int(len(dirty_rects))
-        dirty_area = int(sum((w * h) for (_, _, w, h) in dirty_rects))
+        dirty_area = int(self._dirty_rect_union_area(dirty_rects))
         full_area = (
             int(self._ui_page.matrix.width) * int(self._ui_page.matrix.height)
             if self._ui_page is not None
@@ -2240,6 +2240,65 @@ class PlaneApp:
             return False
         x, y, w, h = dirty_rects[0]
         return x == 0 and y == 0 and w == int(self._ui_page.matrix.width) and h == int(self._ui_page.matrix.height)
+
+    @staticmethod
+    def _dirty_rect_union_area(dirty_rects: list[tuple[int, int, int, int]]) -> int:
+        if not dirty_rects:
+            return 0
+        events: list[tuple[int, int, int, int]] = []
+        for x, y, w, h in dirty_rects:
+            wi = max(0, int(w))
+            hi = max(0, int(h))
+            if wi <= 0 or hi <= 0:
+                continue
+            xi = int(x)
+            yi = int(y)
+            events.append((yi, 1, xi, xi + wi))
+            events.append((yi + hi, -1, xi, xi + wi))
+        if not events:
+            return 0
+        events.sort(key=lambda item: (item[0], -item[1]))
+        active: list[tuple[int, int]] = []
+        area = 0
+        prev_y = events[0][0]
+        idx = 0
+        while idx < len(events):
+            y = events[idx][0]
+            dy = int(y - prev_y)
+            if dy > 0 and active:
+                merged_width = 0
+                cur_start: int | None = None
+                cur_end: int | None = None
+                for start, end in sorted(active):
+                    if end <= start:
+                        continue
+                    if cur_start is None:
+                        cur_start = start
+                        cur_end = end
+                        continue
+                    assert cur_end is not None
+                    if start > cur_end:
+                        merged_width += int(cur_end - cur_start)
+                        cur_start = start
+                        cur_end = end
+                    else:
+                        cur_end = max(cur_end, end)
+                if cur_start is not None and cur_end is not None:
+                    merged_width += int(cur_end - cur_start)
+                area += int(max(0, merged_width)) * dy
+            while idx < len(events) and events[idx][0] == y:
+                _, kind, start, end = events[idx]
+                interval = (start, end)
+                if kind > 0:
+                    active.append(interval)
+                else:
+                    try:
+                        active.remove(interval)
+                    except ValueError:
+                        pass
+                idx += 1
+            prev_y = y
+        return max(0, int(area))
 
     def _estimate_copy_telemetry(
         self,
