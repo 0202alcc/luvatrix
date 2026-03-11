@@ -1,0 +1,26 @@
+{
+  "milestone_id": "R-041",
+  "scenario": "drag",
+  "thresholds": {
+    "p95_frame_total_ms_max": 16.7,
+    "p99_frame_total_ms_max": 22.0,
+    "jitter_ms_max": 5.5,
+    "p95_input_to_present_ms_max": 33.4,
+    "full_present_pct_max": 8.0,
+    "p95_dirty_area_ratio_max": 0.42
+  },
+  "weights": {
+    "frame_latency": 0.35,
+    "jitter": 0.2,
+    "input_to_present": 0.2,
+    "dirty_rect_efficiency": 0.15,
+    "incremental_present": 0.1
+  },
+  "go_threshold": 90.0,
+  "hard_no_go_conditions": [
+    "full_present_pct > 20.0",
+    "p95_frame_total_ms > 22.0",
+    "p95_input_to_present_ms > 45.0",
+    "deterministic == false"
+  ]
+}
