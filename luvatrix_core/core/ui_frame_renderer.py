@@ -11,10 +11,12 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from PIL import Image, ImageDraw, ImageFont
 
 from luvatrix_ui.component_schema import DisplayableArea
+from luvatrix_ui.controls.stained_glass_button import StainedGlassButtonRenderBatch, StainedGlassButtonRenderCommand
 from luvatrix_ui.controls.svg_renderer import SVGRenderBatch, SVGRenderCommand
 from luvatrix_ui.text.renderer import FontSpec, TextLayoutMetrics, TextMeasureRequest, TextRenderBatch, TextRenderCommand
 
@@ -144,6 +146,7 @@ class MatrixUIFrameRenderer:
                     top_y=top_y,
                     color=color,
                     letter_spacing_px=command.appearance.letter_spacing_px,
+                    font_weight=int(command.font.weight),
                 )
 
     def draw_svg_batch(self, batch: SVGRenderBatch) -> None:
@@ -170,6 +173,12 @@ class MatrixUIFrameRenderer:
                     continue
             doc = self._doc_for_markup(command.svg_markup)
             self._render_svg_document(doc, command)
+
+    def draw_stained_glass_button_batch(self, batch: StainedGlassButtonRenderBatch) -> None:
+        if self._frame is None:
+            raise RuntimeError("begin_frame must be called before draw_stained_glass_button_batch")
+        for command in batch.commands:
+            self._render_stained_glass_button(command)
 
     def end_frame(self) -> torch.Tensor:
         if self._frame is None:
@@ -327,6 +336,320 @@ class MatrixUIFrameRenderer:
         self._frame[y0:y1, x0:x1, 0:3] = torch.clamp(out_rgb, 0, 255).to(torch.uint8)
         self._frame[y0:y1, x0:x1, 3:4] = torch.clamp(out_alpha * 255.0, 0, 255).to(torch.uint8)
 
+    def _render_stained_glass_button(self, command: StainedGlassButtonRenderCommand) -> None:
+        if self._frame is None:
+            return
+        x = int(round(float(command.x)))
+        y = int(round(float(command.y)))
+        w = max(1, int(round(float(command.width))))
+        h = max(1, int(round(float(command.height))))
+        x0 = max(0, x)
+        y0 = max(0, y)
+        x1 = min(int(self._frame.shape[1]), x + w)
+        y1 = min(int(self._frame.shape[0]), y + h)
+        if x1 <= x0 or y1 <= y0:
+            return
+        backdrop = self._frame[y0:y1, x0:x1].to(torch.float32)
+        patch_h = int(backdrop.shape[0])
+        patch_w = int(backdrop.shape[1])
+        rgb = backdrop[:, :, 0:3].permute(2, 0, 1).unsqueeze(0) / 255.0
+        base = rgb
+
+        kernel_size = max(3, int(command.kernel_size))
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+        sigma = max(0.1, float(command.sigma_px))
+        center_gain, edge_gain = self._radial_weight_maps(h=patch_h, w=patch_w, device=base.device)
+        edge_proximity = self._rounded_rect_edge_proximity(
+            h=patch_h,
+            w=patch_w,
+            corner_radius_px=float(command.corner_radius_px),
+            device=base.device,
+        )
+        calm = max(0.0, min(1.0, float(command.refract_calm_radius)))
+        transition = max(0.01, float(command.refract_transition))
+        edge_start = calm
+        edge_sigmoid_2d = self._edge_sigmoid_gate(edge_proximity, edge_start=edge_start, transition=transition)
+        edge_sigmoid = edge_sigmoid_2d.unsqueeze(0).unsqueeze(0)
+        edge_kernel_size = max(kernel_size + 2, kernel_size * 3 - 2)
+        if edge_kernel_size % 2 == 0:
+            edge_kernel_size += 1
+        edge_sigma = sigma * (float(edge_kernel_size) / float(kernel_size)) * 1.15
+        blur_center = self._gaussian_blur_rgb(base, kernel_size=kernel_size, sigma=sigma)
+        blur_edge = self._gaussian_blur_rgb(base, kernel_size=edge_kernel_size, sigma=edge_sigma)
+        blurred = torch.clamp(blur_center * (1.0 - edge_sigmoid) + blur_edge * edge_sigmoid, 0.0, 1.0)
+
+        strength = max(0.0, float(command.convolution_strength))
+        inv_center_conv_gain = edge_sigmoid
+        scattered = torch.clamp(base + (blurred - base) * (strength * inv_center_conv_gain), 0.0, 1.0)
+
+        scatter_sigma = max(0.0, float(command.scatter_sigma_px))
+        if scatter_sigma > 0.05:
+            scatter_kernel = max(3, int(round(scatter_sigma * 2.0)) * 2 + 1)
+            scatter_blur = self._gaussian_blur_rgb(scattered, kernel_size=scatter_kernel, sigma=max(0.1, scatter_sigma))
+            edge_mix = torch.clamp(inv_center_conv_gain * 0.9, 0.0, 1.0)
+            scattered = torch.clamp(scattered * (1.0 - edge_mix) + scatter_blur * edge_mix, 0.0, 1.0)
+
+        refract_px = float(command.refract_px)
+        refract_calm_radius = float(command.refract_calm_radius)
+        refract_transition = float(command.refract_transition)
+        chroma_px = float(command.chromatic_aberration_px)
+        refracted = self._refract_with_aberration(
+            scattered,
+            refract_px=refract_px,
+            refract_calm_radius=refract_calm_radius,
+            refract_transition=refract_transition,
+            corner_radius_px=float(command.corner_radius_px),
+            chroma_px=chroma_px,
+        )
+
+        tint = torch.tensor(command.tint_delta_rgba[0:3], dtype=torch.float32).view(1, 3, 1, 1) / 255.0
+        refracted = torch.clamp(refracted + tint, 0.0, 1.0)
+        filter_rgb = torch.tensor(command.color_filter_rgb, dtype=torch.float32).view(1, 3, 1, 1)
+        filtered = torch.clamp(refracted * filter_rgb, 0.0, 1.0)
+        pane_mix = max(0.0, min(1.0, float(command.pane_mix)))
+        pane = torch.clamp(refracted * (1.0 - pane_mix) + filtered * pane_mix, 0.0, 1.0)
+
+        mask = self._rounded_rect_mask(h=patch_h, w=patch_w, radius=float(command.corner_radius_px))
+        alpha = mask * max(0.0, min(1.0, float(command.opacity)))
+        _, _, gy = self._radial_and_y_maps(h=patch_h, w=patch_w, device=base.device)
+
+        # Depth cues are restricted to a thin rounded-rect perimeter ring so the interior
+        # remains optically clear while edges read as a raised prism.
+        depth_edge_gate = self._edge_sigmoid_gate(edge_proximity, edge_start=0.955, transition=0.009) * mask
+        top_gloss = (
+            depth_edge_gate
+            * torch.pow(torch.clamp(1.0 - gy, 0.0, 1.0), 1.35)
+            * max(0.0, float(command.depth_highlight_alpha))
+        )
+        bottom_shadow = (
+            depth_edge_gate
+            * torch.pow(torch.clamp(gy, 0.0, 1.0), 1.2)
+            * max(0.0, float(command.depth_shadow_alpha))
+        )
+        rim_shadow = depth_edge_gate * max(0.0, float(command.rim_darken_alpha))
+        depth_dark = torch.clamp(bottom_shadow * 0.55 + rim_shadow * 0.9, 0.0, 0.9)
+        pane = torch.clamp(pane * (1.0 - depth_dark.unsqueeze(0).unsqueeze(0)), 0.0, 1.0)
+        gloss_tint = torch.tensor([1.0, 0.92, 0.9], dtype=torch.float32, device=base.device).view(1, 3, 1, 1)
+        pane = torch.clamp(pane + gloss_tint * top_gloss.unsqueeze(0).unsqueeze(0), 0.0, 1.0)
+
+        dst = backdrop[:, :, 0:3] / 255.0
+        src = pane.squeeze(0).permute(1, 2, 0)
+        out_rgb = src * alpha.unsqueeze(-1) + dst * (1.0 - alpha.unsqueeze(-1))
+        out_rgba = torch.zeros_like(backdrop)
+        out_rgba[:, :, 0:3] = torch.clamp(out_rgb * 255.0, 0.0, 255.0)
+        out_rgba[:, :, 3] = backdrop[:, :, 3]
+
+        edge_alpha = max(0.0, min(1.0, float(command.edge_highlight_alpha)))
+        if edge_alpha > 0.0:
+            edge = self._edge_mask(mask)
+            edge_color = torch.tensor([1.0, 1.0, 1.0], dtype=torch.float32).view(1, 1, 3)
+            out_patch = out_rgba[:, :, 0:3] / 255.0
+            out_patch = edge_color * (edge * edge_alpha).unsqueeze(-1) + out_patch * (1.0 - (edge * edge_alpha).unsqueeze(-1))
+            out_rgba[:, :, 0:3] = torch.clamp(out_patch * 255.0, 0.0, 255.0)
+
+        self._frame[y0:y1, x0:x1] = out_rgba.to(torch.uint8)
+
+        label = str(command.label)
+        if label.strip():
+            self._draw_button_label(
+                text=label,
+                x=float(x0),
+                y=float(y0),
+                w=float(patch_w),
+                h=float(patch_h),
+                color_hex=str(command.label_color_hex),
+                font=command.label_font,
+                font_size_px=float(command.label_font_size_px),
+            )
+
+    def _gaussian_blur_rgb(self, rgb_bchw: torch.Tensor, *, kernel_size: int, sigma: float) -> torch.Tensor:
+        kernel = _gaussian_kernel_1d(kernel_size, sigma, device=rgb_bchw.device)
+        kx = kernel.view(1, 1, 1, kernel_size).repeat(3, 1, 1, 1)
+        ky = kernel.view(1, 1, kernel_size, 1).repeat(3, 1, 1, 1)
+        pad_x = kernel_size // 2
+        pad_mode_x = "reflect" if int(rgb_bchw.shape[-1]) > pad_x else "replicate"
+        padded_x = F.pad(rgb_bchw, (pad_x, pad_x, 0, 0), mode=pad_mode_x)
+        blur_x = F.conv2d(padded_x, kx, groups=3)
+        pad_y = kernel_size // 2
+        pad_mode_y = "reflect" if int(blur_x.shape[-2]) > pad_y else "replicate"
+        padded_y = F.pad(blur_x, (0, 0, pad_y, pad_y), mode=pad_mode_y)
+        return F.conv2d(padded_y, ky, groups=3)
+
+    def _refract_with_aberration(
+        self,
+        rgb_bchw: torch.Tensor,
+        *,
+        refract_px: float,
+        refract_calm_radius: float,
+        refract_transition: float,
+        corner_radius_px: float,
+        chroma_px: float,
+    ) -> torch.Tensor:
+        b, c, h, w = rgb_bchw.shape
+        _ = b
+        if h <= 1 or w <= 1:
+            return rgb_bchw
+        gy = torch.linspace(0.0, 1.0, h, dtype=torch.float32, device=rgb_bchw.device).view(h, 1).expand(h, w)
+        gx = torch.linspace(0.0, 1.0, w, dtype=torch.float32, device=rgb_bchw.device).view(1, w).expand(h, w)
+        # Shape-aware sigmoid: uses rounded-rect edge distance (not circular radius).
+        edge_proximity = self._rounded_rect_edge_proximity(
+            h=h,
+            w=w,
+            corner_radius_px=corner_radius_px,
+            device=rgb_bchw.device,
+        )
+        calm = max(0.0, min(1.0, float(refract_calm_radius)))
+        transition = max(0.01, float(refract_transition))
+        edge_start = calm
+        edge_sigmoid = self._edge_sigmoid_gate(edge_proximity, edge_start=edge_start, transition=transition)
+        center_floor = 0.0
+        refract_gain = center_floor + (1.0 - center_floor) * edge_sigmoid
+        dx = torch.sin(gy * math.pi * 2.0) * refract_px * refract_gain / max(float(w), 1.0)
+        dy = torch.cos(gx * math.pi * 2.0) * refract_px * 0.65 * refract_gain / max(float(h), 1.0)
+        grid_x = (gx + dx) * 2.0 - 1.0
+        grid_y = (gy + dy) * 2.0 - 1.0
+        grid = torch.stack((grid_x, grid_y), dim=-1).unsqueeze(0)
+        sampled = F.grid_sample(rgb_bchw, grid, mode="bilinear", padding_mode="border", align_corners=True)
+        if abs(chroma_px) <= 1e-6:
+            return sampled
+        chroma_dx = chroma_px / max(float(w), 1.0)
+        grid_r = torch.stack((torch.clamp(grid_x + chroma_dx, -1.0, 1.0), grid_y), dim=-1).unsqueeze(0)
+        grid_b = torch.stack((torch.clamp(grid_x - chroma_dx, -1.0, 1.0), grid_y), dim=-1).unsqueeze(0)
+        red = F.grid_sample(rgb_bchw[:, 0:1], grid_r, mode="bilinear", padding_mode="border", align_corners=True)
+        blue = F.grid_sample(rgb_bchw[:, 2:3], grid_b, mode="bilinear", padding_mode="border", align_corners=True)
+        sampled[:, 0:1] = red
+        sampled[:, 2:3] = blue
+        return sampled
+
+    @staticmethod
+    def _radial_weight_maps(*, h: int, w: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        gy = torch.linspace(0.0, 1.0, h, dtype=torch.float32, device=device).view(h, 1).expand(h, w)
+        gx = torch.linspace(0.0, 1.0, w, dtype=torch.float32, device=device).view(1, w).expand(h, w)
+        nx = (gx - 0.5) * 2.0
+        ny = (gy - 0.5) * 2.0
+        radius = torch.sqrt(torch.clamp(nx * nx + ny * ny, 0.0, 1.0))
+        center_gain_2d = torch.pow(torch.clamp(1.0 - radius, 0.0, 1.0), 1.35)
+        edge_gain_2d = 1.0 - center_gain_2d
+        return (center_gain_2d.unsqueeze(0).unsqueeze(0), edge_gain_2d.unsqueeze(0).unsqueeze(0))
+
+    @staticmethod
+    def _rounded_rect_edge_proximity(*, h: int, w: int, corner_radius_px: float, device: torch.device) -> torch.Tensor:
+        yy = torch.arange(h, dtype=torch.float32, device=device).view(h, 1).expand(h, w)
+        xx = torch.arange(w, dtype=torch.float32, device=device).view(1, w).expand(h, w)
+        cx = (float(w) - 1.0) * 0.5
+        cy = (float(h) - 1.0) * 0.5
+        px = torch.abs(xx - cx)
+        py = torch.abs(yy - cy)
+        hx = max(1e-3, float(w) * 0.5)
+        hy = max(1e-3, float(h) * 0.5)
+        r = max(0.0, min(float(corner_radius_px), min(hx, hy)))
+        bx = max(1e-3, hx - r)
+        by = max(1e-3, hy - r)
+        qx = torch.clamp(px - bx, min=0.0)
+        qy = torch.clamp(py - by, min=0.0)
+        outside = torch.sqrt(qx * qx + qy * qy)
+        inside = torch.minimum(torch.maximum(px - bx, py - by), torch.tensor(0.0, dtype=torch.float32, device=device))
+        sdf = outside + inside - r
+        inward = torch.clamp(-sdf, min=0.0)
+        max_inward = max(1e-3, min(hx, hy))
+        inward_norm = torch.clamp(inward / max_inward, 0.0, 1.0)
+        return 1.0 - inward_norm
+
+    @staticmethod
+    def _edge_sigmoid_gate(edge_proximity: torch.Tensor, *, edge_start: float, transition: float) -> torch.Tensor:
+        # Normalized logistic gate:
+        # - exactly 0 at interior baseline (edge_proximity=0)
+        # - smooth sigmoid rise near edge_start
+        # - approaches 1 near outer edge
+        t = max(1e-4, float(transition))
+        x0 = float(edge_start)
+        raw = torch.sigmoid((edge_proximity - x0) / t)
+        baseline = 1.0 / (1.0 + math.exp((x0 / t)))
+        denom = max(1e-6, 1.0 - baseline)
+        gated = torch.clamp((raw - baseline) / denom, 0.0, 1.0)
+        return gated
+
+    @staticmethod
+    def _radial_and_y_maps(*, h: int, w: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        gy = torch.linspace(0.0, 1.0, h, dtype=torch.float32, device=device).view(h, 1).expand(h, w)
+        gx = torch.linspace(0.0, 1.0, w, dtype=torch.float32, device=device).view(1, w).expand(h, w)
+        nx = (gx - 0.5) * 2.0
+        ny = (gy - 0.5) * 2.0
+        radius = torch.sqrt(torch.clamp(nx * nx + ny * ny, 0.0, 1.0))
+        center_gain_2d = torch.pow(torch.clamp(1.0 - radius, 0.0, 1.0), 1.35)
+        edge_gain_2d = 1.0 - center_gain_2d
+        return (center_gain_2d, edge_gain_2d, gy)
+
+    @staticmethod
+    def _rounded_rect_mask(*, h: int, w: int, radius: float) -> torch.Tensor:
+        r = max(0.0, min(float(radius), min(float(w), float(h)) * 0.5))
+        if r <= 0.0:
+            return torch.ones((h, w), dtype=torch.float32)
+        yy = torch.arange(h, dtype=torch.float32).view(h, 1).expand(h, w)
+        xx = torch.arange(w, dtype=torch.float32).view(1, w).expand(h, w)
+        mask = torch.ones((h, w), dtype=torch.float32)
+        corners = (
+            (r - 0.5, r - 0.5),
+            (w - r - 0.5, r - 0.5),
+            (r - 0.5, h - r - 0.5),
+            (w - r - 0.5, h - r - 0.5),
+        )
+        for cx, cy in corners:
+            dx = xx - cx
+            dy = yy - cy
+            circle = ((dx * dx + dy * dy) <= (r * r)).to(torch.float32)
+            region_x = (xx < r) if cx < w * 0.5 else (xx >= w - r)
+            region_y = (yy < r) if cy < h * 0.5 else (yy >= h - r)
+            corner_region = region_x & region_y
+            mask = torch.where(corner_region, circle, mask)
+        return mask
+
+    @staticmethod
+    def _edge_mask(mask: torch.Tensor) -> torch.Tensor:
+        h, w = mask.shape
+        if h < 3 or w < 3:
+            return torch.zeros_like(mask)
+        core = mask[1:-1, 1:-1]
+        inner = core * mask[0:-2, 1:-1] * mask[2:, 1:-1] * mask[1:-1, 0:-2] * mask[1:-1, 2:]
+        edge = torch.zeros_like(mask)
+        edge[1:-1, 1:-1] = torch.clamp(core - inner, 0.0, 1.0)
+        return edge
+
+    def _draw_button_label(
+        self,
+        *,
+        text: str,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        color_hex: str,
+        font: FontSpec,
+        font_size_px: float,
+    ) -> None:
+        if self._frame is None:
+            return
+        atlas = self._ensure_atlas(font, max(1.0, float(font_size_px)))
+        lines = self._wrap_lines(text, atlas, max_width_px=max(4.0, w - 12.0), letter_spacing_px=0.0)
+        widths = [self._line_advance(line, atlas, 0.0) for line in lines]
+        line_h = max(atlas.line_height, float(font_size_px) * 1.15)
+        block_h = max(float(font_size_px), float(len(lines)) * line_h)
+        color = _parse_rgba_u8(color_hex, 1.0)
+        top = float(y) + max(0.0, (h - block_h) * 0.5)
+        for i, line in enumerate(lines):
+            line_w = widths[i] if i < len(widths) else 0.0
+            left = float(x) + max(0.0, (w - line_w) * 0.5)
+            self._draw_line(
+                line,
+                atlas,
+                x=left,
+                top_y=top + float(i) * line_h,
+                color=color,
+                letter_spacing_px=0.0,
+                font_weight=int(font.weight),
+            )
+
     def _ensure_atlas(self, font: FontSpec, size_px: float) -> _FontAtlas:
         if size_px <= 0:
             raise ValueError("font size must be > 0")
@@ -408,14 +731,20 @@ class MatrixUIFrameRenderer:
         top_y: float,
         color: tuple[int, int, int, int],
         letter_spacing_px: float,
+        font_weight: int = 400,
     ) -> None:
         cursor = float(x)
         spacing = float(letter_spacing_px)
+        synthetic_bold_steps = max(0, min(3, int(round((int(font_weight) - 400) / 160.0))))
+        bold_offsets: tuple[tuple[int, int], ...] = ((1, 0), (0, 1), (1, 1))
         for i, ch in enumerate(line):
             glyph = self._ensure_glyph(atlas, ch)
             gx = int(round(cursor + glyph.x_offset))
             gy = int(round(top_y + glyph.y_offset))
             self._blend_alpha_mask(glyph.alpha_mask, x=gx, y=gy, color=color)
+            if synthetic_bold_steps > 0:
+                for dx, dy in bold_offsets[:synthetic_bold_steps]:
+                    self._blend_alpha_mask(glyph.alpha_mask, x=gx + dx, y=gy + dy, color=color)
             cursor += glyph.advance
             if i > 0:
                 cursor += spacing
@@ -689,3 +1018,17 @@ def _apply_opacity_u8(color: tuple[int, int, int, int], opacity: float) -> tuple
     r, g, b, a = color
     alpha = int(max(0.0, min(1.0, (a / 255.0) * opacity)) * 255.0)
     return (r, g, b, alpha)
+
+
+def _gaussian_kernel_1d(kernel_size: int, sigma: float, *, device: torch.device) -> torch.Tensor:
+    ks = max(3, int(kernel_size))
+    if ks % 2 == 0:
+        ks += 1
+    s = max(0.1, float(sigma))
+    radius = ks // 2
+    x = torch.arange(-radius, radius + 1, dtype=torch.float32, device=device)
+    kernel = torch.exp(-(x * x) / (2.0 * s * s))
+    kernel_sum = torch.sum(kernel)
+    if float(kernel_sum) <= 1e-9:
+        return torch.ones((ks,), dtype=torch.float32, device=device) / float(ks)
+    return kernel / kernel_sum

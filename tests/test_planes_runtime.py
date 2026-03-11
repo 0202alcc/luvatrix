@@ -13,7 +13,7 @@ from luvatrix_core.core.app_runtime import AppContext
 from luvatrix_core.core.hdi_thread import HDIEvent
 from luvatrix_core.core.sensor_manager import SensorSample
 from luvatrix_core.core.window_matrix import WindowMatrix
-from luvatrix_ui.planes_runtime import PlaneApp, load_plane_app
+from luvatrix_ui.planes_runtime import PlaneApp, _resolve_button_material_props, load_plane_app
 
 
 @dataclass
@@ -928,6 +928,105 @@ class PlanesRuntimeTests(unittest.TestCase):
             app.loop(ctx, 0.016)
             self.assertEqual(calls, [("on_press_single", "title")])
             self.assertEqual(app.state.get("clicked"), "title")
+
+    def test_plane_runtime_drag_activates_from_click_down_for_draggable_component(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_file(Path(td))
+            payload = json.loads(plane_path.read_text(encoding="utf-8"))
+            payload["components"][0]["props"]["draggable"] = True
+            plane_path.write_text(json.dumps(payload), encoding="utf-8")
+            app = PlaneApp(plane_path, handlers={})
+            app.register_handler("handlers::open", lambda event_ctx, state: None)
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="click",
+                    status="OK",
+                    payload={"x": 20.0, "y": 20.0, "phase": "down"},
+                )
+            )
+            ctx.queue(
+                HDIEvent(
+                    event_id=2,
+                    ts_ns=2,
+                    window_id="w",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload={"x": 100.0, "y": 80.0},
+                )
+            )
+            ctx.queue(
+                HDIEvent(
+                    event_id=3,
+                    ts_ns=3,
+                    window_id="w",
+                    device="mouse",
+                    event_type="click",
+                    status="OK",
+                    payload={"x": 100.0, "y": 80.0, "phase": "up"},
+                )
+            )
+            app.loop(ctx, 0.016)
+            override = app._drag_position_overrides.get("title")
+            self.assertIsNotNone(override)
+            assert override is not None
+            self.assertAlmostEqual(float(override[0]), 90.0, places=6)
+            self.assertAlmostEqual(float(override[1]), 70.0, places=6)
+
+    def test_native_button_material_profile_resolves_defaults(self) -> None:
+        props = _resolve_button_material_props({"material_profile": "water_button"}, width=280.0, height=84.0)
+        self.assertAlmostEqual(float(props["kernel_size"]), 7.0, places=6)
+        self.assertAlmostEqual(float(props["refract_px"]), 4.4, places=6)
+        self.assertAlmostEqual(float(props["label_font_weight"]), 800.0, places=6)
+
+    def test_native_button_label_size_uses_height_ratio(self) -> None:
+        props = _resolve_button_material_props({"material_profile": "water_button"}, width=320.0, height=96.0)
+        self.assertAlmostEqual(float(props["label_font_size_px"]), 32.0, places=4)
+
+    def test_drag_move_uses_partial_dirty_invalidation_not_full_frame_escape_hatch(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            plane_path = _build_plane_file(Path(td))
+            payload = json.loads(plane_path.read_text(encoding="utf-8"))
+            payload["components"][0]["props"]["draggable"] = True
+            plane_path.write_text(json.dumps(payload), encoding="utf-8")
+            app = PlaneApp(plane_path, handlers={})
+            app.register_handler("handlers::open", lambda event_ctx, state: None)
+            ctx = _FakeCtx(width=320, height=180)
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+            ctx.mounted = []
+            ctx.queue(
+                HDIEvent(
+                    event_id=1,
+                    ts_ns=1,
+                    window_id="w",
+                    device="mouse",
+                    event_type="click",
+                    status="OK",
+                    payload={"x": 20.0, "y": 20.0, "phase": "down"},
+                )
+            )
+            ctx.queue(
+                HDIEvent(
+                    event_id=2,
+                    ts_ns=2,
+                    window_id="w",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload={"x": 100.0, "y": 80.0},
+                )
+            )
+            app.loop(ctx, 0.016)
+            perf = app.state.get("perf", {})
+            self.assertEqual(str(perf.get("compose_mode")), "partial_dirty")
+            self.assertEqual(bool(perf.get("invalidation_escape_hatch_used")), False)
 
     def test_plane_runtime_builtin_viewport_scroll_updates_camera_offset(self) -> None:
         with tempfile.TemporaryDirectory() as td:

@@ -10,6 +10,12 @@ from .component_schema import (
 )
 from .controls.button import ButtonModel, ButtonState
 from .controls.interaction import HDIPressEvent, PressPhase, parse_hdi_press_event
+from .controls.stained_glass_button import (
+    StainedGlassButtonComponent,
+    StainedGlassButtonRenderBatch,
+    StainedGlassButtonRenderCommand,
+    StainedGlassButtonRenderer,
+)
 from .controls.svg_component import SVGComponent
 from .controls.svg_renderer import SVGRenderBatch, SVGRenderCommand, SVGRenderer
 from .planning import (
@@ -99,6 +105,10 @@ __all__ = [
     "PlanningInteractionState",
     "PlanningTimeline",
     "PressPhase",
+    "StainedGlassButtonComponent",
+    "StainedGlassButtonRenderBatch",
+    "StainedGlassButtonRenderCommand",
+    "StainedGlassButtonRenderer",
     "SVGComponent",
     "SVGRenderBatch",
     "SVGRenderCommand",
