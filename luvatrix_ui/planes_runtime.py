@@ -283,6 +283,9 @@ class PlaneApp:
                 "bitmap_cache_hits": 0,
                 "bitmap_cache_misses": 0,
                 "bitmap_cache_entry_count": 0,
+                "backdrop_cache_hits": 0,
+                "backdrop_cache_misses": 0,
+                "backdrop_cache_entry_count": 0,
                 "invalidation_escape_hatch_used": bool(invalidation_escape_hatch_used),
                 "invalidation_escape_hatch_reason": invalidation_escape_hatch_reason,
                 "copy_count": 0,
@@ -311,6 +314,7 @@ class PlaneApp:
                 },
             }
             self._merge_renderer_bitmap_cache_stats()
+            self._merge_renderer_stained_glass_cache_stats()
             return
         if compose_mode == "full_frame":
             self._reset_scroll_shift_residual()
@@ -437,6 +441,9 @@ class PlaneApp:
             "bitmap_cache_hits": 0,
             "bitmap_cache_misses": 0,
             "bitmap_cache_entry_count": 0,
+            "backdrop_cache_hits": 0,
+            "backdrop_cache_misses": 0,
+            "backdrop_cache_entry_count": 0,
             "invalidation_escape_hatch_used": bool(invalidation_escape_hatch_used),
             "invalidation_escape_hatch_reason": invalidation_escape_hatch_reason,
             "copy_count": int(estimated_copy.get("copy_count", 0)),
@@ -467,6 +474,7 @@ class PlaneApp:
         ctx.finalize_ui_frame()
         self._merge_ctx_copy_telemetry(ctx)
         self._merge_renderer_bitmap_cache_stats()
+        self._merge_renderer_stained_glass_cache_stats()
         self._add_perf_ns("present_ns", time.perf_counter_ns() - present_start_ns)
         self._add_perf_ns("frame_total_ns", time.perf_counter_ns() - frame_start_ns)
         perf = self.state.get("perf")
@@ -1435,6 +1443,9 @@ class PlaneApp:
             str(resolved_props.get("label_color_hex", "#FFF8EE")),
             label_font_weight,
             round(float(label_font_size_px), 2),
+            bool(resolved_props.get("backdrop_cache_enabled", True)),
+            round(float(resolved_props.get("roi_inset_px", 0.0)), 3),
+            int(resolved_props.get("downsample_factor", 1)),
         )
         cached_entry = self._retained_mount_cache.get(component_id)
         if cached_entry is not None and cached_entry[0] == key and isinstance(cached_entry[1], StainedGlassButtonComponent):
@@ -1466,6 +1477,9 @@ class PlaneApp:
             label_color_hex=str(resolved_props.get("label_color_hex", "#FFF8EE")),
             label_font=FontSpec(weight=label_font_weight),
             label_font_size_px=float(label_font_size_px),
+            backdrop_cache_enabled=bool(resolved_props.get("backdrop_cache_enabled", True)),
+            roi_inset_px=float(resolved_props.get("roi_inset_px", 0.0)),
+            downsample_factor=max(1, int(resolved_props.get("downsample_factor", 1))),
         )
         self._retained_mount_cache[component_id] = (key, component)
         self._frame_counts["retained_components_new"] = int(self._frame_counts.get("retained_components_new", 0)) + 1
@@ -1491,6 +1505,9 @@ class PlaneApp:
         out["scatter_sigma_px"] = max(0.0, float(out.get("scatter_sigma_px", 0.0)) * 0.45)
         out["refract_px"] = max(0.0, float(out.get("refract_px", 1.0)) * 0.62)
         out["chromatic_aberration_px"] = max(0.0, float(out.get("chromatic_aberration_px", 0.02)) * 0.55)
+        out["backdrop_cache_enabled"] = True
+        out["roi_inset_px"] = max(float(out.get("roi_inset_px", 0.0)), 2.0)
+        out["downsample_factor"] = max(2, int(out.get("downsample_factor", 2)))
         return out, True
 
     @staticmethod
@@ -2283,6 +2300,20 @@ class PlaneApp:
         perf["bitmap_cache_hits"] = int(payload.get("hits", perf.get("bitmap_cache_hits", 0)))
         perf["bitmap_cache_misses"] = int(payload.get("misses", perf.get("bitmap_cache_misses", 0)))
         perf["bitmap_cache_entry_count"] = int(payload.get("entry_count", perf.get("bitmap_cache_entry_count", 0)))
+
+    def _merge_renderer_stained_glass_cache_stats(self) -> None:
+        perf = self.state.get("perf")
+        if not isinstance(perf, dict):
+            return
+        consumer = getattr(self._renderer, "consume_stained_glass_cache_stats", None)
+        if not callable(consumer):
+            return
+        payload = consumer()
+        if not isinstance(payload, dict):
+            return
+        perf["backdrop_cache_hits"] = int(payload.get("hits", perf.get("backdrop_cache_hits", 0)))
+        perf["backdrop_cache_misses"] = int(payload.get("misses", perf.get("backdrop_cache_misses", 0)))
+        perf["backdrop_cache_entry_count"] = int(payload.get("entry_count", perf.get("backdrop_cache_entry_count", 0)))
 
     def _incremental_present_enabled(self) -> bool:
         raw = self.state.get("incremental_present_enabled")
@@ -3300,6 +3331,9 @@ def _resolve_button_material_props(props: dict[str, Any], *, width: float, heigh
                 merged["label_font_size_px"] = basis * ratio
             except (TypeError, ValueError):
                 pass
+    merged.setdefault("backdrop_cache_enabled", True)
+    merged.setdefault("roi_inset_px", 0.0)
+    merged.setdefault("downsample_factor", 1)
     return merged
 
 
