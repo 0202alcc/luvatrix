@@ -7,6 +7,7 @@ from pathlib import Path
 import platform
 import json
 import os
+import subprocess
 
 from luvatrix_core.core import (
     HDIEvent,
@@ -108,7 +109,12 @@ def main() -> None:
         default=None,
         help="Max app-loop ticks. Default: run until window close for macos render; 600 for headless render.",
     )
-    run.add_argument("--fps", type=int, default=60)
+    run.add_argument(
+        "--fps",
+        type=int,
+        default=None,
+        help="Target app-loop FPS. Default: 2x display refresh (Nyquist), fallback 120.",
+    )
     run.add_argument("--render", choices=["headless", "macos"], default="headless")
     run.add_argument(
         "--width",
@@ -211,7 +217,8 @@ def main() -> None:
             max_ticks = args.ticks
             if max_ticks is None and args.render == "headless":
                 max_ticks = 600
-            result = runtime.run_app(args.app_dir, max_ticks=max_ticks, target_fps=args.fps)
+            target_fps = _resolve_target_fps(args.fps)
+            result = runtime.run_app(args.app_dir, max_ticks=max_ticks, target_fps=target_fps)
             print(
                 f"run complete: ticks={result.ticks_run} frames={result.frames_presented} "
                 f"stopped_by_target_close={result.stopped_by_target_close} "
@@ -306,6 +313,56 @@ def _detect_screen_size() -> tuple[int, int] | None:
             return (width, height)
     except Exception:
         return None
+    return None
+
+
+def _resolve_target_fps(explicit_fps: int | None) -> int:
+    if explicit_fps is not None:
+        if explicit_fps <= 0:
+            raise ValueError("fps must be > 0")
+        return int(explicit_fps)
+    refresh_hz = _detect_display_refresh_hz()
+    if refresh_hz is None or refresh_hz <= 0:
+        refresh_hz = 60.0
+    return max(1, int(round(refresh_hz * 2.0)))
+
+
+def _detect_display_refresh_hz() -> float | None:
+    env = os.getenv("LUVATRIX_DISPLAY_REFRESH_HZ")
+    if env:
+        try:
+            value = float(env)
+            if value > 0:
+                return value
+        except ValueError:
+            pass
+    if platform.system() != "Darwin":
+        return None
+    try:
+        proc = subprocess.run(
+            ["system_profiler", "SPDisplaysDataType", "-json"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=4.0,
+        )
+        payload = json.loads(proc.stdout)
+        displays = payload.get("SPDisplaysDataType", [])
+        for entry in displays:
+            if not isinstance(entry, dict):
+                continue
+            for key in ("spdisplays_display_refresh_rate", "spdisplays_refresh_rate"):
+                raw = entry.get(key)
+                if raw is None:
+                    continue
+                try:
+                    value = float(raw)
+                except (TypeError, ValueError):
+                    continue
+                if value > 0:
+                    return value
+    except Exception:
+        pass
     return None
 
 
