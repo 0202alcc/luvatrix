@@ -1,6 +1,11 @@
 # Trading Dashboard
 
-Order-book over time heatmap demo using `luvatrix_plot` raster + compile utilities.
+Order-book over time dashboard demo using `luvatrix_plot` raster + compile utilities.
+
+Mosaic layout:
+- `A` (top): order-book heatmap (bid green / ask red)
+- `B` (bottom-left): live sideways bid distribution bars with exact quantities
+- `C` (bottom-right): live sideways ask distribution bars with exact quantities
 
 Visualization model:
 - `x` axis: time (seconds, newest on the right)
@@ -13,6 +18,7 @@ Optional env vars:
 - `LUVATRIX_ORDERBOOK_PRICE_BINS` (default `96`)
 - `LUVATRIX_ORDERBOOK_TICK_SIZE` (default `0.25`)
 - bid/ask depth levels are fixed at `15` per side
+- `LUVATRIX_ORDERBOOK_DISPLAY_WINDOW_SEC` (default equals `LUVATRIX_ORDERBOOK_TIME_WINDOW_SEC`; shows cropped recent x-domain)
 - `LUVATRIX_ORDERBOOK_INITIAL_MID` (default `100.0`)
 - `LUVATRIX_ORDERBOOK_DRIFT` (default `0.12`)
 - `LUVATRIX_ORDERBOOK_FIT_PAD_TICKS` (default `1.0`; pad above ask/below bid when fitting y-range)
