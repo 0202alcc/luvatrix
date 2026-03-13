@@ -1,18 +1,224 @@
 from __future__ import annotations
 
+import json
+import logging
 import os
+import queue
+import ssl
+import threading
+import time
+import urllib.request
 import numpy as np
 
+from examples.trading_dashboard.orderbook_snapshot_client import OrderBookSnapshot, OrderBookSnapshotClient
 from luvatrix_plot.compile import compile_full_rewrite_batch
 from luvatrix_plot.raster import draw_hline, draw_text, draw_vline, new_canvas, text_size
+
+
+class _SSEPriceClient:
+    """Tiny resilient SSE client that pushes JSON events into a queue."""
+
+    def __init__(self, url: str, *, insecure_tls: bool = False) -> None:
+        self._url = url
+        self._insecure_tls = bool(insecure_tls)
+        self._queue: queue.Queue[tuple[str, dict]] = queue.Queue(maxsize=512)
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self.last_error: str | None = None
+        self.connected = False
+
+    def start(self) -> None:
+        if self._thread is not None:
+            return
+        self._thread = threading.Thread(target=self._run, name="trading-dashboard-sse", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.5)
+        self._thread = None
+
+    def drain(self, limit: int = 256) -> list[tuple[str, dict]]:
+        out: list[tuple[str, dict]] = []
+        for _ in range(max(1, limit)):
+            try:
+                out.append(self._queue.get_nowait())
+            except queue.Empty:
+                break
+        return out
+
+    def _push(self, event_type: str, payload: dict) -> None:
+        try:
+            self._queue.put_nowait((event_type, payload))
+        except queue.Full:
+            try:
+                _ = self._queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self._queue.put_nowait((event_type, payload))
+            except queue.Full:
+                pass
+
+    def _run(self) -> None:
+        reconnect_s = 0.5
+        while not self._stop.is_set():
+            try:
+                headers = {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
+                req = urllib.request.Request(self._url, headers=headers)
+                ctx = None
+                if self._insecure_tls:
+                    ctx = ssl.create_default_context()
+                    ctx.check_hostname = False
+                    ctx.verify_mode = ssl.CERT_NONE
+                with urllib.request.urlopen(req, timeout=30.0, context=ctx) as resp:
+                    self.connected = True
+                    self.last_error = None
+                    reconnect_s = 0.5
+                    event_type = "message"
+                    data_lines: list[str] = []
+                    while not self._stop.is_set():
+                        raw = resp.readline()
+                        if not raw:
+                            break
+                        line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                        if not line:
+                            if data_lines:
+                                blob = "\n".join(data_lines)
+                                data_lines.clear()
+                                try:
+                                    payload_obj = json.loads(blob)
+                                except json.JSONDecodeError:
+                                    payload_obj = {"raw": blob}
+                                if isinstance(payload_obj, dict):
+                                    self._push(event_type or "message", payload_obj)
+                            event_type = "message"
+                            continue
+                        if line.startswith(":"):
+                            continue
+                        if line.startswith("event:"):
+                            event_type = line.split(":", 1)[1].strip() or "message"
+                            continue
+                        if line.startswith("data:"):
+                            data_lines.append(line.split(":", 1)[1].lstrip())
+            except Exception as exc:  # noqa: BLE001 - keep stream alive
+                self.last_error = str(exc)
+            self.connected = False
+            if self._stop.wait(reconnect_s):
+                break
+            reconnect_s = min(5.0, reconnect_s * 1.6)
+
+
+class _OrderBookSnapshotFeed:
+    """Background HTTP poller for orderbook snapshots."""
+
+    def __init__(self, client: OrderBookSnapshotClient) -> None:
+        self._client = client
+        self._queue: queue.Queue[OrderBookSnapshot] = queue.Queue(maxsize=64)
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self.last_error: str | None = None
+        self.connected = False
+
+    def start(self) -> None:
+        if self._thread is not None:
+            return
+        self._thread = threading.Thread(target=self._run, name="trading-dashboard-snapshot", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.5)
+        self._thread = None
+
+    def drain(self, limit: int = 64) -> list[OrderBookSnapshot]:
+        out: list[OrderBookSnapshot] = []
+        for _ in range(max(1, limit)):
+            try:
+                out.append(self._queue.get_nowait())
+            except queue.Empty:
+                break
+        return out
+
+    def _push(self, snapshot: OrderBookSnapshot) -> None:
+        try:
+            self._queue.put_nowait(snapshot)
+        except queue.Full:
+            try:
+                _ = self._queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self._queue.put_nowait(snapshot)
+            except queue.Full:
+                pass
+
+    def _run(self) -> None:
+        backoff_sec = self._client.poll_interval_sec
+        while not self._stop.is_set():
+            started = time.monotonic()
+            try:
+                snap = self._client.fetch_once()
+                self._client._track_staleness(snap)  # noqa: SLF001 - intentional reuse
+                self._push(snap)
+                self.last_error = None
+                self.connected = True
+                backoff_sec = self._client.poll_interval_sec
+                elapsed = time.monotonic() - started
+                wait_s = max(0.0, self._client.poll_interval_sec - elapsed)
+                if self._stop.wait(wait_s):
+                    break
+            except Exception as exc:  # noqa: BLE001 - resilient loop
+                self.last_error = str(exc)
+                self.connected = False
+                transient = self._client._is_transient_error(exc)  # noqa: SLF001 - intentional reuse
+                if not transient:
+                    if self._stop.wait(min(self._client.max_backoff_sec, 1.0)):
+                        break
+                    continue
+                if self._stop.wait(backoff_sec):
+                    break
+                backoff_sec = min(self._client.max_backoff_sec, max(0.1, backoff_sec * 2.0))
 
 
 class TradingDashboardApp:
     """Order-book over time heatmap using incremental rolling bin buffers."""
 
     def __init__(self) -> None:
+        self._logger = logging.getLogger("trading_dashboard")
+        self._debug_log = os.getenv("LUVATRIX_ORDERBOOK_DEBUG_LOG", "0").strip().lower() in {"1", "true", "yes"}
+        if self._debug_log and not logging.getLogger().handlers:
+            logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
         self._width = 0
         self._height = 0
+        self._source = os.getenv("LUVATRIX_ORDERBOOK_SOURCE", "sim").strip().lower()
+        self._snapshot_base_url = os.getenv(
+            "LUVATRIX_ORDERBOOK_SNAPSHOT_BASE_URL",
+            "https://mgabatangnyc.tail9574b0.ts.net:8443",
+        ).strip()
+        self._sse_url = os.getenv(
+            "LUVATRIX_ORDERBOOK_SSE_URL",
+            "https://mgabatangnyc.tail9574b0.ts.net:8443/sse/prices",
+        ).strip()
+        self._selected_pair = os.getenv("LUVATRIX_ORDERBOOK_PRODUCT", "").strip().upper()
+        if self._source == "snapshot" and not self._selected_pair:
+            self._selected_pair = "ADA-USD"
+        self._active_pair = self._selected_pair or ""
+        self._active_quote = self._extract_quote_from_pair(self._active_pair)
+        self._seen_pairs: set[str] = set()
+        self._last_stream_error = ""
+        self._last_stream_event_ts = 0.0
+        self._stream_status = "simulated"
+        self._latest_stream_spread = np.nan
+        self._latest_exchange_ts: int | None = None
+        self._last_snapshot_ts: int | None = None
+        self._last_snapshot_fingerprint: tuple | None = None
+        self._sse = _SSEPriceClient(
+            self._sse_url,
+            insecure_tls=os.getenv("LUVATRIX_ORDERBOOK_SSE_INSECURE_TLS", "0").strip() in {"1", "true", "yes"},
+        )
 
         self._time_window_sec = max(30, int(os.getenv("LUVATRIX_ORDERBOOK_TIME_WINDOW_SEC", "120")))
         self._display_window_sec = max(
@@ -24,9 +230,29 @@ class TradingDashboardApp:
         )
         self._tick_size = float(os.getenv("LUVATRIX_ORDERBOOK_TICK_SIZE", "0.25"))
         self._levels_per_side = 15
+        self._snapshot_levels = max(
+            1,
+            int(os.getenv("LUVATRIX_ORDERBOOK_SNAPSHOT_LEVELS", str(self._levels_per_side))),
+        )
+        self._snapshot_poll_interval_sec = max(
+            0.2,
+            float(os.getenv("LUVATRIX_ORDERBOOK_SNAPSHOT_POLL_INTERVAL_SEC", "1.0")),
+        )
+        self._snapshot_stale_after_sec = max(
+            1.0,
+            float(os.getenv("LUVATRIX_ORDERBOOK_SNAPSHOT_STALE_AFTER_SEC", "10.0")),
+        )
+        self._lock_inferred_tick = os.getenv("LUVATRIX_ORDERBOOK_LOCK_INFERRED_TICK", "1").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+        }
+        self._inferred_tick_locked = False
+        self._inferred_tick_initialized = False
 
         self._mid_price = float(os.getenv("LUVATRIX_ORDERBOOK_INITIAL_MID", "100.0"))
         self._mid_drift = float(os.getenv("LUVATRIX_ORDERBOOK_DRIFT", "0.12"))
+        self._font_scale = 1.5
         self._fit_pad_ticks = max(0.0, float(os.getenv("LUVATRIX_ORDERBOOK_FIT_PAD_TICKS", "1.0")))
         self._gradient_blur_px = max(1, int(os.getenv("LUVATRIX_ORDERBOOK_GRADIENT_BLUR_PX", "3")))
         self._bin_pad_ticks = max(0, int(np.ceil(self._fit_pad_ticks)))
@@ -58,11 +284,430 @@ class TradingDashboardApp:
         self._global_price_min = self._mid_price - 0.5 * float(self._global_bin_count) * self._tick_size
         self._global_price_max = self._global_price_min + float(self._global_bin_count) * self._tick_size
         self._elapsed = 0.0
+        self._snapshot_client = OrderBookSnapshotClient(
+            base_url=self._snapshot_base_url,
+            product_id=self._selected_pair or "ADA-USD",
+            levels=self._snapshot_levels,
+            poll_interval_sec=self._snapshot_poll_interval_sec,
+            stale_after_sec=self._snapshot_stale_after_sec,
+        )
+        self._snapshot_feed = _OrderBookSnapshotFeed(self._snapshot_client)
+        self._x_tick_label_h_cache: int | None = None
+
+    def _dbg(self, message: str) -> None:
+        if self._debug_log:
+            self._logger.info(message)
+
+    def _fs(self, px: float) -> float:
+        return float(px) * float(self._font_scale)
 
     def _price_label_decimals(self) -> int:
         if self._tick_size <= 0:
-            return 2
-        return max(2, min(8, int(np.ceil(-np.log10(self._tick_size))) + 1))
+            return 6
+        return max(4, min(12, int(np.ceil(-np.log10(self._tick_size))) + 1))
+
+    def _spread_label_decimals(self) -> int:
+        return max(8, min(14, self._price_label_decimals() + 2))
+
+    def _price_sig_digits(self) -> int:
+        if self._tick_size <= 0:
+            return 6
+        return max(3, min(12, int(np.ceil(-np.log10(self._tick_size))) + 2))
+
+    def _format_price_axis(self, value: float) -> str:
+        if not np.isfinite(value):
+            return "--"
+        if value != 0.0 and abs(value) < 1e-5:
+            return self._format_scientific(value, self._price_sig_digits())
+        return self._format_fixed(value, self._price_label_decimals())
+
+    @staticmethod
+    def _format_scientific(value: float, sig_digits: int = 2) -> str:
+        if not np.isfinite(value):
+            return "--"
+        if value == 0.0:
+            return "0.0E0"
+        precision = max(1, int(sig_digits))
+        s = f"{value:.{precision - 1}E}"
+        mantissa, exp = s.split("E")
+        if "." in mantissa:
+            mantissa = mantissa.rstrip("0").rstrip(".")
+        if mantissa in {"-0", ""}:
+            mantissa = "0"
+        if "." not in mantissa:
+            mantissa = f"{mantissa}.0"
+        exp_i = int(exp)
+        return f"{mantissa}E{exp_i}"
+
+    @staticmethod
+    def _format_fixed(value: float, decimals: int) -> str:
+        if not np.isfinite(value):
+            return "--"
+        txt = f"{value:.{max(0, int(decimals))}f}"
+        if "." in txt:
+            txt = txt.rstrip("0").rstrip(".")
+        if txt in {"-0", "-0.0", ""}:
+            return "0"
+        return txt
+
+    def _infer_tick_size_from_books(self, bid_prices: np.ndarray, ask_prices: np.ndarray) -> float | None:
+        vals = np.concatenate((bid_prices[np.isfinite(bid_prices)], ask_prices[np.isfinite(ask_prices)]))
+        if vals.size < 2:
+            return None
+        uniq = np.unique(np.round(vals.astype(np.float64), 12))
+        if uniq.size < 2:
+            return None
+        diffs = np.diff(np.sort(uniq))
+        diffs = diffs[diffs > 0]
+        if diffs.size == 0:
+            return None
+        tick = float(np.min(diffs))
+        if not np.isfinite(tick) or tick <= 0.0:
+            return None
+        return tick
+
+    def _apply_tick_size(self, tick: float) -> None:
+        if not np.isfinite(tick) or tick <= 0.0:
+            return
+        old_tick = float(self._tick_size)
+        rel = abs(tick - old_tick) / max(old_tick, 1e-12)
+        if rel < 0.01:
+            return
+        self._dbg(f"tick-size reset old={old_tick:.12g} new={tick:.12g} rel={rel:.4f} plot_w={self._plot_w}")
+        self._tick_size = float(tick)
+        self._global_price_min = self._mid_price - 0.5 * float(self._global_bin_count) * self._tick_size
+        self._global_price_max = self._global_price_min + float(self._global_bin_count) * self._tick_size
+        self._bid_heatmap = np.zeros((self._bin_count, self._plot_w), dtype=np.float32)
+        self._ask_heatmap = np.zeros((self._bin_count, self._plot_w), dtype=np.float32)
+        self._global_bid_heatmap = np.zeros((self._global_bin_count, self._plot_w), dtype=np.float32)
+        self._global_ask_heatmap = np.zeros((self._global_bin_count, self._plot_w), dtype=np.float32)
+
+    def _maybe_apply_inferred_tick(self, inferred_tick: float | None) -> None:
+        if inferred_tick is None:
+            return
+        if self._source != "snapshot":
+            self._apply_tick_size(inferred_tick)
+            return
+        # Snapshot mode: infer tick once, then keep it fixed to prevent history resets.
+        if self._inferred_tick_initialized:
+            return
+        # Once we have any rendered history, keep the tick ruler stable to avoid visual resets.
+        if np.any(self._bid_heatmap > 0.0) or np.any(self._ask_heatmap > 0.0):
+            self._inferred_tick_locked = True
+            self._inferred_tick_initialized = True
+            return
+        if self._lock_inferred_tick and self._inferred_tick_locked:
+            return
+        self._apply_tick_size(inferred_tick)
+        self._inferred_tick_initialized = True
+        if self._lock_inferred_tick:
+            self._inferred_tick_locked = True
+        self._dbg(f"inferred tick initialized={self._inferred_tick_initialized} locked={self._inferred_tick_locked} tick={self._tick_size:.12g}")
+
+    @staticmethod
+    def _coerce_float(value: object) -> float | None:
+        try:
+            out = float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return None
+        if not np.isfinite(out):
+            return None
+        return out
+
+    @staticmethod
+    def _extract_pair(payload: dict) -> str:
+        for key in ("product_id", "product", "symbol", "pair", "instrument"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip().upper()
+        return ""
+
+    @staticmethod
+    def _extract_quote_from_pair(pair: str) -> str:
+        pair_norm = (pair or "").strip().upper()
+        if not pair_norm:
+            return "QUOTE"
+        if "-" in pair_norm:
+            parts = pair_norm.split("-", 1)
+            if len(parts) == 2 and parts[1]:
+                return parts[1]
+        if "/" in pair_norm:
+            parts = pair_norm.split("/", 1)
+            if len(parts) == 2 and parts[1]:
+                return parts[1]
+        return "QUOTE"
+
+    def _extract_side_levels(
+        self,
+        side_raw: object,
+        *,
+        side_name: str,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        prices = np.full(self._levels_per_side, np.nan, dtype=np.float64)
+        sizes = np.zeros(self._levels_per_side, dtype=np.float32)
+        if not isinstance(side_raw, list):
+            return prices, sizes
+        idx = 0
+        for item in side_raw:
+            if idx >= self._levels_per_side:
+                break
+            price_val: float | None = None
+            size_val: float | None = None
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                price_val = self._coerce_float(item[0])
+                size_val = self._coerce_float(item[1])
+            elif isinstance(item, dict):
+                price_val = self._coerce_float(item.get("price"))
+                if size_val is None:
+                    size_val = self._coerce_float(item.get("size"))
+                if size_val is None:
+                    size_val = self._coerce_float(item.get("qty"))
+                if size_val is None:
+                    size_val = self._coerce_float(item.get("quantity"))
+            if price_val is None:
+                continue
+            if size_val is None:
+                size_val = 0.0
+            prices[idx] = float(price_val)
+            sizes[idx] = max(0.0, float(size_val))
+            idx += 1
+        if idx == 0:
+            return prices, sizes
+        valid = np.isfinite(prices)
+        sort_idx = np.argsort(prices[valid])
+        sorted_prices = prices[valid][sort_idx]
+        sorted_sizes = sizes[valid][sort_idx]
+        if side_name == "bid":
+            sorted_prices = sorted_prices[::-1]
+            sorted_sizes = sorted_sizes[::-1]
+        prices[:] = np.nan
+        sizes[:] = 0.0
+        n = min(self._levels_per_side, sorted_prices.shape[0])
+        prices[:n] = sorted_prices[:n]
+        sizes[:n] = sorted_sizes[:n]
+        return prices, sizes
+
+    def _synthesize_levels_from_mid(
+        self,
+        mid_price: float,
+        spread: float,
+        bid_hint: float | None,
+        ask_hint: float | None,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        bid_prices = np.full(self._levels_per_side, np.nan, dtype=np.float64)
+        ask_prices = np.full(self._levels_per_side, np.nan, dtype=np.float64)
+        bid_sizes = np.zeros(self._levels_per_side, dtype=np.float32)
+        ask_sizes = np.zeros(self._levels_per_side, dtype=np.float32)
+        bid_base = bid_hint if bid_hint is not None else (mid_price - 0.5 * spread)
+        ask_base = ask_hint if ask_hint is not None else (mid_price + 0.5 * spread)
+        for i in range(self._levels_per_side):
+            bid_prices[i] = float(bid_base - i * self._tick_size)
+            ask_prices[i] = float(ask_base + i * self._tick_size)
+        decay = np.exp(-np.arange(self._levels_per_side, dtype=np.float64) / 7.0).astype(np.float32)
+        bid_sizes[:] = decay
+        ask_sizes[:] = decay
+        return bid_prices, bid_sizes, ask_prices, ask_sizes
+
+    def _apply_live_payload(self, payload: dict) -> bool:
+        pair = self._extract_pair(payload)
+        if pair:
+            self._seen_pairs.add(pair)
+            if self._selected_pair:
+                if pair == self._selected_pair:
+                    self._active_pair = self._selected_pair
+                elif self._selected_pair in self._seen_pairs:
+                    return False
+                elif not self._active_pair:
+                    # Requested pair has not appeared yet; fall back to a live pair.
+                    self._active_pair = pair
+                elif pair != self._active_pair:
+                    return False
+            else:
+                if not self._active_pair:
+                    self._active_pair = pair
+                if self._active_pair and pair != self._active_pair:
+                    return False
+            if self._active_pair:
+                self._active_quote = self._extract_quote_from_pair(self._active_pair)
+
+        bids_raw = payload.get("bids")
+        asks_raw = payload.get("asks")
+        bid_prices, bid_sizes_exact = self._extract_side_levels(bids_raw, side_name="bid")
+        ask_prices, ask_sizes_exact = self._extract_side_levels(asks_raw, side_name="ask")
+        has_book = bool(np.isfinite(bid_prices).any() and np.isfinite(ask_prices).any())
+
+        best_bid = self._coerce_float(payload.get("best_bid"))
+        if best_bid is None:
+            best_bid = self._coerce_float(payload.get("bid"))
+        best_ask = self._coerce_float(payload.get("best_ask"))
+        if best_ask is None:
+            best_ask = self._coerce_float(payload.get("ask"))
+        last_price = self._coerce_float(payload.get("price"))
+        if last_price is None:
+            last_price = self._coerce_float(payload.get("last_price"))
+        ts_raw = payload.get("timestamp")
+        if isinstance(ts_raw, (int, float)):
+            self._latest_exchange_ts = int(ts_raw)
+        spread = self._coerce_float(payload.get("spread"))
+        display_spread = spread
+        if display_spread is None and best_bid is not None and best_ask is not None:
+            display_spread = float(best_ask - best_bid)
+        if display_spread is not None:
+            self._latest_stream_spread = float(display_spread)
+
+        synth_spread = spread if spread is not None else self._tick_size
+        synth_spread = max(self._tick_size, float(synth_spread))
+
+        if not has_book:
+            if best_bid is None and best_ask is not None:
+                best_bid = float(best_ask - spread)
+            if best_ask is None and best_bid is not None:
+                best_ask = float(best_bid + spread)
+            if last_price is None:
+                if best_bid is not None and best_ask is not None:
+                    last_price = 0.5 * (best_bid + best_ask)
+                elif best_bid is not None:
+                    last_price = best_bid + 0.5 * spread
+                elif best_ask is not None:
+                    last_price = best_ask - 0.5 * spread
+                else:
+                    last_price = self._mid_price
+            bid_prices, bid_sizes_exact, ask_prices, ask_sizes_exact = self._synthesize_levels_from_mid(
+                float(last_price),
+                synth_spread,
+                best_bid,
+                best_ask,
+            )
+            has_book = True
+
+        if not has_book:
+            return False
+
+        self._mid_price = float(last_price) if last_price is not None else self._mid_price
+        self._latest_bid_prices = bid_prices.copy()
+        self._latest_ask_prices = ask_prices.copy()
+        self._latest_bid_sizes_exact = bid_sizes_exact.copy()
+        self._latest_ask_sizes_exact = ask_sizes_exact.copy()
+
+        bid_norm = bid_sizes_exact.copy()
+        ask_norm = ask_sizes_exact.copy()
+        bmx = float(np.max(bid_norm)) if bid_norm.size > 0 else 0.0
+        amx = float(np.max(ask_norm)) if ask_norm.size > 0 else 0.0
+        if bmx > 0.0:
+            bid_norm /= bmx
+        if amx > 0.0:
+            ask_norm /= amx
+
+        lowest_bid = float(np.nanmin(bid_prices))
+        highest_ask = float(np.nanmax(ask_prices))
+        self._latest_lowest_bid = lowest_bid
+        self._latest_highest_ask = highest_ask
+        self._push_distribution_column(
+            bid_prices,
+            bid_norm,
+            ask_prices,
+            ask_norm,
+            lowest_bid,
+            highest_ask,
+            roll_steps=0,
+        )
+        self._last_stream_event_ts = time.time()
+        return True
+
+    def _apply_snapshot(self, snapshot: OrderBookSnapshot) -> bool:
+        self._seen_pairs.add(snapshot.product_id)
+        pair_changed = bool(self._active_pair and snapshot.product_id != self._active_pair)
+        self._active_pair = snapshot.product_id
+        self._active_quote = self._extract_quote_from_pair(snapshot.product_id)
+        if pair_changed and self._lock_inferred_tick:
+            self._inferred_tick_locked = False
+            self._inferred_tick_initialized = False
+
+        if not snapshot.bids or not snapshot.asks:
+            return False
+
+        bid_prices = np.full(self._levels_per_side, np.nan, dtype=np.float64)
+        ask_prices = np.full(self._levels_per_side, np.nan, dtype=np.float64)
+        bid_sizes_exact = np.zeros(self._levels_per_side, dtype=np.float32)
+        ask_sizes_exact = np.zeros(self._levels_per_side, dtype=np.float32)
+
+        b_n = min(self._levels_per_side, len(snapshot.bids))
+        a_n = min(self._levels_per_side, len(snapshot.asks))
+        for i in range(b_n):
+            bid_prices[i] = float(snapshot.bids[i].price)
+            bid_sizes_exact[i] = max(0.0, float(snapshot.bids[i].size))
+        for i in range(a_n):
+            ask_prices[i] = float(snapshot.asks[i].price)
+            ask_sizes_exact[i] = max(0.0, float(snapshot.asks[i].size))
+
+        fingerprint = (
+            tuple(float(v) if np.isfinite(v) else np.nan for v in bid_prices),
+            tuple(float(v) for v in bid_sizes_exact),
+            tuple(float(v) if np.isfinite(v) else np.nan for v in ask_prices),
+            tuple(float(v) for v in ask_sizes_exact),
+        )
+        same_ts = snapshot.timestamp is not None and snapshot.timestamp == self._last_snapshot_ts
+        replace_latest_column = bool(same_ts)
+        ts = snapshot.timestamp
+        if ts is None:
+            roll_steps = 1
+        elif self._last_snapshot_ts is None:
+            roll_steps = 1
+        elif ts == self._last_snapshot_ts:
+            roll_steps = 0
+        elif ts > self._last_snapshot_ts:
+            roll_steps = int(ts - self._last_snapshot_ts)
+        else:
+            # Out-of-order timestamp: overwrite latest column instead of rolling backward.
+            roll_steps = 0
+        sec_cols = self._columns_per_second()
+        roll_cols = int(max(0, roll_steps)) * sec_cols
+        self._dbg(
+            f"snapshot apply pair={snapshot.product_id} ts={snapshot.timestamp} last_ts={self._last_snapshot_ts} "
+            f"same_ts={same_ts} replace={replace_latest_column} roll_steps={roll_steps}"
+        )
+
+        inferred_tick = self._infer_tick_size_from_books(bid_prices, ask_prices)
+        if inferred_tick is not None:
+            self._maybe_apply_inferred_tick(inferred_tick)
+
+        bid_norm = bid_sizes_exact.copy()
+        ask_norm = ask_sizes_exact.copy()
+        bmx = float(np.max(bid_norm)) if b_n > 0 else 0.0
+        amx = float(np.max(ask_norm)) if a_n > 0 else 0.0
+        if bmx > 0.0:
+            bid_norm /= bmx
+        if amx > 0.0:
+            ask_norm /= amx
+
+        self._latest_bid_prices = bid_prices.copy()
+        self._latest_bid_sizes_exact = bid_sizes_exact.copy()
+        self._latest_ask_prices = ask_prices.copy()
+        self._latest_ask_sizes_exact = ask_sizes_exact.copy()
+        self._latest_stream_spread = float(snapshot.spread) if snapshot.spread is not None else np.nan
+        if snapshot.timestamp is not None:
+            self._latest_exchange_ts = int(snapshot.timestamp)
+
+        lowest_bid = float(np.nanmin(bid_prices))
+        highest_ask = float(np.nanmax(ask_prices))
+        self._latest_lowest_bid = lowest_bid
+        self._latest_highest_ask = highest_ask
+        self._push_distribution_column(
+            bid_prices,
+            bid_norm,
+            ask_prices,
+            ask_norm,
+            lowest_bid,
+            highest_ask,
+            roll_column=False,
+            roll_steps=roll_cols,
+            write_steps=sec_cols,
+        )
+        if snapshot.timestamp is not None:
+            self._last_snapshot_ts = int(snapshot.timestamp)
+        self._last_snapshot_fingerprint = fingerprint
+        self._last_stream_event_ts = time.time()
+        return True
 
     def _layout(self) -> tuple[int, int, int, int, int, int, int, int, int]:
         left, right, top, bottom = 84, 18, 28, 34
@@ -70,7 +715,12 @@ class TradingDashboardApp:
         pw = max(8, self._width - left - right)
         total_h = max(24, self._height - top - bottom)
         gap = max(22, min(44, int(round(total_h * 0.16))))
-        bars_h = max(8, min(total_h // 2, int(round(total_h * 0.23))))
+        if self._source in {"sse", "snapshot"}:
+            # Reserve enough vertical divider space for rotated timestamp tick labels.
+            # Math: tick label offset + rotated labels + spacing + x-title + safety + extra B/C drop.
+            required_gap = 8 + self._x_tick_label_height_px() + 4 + self._x_title_height_px() + 16
+            gap = max(gap, required_gap)
+        bars_h = max(8, min(total_h // 2, int(round(total_h * 0.29))))
         heat_h = max(8, total_h - bars_h - gap)
         if heat_h + bars_h + gap > total_h:
             bars_h = max(8, total_h - heat_h - gap)
@@ -78,6 +728,28 @@ class TradingDashboardApp:
             gap = max(0, total_h - heat_h - bars_h)
         bars_y0 = y0 + heat_h + gap
         return x0, y0, pw, heat_h, x0, bars_y0, pw, bars_h, gap
+
+    @staticmethod
+    def _x_tick_rotate_deg() -> int:
+        return 65
+
+    def _x_tick_label_height_px(self) -> int:
+        if self._x_tick_label_h_cache is None:
+            # Keep layout stable across frames by using a fixed worst-case sample label.
+            # Using all '8's approximates max glyph height/footprint for bitmap text.
+            sample = "8888888888"
+            _w, h = text_size(sample, font_size_px=self._fs(9.0), rotate_deg=self._x_tick_rotate_deg())
+            self._x_tick_label_h_cache = int(max(1, h))
+        return int(self._x_tick_label_h_cache)
+
+    def _x_title_height_px(self) -> int:
+        _w, h = text_size("time (s, recent -> right)", font_size_px=self._fs(8.0))
+        return int(max(1, h))
+
+    def _columns_per_second(self) -> int:
+        if self._time_window_sec <= 0:
+            return 1
+        return max(1, int(round(float(self._plot_w) / float(self._time_window_sec))))
 
     def _ensure_heatmap_buffers(self) -> None:
         x0, y0, pw, ph, bx0, by0, bw, bh, _gap = self._layout()
@@ -94,6 +766,7 @@ class TradingDashboardApp:
             return
         self._plot_x0, self._plot_y0, self._plot_w, self._plot_h = x0, y0, pw, ph
         self._bars_x0, self._bars_y0, self._bars_w, self._bars_h = bx0, by0, bw, bh
+        self._dbg(f"buffer resize/reinit plot=({pw}x{ph}) bars=({bw}x{bh})")
         self._bid_heatmap = np.zeros((self._bin_count, pw), dtype=np.float32)
         self._ask_heatmap = np.zeros((self._bin_count, pw), dtype=np.float32)
         self._global_bid_heatmap = np.zeros((self._global_bin_count, pw), dtype=np.float32)
@@ -241,6 +914,10 @@ class TradingDashboardApp:
         ask_sizes: np.ndarray,
         lowest_bid: float,
         highest_ask: float,
+        *,
+        roll_column: bool = True,
+        roll_steps: int = 1,
+        write_steps: int = 1,
     ) -> None:
         self._ensure_heatmap_buffers()
         old_min = self._price_min
@@ -254,15 +931,33 @@ class TradingDashboardApp:
         bid_col = self._build_side_column(bid_prices, bid_sizes)
         ask_col = self._build_side_column(ask_prices, ask_sizes)
 
-        self._bid_heatmap = np.roll(self._bid_heatmap, -1, axis=1)
-        self._ask_heatmap = np.roll(self._ask_heatmap, -1, axis=1)
-        self._bid_heatmap[:, -1] = bid_col
-        self._ask_heatmap[:, -1] = ask_col
+        if roll_column:
+            self._bid_heatmap = np.roll(self._bid_heatmap, -1, axis=1)
+            self._ask_heatmap = np.roll(self._ask_heatmap, -1, axis=1)
+        steps = max(0, int(roll_steps))
+        if steps > 1:
+            self._dbg(f"multi-roll steps={steps} roll_column={roll_column} ts={self._latest_exchange_ts}")
+        if steps > 0:
+            steps = min(steps, self._plot_w)
+            self._bid_heatmap = np.roll(self._bid_heatmap, -steps, axis=1)
+            self._ask_heatmap = np.roll(self._ask_heatmap, -steps, axis=1)
+            self._bid_heatmap[:, -steps:] = 0.0
+            self._ask_heatmap[:, -steps:] = 0.0
+        write_cols = max(1, int(write_steps))
+        write_cols = min(write_cols, self._plot_w)
+        self._bid_heatmap[:, -write_cols:] = bid_col[:, None]
+        self._ask_heatmap[:, -write_cols:] = ask_col[:, None]
 
-        self._global_bid_heatmap = np.roll(self._global_bid_heatmap, -1, axis=1)
-        self._global_ask_heatmap = np.roll(self._global_ask_heatmap, -1, axis=1)
-        self._global_bid_heatmap[:, -1] = 0.0
-        self._global_ask_heatmap[:, -1] = 0.0
+        if roll_column:
+            self._global_bid_heatmap = np.roll(self._global_bid_heatmap, -1, axis=1)
+            self._global_ask_heatmap = np.roll(self._global_ask_heatmap, -1, axis=1)
+        if steps > 0:
+            self._global_bid_heatmap = np.roll(self._global_bid_heatmap, -steps, axis=1)
+            self._global_ask_heatmap = np.roll(self._global_ask_heatmap, -steps, axis=1)
+            self._global_bid_heatmap[:, -steps:] = 0.0
+            self._global_ask_heatmap[:, -steps:] = 0.0
+        self._global_bid_heatmap[:, -write_cols:] = 0.0
+        self._global_ask_heatmap[:, -write_cols:] = 0.0
 
         offset = int(round((self._price_min - self._global_price_min) / self._tick_size))
         g0 = max(0, offset)
@@ -270,17 +965,48 @@ class TradingDashboardApp:
         if g1 > g0:
             l0 = max(0, -offset)
             l1 = l0 + (g1 - g0)
-            self._global_bid_heatmap[g0:g1, -1] = np.maximum(
-                self._global_bid_heatmap[g0:g1, -1], bid_col[l0:l1]
-            )
-            self._global_ask_heatmap[g0:g1, -1] = np.maximum(
-                self._global_ask_heatmap[g0:g1, -1], ask_col[l0:l1]
-            )
+            self._global_bid_heatmap[g0:g1, -write_cols:] = bid_col[l0:l1][:, None]
+            self._global_ask_heatmap[g0:g1, -write_cols:] = ask_col[l0:l1][:, None]
 
         if local_shifted:
             self._rehydrate_local_from_global()
 
     def _step_market(self, dt: float) -> bool:
+        if self._source == "sse":
+            updated = False
+            events = self._sse.drain(limit=512)
+            if self._sse.last_error:
+                self._last_stream_error = self._sse.last_error
+            for event_type, payload in events:
+                if event_type == "error":
+                    msg = payload.get("message") if isinstance(payload, dict) else None
+                    if isinstance(msg, str) and msg.strip():
+                        self._last_stream_error = msg.strip()
+                    continue
+                price_batch = payload.get("prices") if isinstance(payload, dict) else None
+                if isinstance(price_batch, list):
+                    for item in price_batch:
+                        if isinstance(item, dict) and self._apply_live_payload(item):
+                            updated = True
+                    continue
+                if isinstance(payload, dict) and self._apply_live_payload(payload):
+                    updated = True
+            self._stream_status = "connected" if self._sse.connected else "connecting"
+            return updated
+        if self._source == "snapshot":
+            updated = False
+            snaps = self._snapshot_feed.drain(limit=64)
+            if self._snapshot_feed.last_error:
+                self._last_stream_error = self._snapshot_feed.last_error
+                self._dbg(f"snapshot feed error: {self._last_stream_error}")
+            if snaps and self._debug_log:
+                self._dbg(f"snapshot drain count={len(snaps)}")
+            for snap in snaps:
+                if self._apply_snapshot(snap):
+                    updated = True
+            self._stream_status = "connected" if self._snapshot_feed.connected else "connecting"
+            return updated
+
         self._elapsed += max(0.0, dt)
         if self._elapsed < 1.0:
             return False
@@ -302,7 +1028,15 @@ class TradingDashboardApp:
         self._latest_bid_sizes_exact = bid_sizes_exact.copy()
         self._latest_ask_prices = ask_prices.copy()
         self._latest_ask_sizes_exact = ask_sizes_exact.copy()
-        self._push_distribution_column(bid_prices, bid_sizes, ask_prices, ask_sizes, lowest_bid, highest_ask)
+        self._push_distribution_column(
+            bid_prices,
+            bid_sizes,
+            ask_prices,
+            ask_sizes,
+            lowest_bid,
+            highest_ask,
+            roll_steps=0,
+        )
         return True
 
     def _render(self) -> np.ndarray:
@@ -355,6 +1089,26 @@ class TradingDashboardApp:
         rgb = base + (bid_img[:, :, None] * green) + (ask_img[:, :, None] * red)
         rgb = np.clip(rgb, 0, 255).astype(np.uint8)
 
+        # Time-second cadence tint: 2 normal second-bins, then 1 slightly lighter blue second-bin.
+        # Anchor to absolute second (when available) so stripes roll with the timeline/data.
+        if self._display_window_sec > 1:
+            x = np.arange(pw, dtype=np.float32)
+            secs_ago = ((pw - 1 - x) * float(self._display_window_sec) / float(pw - 1)).astype(np.int32)
+            secs_ago = np.clip(secs_ago, 0, self._display_window_sec - 1)
+        else:
+            secs_ago = np.zeros((pw,), dtype=np.int32)
+        if self._latest_exchange_ts is not None and self._source in {"snapshot", "sse"}:
+            col_ts = int(self._latest_exchange_ts) - secs_ago
+            stripe_mask = (col_ts % 3) == 2
+        else:
+            stripe_mask = (secs_ago % 3) == 2
+        if np.any(stripe_mask):
+            tint = np.array([26, 40, 58], dtype=np.float32).reshape(1, 1, 3)
+            alpha = 0.16
+            rgb_f = rgb.astype(np.float32)
+            rgb_f[:, stripe_mask, :] = (1.0 - alpha) * rgb_f[:, stripe_mask, :] + alpha * tint
+            rgb = np.clip(rgb_f, 0, 255).astype(np.uint8)
+
         canvas[y0 : y0 + ph, x0 : x0 + pw, :3] = rgb
         canvas[y0 : y0 + ph, x0 : x0 + pw, 3] = 255
 
@@ -374,29 +1128,53 @@ class TradingDashboardApp:
         draw_vline(canvas, x1, y0, y1, frame)
 
         label = (212, 222, 236, 255)
-        title = "Order Book Heatmap (Bid=Green, Ask=Red)"
-        title_w, title_h = text_size(title, font_size_px=12.0)
+        pair_for_title = self._active_pair or self._selected_pair
+        if pair_for_title:
+            title = f"{pair_for_title} Order Book Heatmap"
+        else:
+            title = "Order Book Heatmap (Bid=Green, Ask=Red)"
+        title_w, title_h = text_size(title, font_size_px=self._fs(12.0))
         title_x = x0 + max(0, (pw - title_w) // 2)
         title_y = 4
-        draw_text(canvas, title_x, title_y, title, label, font_size_px=12.0)
+        draw_text(canvas, title_x, title_y, title, label, font_size_px=self._fs(12.0))
         draw_hline(canvas, title_x, min(x1, title_x + title_w), min(y0 - 2, title_y + title_h + 1), label)
 
-        a_y_title = "Y: price (quote)"
-        a_yw, a_yh = text_size(a_y_title, font_size_px=8.0)
-        a_yx = 8
-        a_yy = y0 + 2
-        draw_text(canvas, a_yx, a_yy, a_y_title, label, font_size_px=8.0)
-        draw_hline(canvas, a_yx, a_yx + a_yw, min(y1, a_yy + a_yh + 1), label)
+        y_label_right = max(8, x0 - 10)
+        quote = self._active_quote if self._active_quote else "QUOTE"
+        a_y_title = f"price ({quote})"
+        a_yw, a_yh = text_size(a_y_title, font_size_px=self._fs(8.0))
+        a_yx = max(8, y_label_right - a_yw)
+        a_yy = max(2, y0 - a_yh - 6)
+        draw_text(canvas, a_yx, a_yy, a_y_title, label, font_size_px=self._fs(8.0))
+        draw_hline(canvas, a_yx, a_yx + a_yw, a_yy + a_yh + 1, label)
 
-        best_bid = float(np.nanmax(self._latest_bid_prices)) if np.isfinite(self._latest_bid_prices).any() else np.nan
-        best_ask = float(np.nanmin(self._latest_ask_prices)) if np.isfinite(self._latest_ask_prices).any() else np.nan
-        spread = best_ask - best_bid if np.isfinite(best_bid) and np.isfinite(best_ask) else np.nan
+        if self._source in {"sse", "snapshot"}:
+            spread = float(self._latest_stream_spread) if np.isfinite(self._latest_stream_spread) else np.nan
+        else:
+            best_bid = float(np.nanmax(self._latest_bid_prices)) if np.isfinite(self._latest_bid_prices).any() else np.nan
+            best_ask = float(np.nanmin(self._latest_ask_prices)) if np.isfinite(self._latest_ask_prices).any() else np.nan
+            spread = best_ask - best_bid if np.isfinite(best_bid) and np.isfinite(best_ask) else np.nan
         spread_text = (
-            f"Spread: {spread:.{self._price_label_decimals()}f}"
+            f"Spread: {self._format_fixed(spread, self._spread_label_decimals())} = {self._format_scientific(spread, 2)}"
             if np.isfinite(spread)
             else "Spread: --"
         )
-        draw_text(canvas, max(8, x1 - 150), 4, spread_text, label, font_size_px=10.0)
+        spread_w, _ = text_size(spread_text, font_size_px=self._fs(10.0))
+        spread_x = max(8, x1 - spread_w - 8)
+        draw_text(canvas, spread_x, 4, spread_text, label, font_size_px=self._fs(10.0))
+        if self._source in {"sse", "snapshot"}:
+            pair = self._active_pair or self._selected_pair or "--"
+            seen_count = len(self._seen_pairs)
+            host_ts = int(time.time())
+            stream_meta = (
+                f"Pair: {pair} | source: {self._source} | stream: {self._stream_status} "
+                f"| seen: {seen_count} | host_ts: {host_ts}"
+            )
+            if self._selected_pair and self._selected_pair != pair:
+                stream_meta = f"{stream_meta} | requested: {self._selected_pair}"
+            if self._last_stream_error:
+                stream_meta = f"{stream_meta} | err: {self._last_stream_error[:42]}"
+            draw_text(canvas, x0 + 8, 4, stream_meta, label, font_size_px=self._fs(8.0))
 
         # Label every bin center. Major cadence labels are larger and emboldened.
         decimals = self._price_label_decimals()
@@ -409,16 +1187,18 @@ class TradingDashboardApp:
                 continue
             y_center = y0 + (row_start + row_end) // 2
             price = self._price_min + (float(b) + 0.5) * self._tick_size
-            text = f"{price:.{decimals}f}"
+            text = self._format_price_axis(price)
             is_major = (b % 5) == 0
             draw_hline(canvas, x0 - (6 if is_major else 3), x0, y_center, frame)
+            rule_font = self._fs(9.0 if is_major else 7.25)
+            t_w, t_h = text_size(text, font_size_px=rule_font)
             draw_text(
                 canvas,
-                8,
-                max(0, y_center - (7 if is_major else 5)),
+                max(8, y_label_right - t_w),
+                max(0, y_center - (t_h // 2)),
                 text,
                 label,
-                font_size_px=(11.0 if is_major else 8.5),
+                font_size_px=rule_font,
                 embolden_px=(2 if is_major else 1),
             )
 
@@ -428,17 +1208,6 @@ class TradingDashboardApp:
             canvas[divider_top : divider_bottom + 1, x0 : x0 + pw, 3] = 255
             draw_hline(canvas, x0, x1, divider_top, frame)
             draw_hline(canvas, x0, x1, divider_bottom, frame)
-            mid_y = divider_top + max(0, (divider_bottom - divider_top) // 2 - 3)
-            draw_text(
-                canvas,
-                x0 + max(0, pw // 2 - 58),
-                mid_y,
-                "time (s, recent -> right)",
-                label,
-                font_size_px=8.0,
-            )
-            tx_w, tx_h = text_size("time (s, recent -> right)", font_size_px=8.0)
-            draw_hline(canvas, x0 + max(0, pw // 2 - 58), x0 + max(0, pw // 2 - 58) + tx_w, mid_y + tx_h + 1, label)
         else:
             draw_text(
                 canvas,
@@ -446,7 +1215,7 @@ class TradingDashboardApp:
                 min(self._height - 14, y1 + 14),
                 "time (s, recent -> right)",
                 label,
-                font_size_px=8.0,
+                font_size_px=self._fs(8.0),
             )
 
         # Draw x-axis ticks/labels after divider so they are not overpainted.
@@ -454,12 +1223,31 @@ class TradingDashboardApp:
         tick_y0 = y1
         tick_y1 = min(self._height - 1, y1 + 4)
         label_y = min(self._height - 12, y1 + 8)
+        x_tick_rotate = self._x_tick_rotate_deg()
         for i in range(x_ticks + 1):
             frac = i / x_ticks
             x = int(round(x0 + frac * (pw - 1)))
             draw_vline(canvas, x, tick_y0, tick_y1, frame)
-            seconds_ago = int(round((1.0 - frac) * (self._display_window_sec - 1)))
-            draw_text(canvas, max(0, x - 12), label_y, f"-{seconds_ago}s", label, font_size_px=9.0)
+            seconds_ago = int(round((1.0 - frac) * float(self._display_window_sec)))
+            if self._latest_exchange_ts is not None and self._source in {"snapshot", "sse"}:
+                tick_text = str(int(self._latest_exchange_ts - seconds_ago))
+            else:
+                tick_text = f"-{seconds_ago}s"
+            tw, _ = text_size(tick_text, font_size_px=self._fs(9.0), rotate_deg=x_tick_rotate)
+            # Right-anchor each angled label near its tick to reduce right-edge clipping.
+            lx = max(0, min(self._width - tw - 1, x - tw + 2))
+            draw_text(canvas, lx, label_y, tick_text, label, font_size_px=self._fs(9.0), rotate_deg=x_tick_rotate)
+
+        if divider_bottom >= divider_top:
+            x_title = "time (s, recent -> right)"
+            tx_w, tx_h = text_size(x_title, font_size_px=self._fs(8.0))
+            tx_x = x0 + max(0, (pw - tx_w) // 2)
+            # Place x-title below rotated tick labels with explicit spacing.
+            tx_y = label_y + self._x_tick_label_height_px() + 3
+            tx_y = min(divider_bottom - tx_h - 1, tx_y)
+            tx_y = max(divider_top + 1, tx_y)
+            draw_text(canvas, tx_x, tx_y, x_title, label, font_size_px=self._fs(8.0))
+            draw_hline(canvas, tx_x, min(x1, tx_x + tx_w), min(divider_bottom - 1, tx_y + tx_h + 1), label)
 
         # Y label is shown in header subtitle near the centered title.
 
@@ -482,39 +1270,31 @@ class TradingDashboardApp:
             draw_vline(canvas, px0, by0, by1, frame)
             draw_vline(canvas, px1, by0, by1, frame)
 
-        b_title = "B: Bid Distribution (Exact Qty)"
-        c_title = "C: Ask Distribution (Exact Qty)"
-        b_tw, b_th = text_size(b_title, font_size_px=10.0)
-        c_tw, c_th = text_size(c_title, font_size_px=10.0)
+        b_title = "Market Book Bids (SELL)"
+        c_title = "Market Book Asks (BUY)"
+        b_tw, b_th = text_size(b_title, font_size_px=self._fs(10.0))
+        c_tw, c_th = text_size(c_title, font_size_px=self._fs(10.0))
         b_tx = b_x0 + max(0, (b_w - b_tw) // 2)
         c_tx = c_x0 + max(0, (c_w - c_tw) // 2)
         b_ty, c_ty = by0 + 7, by0 + 7
-        draw_text(canvas, b_tx, b_ty, b_title, label, font_size_px=10.0)
-        draw_text(canvas, c_tx, c_ty, c_title, label, font_size_px=10.0)
+        draw_text(canvas, b_tx, b_ty, b_title, label, font_size_px=self._fs(10.0))
+        draw_text(canvas, c_tx, c_ty, c_title, label, font_size_px=self._fs(10.0))
         draw_hline(canvas, b_tx, min(b_x1, b_tx + b_tw), min(by1, b_ty + b_th + 1), label)
         draw_hline(canvas, c_tx, min(c_x1, c_tx + c_tw), min(by1, c_ty + c_th + 1), label)
 
-        b_y_title = "Y: bid price"
-        c_y_title = "Y: ask price"
-        b_yw, b_yh = text_size(b_y_title, font_size_px=8.0)
-        c_yw, c_yh = text_size(c_y_title, font_size_px=8.0)
-        b_yx, b_yy = b_x0 + 6, by0 + 21
-        c_yx, c_yy = c_x0 + 6, by0 + 21
-        draw_text(canvas, b_yx, b_yy, b_y_title, label, font_size_px=8.0)
-        draw_text(canvas, c_yx, c_yy, c_y_title, label, font_size_px=8.0)
+        b_y_title = "bid price bin"
+        c_y_title = "ask price bin"
+        b_yw, b_yh = text_size(b_y_title, font_size_px=self._fs(8.0))
+        c_yw, c_yh = text_size(c_y_title, font_size_px=self._fs(8.0))
+        b_yx, c_yx = b_x0 + 6, c_x0 + 6
+        b_title_underline_y = b_ty + b_th + 1
+        c_title_underline_y = c_ty + c_th + 1
+        b_yy = max(by0 + 2, b_title_underline_y - b_yh - 1)
+        c_yy = max(by0 + 2, c_title_underline_y - c_yh - 1)
+        draw_text(canvas, b_yx, b_yy, b_y_title, label, font_size_px=self._fs(8.0))
+        draw_text(canvas, c_yx, c_yy, c_y_title, label, font_size_px=self._fs(8.0))
         draw_hline(canvas, b_yx, min(b_x1, b_yx + b_yw), min(by1, b_yy + b_yh + 1), label)
         draw_hline(canvas, c_yx, min(c_x1, c_yx + c_yw), min(by1, c_yy + c_yh + 1), label)
-
-        b_x_title = "quantity (exact)"
-        c_x_title = "quantity (exact)"
-        b_xw, b_xh = text_size(b_x_title, font_size_px=8.5)
-        c_xw, c_xh = text_size(c_x_title, font_size_px=8.5)
-        b_qx, b_qy = b_x0 + max(0, b_w // 2 - b_xw // 2), by1 - 10
-        c_qx, c_qy = c_x0 + max(0, c_w // 2 - c_xw // 2), by1 - 10
-        draw_text(canvas, b_qx, b_qy, b_x_title, label, font_size_px=8.5)
-        draw_text(canvas, c_qx, c_qy, c_x_title, label, font_size_px=8.5)
-        draw_hline(canvas, b_qx, min(b_x1, b_qx + b_xw), min(by1, b_qy + b_xh + 1), label)
-        draw_hline(canvas, c_qx, min(c_x1, c_qx + c_xw), min(by1, c_qy + c_xh + 1), label)
 
         def _draw_sideways_distribution(
             panel_x0: int,
@@ -523,10 +1303,11 @@ class TradingDashboardApp:
             sizes: np.ndarray,
             bar_color: tuple[int, int, int, int],
         ) -> None:
+            panel_num_font = self._fs(7.0)
             bar_left = panel_x0 + 88
             bar_right = panel_x1 - 72
             bar_w = max(10, bar_right - bar_left)
-            header_h = min(40, max(28, bh // 3))
+            header_h = min(30, max(18, bh // 4))
             usable_h = max(1, bh - header_h)
             row_h = max(1, usable_h // self._levels_per_side)
             max_qty = float(np.max(sizes)) if sizes.size > 0 else 0.0
@@ -545,21 +1326,24 @@ class TradingDashboardApp:
                     x_fill_end = min(panel_x1, bar_left + fill)
                     for yy in range(y_top, y_bot + 1):
                         draw_hline(canvas, bar_left, x_fill_end, yy, bar_color)
+                price_text = self._format_price_axis(float(price)) if np.isfinite(price) else "--"
+                price_w, _ = text_size(price_text, font_size_px=panel_num_font)
+                price_x = max(panel_x0 + 6, (bar_left - 6) - price_w)
                 draw_text(
                     canvas,
-                    panel_x0 + 6,
+                    price_x,
                     max(0, y_top + 1),
-                    f"{price:.4f}" if np.isfinite(price) else "--",
+                    price_text,
                     label,
-                    font_size_px=8.5,
+                    font_size_px=panel_num_font,
                 )
                 draw_text(
                     canvas,
                     min(self._width - 80, bar_right + 5),
                     max(0, y_top + 1),
-                    f"{qty:.6f}",
+                    self._format_fixed(qty, 6),
                     label,
-                    font_size_px=8.5,
+                    font_size_px=panel_num_font,
                 )
 
         _draw_sideways_distribution(b_x0, b_x1, self._latest_bid_prices, self._latest_bid_sizes_exact, (56, 214, 114, 220))
@@ -572,6 +1356,12 @@ class TradingDashboardApp:
         self._width = width
         self._height = height
         self._ensure_heatmap_buffers()
+        if self._source == "sse":
+            self._stream_status = "connecting"
+            self._sse.start()
+        if self._source == "snapshot":
+            self._stream_status = "connecting"
+            self._snapshot_feed.start()
         self._elapsed = 1.0
         for _ in range(self._plot_w):
             self._step_market(1.0)
@@ -590,6 +1380,10 @@ class TradingDashboardApp:
 
     def stop(self, ctx) -> None:
         _ = ctx
+        if self._source == "sse":
+            self._sse.stop()
+        if self._source == "snapshot":
+            self._snapshot_feed.stop()
         return None
 
 
