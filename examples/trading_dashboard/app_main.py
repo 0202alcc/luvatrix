@@ -255,6 +255,11 @@ class TradingDashboardApp:
         self._font_scale = 1.5
         self._fit_pad_ticks = max(0.0, float(os.getenv("LUVATRIX_ORDERBOOK_FIT_PAD_TICKS", "1.0")))
         self._gradient_blur_px = max(1, int(os.getenv("LUVATRIX_ORDERBOOK_GRADIENT_BLUR_PX", "3")))
+        self._maker_mode = os.getenv("LUVATRIX_ORDERBOOK_MAKER_MODE", "0").strip().lower() in {"1", "true", "yes"}
+        self._maker_fee_rate = max(
+            0.0,
+            float(os.getenv("LUVATRIX_ORDERBOOK_MAKER_FEE_RATE", "0.0")),
+        )
         self._bin_pad_ticks = max(0, int(np.ceil(self._fit_pad_ticks)))
         self._bin_count = (2 * self._levels_per_side) + (2 * self._bin_pad_ticks)
         self._global_bin_count = max(self._bin_count * 8, 256)
@@ -272,6 +277,7 @@ class TradingDashboardApp:
         self._ask_heatmap = np.zeros((self._bin_count, 1), dtype=np.float32)
         self._global_bid_heatmap = np.zeros((self._global_bin_count, 1), dtype=np.float32)
         self._global_ask_heatmap = np.zeros((self._global_bin_count, 1), dtype=np.float32)
+        self._column_ts = np.full((1,), np.nan, dtype=np.float64)
 
         self._latest_lowest_bid = self._mid_price - float(self._levels_per_side) * self._tick_size
         self._latest_highest_ask = self._mid_price + float(self._levels_per_side) * self._tick_size
@@ -293,10 +299,190 @@ class TradingDashboardApp:
         )
         self._snapshot_feed = _OrderBookSnapshotFeed(self._snapshot_client)
         self._x_tick_label_h_cache: int | None = None
+        self._last_key_debug = ""
+        self._keyboard_status = "init"
+        self._last_tab_toggle_ns = 0
+        self._last_console_stream_meta = ""
+        self._mode_badge_rect: tuple[int, int, int, int] | None = None
+
+    def _toggle_mode(self) -> None:
+        was_maker = bool(self._maker_mode)
+        self._maker_mode = not self._maker_mode
+        mode = "maker" if self._maker_mode else "market"
+        self._reproject_all_heatmaps_for_mode_change(was_maker=was_maker, is_maker=self._maker_mode)
+        self._dbg(f"mode toggle -> {mode}")
+        self._recompute_latest_column_for_mode()
+
+    def _reproject_all_heatmaps_for_mode_change(self, *, was_maker: bool, is_maker: bool) -> None:
+        if was_maker == is_maker:
+            return
+        fee = float(max(0.0, self._maker_fee_rate))
+        if fee <= 0.0:
+            return
+
+        old_bid_factor = float(max(0.0, 1.0 - fee)) if was_maker else 1.0
+        old_ask_factor = float(1.0 + fee) if was_maker else 1.0
+        new_bid_factor = float(max(0.0, 1.0 - fee)) if is_maker else 1.0
+        new_ask_factor = float(1.0 + fee) if is_maker else 1.0
+        if old_bid_factor <= 0.0 or old_ask_factor <= 0.0:
+            return
+
+        bid_ratio = new_bid_factor / old_bid_factor
+        ask_ratio = new_ask_factor / old_ask_factor
+
+        self._bid_heatmap = self._remap_heatmap_rows(self._bid_heatmap, self._price_min, bid_ratio)
+        self._ask_heatmap = self._remap_heatmap_rows(self._ask_heatmap, self._price_min, ask_ratio)
+        self._global_bid_heatmap = self._remap_heatmap_rows(self._global_bid_heatmap, self._global_price_min, bid_ratio)
+        self._global_ask_heatmap = self._remap_heatmap_rows(self._global_ask_heatmap, self._global_price_min, ask_ratio)
+
+    def _remap_heatmap_rows(self, heatmap: np.ndarray, price_min: float, ratio: float) -> np.ndarray:
+        if heatmap.ndim != 2:
+            return heatmap
+        rows, _cols = heatmap.shape
+        if rows <= 0 or abs(ratio - 1.0) < 1e-12:
+            return heatmap
+
+        out = np.zeros_like(heatmap)
+        for src_row in range(rows):
+            p = float(price_min) + (float(src_row) + 0.5) * self._tick_size
+            mapped_p = p * float(ratio)
+            target = ((mapped_p - float(price_min)) / self._tick_size) - 0.5
+            i0 = int(np.floor(target))
+            w1 = float(target - i0)
+            w0 = 1.0 - w1
+            if 0 <= i0 < rows:
+                out[i0, :] += heatmap[src_row, :] * w0
+            i1 = i0 + 1
+            if 0 <= i1 < rows:
+                out[i1, :] += heatmap[src_row, :] * w1
+        return out
+
+    def _recompute_latest_column_for_mode(self) -> None:
+        bid_prices = self._latest_bid_prices.copy()
+        ask_prices = self._latest_ask_prices.copy()
+        if not np.isfinite(bid_prices).any() or not np.isfinite(ask_prices).any():
+            return
+        bid_sizes = self._latest_bid_sizes_exact.copy()
+        ask_sizes = self._latest_ask_sizes_exact.copy()
+        bid_norm = bid_sizes.copy()
+        ask_norm = ask_sizes.copy()
+        bmx = float(np.max(bid_norm)) if bid_norm.size else 0.0
+        amx = float(np.max(ask_norm)) if ask_norm.size else 0.0
+        if bmx > 0.0:
+            bid_norm /= bmx
+        if amx > 0.0:
+            ask_norm /= amx
+        lowest_bid = float(np.nanmin(bid_prices))
+        highest_ask = float(np.nanmax(ask_prices))
+        # Replace current column in-place so mode change is visible immediately.
+        self._push_distribution_column(
+            bid_prices,
+            bid_norm,
+            ask_prices,
+            ask_norm,
+            lowest_bid,
+            highest_ask,
+            roll_column=False,
+            roll_steps=0,
+            write_steps=max(1, self._columns_per_second()),
+        )
+
+    def _poll_keyboard_toggles(self, events: list[object]) -> None:
+        self._keyboard_status = f"events:{len(events)}"
+        for event in events:
+            device = str(getattr(event, "device", "")).strip().lower()
+            if "keyboard" not in device:
+                continue
+            if getattr(event, "status", None) != "OK":
+                self._keyboard_status = f"status:{getattr(event, 'status', '--')}"
+                continue
+            event_type = str(getattr(event, "event_type", "")).strip().lower()
+            if event_type and event_type not in {"press", "key_down", "keydown"}:
+                continue
+            payload = getattr(event, "payload", None)
+            if not isinstance(payload, dict):
+                continue
+            phase = str(payload.get("phase", "")).strip().lower()
+            if phase and phase not in {"down", "single", "repeat", "up"}:
+                continue
+            raw_key = str(payload.get("key", ""))
+            key = raw_key.lower()
+            code_raw = payload.get("code")
+            try:
+                code_int = int(code_raw) if code_raw is not None else None
+            except (TypeError, ValueError):
+                code_int = None
+            active_keys = payload.get("active_keys")
+            self._last_key_debug = (
+                f"type={event_type or '--'} key={key or '--'} phase={phase or '--'} "
+                f"code={code_int if code_int is not None else code_raw if code_raw is not None else '--'}"
+            )
+            self._keyboard_status = "ok"
+            self._dbg(f"keyboard event {self._last_key_debug}")
+            is_tab = (
+                raw_key in {"\t"}
+                or key in {"tab", "\\t", "⇥"}
+                or code_int in {48, 9}
+            )
+            if not is_tab:
+                continue
+            if phase in {"up", "cancel", "repeat"}:
+                continue
+            if phase and phase not in {"single"}:
+                continue
+            now_ns = time.time_ns()
+            if now_ns - self._last_tab_toggle_ns < 120_000_000:
+                continue
+            self._last_tab_toggle_ns = now_ns
+            self._toggle_mode()
+
+    def _poll_pointer_toggle(self, events: list[object]) -> None:
+        rect = self._mode_badge_rect
+        if rect is None:
+            return
+        x0, y0, x1, y1 = rect
+        for event in events:
+            device = str(getattr(event, "device", "")).strip().lower()
+            if device not in {"mouse", "trackpad"}:
+                continue
+            event_type = str(getattr(event, "event_type", "")).strip().lower()
+            if event_type not in {"click", "tap"}:
+                continue
+            payload = getattr(event, "payload", None)
+            if not isinstance(payload, dict):
+                continue
+            phase = str(payload.get("phase", "")).strip().lower()
+            if phase and phase not in {"down", "single"}:
+                continue
+            x = payload.get("x")
+            y = payload.get("y")
+            if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+                continue
+            inside = (x0 <= int(x) <= x1) and (y0 <= int(y) <= y1)
+            if not inside:
+                continue
+            now_ns = time.time_ns()
+            if now_ns - self._last_tab_toggle_ns < 120_000_000:
+                continue
+            self._last_tab_toggle_ns = now_ns
+            self._toggle_mode()
+            self._dbg(f"mode toggle pointer={device}:{event_type}")
+            break
 
     def _dbg(self, message: str) -> None:
         if self._debug_log:
             self._logger.info(message)
+
+    def _emit_console_stream_meta(self) -> None:
+        if self._source not in {"sse", "snapshot"}:
+            return
+        pair = self._active_pair or self._selected_pair or "--"
+        seen_count = len(self._seen_pairs)
+        msg = f"[trading-dashboard] pair={pair} source={self._source} seen={seen_count}"
+        if msg == self._last_console_stream_meta:
+            return
+        self._last_console_stream_meta = msg
+        print(msg)
 
     def _fs(self, px: float) -> float:
         return float(px) * float(self._font_scale)
@@ -313,6 +499,19 @@ class TradingDashboardApp:
         if self._tick_size <= 0:
             return 6
         return max(3, min(12, int(np.ceil(-np.log10(self._tick_size))) + 2))
+
+    def _snap_to_tick(self, value: float) -> float:
+        if self._tick_size <= 0.0 or not np.isfinite(value):
+            return float(value)
+        ticks = float(value) / float(self._tick_size)
+        snapped_ticks = np.floor(ticks + 0.5 + 1e-12)
+        return float(snapped_ticks * self._tick_size)
+
+    def _bin_index_for_price(self, price: float) -> int:
+        if self._tick_size <= 0.0 or not np.isfinite(price):
+            return -1
+        ticks = (float(price) - float(self._price_min)) / float(self._tick_size)
+        return int(np.floor(ticks + 0.5 + 1e-12))
 
     def _format_price_axis(self, value: float) -> str:
         if not np.isfinite(value):
@@ -710,7 +909,7 @@ class TradingDashboardApp:
         return True
 
     def _layout(self) -> tuple[int, int, int, int, int, int, int, int, int]:
-        left, right, top, bottom = 84, 18, 28, 34
+        left, right, top, bottom = 84, 112, 28, 34
         x0, y0 = left, top
         pw = max(8, self._width - left - right)
         total_h = max(24, self._height - top - bottom)
@@ -771,19 +970,28 @@ class TradingDashboardApp:
         self._ask_heatmap = np.zeros((self._bin_count, pw), dtype=np.float32)
         self._global_bid_heatmap = np.zeros((self._global_bin_count, pw), dtype=np.float32)
         self._global_ask_heatmap = np.zeros((self._global_bin_count, pw), dtype=np.float32)
+        self._column_ts = np.full((pw,), np.nan, dtype=np.float64)
 
     def _fit_price_window_to_book(self, lowest_bid: float, highest_ask: float) -> None:
-        lo = lowest_bid - float(self._bin_pad_ticks) * self._tick_size
-        lo = round(lo / self._tick_size) * self._tick_size
+        target_range = float(self._bin_count) * self._tick_size
+        observed_range = max(0.0, float(highest_ask - lowest_bid))
+        if observed_range >= target_range:
+            # Fallback: clamp window to target range anchored at low edge.
+            lo = lowest_bid
+        else:
+            # Center-fit so bid/ask shifts are visually symmetric around the mid.
+            spare = target_range - observed_range
+            lo = lowest_bid - 0.5 * spare
+        lo = self._snap_to_tick(lo)
         self._price_min = lo
-        self._price_max = lo + float(self._bin_count) * self._tick_size
+        self._price_max = lo + target_range
 
     def _ensure_global_range_for_local(self) -> None:
         if self._price_min >= self._global_price_min and self._price_max <= self._global_price_max:
             return
         offset_bins = max(0, (self._global_bin_count - self._bin_count) // 2)
         target_min = self._price_min - float(offset_bins) * self._tick_size
-        target_min = round(target_min / self._tick_size) * self._tick_size
+        target_min = self._snap_to_tick(target_min)
         shift = int(round((target_min - self._global_price_min) / self._tick_size))
         if shift != 0:
             self._global_bid_heatmap = np.roll(self._global_bid_heatmap, shift, axis=0)
@@ -840,7 +1048,7 @@ class TradingDashboardApp:
         for price, weight in zip(prices, sizes):
             if not np.isfinite(price) or weight <= 0.0:
                 continue
-            idx = int(np.rint((float(price) - self._price_min) / self._tick_size))
+            idx = self._bin_index_for_price(float(price))
             if 0 <= idx < self._bin_count:
                 points.append((idx, float(weight)))
         if not points:
@@ -920,20 +1128,33 @@ class TradingDashboardApp:
         write_steps: int = 1,
     ) -> None:
         self._ensure_heatmap_buffers()
+        plot_bid_prices = bid_prices.copy()
+        plot_ask_prices = ask_prices.copy()
+        if self._maker_mode and self._maker_fee_rate > 0.0:
+            bid_factor = float(max(0.0, 1.0 - self._maker_fee_rate))
+            ask_factor = float(1.0 + self._maker_fee_rate)
+            bid_mask = np.isfinite(plot_bid_prices)
+            ask_mask = np.isfinite(plot_ask_prices)
+            plot_bid_prices[bid_mask] = plot_bid_prices[bid_mask] * bid_factor
+            plot_ask_prices[ask_mask] = plot_ask_prices[ask_mask] * ask_factor
+
         old_min = self._price_min
         old_max = self._price_max
-        self._fit_price_window_to_book(lowest_bid, highest_ask)
+        # Keep y-axis ruler anchored to market prices regardless of mode.
+        self._fit_price_window_to_book(float(lowest_bid), float(highest_ask))
         local_shifted = abs(self._price_min - old_min) > 0.5 * self._tick_size
         if local_shifted:
             self._shift_heatmap_vertical(old_min, old_max, self._price_min, self._price_max)
         self._ensure_global_range_for_local()
 
-        bid_col = self._build_side_column(bid_prices, bid_sizes)
-        ask_col = self._build_side_column(ask_prices, ask_sizes)
+        bid_col = self._build_side_column(plot_bid_prices, bid_sizes)
+        ask_col = self._build_side_column(plot_ask_prices, ask_sizes)
 
         if roll_column:
             self._bid_heatmap = np.roll(self._bid_heatmap, -1, axis=1)
             self._ask_heatmap = np.roll(self._ask_heatmap, -1, axis=1)
+            self._column_ts = np.roll(self._column_ts, -1, axis=0)
+            self._column_ts[-1:] = np.nan
         steps = max(0, int(roll_steps))
         if steps > 1:
             self._dbg(f"multi-roll steps={steps} roll_column={roll_column} ts={self._latest_exchange_ts}")
@@ -943,10 +1164,14 @@ class TradingDashboardApp:
             self._ask_heatmap = np.roll(self._ask_heatmap, -steps, axis=1)
             self._bid_heatmap[:, -steps:] = 0.0
             self._ask_heatmap[:, -steps:] = 0.0
+            self._column_ts = np.roll(self._column_ts, -steps, axis=0)
+            self._column_ts[-steps:] = np.nan
         write_cols = max(1, int(write_steps))
         write_cols = min(write_cols, self._plot_w)
         self._bid_heatmap[:, -write_cols:] = bid_col[:, None]
         self._ask_heatmap[:, -write_cols:] = ask_col[:, None]
+        ts_val = float(self._latest_exchange_ts) if self._latest_exchange_ts is not None else np.nan
+        self._column_ts[-write_cols:] = ts_val
 
         if roll_column:
             self._global_bid_heatmap = np.roll(self._global_bid_heatmap, -1, axis=1)
@@ -1084,10 +1309,66 @@ class TradingDashboardApp:
             ask_img = ask_img / ask_max
 
         base = np.array([14, 20, 28], dtype=np.float32).reshape(1, 1, 3)
-        green = np.array([45, 220, 95], dtype=np.float32).reshape(1, 1, 3)
-        red = np.array([230, 70, 70], dtype=np.float32).reshape(1, 1, 3)
-        rgb = base + (bid_img[:, :, None] * green) + (ask_img[:, :, None] * red)
+        if self._maker_mode:
+            bid_color = np.array([88, 162, 242], dtype=np.float32).reshape(1, 1, 3)  # blue
+            ask_color = np.array([242, 148, 72], dtype=np.float32).reshape(1, 1, 3)  # orange
+        else:
+            bid_color = np.array([45, 220, 95], dtype=np.float32).reshape(1, 1, 3)  # green
+            ask_color = np.array([230, 70, 70], dtype=np.float32).reshape(1, 1, 3)  # red
+        rgb = base + (bid_img[:, :, None] * bid_color) + (ask_img[:, :, None] * ask_color)
         rgb = np.clip(rgb, 0, 255).astype(np.uint8)
+
+        # Peak-bin borders per timestamp-column: compute strongest bin independently
+        # for each displayed column from the corresponding heatmap source column.
+        bid_peak = np.zeros((ph, pw), dtype=bool)
+        ask_peak = np.zeros((ph, pw), dtype=bool)
+        border_px = 3
+
+        for xx in range(pw):
+            src_col = int(src_idx[xx])
+            if 0 <= src_col < visible_cols:
+                bcol = bid_bins[:, src_col]
+                bmx = float(np.max(bcol))
+            else:
+                bcol = None
+                bmx = 0.0
+            if bmx > 0.0 and bcol is not None:
+                bbin = int(np.argmax(bcol))
+                b_row_start = ph - int(round((bbin + 1) * ph / self._bin_count))
+                b_row_end = ph - int(round(bbin * ph / self._bin_count)) - 1
+                b_row_start = max(0, min(ph - 1, b_row_start))
+                b_row_end = max(0, min(ph - 1, b_row_end))
+                top_end = min(ph - 1, b_row_start + border_px - 1)
+                bot_start = max(0, b_row_end - border_px + 1)
+                bid_peak[b_row_start : top_end + 1, xx] = True
+                bid_peak[bot_start : b_row_end + 1, xx] = True
+
+            if 0 <= src_col < visible_cols:
+                acol = ask_bins[:, src_col]
+                amx = float(np.max(acol))
+            else:
+                acol = None
+                amx = 0.0
+            if amx > 0.0 and acol is not None:
+                abin = int(np.argmax(acol))
+                a_row_start = ph - int(round((abin + 1) * ph / self._bin_count))
+                a_row_end = ph - int(round(abin * ph / self._bin_count)) - 1
+                a_row_start = max(0, min(ph - 1, a_row_start))
+                a_row_end = max(0, min(ph - 1, a_row_end))
+                top_end = min(ph - 1, a_row_start + border_px - 1)
+                bot_start = max(0, a_row_end - border_px + 1)
+                ask_peak[a_row_start : top_end + 1, xx] = True
+                ask_peak[bot_start : a_row_end + 1, xx] = True
+
+        if np.any(bid_peak) or np.any(ask_peak):
+            rgb_f = rgb.astype(np.float32)
+            bid_dark = (bid_color.reshape(3) * 0.42).astype(np.float32)
+            ask_dark = (ask_color.reshape(3) * 0.42).astype(np.float32)
+            if np.any(bid_peak):
+                rgb_f[bid_peak] = (0.35 * rgb_f[bid_peak]) + (0.65 * bid_dark)
+            if np.any(ask_peak):
+                rgb_f[ask_peak] = (0.35 * rgb_f[ask_peak]) + (0.65 * ask_dark)
+            rgb = np.clip(rgb_f, 0, 255).astype(np.uint8)
 
         # Time-second cadence tint: 2 normal second-bins, then 1 slightly lighter blue second-bin.
         # Anchor to absolute second (when available) so stripes roll with the timeline/data.
@@ -1132,18 +1413,28 @@ class TradingDashboardApp:
         if pair_for_title:
             title = f"{pair_for_title} Order Book Heatmap"
         else:
-            title = "Order Book Heatmap (Bid=Green, Ask=Red)"
+            title = (
+                "Order Book Heatmap (Top=Orange, Bottom=Blue)"
+                if self._maker_mode
+                else "Order Book Heatmap (Bid=Green, Ask=Red)"
+            )
         title_w, title_h = text_size(title, font_size_px=self._fs(12.0))
         title_x = x0 + max(0, (pw - title_w) // 2)
         title_y = 4
         draw_text(canvas, title_x, title_y, title, label, font_size_px=self._fs(12.0))
         draw_hline(canvas, title_x, min(x1, title_x + title_w), min(y0 - 2, title_y + title_h + 1), label)
+        mode_badge = "[MAKER]" if self._maker_mode else "[MARKET]"
+        badge_w, _ = text_size(mode_badge, font_size_px=self._fs(10.0))
+        badge_x = max(8, title_x - badge_w - 10)
+        badge_y = title_y + 2
+        draw_text(canvas, badge_x, badge_y, mode_badge, label, font_size_px=self._fs(10.0))
+        self._mode_badge_rect = (badge_x - 4, max(0, badge_y - 2), badge_x + badge_w + 4, badge_y + int(self._fs(12.0)))
 
-        y_label_right = max(8, x0 - 10)
+        y_label_left = min(self._width - 8, x1 + 10)
         quote = self._active_quote if self._active_quote else "QUOTE"
         a_y_title = f"price ({quote})"
         a_yw, a_yh = text_size(a_y_title, font_size_px=self._fs(8.0))
-        a_yx = max(8, y_label_right - a_yw)
+        a_yx = min(self._width - a_yw - 8, y_label_left)
         a_yy = max(2, y0 - a_yh - 6)
         draw_text(canvas, a_yx, a_yy, a_y_title, label, font_size_px=self._fs(8.0))
         draw_hline(canvas, a_yx, a_yx + a_yw, a_yy + a_yh + 1, label)
@@ -1154,6 +1445,12 @@ class TradingDashboardApp:
             best_bid = float(np.nanmax(self._latest_bid_prices)) if np.isfinite(self._latest_bid_prices).any() else np.nan
             best_ask = float(np.nanmin(self._latest_ask_prices)) if np.isfinite(self._latest_ask_prices).any() else np.nan
             spread = best_ask - best_bid if np.isfinite(best_bid) and np.isfinite(best_ask) else np.nan
+        if self._maker_mode and np.isfinite(self._latest_bid_prices).any() and np.isfinite(self._latest_ask_prices).any():
+            best_bid = float(np.nanmax(self._latest_bid_prices))
+            best_ask = float(np.nanmin(self._latest_ask_prices))
+            bid_eff = best_bid * float(max(0.0, 1.0 - self._maker_fee_rate))
+            ask_eff = best_ask * float(1.0 + self._maker_fee_rate)
+            spread = ask_eff - bid_eff
         spread_text = (
             f"Spread: {self._format_fixed(spread, self._spread_label_decimals())} = {self._format_scientific(spread, 2)}"
             if np.isfinite(spread)
@@ -1162,22 +1459,39 @@ class TradingDashboardApp:
         spread_w, _ = text_size(spread_text, font_size_px=self._fs(10.0))
         spread_x = max(8, x1 - spread_w - 8)
         draw_text(canvas, spread_x, 4, spread_text, label, font_size_px=self._fs(10.0))
+        # Tiny maker delta marker: best-price displacement vs market book.
+        if np.isfinite(self._latest_bid_prices).any() and np.isfinite(self._latest_ask_prices).any():
+            best_bid_mkt = float(np.nanmax(self._latest_bid_prices))
+            best_ask_mkt = float(np.nanmin(self._latest_ask_prices))
+            bid_factor = float(max(0.0, 1.0 - self._maker_fee_rate))
+            ask_factor = float(1.0 + self._maker_fee_rate)
+            bid_delta = (best_bid_mkt * bid_factor) - best_bid_mkt
+            ask_delta = (best_ask_mkt * ask_factor) - best_ask_mkt
+            delta_text = f"Δbid: {self._format_scientific(bid_delta, 2)}  Δask: {self._format_scientific(ask_delta, 2)}"
+            delta_w, _ = text_size(delta_text, font_size_px=self._fs(8.0))
+            delta_x = max(8, x1 - delta_w - 8)
+            draw_text(canvas, delta_x, 16, delta_text, label, font_size_px=self._fs(8.0))
         if self._source in {"sse", "snapshot"}:
-            pair = self._active_pair or self._selected_pair or "--"
-            seen_count = len(self._seen_pairs)
             host_ts = int(time.time())
-            stream_meta = (
-                f"Pair: {pair} | source: {self._source} | stream: {self._stream_status} "
-                f"| seen: {seen_count} | host_ts: {host_ts}"
+            heatmap_ts = (
+                int(self._column_ts[-1])
+                if self._column_ts.size > 0 and np.isfinite(self._column_ts[-1])
+                else None
             )
-            if self._selected_pair and self._selected_pair != pair:
-                stream_meta = f"{stream_meta} | requested: {self._selected_pair}"
+            book_ts_text = str(self._latest_exchange_ts) if self._latest_exchange_ts is not None else "--"
+            heatmap_ts_text = str(heatmap_ts) if heatmap_ts is not None else "--"
+            stream_meta = (
+                f"stream: {self._stream_status} | mode: {'maker' if self._maker_mode else 'market'} | "
+                f"host_ts: {host_ts} | book_ts: {book_ts_text} | heatmap_ts: {heatmap_ts_text}"
+            )
+            stream_meta = f"{stream_meta} | kbd_status: {self._keyboard_status}"
+            if self._last_key_debug:
+                stream_meta = f"{stream_meta} | kbd: {self._last_key_debug[:64]}"
             if self._last_stream_error:
                 stream_meta = f"{stream_meta} | err: {self._last_stream_error[:42]}"
             draw_text(canvas, x0 + 8, 4, stream_meta, label, font_size_px=self._fs(8.0))
 
-        # Label every bin center. Major cadence labels are larger and emboldened.
-        decimals = self._price_label_decimals()
+        # Label each ordered price bin (not row centers). Major cadence labels are larger and emboldened.
         for b in range(self._bin_count):
             row_start = ph - int(round((b + 1) * ph / self._bin_count))
             row_end = ph - int(round(b * ph / self._bin_count)) - 1
@@ -1186,15 +1500,16 @@ class TradingDashboardApp:
             if row_end < row_start:
                 continue
             y_center = y0 + (row_start + row_end) // 2
-            price = self._price_min + (float(b) + 0.5) * self._tick_size
+            price = self._price_min + float(b + 1) * self._tick_size
             text = self._format_price_axis(price)
             is_major = (b % 5) == 0
-            draw_hline(canvas, x0 - (6 if is_major else 3), x0, y_center, frame)
+            draw_hline(canvas, x1, min(self._width - 1, x1 + (6 if is_major else 3)), y_center, frame)
             rule_font = self._fs(9.0 if is_major else 7.25)
             t_w, t_h = text_size(text, font_size_px=rule_font)
+            label_x = max(8, min(self._width - t_w - 8, y_label_left))
             draw_text(
                 canvas,
-                max(8, y_label_right - t_w),
+                label_x,
                 max(0, y_center - (t_h // 2)),
                 text,
                 label,
@@ -1224,15 +1539,26 @@ class TradingDashboardApp:
         tick_y1 = min(self._height - 1, y1 + 4)
         label_y = min(self._height - 12, y1 + 8)
         x_tick_rotate = self._x_tick_rotate_deg()
+        bin_w_px = float(pw) / max(1.0, float(self._display_window_sec))
+        half_bin_px = 0.5 * bin_w_px
         for i in range(x_ticks + 1):
             frac = i / x_ticks
-            x = int(round(x0 + frac * (pw - 1)))
+            x_unclamped = x0 + (frac * float(pw)) + half_bin_px
+            x_min_center = x0 + half_bin_px
+            x_max_center = x0 + float(pw) - half_bin_px
+            x = int(round(max(x_min_center, min(x_max_center, x_unclamped))))
             draw_vline(canvas, x, tick_y0, tick_y1, frame)
-            seconds_ago = int(round((1.0 - frac) * float(self._display_window_sec)))
-            if self._latest_exchange_ts is not None and self._source in {"snapshot", "sse"}:
-                tick_text = str(int(self._latest_exchange_ts - seconds_ago))
+            local_x = max(0, min(pw - 1, int(round((x - x0)))))
+            source_col = source_start + int(src_idx[local_x])
+            tick_ts = self._column_ts[source_col] if 0 <= source_col < self._column_ts.shape[0] else np.nan
+            if np.isfinite(tick_ts):
+                tick_text = str(int(tick_ts))
             else:
-                tick_text = f"-{seconds_ago}s"
+                seconds_ago = int(round((1.0 - frac) * float(self._display_window_sec)))
+                if self._latest_exchange_ts is not None and self._source in {"snapshot", "sse"}:
+                    tick_text = str(int(self._latest_exchange_ts - seconds_ago))
+                else:
+                    tick_text = f"-{seconds_ago}s"
             tw, _ = text_size(tick_text, font_size_px=self._fs(9.0), rotate_deg=x_tick_rotate)
             # Right-anchor each angled label near its tick to reduce right-edge clipping.
             lx = max(0, min(self._width - tw - 1, x - tw + 2))
@@ -1270,8 +1596,9 @@ class TradingDashboardApp:
             draw_vline(canvas, px0, by0, by1, frame)
             draw_vline(canvas, px1, by0, by1, frame)
 
-        b_title = "Market Book Bids (SELL)"
-        c_title = "Market Book Asks (BUY)"
+        live_book_ts_text = str(self._latest_exchange_ts) if self._latest_exchange_ts is not None else "--"
+        b_title = f"Market Book Bids (SELL) | ts: {live_book_ts_text}"
+        c_title = f"Market Book Asks (BUY) | ts: {live_book_ts_text}"
         b_tw, b_th = text_size(b_title, font_size_px=self._fs(10.0))
         c_tw, c_th = text_size(c_title, font_size_px=self._fs(10.0))
         b_tx = b_x0 + max(0, (b_w - b_tw) // 2)
@@ -1373,7 +1700,15 @@ class TradingDashboardApp:
             self._height = height
             self._width = width
             self._ensure_heatmap_buffers()
+        try:
+            events = ctx.poll_hdi_events(max_events=64)
+        except Exception as exc:  # noqa: BLE001
+            self._keyboard_status = f"err:{str(exc)[:28]}"
+            events = []
+        self._poll_keyboard_toggles(events)
+        self._poll_pointer_toggle(events)
         self._step_market(dt)
+        self._emit_console_stream_meta()
         frame = self._render()
         ctx.submit_write_batch(compile_full_rewrite_batch(frame))
         return None
