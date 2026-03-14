@@ -256,7 +256,8 @@ class TradingDashboardApp:
         # Default to strict ladder fit (no extra pad bins) so Plot A aligns 1:1 with
         # the visible top-N bid/ask orderbook levels unless explicitly overridden.
         self._fit_pad_ticks = max(0.0, float(os.getenv("LUVATRIX_ORDERBOOK_FIT_PAD_TICKS", "0.0")))
-        self._gradient_blur_px = max(1, int(os.getenv("LUVATRIX_ORDERBOOK_GRADIENT_BLUR_PX", "3")))
+        # Blur intentionally disabled: keep strict per-bin fidelity to market levels.
+        self._gradient_blur_px = 0
         self._maker_mode = os.getenv("LUVATRIX_ORDERBOOK_MAKER_MODE", "0").strip().lower() in {"1", "true", "yes"}
         self._maker_fee_rate = max(
             0.0,
@@ -305,6 +306,21 @@ class TradingDashboardApp:
         self._keyboard_status = "init"
         self._last_tab_toggle_ns = 0
         self._last_console_stream_meta = ""
+        self._peak_probe_log = os.getenv("LUVATRIX_ORDERBOOK_PEAK_PROBE", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        self._peak_bin_probe_log = os.getenv("LUVATRIX_ORDERBOOK_PEAK_BIN_PROBE", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        self._pipeline_trace_log = os.getenv("LUVATRIX_ORDERBOOK_PIPELINE_TRACE", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
         self._mode_badge_rect: tuple[int, int, int, int] | None = None
 
     def _toggle_mode(self) -> None:
@@ -526,6 +542,187 @@ class TradingDashboardApp:
         print(f"[orderbook] pair={snapshot.product_id} ts={ts_txt} spread={spread_txt} {best_txt}")
         print(f"[orderbook] bids: {_side_line(bid_prices, bid_sizes)}")
         print(f"[orderbook] asks: {_side_line(ask_prices, ask_sizes)}")
+
+    def _emit_peak_probe_line(
+        self,
+        *,
+        snapshot: OrderBookSnapshot,
+        bid_sizes_exact: np.ndarray,
+        ask_sizes_exact: np.ndarray,
+    ) -> None:
+        bid_col = self._bid_heatmap[:, -1] if self._bid_heatmap.shape[1] > 0 else np.zeros((0,), dtype=np.float32)
+        ask_col = self._ask_heatmap[:, -1] if self._ask_heatmap.shape[1] > 0 else np.zeros((0,), dtype=np.float32)
+        a_peak = float(max(float(np.max(bid_col, initial=0.0)), float(np.max(ask_col, initial=0.0))))
+        b_peak = float(np.max(bid_sizes_exact, initial=0.0))
+        c_peak = float(np.max(ask_sizes_exact, initial=0.0))
+        api_bid_peak = float(max((float(level.size) for level in snapshot.bids), default=0.0))
+        api_ask_peak = float(max((float(level.size) for level in snapshot.asks), default=0.0))
+        api_global_peak = float(max(api_bid_peak, api_ask_peak))
+
+        a_ts = None
+        if self._column_ts.size > 0:
+            finite = self._column_ts[np.isfinite(self._column_ts)]
+            if finite.size > 0:
+                a_ts = int(finite[-1])
+        b_ts = int(self._latest_exchange_ts) if self._latest_exchange_ts is not None else None
+        c_ts = b_ts
+        api_ts = int(snapshot.timestamp) if snapshot.timestamp is not None else None
+        print(
+            "[peak-probe] "
+            f"api_ts={api_ts if api_ts is not None else '--'} "
+            f"a_ts={a_ts if a_ts is not None else '--'} "
+            f"b_ts={b_ts if b_ts is not None else '--'} "
+            f"c_ts={c_ts if c_ts is not None else '--'} "
+            f"a_peak={a_peak:.6g} "
+            f"b_peak={b_peak:.6g} "
+            f"c_peak={c_peak:.6g} "
+            f"api_bid_peak={api_bid_peak:.6g} "
+            f"api_ask_peak={api_ask_peak:.6g} "
+            f"api_global_peak={api_global_peak:.6g}"
+        )
+
+    def _peak_price_from_levels(self, prices: np.ndarray, sizes: np.ndarray) -> float:
+        idx, _price, _size = self._peak_level_details(prices, sizes)
+        if idx < 0 or idx >= self._bin_count:
+            return float("nan")
+        return float(self._price_min + float(idx) * self._tick_size)
+
+    def _peak_level_details(self, prices: np.ndarray, sizes: np.ndarray) -> tuple[int, float, float]:
+        n = min(prices.shape[0], sizes.shape[0])
+        best_idx = -1
+        best_size = -1.0
+        for i in range(n):
+            p = float(prices[i])
+            s = float(sizes[i])
+            if not np.isfinite(p) or not np.isfinite(s):
+                continue
+            if s > best_size:
+                best_size = s
+                best_idx = i
+        if best_idx < 0:
+            return -1, float("nan"), float("nan")
+        p = float(prices[best_idx])
+        idx = self._bin_index_for_price(p)
+        return idx, p, float(best_size)
+
+    def _emit_peak_bin_probe_line(
+        self,
+        *,
+        snapshot: OrderBookSnapshot,
+        bid_prices: np.ndarray,
+        bid_sizes_exact: np.ndarray,
+        ask_prices: np.ndarray,
+        ask_sizes_exact: np.ndarray,
+    ) -> None:
+        bid_col = self._bid_heatmap[:, -1] if self._bid_heatmap.shape[1] > 0 else np.zeros((0,), dtype=np.float32)
+        ask_col = self._ask_heatmap[:, -1] if self._ask_heatmap.shape[1] > 0 else np.zeros((0,), dtype=np.float32)
+        a_bid_idx = int(np.argmax(bid_col)) if bid_col.size > 0 else -1
+        a_ask_idx = int(np.argmax(ask_col)) if ask_col.size > 0 else -1
+        a_bid_px = (
+            float(self._price_min + float(a_bid_idx) * self._tick_size)
+            if 0 <= a_bid_idx < self._bin_count
+            else float("nan")
+        )
+        a_ask_px = (
+            float(self._price_min + float(a_ask_idx) * self._tick_size)
+            if 0 <= a_ask_idx < self._bin_count
+            else float("nan")
+        )
+        b_px = self._peak_price_from_levels(bid_prices, bid_sizes_exact)
+        c_px = self._peak_price_from_levels(ask_prices, ask_sizes_exact)
+
+        api_bid_px = float("nan")
+        if snapshot.bids:
+            best_bid_level = max(snapshot.bids, key=lambda lvl: float(lvl.size))
+            api_bid_px = float(best_bid_level.price)
+        api_ask_px = float("nan")
+        if snapshot.asks:
+            best_ask_level = max(snapshot.asks, key=lambda lvl: float(lvl.size))
+            api_ask_px = float(best_ask_level.price)
+
+        render_ts = None
+        if self._column_ts.size > 0 and np.isfinite(self._column_ts[-1]):
+            render_ts = int(self._column_ts[-1])
+        api_ts = int(snapshot.timestamp) if snapshot.timestamp is not None else None
+        print(
+            "[peak-bin-probe] "
+            f"render_ts={render_ts if render_ts is not None else '--'} "
+            f"api_ts={api_ts if api_ts is not None else '--'} "
+            f"a_bid_px={a_bid_px:.12g} "
+            f"a_ask_px={a_ask_px:.12g} "
+            f"b_bid_px={b_px:.12g} "
+            f"c_ask_px={c_px:.12g} "
+            f"api_bid_px={api_bid_px:.12g} "
+            f"api_ask_px={api_ask_px:.12g}"
+        )
+
+    def _emit_pipeline_trace_line(
+        self,
+        *,
+        snapshot: OrderBookSnapshot,
+        bid_prices: np.ndarray,
+        bid_sizes_exact: np.ndarray,
+        ask_prices: np.ndarray,
+        ask_sizes_exact: np.ndarray,
+        roll_steps: int,
+        roll_cols: int,
+        write_cols: int,
+    ) -> None:
+        bid_col = self._bid_heatmap[:, -1] if self._bid_heatmap.shape[1] > 0 else np.zeros((0,), dtype=np.float32)
+        ask_col = self._ask_heatmap[:, -1] if self._ask_heatmap.shape[1] > 0 else np.zeros((0,), dtype=np.float32)
+        a_bid_bin = int(np.argmax(bid_col)) if bid_col.size > 0 else -1
+        a_ask_bin = int(np.argmax(ask_col)) if ask_col.size > 0 else -1
+        a_bid_px = (
+            float(self._price_min + float(a_bid_bin) * self._tick_size)
+            if 0 <= a_bid_bin < self._bin_count
+            else float("nan")
+        )
+        a_ask_px = (
+            float(self._price_min + float(a_ask_bin) * self._tick_size)
+            if 0 <= a_ask_bin < self._bin_count
+            else float("nan")
+        )
+
+        raw_bid_bin, raw_bid_px, raw_bid_size = self._peak_level_details(bid_prices, bid_sizes_exact)
+        raw_ask_bin, raw_ask_px, raw_ask_size = self._peak_level_details(ask_prices, ask_sizes_exact)
+
+        api_bid_px = float("nan")
+        api_bid_size = float("nan")
+        if snapshot.bids:
+            lvl = max(snapshot.bids, key=lambda x: float(x.size))
+            api_bid_px = float(lvl.price)
+            api_bid_size = float(lvl.size)
+        api_ask_px = float("nan")
+        api_ask_size = float("nan")
+        if snapshot.asks:
+            lvl = max(snapshot.asks, key=lambda x: float(x.size))
+            api_ask_px = float(lvl.price)
+            api_ask_size = float(lvl.size)
+
+        api_bid_bin = self._bin_index_for_price(api_bid_px) if np.isfinite(api_bid_px) else -1
+        api_ask_bin = self._bin_index_for_price(api_ask_px) if np.isfinite(api_ask_px) else -1
+
+        bid_shift_bins = a_bid_bin - raw_bid_bin if a_bid_bin >= 0 and raw_bid_bin >= 0 else None
+        ask_shift_bins = a_ask_bin - raw_ask_bin if a_ask_bin >= 0 and raw_ask_bin >= 0 else None
+        render_ts = int(self._column_ts[-1]) if self._column_ts.size > 0 and np.isfinite(self._column_ts[-1]) else None
+        api_ts = int(snapshot.timestamp) if snapshot.timestamp is not None else None
+
+        print(
+            "[pipeline-trace] "
+            f"api_ts={api_ts if api_ts is not None else '--'} "
+            f"render_ts={render_ts if render_ts is not None else '--'} "
+            f"roll_steps={int(roll_steps)} roll_cols={int(roll_cols)} write_cols={int(write_cols)} "
+            f"tick={self._tick_size:.12g} blur={int(self._gradient_blur_px)} "
+            f"pmin={self._price_min:.12g} pmax={self._price_max:.12g} "
+            f"raw_bid_bin={raw_bid_bin} raw_bid_px={raw_bid_px:.12g} raw_bid_sz={raw_bid_size:.12g} "
+            f"raw_ask_bin={raw_ask_bin} raw_ask_px={raw_ask_px:.12g} raw_ask_sz={raw_ask_size:.12g} "
+            f"a_bid_bin={a_bid_bin} a_bid_px={a_bid_px:.12g} "
+            f"a_ask_bin={a_ask_bin} a_ask_px={a_ask_px:.12g} "
+            f"api_bid_bin={api_bid_bin} api_bid_px={api_bid_px:.12g} api_bid_sz={api_bid_size:.12g} "
+            f"api_ask_bin={api_ask_bin} api_ask_px={api_ask_px:.12g} api_ask_sz={api_ask_size:.12g} "
+            f"bid_shift_bins={bid_shift_bins if bid_shift_bins is not None else '--'} "
+            f"ask_shift_bins={ask_shift_bins if ask_shift_bins is not None else '--'}"
+        )
 
     def _fs(self, px: float) -> float:
         return float(px) * float(self._font_scale)
@@ -952,6 +1149,31 @@ class TradingDashboardApp:
             roll_steps=roll_cols,
             write_steps=sec_cols,
         )
+        if self._peak_probe_log:
+            self._emit_peak_probe_line(
+                snapshot=snapshot,
+                bid_sizes_exact=bid_sizes_exact,
+                ask_sizes_exact=ask_sizes_exact,
+            )
+        if self._peak_bin_probe_log:
+            self._emit_peak_bin_probe_line(
+                snapshot=snapshot,
+                bid_prices=bid_prices,
+                bid_sizes_exact=bid_sizes_exact,
+                ask_prices=ask_prices,
+                ask_sizes_exact=ask_sizes_exact,
+            )
+        if self._pipeline_trace_log:
+            self._emit_pipeline_trace_line(
+                snapshot=snapshot,
+                bid_prices=bid_prices,
+                bid_sizes_exact=bid_sizes_exact,
+                ask_prices=ask_prices,
+                ask_sizes_exact=ask_sizes_exact,
+                roll_steps=roll_steps,
+                roll_cols=roll_cols,
+                write_cols=sec_cols,
+            )
         if snapshot.timestamp is not None:
             self._last_snapshot_ts = int(snapshot.timestamp)
         self._last_snapshot_fingerprint = fingerprint
@@ -1092,12 +1314,17 @@ class TradingDashboardApp:
     def _build_side_column(self, prices: np.ndarray, sizes: np.ndarray) -> np.ndarray:
         bin_values = np.zeros(self._bin_count, dtype=np.float32)
         points: list[tuple[int, float]] = []
+        peak_idx = -1
+        peak_w = -1.0
         for price, weight in zip(prices, sizes):
             if not np.isfinite(price) or weight <= 0.0:
                 continue
             idx = self._bin_index_for_price(float(price))
             if 0 <= idx < self._bin_count:
                 points.append((idx, float(weight)))
+                if float(weight) > peak_w:
+                    peak_w = float(weight)
+                    peak_idx = idx
         if not points:
             return bin_values
 
@@ -1117,14 +1344,12 @@ class TradingDashboardApp:
                 w = (1.0 - t) * w0 + t * w1
                 bin_values[b] = max(bin_values[b], float(w))
 
-        # Blur in bin space for smooth gradient.
-        r = self._gradient_blur_px
-        if r > 0:
-            x = np.arange(-r, r + 1, dtype=np.float32)
-            sigma = max(1.0, r * 0.6)
-            kernel = np.exp(-(x * x) / (2.0 * sigma * sigma))
-            kernel /= np.sum(kernel)
-            bin_values = np.convolve(bin_values, kernel, mode="same").astype(np.float32)
+        # Keep strict peak-bin alignment with the source ladder:
+        # preserve the strongest raw level as the unique argmax for this column.
+        if 0 <= peak_idx < self._bin_count and peak_w > 0.0:
+            col_max = float(np.max(bin_values))
+            # Tiny epsilon so np.argmax resolves to the raw peak bin deterministically.
+            bin_values[peak_idx] = max(float(bin_values[peak_idx]), col_max + 1e-4)
 
         return bin_values
 
@@ -1519,7 +1744,6 @@ class TradingDashboardApp:
             delta_x = max(8, x1 - delta_w - 8)
             draw_text(canvas, delta_x, 16, delta_text, label, font_size_px=self._fs(8.0))
         if self._source in {"sse", "snapshot"}:
-            host_ts = int(time.time())
             heatmap_ts = (
                 int(self._column_ts[-1])
                 if self._column_ts.size > 0 and np.isfinite(self._column_ts[-1])
@@ -1529,7 +1753,7 @@ class TradingDashboardApp:
             heatmap_ts_text = str(heatmap_ts) if heatmap_ts is not None else "--"
             stream_meta = (
                 f"stream: {self._stream_status} | mode: {'maker' if self._maker_mode else 'market'} | "
-                f"host_ts: {host_ts} | book_ts: {book_ts_text} | heatmap_ts: {heatmap_ts_text}"
+                f"book_ts: {book_ts_text} | heatmap_ts: {heatmap_ts_text}"
             )
             stream_meta = f"{stream_meta} | kbd_status: {self._keyboard_status}"
             if self._last_key_debug:
