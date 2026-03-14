@@ -1026,11 +1026,10 @@ class TradingDashboardApp:
         target_range = float(self._bin_count) * self._tick_size
         observed_range = max(0.0, float(highest_ask - lowest_bid))
         _ = observed_range
-        # Strict order-book anchoring: map bins as an ordered ladder from the live book,
-        # not a center-fitted window. This avoids half-spare phase shifts that can look
-        # like a persistent one-bin y-axis offset.
-        lo = float(lowest_bid)
-        lo = self._snap_to_tick(lo)
+        # Center the visible y-window on the current book midpoint so the ladder
+        # is balanced around the latest bid/ask distributions.
+        mid = 0.5 * (float(lowest_bid) + float(highest_ask))
+        lo = self._snap_to_tick(mid - 0.5 * target_range)
         self._price_min = lo
         self._price_max = lo + target_range
 
