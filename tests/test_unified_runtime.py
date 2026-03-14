@@ -375,6 +375,56 @@ class UnifiedRuntimeTests(unittest.TestCase):
             self.assertEqual(result.ticks_run, 3)
             self.assertEqual(matrix.revision, 3)
 
+    def test_unified_runtime_keyboard_interrupt_uses_graceful_shutdown(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            (app_dir / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "test.keyboard.interrupt"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'required_capabilities = ["window.write"]',
+                        "optional_capabilities = []",
+                    ]
+                )
+            )
+            (app_dir / "app_main.py").write_text(
+                "\n".join(
+                    [
+                        "class _App:",
+                        "    def init(self, ctx):",
+                        "        pass",
+                        "    def loop(self, ctx, dt):",
+                        "        raise KeyboardInterrupt()",
+                        "    def stop(self, ctx):",
+                        "        pass",
+                        "def create():",
+                        "    return _App()",
+                    ]
+                )
+            )
+            matrix = WindowMatrix(height=1, width=1)
+            target = _RecordingTarget()
+            hdi = HDIThread(source=_NoopHDISource())
+            sensors = _FakeSensorManager()
+            runtime = UnifiedRuntime(
+                matrix=matrix,
+                target=target,
+                hdi=hdi,
+                sensor_manager=sensors,
+                capability_decider=lambda cap: True,
+            )
+            result = runtime.run_app(app_dir, max_ticks=5, target_fps=1000)
+            self.assertEqual(result.ticks_run, 0)
+            self.assertEqual(result.frames_presented, 0)
+            self.assertTrue(result.stopped_by_target_close)
+            self.assertFalse(result.stopped_by_energy_safety)
+            self.assertEqual(target.started, 1)
+            self.assertEqual(target.stopped, 1)
+            self.assertEqual(sensors.started, 1)
+            self.assertEqual(sensors.stopped, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -79,6 +79,14 @@ class PlaneApp:
             "LUVATRIX_INTENT_QUEUE_ENABLED",
             default=True,
         )
+        self._input_debug_enabled_default = _env_flag(
+            "LUVATRIX_DEBUG_INPUT",
+            default=False,
+        )
+        self._input_debug_verbose_default = _env_flag(
+            "LUVATRIX_DEBUG_INPUT_VERBOSE",
+            default=False,
+        )
         self._planes_v2_rollout_flags = resolve_planes_v2_rollout_flags()
 
         self._planes = json.loads(self._plane_path.read_text(encoding="utf-8"))
@@ -98,6 +106,8 @@ class PlaneApp:
         self.state.setdefault("adaptive_drag_quality_enabled", True)
         self.state.setdefault("origin_refs_enabled", self._origin_refs_enabled_default)
         self.state.setdefault("intent_queue_enabled", self._intent_queue_enabled_default)
+        self.state.setdefault("input_debug_enabled", self._input_debug_enabled_default)
+        self.state.setdefault("input_debug_verbose", self._input_debug_verbose_default)
         self.state.setdefault("planes_v2_schema_enabled", self._planes_v2_rollout_flags.schema_enabled)
         self.state.setdefault("planes_v2_compiler_enabled", self._planes_v2_rollout_flags.compiler_enabled)
         self.state.setdefault("planes_v2_runtime_enabled", self._planes_v2_rollout_flags.runtime_enabled)
@@ -525,7 +535,13 @@ class PlaneApp:
         if self._intent_queue_enabled():
             ingest_budget = max(int(self._event_batch_base), int(pending_before_hdi))
             ingest_budget = max(1, min(int(self._intent_ingest_max), ingest_budget))
-            polled = ctx.poll_hdi_events(ingest_budget)
+            polled = self._ctx_poll_hdi_events_screen_tl(ctx, ingest_budget)
+            self._input_debug_log(
+                "poll",
+                mode="intent_queue",
+                ingest_budget=int(ingest_budget),
+                polled_count=int(len(polled)),
+            )
             self._frame_counts["events_polled"] = int(len(polled))
             for event in polled:
                 if len(self._intent_queue) >= int(self._intent_queue_max):
@@ -547,7 +563,13 @@ class PlaneApp:
             self._frame_counts["intent_queue_drained"] = int(drain_count)
         else:
             budget = self._compute_event_budget(pending_before_hdi)
-            events = ctx.poll_hdi_events(budget)
+            events = self._ctx_poll_hdi_events_screen_tl(ctx, budget)
+            self._input_debug_log(
+                "poll",
+                mode="direct",
+                budget=int(budget),
+                polled_count=int(len(events)),
+            )
             pending_after_total = self._ctx_pending_hdi_events(ctx)
             self._frame_counts["events_polled"] = int(len(events))
             self._frame_counts["intent_queue_depth_before"] = int(0)
@@ -569,6 +591,14 @@ class PlaneApp:
             processed_ids.append(int(event.event_id))
             self._frame_counts["events_processed"] = int(self._frame_counts.get("events_processed", 0)) + 1
             payload = event.payload if isinstance(event.payload, dict) else {}
+            self._input_debug_log(
+                "event",
+                event_id=int(event.event_id),
+                event_type=str(event.event_type),
+                device=str(event.device),
+                status=str(event.status),
+                payload=payload,
+            )
             self._record_pointer_xy(payload)
             if event.event_type in {"scroll", "pan", "swipe"}:
                 intent = _scroll_intent_from_event(event.event_type, payload, event.device)
@@ -602,15 +632,30 @@ class PlaneApp:
                 self._frame_counts.get("non_scroll_non_pointer_events", 0)
             ) + 1
             hook = _hook_for_event(event.event_type, payload)
+            if hook is None:
+                self._frame_counts["unsupported_events_skipped"] = int(
+                    self._frame_counts.get("unsupported_events_skipped", 0)
+                ) + 1
+                self._input_debug_log(
+                    "dispatch_skip",
+                    reason="unsupported_event",
+                    event_type=str(event.event_type),
+                )
+                continue
             target_component = self._pick_component_for_event(payload)
+            self._input_debug_log(
+                "dispatch_candidate",
+                event_type=str(event.event_type),
+                hook=hook,
+                target_component_id=(None if target_component is None else str(target_component.component_id)),
+            )
             if event.event_type in {"press", "click", "tap"}:
                 self._update_drag_from_press(event.event_type, payload, target_component)
             rect = self._event_pointer_dirty_rect(payload, margin_px=18)
             if rect is not None:
                 self._event_pointer_dirty_rects.append(rect)
-            if hook is None:
-                continue
             if target_component is None:
+                self._input_debug_log("dispatch_skip", reason="no_target_component", hook=hook)
                 continue
             self._invoke_bindings(target_component, hook, event.event_type, payload, dt)
         if scheduled_scroll_intent is not None:
@@ -690,6 +735,42 @@ class PlaneApp:
                 return 0
         return 0
 
+    @staticmethod
+    def _ctx_poll_hdi_events_screen_tl(ctx, max_events: int):
+        poller = getattr(ctx, "poll_hdi_events", None)
+        if poller is None or not callable(poller):
+            return []
+        try:
+            return poller(max_events, frame="screen_tl")
+        except TypeError:
+            return poller(max_events)
+
+    def _input_debug_enabled(self) -> bool:
+        return bool(self.state.get("input_debug_enabled", False))
+
+    def _input_debug_verbose(self) -> bool:
+        return bool(self.state.get("input_debug_verbose", False))
+
+    def _input_debug_log(self, event: str, **fields: Any) -> None:
+        if not self._input_debug_enabled():
+            return
+        if not self._input_debug_verbose():
+            # Compact mode: keep actionable interaction lines and suppress
+            # per-frame pointer-motion spam.
+            if event == "poll":
+                return
+            if event == "hover_candidate":
+                return
+            if event == "hit_test":
+                return
+            if event == "event" and str(fields.get("event_type", "")) == "pointer_move":
+                return
+        payload = {"event": event, **fields}
+        try:
+            print(f"[planes-input-debug] {json.dumps(payload, sort_keys=True, default=str)}")
+        except Exception:
+            print(f"[planes-input-debug] {event} {fields}")
+
     def _merge_hdi_telemetry(self, ctx) -> None:
         consumer = getattr(ctx, "consume_hdi_telemetry", None)
         if consumer is None or not callable(consumer):
@@ -708,6 +789,12 @@ class PlaneApp:
         new_target = self._pick_component_for_event(payload)
         prev_id = self.state.get("hover_component_id")
         new_id = new_target.component_id if new_target is not None else None
+        self._input_debug_log(
+            "hover_candidate",
+            prev_hover_component_id=(None if prev_id is None else str(prev_id)),
+            next_hover_component_id=(None if new_id is None else str(new_id)),
+            payload=payload,
+        )
         if prev_id == new_id:
             return
         prev_target = None
@@ -718,6 +805,10 @@ class PlaneApp:
         if new_target is not None:
             self._invoke_bindings(new_target, "on_hover_start", "pointer_move", payload, dt)
         self.state["hover_component_id"] = new_id
+        self._input_debug_log(
+            "hover_applied",
+            hover_component_id=(None if new_id is None else str(new_id)),
+        )
 
     @staticmethod
     def _component_draggable(component) -> bool:
@@ -777,6 +868,7 @@ class PlaneApp:
         self._frame_counts["hit_test_calls"] = int(self._frame_counts.get("hit_test_calls", 0)) + 1
         xy = self._extract_event_xy(payload)
         if xy is None:
+            self._input_debug_log("hit_test", result="no_xy", payload=payload)
             self._add_perf_ns("hit_test_ns", time.perf_counter_ns() - hit_start_ns)
             return None
         x, y = xy
@@ -787,8 +879,25 @@ class PlaneApp:
             bounds = self._resolved_interaction_bounds(component)
             resolved_x, resolved_y = self._resolved_position(component)
             if resolved_x <= x <= resolved_x + bounds.width and resolved_y <= y <= resolved_y + bounds.height:
+                self._input_debug_log(
+                    "hit_test",
+                    result="hit",
+                    pointer={"x": float(x), "y": float(y)},
+                    component_id=str(component.component_id),
+                    resolved_bounds={
+                        "x": float(resolved_x),
+                        "y": float(resolved_y),
+                        "width": float(bounds.width),
+                        "height": float(bounds.height),
+                    },
+                )
                 self._add_perf_ns("hit_test_ns", time.perf_counter_ns() - hit_start_ns)
                 return component
+        self._input_debug_log(
+            "hit_test",
+            result="miss",
+            pointer={"x": float(x), "y": float(y)},
+        )
         self._add_perf_ns("hit_test_ns", time.perf_counter_ns() - hit_start_ns)
         return None
 
@@ -914,6 +1023,12 @@ class PlaneApp:
                 continue
             handler = self._resolve_handler(binding.handler)
             if handler is None:
+                self._input_debug_log(
+                    "handler_missing",
+                    component_id=str(component.component_id),
+                    hook=str(hook),
+                    target=str(binding.handler),
+                )
                 if self._strict:
                     raise RuntimeError(f"missing handler for target: {binding.handler}")
                 continue
@@ -924,6 +1039,13 @@ class PlaneApp:
                 "payload": payload,
                 "dt": float(dt),
             }
+            self._input_debug_log(
+                "handler_invoke",
+                component_id=str(component.component_id),
+                hook=str(hook),
+                event_type=str(event_type),
+                target=str(binding.handler),
+            )
             handler(event_ctx, self.state)
 
     def _resolve_background(self) -> tuple[int, int, int, int]:
@@ -1911,6 +2033,21 @@ class PlaneApp:
             dirty_rects.extend(self._event_pointer_dirty_rects)
         if self._drag_dirty_rects:
             dirty_rects.extend(self._drag_dirty_rects)
+        forced_dirty_ids_raw = self.state.get("force_component_dirty_ids")
+        forced_dirty_ids: list[str] = []
+        if isinstance(forced_dirty_ids_raw, (list, tuple, set)):
+            for item in forced_dirty_ids_raw:
+                if isinstance(item, str) and item:
+                    forced_dirty_ids.append(item)
+        if forced_dirty_ids:
+            self.state["force_component_dirty_ids"] = []
+            for component_id in forced_dirty_ids:
+                component = self._component_index.get(component_id)
+                if component is None:
+                    continue
+                rect = self._component_dirty_rect(component, margin_px=2)
+                if rect is not None:
+                    dirty_rects.append(rect)
         if not plane_changed:
             normalized = self._normalize_local_dirty_rects(dirty_rects, view_w=view_w, view_h=view_h)
             if normalized:

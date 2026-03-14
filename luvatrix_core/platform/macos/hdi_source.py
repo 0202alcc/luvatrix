@@ -14,6 +14,7 @@ class MacOSWindowHDISource(HDIEventSource):
         self._next_id = 1
         self._queued_events: deque[HDIEvent] = deque()
         self._monitor = None
+        self._last_mouse_buttons_mask = 0
         self._install_monitor()
 
     def _install_monitor(self) -> None:
@@ -175,12 +176,43 @@ class MacOSWindowHDISource(HDIEventSource):
         out: list[HDIEvent] = []
         while self._queued_events:
             out.append(self._queued_events.popleft())
+        had_click_event = any(event.event_type == "click" for event in out)
         window = self._window_handle.window
         view = window.contentView()
-        global_mouse = NSEvent.mouseLocation()
-        window_point = window.convertPointFromScreen_(global_mouse)
-        local_point = view.convertPoint_fromView_(window_point, None)
+        # Prefer window-local sampling. Global screen conversion can drift on some
+        # setups (multiple displays / scaling), which yields incorrect hit-testing.
+        local_point = None
+        try:
+            local_point = window.mouseLocationOutsideOfEventStream()
+        except Exception:
+            local_point = None
+        if local_point is None:
+            global_mouse = NSEvent.mouseLocation()
+            window_point = window.convertPointFromScreen_(global_mouse)
+            local_point = view.convertPoint_fromView_(window_point, None)
         view_h = float(view.bounds().size.height)
+        px = float(local_point.x)
+        py = _to_top_left_y(float(local_point.y), view_h)
+        if not had_click_event:
+            buttons_mask = _read_pressed_mouse_buttons_mask(NSEvent=NSEvent)
+            changed = int(buttons_mask ^ self._last_mouse_buttons_mask)
+            for button in (0, 1):
+                bit = 1 << button
+                if changed & bit:
+                    phase = "down" if (buttons_mask & bit) else "up"
+                    out.append(
+                        HDIEvent(
+                            event_id=self._next_id,
+                            ts_ns=ts_ns,
+                            window_id="logger-demo",
+                            device="mouse",
+                            event_type="click",
+                            status="OK",
+                            payload={"x": px, "y": py, "button": button, "phase": phase, "click_count": 1},
+                        )
+                    )
+                    self._next_id += 1
+            self._last_mouse_buttons_mask = int(buttons_mask)
         out.append(
             HDIEvent(
                 event_id=self._next_id,
@@ -189,7 +221,7 @@ class MacOSWindowHDISource(HDIEventSource):
                 device="mouse",
                 event_type="pointer_move",
                 status="OK",
-                payload={"x": float(local_point.x), "y": _to_top_left_y(float(local_point.y), view_h)},
+                payload={"x": px, "y": py, "buttons_mask": int(self._last_mouse_buttons_mask)},
             )
         )
         self._next_id += 1
@@ -216,6 +248,33 @@ def _to_top_left_y(local_y: float, view_height: float) -> float:
     if y > (h - 1.0):
         return h - 1.0
     return y
+
+
+def _read_pressed_mouse_buttons_mask(*, NSEvent) -> int:
+    try:
+        mask = int(NSEvent.pressedMouseButtons())
+        if mask >= 0:
+            return mask
+    except Exception:
+        pass
+    try:
+        import Quartz  # type: ignore
+
+        left_down = bool(
+            Quartz.CGEventSourceButtonState(
+                Quartz.kCGEventSourceStateCombinedSessionState,
+                Quartz.kCGMouseButtonLeft,
+            )
+        )
+        right_down = bool(
+            Quartz.CGEventSourceButtonState(
+                Quartz.kCGEventSourceStateCombinedSessionState,
+                Quartz.kCGMouseButtonRight,
+            )
+        )
+        return (1 if left_down else 0) | (2 if right_down else 0)
+    except Exception:
+        return 0
 
 
 def _scroll_phase_name(raw: int) -> str:

@@ -284,6 +284,31 @@ class HDIThreadTests(unittest.TestCase):
         self.assertIn("up", press_phases)
         self.assertIn("single", press_phases)
 
+    def test_tab_key_is_not_normalized_to_cancel(self) -> None:
+        source = _ScriptedHDISource(
+            [
+                [
+                    HDIEvent(1, 1, "w", "keyboard", "key_down", "OK", {"key": "\t", "code": 48}),
+                    HDIEvent(2, 2, "w", "keyboard", "key_up", "OK", {"key": "\t", "code": 48}),
+                ]
+            ]
+        )
+        thread = HDIThread(source=source, poll_interval_s=0.001)
+        thread.start()
+        time.sleep(0.01)
+        thread.stop()
+        events = thread.poll_events(max_events=10)
+        press_events = [
+            e
+            for e in events
+            if e.device == "keyboard" and e.event_type == "press" and isinstance(e.payload, dict)
+        ]
+        phases = [str(e.payload.get("phase")) for e in press_events]
+        self.assertIn("down", phases)
+        self.assertIn("up", phases)
+        self.assertIn("single", phases)
+        self.assertNotIn("cancel", phases)
+
     def test_keyboard_double_press_is_emitted(self) -> None:
         source = _ScriptedHDISource(
             [

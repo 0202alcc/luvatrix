@@ -195,15 +195,81 @@ class HelloPlaneAppTests(unittest.TestCase):
         components = app._planes.get("components", [])
         self.assertIsInstance(components, list)
         ids = {str(c.get("id")) for c in components if isinstance(c, dict)}
-        self.assertTrue({"title_text", "status_text", "btn_toggle_theme", "panel_bg"}.issubset(ids))
+        self.assertTrue({"title_text", "subtitle_text", "stained_glass_button"}.issubset(ids))
 
     def test_validation_artifact_reports_pass(self) -> None:
         artifact_path = run_validation(HELLO_APP_DIR)
         payload = json.loads(artifact_path.read_text(encoding="utf-8"))
         self.assertEqual(payload["app_id"], "hello_plane")
         self.assertEqual(payload["status"], "PASS")
-        self.assertTrue(payload["interactive_checks"]["theme_toggled"])
+        self.assertTrue(payload["interactive_checks"]["profile_cycle_count"])
         self.assertTrue(payload["all_checks_passed"])
+
+    def test_click_cycles_button_hover_profile(self) -> None:
+        app = create()
+        ctx = AppContext(
+            matrix=WindowMatrix(height=540, width=960),
+            hdi=_QueuedHDI(),
+            sensor_manager=_NoopSensorManager(),
+            granted_capabilities={"window.write"},
+        )
+        app.init(ctx)
+        self.assertEqual(app.state.get("hover_profile_index"), 0)
+        handler = app._handlers.get("handlers::cycle_hover_profile")
+        self.assertIsNotNone(handler)
+        handler(
+            {
+                "event_type": "click",
+                "payload": {"x": 480.0, "y": 270.0},
+                "component_id": "stained_glass_button",
+                "dt": 0.016,
+            },
+            app.state,
+        )
+        self.assertEqual(app.state.get("hover_profile_index"), 1)
+        self.assertEqual(app.state.get("profile_cycle_count"), 1)
+        components = app._planes.get("components", [])
+        button = next(c for c in components if isinstance(c, dict) and c.get("id") == "stained_glass_button")
+        props = button.get("props", {})
+        self.assertIsInstance(props, dict)
+        self.assertIn("Profile 2/5", str(props.get("label", "")))
+
+    def test_click_cycles_with_cartesian_default_frame_runtime_path(self) -> None:
+        app = create()
+        ctx = AppContext(
+            matrix=WindowMatrix(height=540, width=960),
+            hdi=_QueuedHDI(),
+            sensor_manager=_NoopSensorManager(),
+            granted_capabilities={"window.write", "hdi.mouse"},
+        )
+        ctx.set_default_coordinate_frame("cartesian_center")
+        app.init(ctx)
+        ctx.hdi.queue(
+            HDIEvent(
+                event_id=11,
+                ts_ns=11,
+                window_id="w",
+                device="mouse",
+                event_type="pointer_move",
+                status="OK",
+                payload={"x": 480.0, "y": 270.0},
+            )
+        )
+        ctx.hdi.queue(
+            HDIEvent(
+                event_id=12,
+                ts_ns=12,
+                window_id="w",
+                device="mouse",
+                event_type="click",
+                status="OK",
+                payload={"x": 480.0, "y": 270.0},
+            )
+        )
+        app.loop(ctx, 0.016)
+        self.assertEqual(app.state.get("hover_component_id"), "stained_glass_button")
+        self.assertEqual(app.state.get("hover_profile_index"), 1)
+        self.assertEqual(app.state.get("profile_cycle_count"), 1)
 
     def test_debug_header_screenshot_captures_expected_frame(self) -> None:
         backend = MoltenVKMacOSBackend(window_system=_FakeWindowSystem())

@@ -131,6 +131,10 @@ class UnifiedRuntime:
                 )
                 if sleep_for > 0:
                     time.sleep(sleep_for)
+        except KeyboardInterrupt:
+            # Treat Ctrl+C the same way as a normal target-close stop so callers
+            # get a graceful exit path instead of a traceback.
+            stopped_by_target_close = True
         except Exception as exc:  # noqa: BLE001
             self._last_error = exc
             raise

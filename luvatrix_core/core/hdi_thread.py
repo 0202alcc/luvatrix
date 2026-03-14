@@ -167,7 +167,8 @@ class HDIThread:
         if not active:
             return [replace(event, status="NOT_DETECTED", payload=None)]
         payload = event.payload if isinstance(event.payload, dict) else {}
-        key = str(payload.get("key", "")).strip()
+        raw_key = payload.get("key", "")
+        key = "" if raw_key is None else str(raw_key)
         if not key:
             return [
                 replace(

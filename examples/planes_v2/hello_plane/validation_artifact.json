@@ -1,16 +1,18 @@
 {
-  "actions_executed": [],
-  "all_checks_passed": false,
+  "actions_executed": [
+    "cycle_hover_profile"
+  ],
+  "all_checks_passed": true,
   "app_id": "hello_plane",
   "artifact_version": "v2",
-  "deterministic_fingerprint": "9c7a1dd1683e4e5971d521bedf5c42ffe69e49c07226525e582947b852f3cc90",
+  "deterministic_fingerprint": "7403a2f52a6e221776be7c74ee78fa92e7e06eea563c79503e9265036b4ce4ea",
   "interactive_checks": {
-    "theme_toggled": false
+    "profile_cycle_count": true
   },
   "required_features": [
-    "theme_toggled"
+    "profile_cycle_count"
   ],
-  "status": "FAIL",
-  "status_text": "",
+  "status": "PASS",
+  "status_text": "last_action=cycle_hover_profile",
   "validation_command": "PYTHONPATH=. uv run python examples/planes_v2/hello_plane/app_main.py --validate"
 }

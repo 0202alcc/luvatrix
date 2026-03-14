@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import os
+import time
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -11,6 +14,18 @@ from typing import Any
 from luvatrix_core.core.coordinates import CoordinateFrameRegistry
 from luvatrix_core.core.hdi_thread import HDIEvent
 from luvatrix_ui.planes_runtime import load_plane_app
+
+
+def _env_flag(name: str, *, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return bool(default)
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
 
 
 APP_SPECS: dict[str, dict[str, Any]] = {
@@ -68,17 +83,21 @@ APP_SPECS: dict[str, dict[str, Any]] = {
   },
   "hello_plane": {
     "actions": [
-      "toggle_theme"
+      "cycle_hover_profile"
     ],
+    "action_component_ids": {
+      "cycle_hover_profile": "stained_glass_button"
+    },
     "checks": {
-      "theme_toggled": True
+      "profile_cycle_count": 1
     },
     "concepts": [
       "Plane runtime bootstrapping",
-      "Theme toggle event handling",
+      "Pointer-relative refraction animation",
+      "Profile cycle event handling",
       "Deterministic state snapshots"
     ],
-    "objective": "Render a starter plane app and toggle themes through direct click interaction."
+    "objective": "Render a starter plane app and cycle hover-refraction profiles through direct click interaction."
   },
   "input_sensor_overlay_logger": {
     "actions": [
@@ -193,6 +212,125 @@ APP_SPECS: dict[str, dict[str, Any]] = {
 }
 
 
+HELLO_HOVER_PROFILES: list[dict[str, Any]] = [
+  {
+    "id": "prism_drift",
+    "label": "Prism Drift",
+    "base": {
+      "kernel_size": 5,
+      "sigma_px": 1.5,
+      "downsample_factor": 2,
+      "backdrop_cache_enabled": True,
+      "refract_px": 3.2,
+      "refract_calm_radius": 0.9,
+      "refract_transition": 0.03,
+      "chromatic_aberration_px": 0.08,
+      "pane_mix": 0.36,
+      "color_filter_rgb": [1.22, 0.8, 0.8],
+      "tint_delta_rgba": [42, -20, -22, 0],
+    },
+    "hover_gain": {
+      "refract_px": 2.1,
+      "chromatic_aberration_px": 0.11,
+      "pane_mix": 0.08,
+      "tint_xy_scale": [12.0, 8.0],
+    },
+  },
+  {
+    "id": "calm_lens",
+    "label": "Calm Lens",
+    "base": {
+      "kernel_size": 5,
+      "sigma_px": 1.3,
+      "downsample_factor": 2,
+      "backdrop_cache_enabled": True,
+      "refract_px": 1.5,
+      "refract_calm_radius": 0.95,
+      "refract_transition": 0.04,
+      "chromatic_aberration_px": 0.03,
+      "pane_mix": 0.3,
+      "color_filter_rgb": [1.1, 0.88, 0.9],
+      "tint_delta_rgba": [18, -8, -8, 0],
+    },
+    "hover_gain": {
+      "refract_px": 1.0,
+      "chromatic_aberration_px": 0.04,
+      "pane_mix": 0.05,
+      "tint_xy_scale": [8.0, 6.0],
+    },
+  },
+  {
+    "id": "ripple_push",
+    "label": "Ripple Push",
+    "base": {
+      "kernel_size": 5,
+      "sigma_px": 1.7,
+      "downsample_factor": 2,
+      "backdrop_cache_enabled": True,
+      "refract_px": 4.6,
+      "refract_calm_radius": 0.85,
+      "refract_transition": 0.02,
+      "chromatic_aberration_px": 0.14,
+      "pane_mix": 0.48,
+      "color_filter_rgb": [1.28, 0.74, 0.72],
+      "tint_delta_rgba": [58, -30, -34, 0],
+    },
+    "hover_gain": {
+      "refract_px": 2.5,
+      "chromatic_aberration_px": 0.16,
+      "pane_mix": 0.11,
+      "tint_xy_scale": [16.0, 11.0],
+    },
+  },
+  {
+    "id": "edge_spark",
+    "label": "Edge Spark",
+    "base": {
+      "kernel_size": 5,
+      "sigma_px": 1.4,
+      "downsample_factor": 2,
+      "backdrop_cache_enabled": True,
+      "refract_px": 2.3,
+      "refract_calm_radius": 0.78,
+      "refract_transition": 0.015,
+      "chromatic_aberration_px": 0.2,
+      "pane_mix": 0.62,
+      "color_filter_rgb": [1.34, 0.68, 0.66],
+      "tint_delta_rgba": [72, -38, -42, 0],
+    },
+    "hover_gain": {
+      "refract_px": 1.8,
+      "chromatic_aberration_px": 0.18,
+      "pane_mix": 0.12,
+      "tint_xy_scale": [19.0, 14.0],
+    },
+  },
+  {
+    "id": "frost_glow",
+    "label": "Frost Glow",
+    "base": {
+      "kernel_size": 5,
+      "sigma_px": 1.4,
+      "downsample_factor": 2,
+      "backdrop_cache_enabled": True,
+      "refract_px": 2.8,
+      "refract_calm_radius": 0.93,
+      "refract_transition": 0.05,
+      "chromatic_aberration_px": 0.06,
+      "pane_mix": 0.27,
+      "color_filter_rgb": [1.06, 0.97, 1.05],
+      "tint_delta_rgba": [12, 2, 14, 0],
+    },
+    "hover_gain": {
+      "refract_px": 1.3,
+      "chromatic_aberration_px": 0.05,
+      "pane_mix": 0.07,
+      "tint_xy_scale": [10.0, 12.0],
+    },
+  },
+]
+
+
 @dataclass
 class _Matrix:
     width: int
@@ -248,6 +386,139 @@ def _set_text(app: Any, component_id: str, value: str) -> None:
         props = {}
         component['props'] = props
     props['text'] = value
+    component_index = getattr(app, '_component_index', None)
+    if isinstance(component_index, dict):
+        runtime_comp = component_index.get(component_id)
+        runtime_style = getattr(runtime_comp, 'style', None)
+        if isinstance(runtime_style, dict):
+            runtime_style['text'] = value
+
+
+def _set_component_props(app: Any, component_id: str, updates: dict[str, Any]) -> None:
+    try:
+        component = _find_component(app._planes, component_id)
+    except RuntimeError:
+        return
+    props = component.get('props')
+    if not isinstance(props, dict):
+        props = {}
+        component['props'] = props
+    props.update(updates)
+    component_index = getattr(app, '_component_index', None)
+    if isinstance(component_index, dict):
+        runtime_comp = component_index.get(component_id)
+        runtime_style = getattr(runtime_comp, 'style', None)
+        if isinstance(runtime_style, dict):
+            runtime_style.update(updates)
+
+
+def _ctx_dimensions(ctx: Any) -> tuple[float, float]:
+    matrix = getattr(ctx, 'matrix', None)
+    width = max(1.0, float(getattr(matrix, 'width', 960)))
+    height = max(1.0, float(getattr(matrix, 'height', 540)))
+    return (width, height)
+
+
+def _hello_profile_count() -> int:
+    return len(HELLO_HOVER_PROFILES)
+
+
+def _hello_profile_label(index: int) -> str:
+    total = _hello_profile_count()
+    if total <= 0:
+        return 'Profile 1/1'
+    idx = int(index) % total
+    profile = HELLO_HOVER_PROFILES[idx]
+    return f"Profile {idx + 1}/{total}: {profile['label']}"
+
+
+def _hello_apply_hover_profile(app: Any, state: dict[str, Any], *, width: float, height: float) -> None:
+    if _hello_profile_count() <= 0:
+        return
+    idx = int(state.get('hover_profile_index', 0)) % _hello_profile_count()
+    profile = HELLO_HOVER_PROFILES[idx]
+    base = dict(profile.get('base', {}))
+    gain = profile.get('hover_gain', {}) if isinstance(profile.get('hover_gain'), dict) else {}
+
+    hover_id = str(state.get('hover_component_id', ''))
+    pointer = state.get('last_pointer_xy')
+    hover_active = hover_id == 'stained_glass_button' and isinstance(pointer, tuple) and len(pointer) == 2
+
+    dynamic = dict(base)
+    if hover_active:
+        px = float(pointer[0])
+        py = float(pointer[1])
+        cx = float(width) * 0.5
+        cy = float(height) * 0.5
+        half_w = 140.0
+        half_h = 42.0
+        nx = max(-1.0, min(1.0, (px - cx) / max(1.0, half_w)))
+        ny = max(-1.0, min(1.0, (py - cy) / max(1.0, half_h)))
+        step = 0.08
+        nx = round(nx / step) * step
+        ny = round(ny / step) * step
+        radial = max(0.0, 1.0 - min(1.0, math.sqrt((nx * nx) + (ny * ny))))
+        theta = math.atan2(ny, nx if abs(nx) > 1e-6 else 1e-6)
+        swirl = math.cos(theta)
+        dynamic['refract_px'] = float(base.get('refract_px', 2.0)) + (float(gain.get('refract_px', 0.0)) * radial)
+        dynamic['chromatic_aberration_px'] = float(base.get('chromatic_aberration_px', 0.0)) + (
+            float(gain.get('chromatic_aberration_px', 0.0)) * radial
+        )
+        dynamic['pane_mix'] = min(
+            0.95,
+            max(0.05, float(base.get('pane_mix', 0.35)) + (float(gain.get('pane_mix', 0.0)) * radial)),
+        )
+        tint = list(base.get('tint_delta_rgba', [0, 0, 0, 0]))
+        while len(tint) < 4:
+            tint.append(0)
+        tint_scale = gain.get('tint_xy_scale', [0.0, 0.0])
+        sx = float(tint_scale[0]) if isinstance(tint_scale, list) and len(tint_scale) >= 1 else 0.0
+        sy = float(tint_scale[1]) if isinstance(tint_scale, list) and len(tint_scale) >= 2 else 0.0
+        tint[0] = float(tint[0]) + (nx * sx)
+        tint[1] = float(tint[1]) + (ny * sy)
+        tint[2] = float(tint[2]) + (swirl * (sx * 0.35))
+        dynamic['tint_delta_rgba'] = tint
+
+    dynamic['material_profile'] = 'water_button'
+    dynamic['draggable'] = False
+    dynamic['label'] = _hello_profile_label(idx)
+    dynamic['label_color_hex'] = '#FFF6F4'
+    style_sig = (
+      idx,
+      bool(hover_active),
+      round(float(dynamic.get('refract_px', 0.0)), 3),
+      round(float(dynamic.get('chromatic_aberration_px', 0.0)), 3),
+      round(float(dynamic.get('pane_mix', 0.0)), 3),
+      tuple(round(float(v), 2) for v in dynamic.get('tint_delta_rgba', [0, 0, 0, 0])),
+    )
+    if state.get('_hello_last_style_sig') != style_sig:
+      _set_component_props(app, 'stained_glass_button', dynamic)
+      state['_hello_last_style_sig'] = style_sig
+      forced = state.get('force_component_dirty_ids')
+      if not isinstance(forced, list):
+        forced = []
+        state['force_component_dirty_ids'] = forced
+      if 'stained_glass_button' not in forced:
+        forced.append('stained_glass_button')
+    state['active_hover_profile'] = profile['id']
+    subtitle = f"Hover + click test | {_hello_profile_label(idx)}"
+    if bool(state.get('input_debug_enabled', False)):
+      hover_id = str(state.get('hover_component_id', '') or '-')
+      pointer = state.get('last_pointer_xy')
+      if isinstance(pointer, tuple) and len(pointer) == 2:
+          pointer_label = f"{float(pointer[0]):.1f},{float(pointer[1]):.1f}"
+      else:
+          pointer_label = "-"
+      subtitle = f"{subtitle} | hover={hover_id} | ptr={pointer_label}"
+    if state.get('_hello_last_subtitle') != subtitle:
+      _set_text(app, 'subtitle_text', subtitle)
+      state['_hello_last_subtitle'] = subtitle
+      forced = state.get('force_component_dirty_ids')
+      if not isinstance(forced, list):
+        forced = []
+        state['force_component_dirty_ids'] = forced
+      if 'subtitle_text' not in forced:
+        forced.append('subtitle_text')
 
 
 def _handler(action: str):
@@ -258,6 +529,11 @@ def _handler(action: str):
             current = str(app_state.get('active_theme', 'default'))
             app_state['active_theme'] = 'training_alt' if current == 'default' else 'default'
             app_state['theme_toggled'] = True
+        elif action == 'cycle_hover_profile':
+            total = max(1, _hello_profile_count())
+            current = int(app_state.get('hover_profile_index', 0))
+            app_state['hover_profile_index'] = (current + 1) % total
+            app_state['profile_cycle_count'] = int(app_state.get('profile_cycle_count', 0)) + 1
         elif action == 'capture_coordinates':
             payload = event_ctx.get('payload', {})
             if isinstance(payload, dict):
@@ -324,13 +600,31 @@ def _build_handlers(spec: dict[str, Any]) -> dict[str, Any]:
 
 
 def _event_for_component(planes_payload: dict[str, Any], component_id: str, *, event_id: int, event_type: str) -> list[HDIEvent]:
+    def _scalar(raw: Any, default: float) -> float:
+        if isinstance(raw, dict):
+            if 'value' in raw:
+                return _scalar(raw.get('value'), default)
+            return float(default)
+        if isinstance(raw, (int, float)):
+            return float(raw)
+        if isinstance(raw, str):
+            txt = raw.strip().lower()
+            if txt.endswith('vw'):
+                return 640.0 * (float(txt[:-2]) / 100.0)
+            if txt.endswith('vh'):
+                return 360.0 * (float(txt[:-2]) / 100.0)
+            if txt.endswith('%'):
+                return float(default) * (float(txt[:-1]) / 100.0)
+            return float(txt)
+        return float(default)
+
     component = _find_component(planes_payload, component_id)
     position = component.get('position', {})
     size = component.get('size', {})
-    width = float(size.get('width', {}).get('value', 120))
-    height = float(size.get('height', {}).get('value', 28))
-    x = float(position.get('x', 0)) + (width / 2.0)
-    y = float(position.get('y', 0)) + (height / 2.0)
+    width = _scalar(size.get('width', 120), 120.0)
+    height = _scalar(size.get('height', 28), 28.0)
+    x = _scalar(position.get('x', 0), 0.0) + (width / 2.0)
+    y = _scalar(position.get('y', 0), 0.0) + (height / 2.0)
     from_frame = str(position.get('frame', 'screen_tl'))
     try:
         planes = planes_payload.get('planes', [])
@@ -389,32 +683,86 @@ def build_app(app_dir: Path):
     app_id = app_dir.name
     spec = APP_SPECS[app_id]
     plane_path = app_dir / 'plane.json'
-    app = load_plane_app(plane_path, handlers=_build_handlers(spec), strict=True)
+    handlers = _build_handlers(spec)
+    app = load_plane_app(plane_path, handlers=handlers, strict=True)
+
+    if app_id == 'hello_plane':
+        def _cycle_hover_profile(event_ctx: dict[str, Any], app_state: dict[str, Any]) -> None:
+            payload = event_ctx.get('payload', {})
+            phase = str(payload.get('phase', '')).lower() if isinstance(payload, dict) else ''
+            if phase and phase not in {'up', 'single'}:
+                return
+            now_s = time.perf_counter()
+            last_s = float(app_state.get('_hover_profile_last_click_s', -1.0))
+            if last_s >= 0.0 and (now_s - last_s) < 0.12:
+                return
+            app_state['_hover_profile_last_click_s'] = now_s
+            app_state.setdefault('actions', []).append('cycle_hover_profile')
+            app_state['last_action'] = 'cycle_hover_profile'
+            total = max(1, _hello_profile_count())
+            current = int(app_state.get('hover_profile_index', 0))
+            app_state['hover_profile_index'] = (current + 1) % total
+            app_state['profile_cycle_count'] = int(app_state.get('profile_cycle_count', 0)) + 1
+            if isinstance(payload, dict) and 'x' in payload and 'y' in payload:
+                app_state['last_pointer_xy'] = (float(payload['x']), float(payload['y']))
+            w = float(app_state.get('window_w', 960.0))
+            h = float(app_state.get('window_h', 540.0))
+            _hello_apply_hover_profile(app, app_state, width=w, height=h)
+            app_state['status_text'] = 'last_action=cycle_hover_profile'
+
+        handlers_map = getattr(app, '_handlers', None)
+        if isinstance(handlers_map, dict):
+            handlers_map['handlers::cycle_hover_profile'] = _cycle_hover_profile
 
     original_init = app.init
+    original_loop = app.loop
 
     def _init(ctx: Any) -> None:
         original_init(ctx)
         app.state.setdefault('active_component_mode', 'basic')
         app.state.setdefault('overlay_visible', True)
         app.state.setdefault('active_route_path', '/home')
+        if app_id == 'hello_plane':
+            app.state['input_debug_enabled'] = _env_flag("LUVATRIX_DEBUG_INPUT", default=False)
+        app.state.setdefault('hover_profile_index', 0)
+        app.state.setdefault('profile_cycle_count', 0)
+        width, height = _ctx_dimensions(ctx)
+        app.state['window_w'] = width
+        app.state['window_h'] = height
+        if app_id == 'hello_plane':
+            _hello_apply_hover_profile(app, app.state, width=width, height=height)
         _set_text(app, 'status_text', 'ready')
 
+    def _loop(ctx: Any, dt: float) -> None:
+        width, height = _ctx_dimensions(ctx)
+        app.state['window_w'] = width
+        app.state['window_h'] = height
+        if app_id == 'hello_plane':
+            _hello_apply_hover_profile(app, app.state, width=width, height=height)
+        original_loop(ctx, dt)
+
     app.init = _init
+    app.loop = _loop
     return app
 
 
 def _validation_component_sequence(spec: dict[str, Any]) -> list[tuple[str, str]]:
     sequence: list[tuple[str, str]] = []
+    component_targets = spec.get('action_component_ids', {})
     for action in spec.get('actions', []):
         repeats = int(spec.get('action_repeats', {}).get(action, 1))
         repeats = max(1, repeats)
+        target_component = None
+        if isinstance(component_targets, dict):
+            raw_target = component_targets.get(action)
+            if isinstance(raw_target, str) and raw_target.strip():
+                target_component = raw_target.strip()
         if action == 'scroll_plane':
             for _ in range(repeats):
                 sequence.append(('scroll', 'scroll_canvas'))
         else:
             for _ in range(repeats):
-                sequence.append(('click', f'btn_{action}'))
+                sequence.append(('click', target_component or f'btn_{action}'))
     return sequence
 
 

@@ -253,7 +253,9 @@ class TradingDashboardApp:
         self._mid_price = float(os.getenv("LUVATRIX_ORDERBOOK_INITIAL_MID", "100.0"))
         self._mid_drift = float(os.getenv("LUVATRIX_ORDERBOOK_DRIFT", "0.12"))
         self._font_scale = 1.5
-        self._fit_pad_ticks = max(0.0, float(os.getenv("LUVATRIX_ORDERBOOK_FIT_PAD_TICKS", "1.0")))
+        # Default to strict ladder fit (no extra pad bins) so Plot A aligns 1:1 with
+        # the visible top-N bid/ask orderbook levels unless explicitly overridden.
+        self._fit_pad_ticks = max(0.0, float(os.getenv("LUVATRIX_ORDERBOOK_FIT_PAD_TICKS", "0.0")))
         self._gradient_blur_px = max(1, int(os.getenv("LUVATRIX_ORDERBOOK_GRADIENT_BLUR_PX", "3")))
         self._maker_mode = os.getenv("LUVATRIX_ORDERBOOK_MAKER_MODE", "0").strip().lower() in {"1", "true", "yes"}
         self._maker_fee_rate = max(
@@ -483,6 +485,47 @@ class TradingDashboardApp:
             return
         self._last_console_stream_meta = msg
         print(msg)
+
+    def _emit_console_snapshot_book(
+        self,
+        *,
+        snapshot: OrderBookSnapshot,
+        bid_prices: np.ndarray,
+        bid_sizes: np.ndarray,
+        ask_prices: np.ndarray,
+        ask_sizes: np.ndarray,
+    ) -> None:
+        def _fmt_px(v: float) -> str:
+            return self._format_price_axis(v) if np.isfinite(v) else "--"
+
+        def _fmt_qty(v: float) -> str:
+            if not np.isfinite(v):
+                return "--"
+            av = abs(v)
+            if av >= 1e6:
+                return self._format_scientific(v, 4)
+            return self._format_fixed(v, 3)
+
+        def _side_line(prices: np.ndarray, sizes: np.ndarray) -> str:
+            parts: list[str] = []
+            n = min(self._levels_per_side, prices.shape[0], sizes.shape[0])
+            for i in range(n):
+                p = float(prices[i])
+                q = float(sizes[i])
+                if not np.isfinite(p):
+                    continue
+                parts.append(f"{_fmt_px(p)}@{_fmt_qty(q)}")
+            return " | ".join(parts) if parts else "--"
+
+        ts_txt = str(snapshot.timestamp) if snapshot.timestamp is not None else "null"
+        spread = snapshot.spread
+        spread_txt = self._format_price_axis(float(spread)) if spread is not None else "--"
+        best_bid = float(np.nanmax(bid_prices)) if np.isfinite(bid_prices).any() else np.nan
+        best_ask = float(np.nanmin(ask_prices)) if np.isfinite(ask_prices).any() else np.nan
+        best_txt = f"best_bid={_fmt_px(best_bid)} best_ask={_fmt_px(best_ask)}"
+        print(f"[orderbook] pair={snapshot.product_id} ts={ts_txt} spread={spread_txt} {best_txt}")
+        print(f"[orderbook] bids: {_side_line(bid_prices, bid_sizes)}")
+        print(f"[orderbook] asks: {_side_line(ask_prices, ask_sizes)}")
 
     def _fs(self, px: float) -> float:
         return float(px) * float(self._font_scale)
@@ -886,6 +929,13 @@ class TradingDashboardApp:
         self._latest_stream_spread = float(snapshot.spread) if snapshot.spread is not None else np.nan
         if snapshot.timestamp is not None:
             self._latest_exchange_ts = int(snapshot.timestamp)
+        self._emit_console_snapshot_book(
+            snapshot=snapshot,
+            bid_prices=bid_prices,
+            bid_sizes=bid_sizes_exact,
+            ask_prices=ask_prices,
+            ask_sizes=ask_sizes_exact,
+        )
 
         lowest_bid = float(np.nanmin(bid_prices))
         highest_ask = float(np.nanmax(ask_prices))
@@ -975,13 +1025,11 @@ class TradingDashboardApp:
     def _fit_price_window_to_book(self, lowest_bid: float, highest_ask: float) -> None:
         target_range = float(self._bin_count) * self._tick_size
         observed_range = max(0.0, float(highest_ask - lowest_bid))
-        if observed_range >= target_range:
-            # Fallback: clamp window to target range anchored at low edge.
-            lo = lowest_bid
-        else:
-            # Center-fit so bid/ask shifts are visually symmetric around the mid.
-            spare = target_range - observed_range
-            lo = lowest_bid - 0.5 * spare
+        _ = observed_range
+        # Strict order-book anchoring: map bins as an ordered ladder from the live book,
+        # not a center-fitted window. This avoids half-spare phase shifts that can look
+        # like a persistent one-bin y-axis offset.
+        lo = float(lowest_bid)
         lo = self._snap_to_tick(lo)
         self._price_min = lo
         self._price_max = lo + target_range
@@ -1489,6 +1537,19 @@ class TradingDashboardApp:
                 stream_meta = f"{stream_meta} | kbd: {self._last_key_debug[:64]}"
             if self._last_stream_error:
                 stream_meta = f"{stream_meta} | err: {self._last_stream_error[:42]}"
+            if self._debug_log and np.isfinite(self._latest_bid_prices).any() and np.isfinite(self._latest_ask_prices).any():
+                best_bid_dbg = float(np.nanmax(self._latest_bid_prices))
+                best_ask_dbg = float(np.nanmin(self._latest_ask_prices))
+                bid_idx_dbg = self._bin_index_for_price(best_bid_dbg)
+                ask_idx_dbg = self._bin_index_for_price(best_ask_dbg)
+                if 0 <= bid_idx_dbg < self._bin_count and 0 <= ask_idx_dbg < self._bin_count:
+                    bid_lbl_dbg = self._price_min + float(bid_idx_dbg) * self._tick_size
+                    ask_lbl_dbg = self._price_min + float(ask_idx_dbg) * self._tick_size
+                    stream_meta = (
+                        f"{stream_meta} | ymap_err "
+                        f"bid:{self._format_scientific(best_bid_dbg - bid_lbl_dbg, 2)} "
+                        f"ask:{self._format_scientific(best_ask_dbg - ask_lbl_dbg, 2)}"
+                    )
             draw_text(canvas, x0 + 8, 4, stream_meta, label, font_size_px=self._fs(8.0))
 
         # Label each ordered price bin (not row centers). Major cadence labels are larger and emboldened.
@@ -1500,7 +1561,7 @@ class TradingDashboardApp:
             if row_end < row_start:
                 continue
             y_center = y0 + (row_start + row_end) // 2
-            price = self._price_min + float(b + 1) * self._tick_size
+            price = self._price_min + float(b) * self._tick_size
             text = self._format_price_axis(price)
             is_major = (b % 5) == 0
             draw_hline(canvas, x1, min(self._width - 1, x1 + (6 if is_major else 3)), y_center, frame)
@@ -1637,7 +1698,18 @@ class TradingDashboardApp:
             header_h = min(30, max(18, bh // 4))
             usable_h = max(1, bh - header_h)
             row_h = max(1, usable_h // self._levels_per_side)
-            max_qty = float(np.max(sizes)) if sizes.size > 0 else 0.0
+            # Display both sides in descending price order (high -> low, top -> bottom)
+            # so panel row direction matches Graph A's y-axis orientation.
+            finite = np.isfinite(prices)
+            if finite.any():
+                order = np.argsort(prices[finite])[::-1]
+                ordered_prices = prices[finite][order]
+                ordered_sizes = sizes[finite][order]
+            else:
+                ordered_prices = np.array([], dtype=np.float64)
+                ordered_sizes = np.array([], dtype=np.float32)
+
+            max_qty = float(np.max(ordered_sizes)) if ordered_sizes.size > 0 else 0.0
             if max_qty <= 0.0:
                 max_qty = 1.0
             for i in range(self._levels_per_side):
@@ -1645,15 +1717,27 @@ class TradingDashboardApp:
                 y_bot = min(by1, y_top + row_h - 1)
                 if y_bot < y_top:
                     continue
-                price = prices[i]
-                qty = float(sizes[i])
+                if i < ordered_prices.shape[0]:
+                    price = float(ordered_prices[i])
+                    qty = float(ordered_sizes[i])
+                else:
+                    price = float("nan")
+                    qty = 0.0
                 frac = max(0.0, min(1.0, qty / max_qty))
                 fill = int(round(frac * bar_w))
                 if fill > 0:
                     x_fill_end = min(panel_x1, bar_left + fill)
                     for yy in range(y_top, y_bot + 1):
                         draw_hline(canvas, bar_left, x_fill_end, yy, bar_color)
-                price_text = self._format_price_axis(float(price)) if np.isfinite(price) else "--"
+                if np.isfinite(price):
+                    idx = self._bin_index_for_price(price)
+                    if 0 <= idx < self._bin_count:
+                        display_price = self._price_min + float(idx) * self._tick_size
+                    else:
+                        display_price = price
+                    price_text = self._format_price_axis(float(display_price))
+                else:
+                    price_text = "--"
                 price_w, _ = text_size(price_text, font_size_px=panel_num_font)
                 price_x = max(panel_x0 + 6, (bar_left - 6) - price_w)
                 draw_text(

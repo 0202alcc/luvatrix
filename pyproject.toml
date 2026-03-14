@@ -9,8 +9,10 @@ description = "Luvatrix runtime and plotting toolkit"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = [
+  "coinbasetraderbot",
   "numpy>=2.4.2",
   "Pillow>=10.3.0",
+  "pytz>=2026.1.post1",
   "torch>=2.4.0",
   "vulkan>=1.3.275.1",
 ]
@@ -34,3 +36,6 @@ gateflow = "gateflow_cli.wrapper:main"
 
 [tool.setuptools.packages.find]
 include = ["gateflow_cli*", "luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
+
+[tool.uv.sources]
+coinbasetraderbot = { path = "../CoinbaseTraderBot", editable = true }
