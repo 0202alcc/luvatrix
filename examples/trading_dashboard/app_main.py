@@ -2154,20 +2154,25 @@ class TradingDashboardApp:
             draw_text(canvas, x0 + 8, 4, stream_meta, label, font_size_px=self._fs(8.0))
 
         # Label thinning for readability: keep full grid, but adapt y-rule labels
-        # to available pixel height. Between major labels, include up to 5
+        # to available pixel height. Between major labels, include up to 4
         # uniformly spaced minor labels.
         min_label_px = max(8, int(round(self._fs(10.0))))
         max_labels_fit = max(2, ph // min_label_px)
         label_stride = max(1, int(np.ceil(float(render_bin_count) / float(max_labels_fit))))
-        max_between_labels = 5
-        major_every_labels = max(1, max_between_labels + 1)  # up to 5 in-between => every 6th is major
+        max_between_labels = 4
+        major_every_labels = max(1, max_between_labels + 1)  # up to 4 in-between => every 5th is major
         major_stride = max(label_stride, label_stride * major_every_labels)
+        hide_top_label = render_bin_count > max_labels_fit
         label_bins = list(range(0, render_bin_count, label_stride))
         if (render_bin_count - 1) not in label_bins:
             label_bins.append(render_bin_count - 1)
 
         # Label each displayed price row (not row centers). Major cadence labels are larger and emboldened.
         for b in label_bins:
+            # Suppress top-most y-rule label only when row density is high
+            # enough that top-edge labels become cluttered.
+            if hide_top_label and b >= (render_bin_count - 1):
+                continue
             row_start = ph - int(round((b + 1) * ph / render_bin_count))
             row_end = ph - int(round(b * ph / render_bin_count)) - 1
             row_start = max(0, min(ph - 1, row_start))
@@ -2182,10 +2187,12 @@ class TradingDashboardApp:
             rule_font = self._fs(9.0 if is_major else 7.25)
             t_w, t_h = text_size(text, font_size_px=rule_font)
             label_x = max(8, min(self._width - t_w - 8, y_label_left))
+            # Keep y-rule text inside Plot A so top labels do not spill into header.
+            label_y = max(y0 + 1, min(y1 - t_h - 1, y_center - (t_h // 2)))
             draw_text(
                 canvas,
                 label_x,
-                max(0, y_center - (t_h // 2)),
+                label_y,
                 text,
                 label,
                 font_size_px=rule_font,
