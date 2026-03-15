@@ -5,9 +5,12 @@ import logging
 import os
 import queue
 import ssl
+import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
+from pathlib import Path
 import numpy as np
 
 from examples.trading_dashboard.orderbook_snapshot_client import OrderBookSnapshot, OrderBookSnapshotClient
@@ -18,14 +21,28 @@ from luvatrix_plot.raster import draw_hline, draw_text, draw_vline, new_canvas, 
 class _SSEPriceClient:
     """Tiny resilient SSE client that pushes JSON events into a queue."""
 
-    def __init__(self, url: str, *, insecure_tls: bool = False) -> None:
+    def __init__(
+        self,
+        url: str,
+        *,
+        insecure_tls: bool = False,
+        reconnect_initial_sec: float = 1.0,
+        reconnect_max_sec: float = 10.0,
+        client_name: str = "sse",
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._url = url
         self._insecure_tls = bool(insecure_tls)
+        self._reconnect_initial_sec = max(0.1, float(reconnect_initial_sec))
+        self._reconnect_max_sec = max(self._reconnect_initial_sec, float(reconnect_max_sec))
+        self._client_name = client_name
+        self._logger = logger or logging.getLogger("trading_dashboard")
         self._queue: queue.Queue[tuple[str, dict]] = queue.Queue(maxsize=512)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.last_error: str | None = None
         self.connected = False
+        self._connect_attempts = 0
 
     def start(self) -> None:
         if self._thread is not None:
@@ -62,9 +79,16 @@ class _SSEPriceClient:
                 pass
 
     def _run(self) -> None:
-        reconnect_s = 0.5
+        reconnect_s = self._reconnect_initial_sec
         while not self._stop.is_set():
             try:
+                self._connect_attempts += 1
+                self._logger.info(
+                    "%s connect attempt=%d url=%s",
+                    self._client_name,
+                    self._connect_attempts,
+                    self._url,
+                )
                 headers = {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
                 req = urllib.request.Request(self._url, headers=headers)
                 ctx = None
@@ -75,7 +99,8 @@ class _SSEPriceClient:
                 with urllib.request.urlopen(req, timeout=30.0, context=ctx) as resp:
                     self.connected = True
                     self.last_error = None
-                    reconnect_s = 0.5
+                    reconnect_s = self._reconnect_initial_sec
+                    self._logger.info("%s open", self._client_name)
                     event_type = "message"
                     data_lines: list[str] = []
                     while not self._stop.is_set():
@@ -104,10 +129,12 @@ class _SSEPriceClient:
                             data_lines.append(line.split(":", 1)[1].lstrip())
             except Exception as exc:  # noqa: BLE001 - keep stream alive
                 self.last_error = str(exc)
+                self._logger.warning("%s error=%s", self._client_name, self.last_error)
             self.connected = False
             if self._stop.wait(reconnect_s):
                 break
-            reconnect_s = min(5.0, reconnect_s * 1.6)
+            self._logger.info("%s reconnect_in=%.2fs", self._client_name, reconnect_s)
+            reconnect_s = min(self._reconnect_max_sec, max(0.1, reconnect_s * 2.0))
 
 
 class _OrderBookSnapshotFeed:
@@ -215,9 +242,28 @@ class TradingDashboardApp:
         self._latest_exchange_ts: int | None = None
         self._last_snapshot_ts: int | None = None
         self._last_snapshot_fingerprint: tuple | None = None
+        self._stream_stale_after_sec = max(
+            1.0,
+            float(os.getenv("LUVATRIX_ORDERBOOK_STREAM_STALE_AFTER_SEC", "10.0")),
+        )
+        self._fallback_to_snapshot = os.getenv("LUVATRIX_ORDERBOOK_SSE_FALLBACK_TO_SNAPSHOT", "1").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        self._last_orderbook_update_mono = 0.0
+        self._last_heartbeat_mono = 0.0
+        self._orderbook_update_count = 0
+        self._heartbeat_count = 0
+        self._orderbook_error_count = 0
+        self._last_stream_count_log_mono = 0.0
         self._sse = _SSEPriceClient(
             self._sse_url,
             insecure_tls=os.getenv("LUVATRIX_ORDERBOOK_SSE_INSECURE_TLS", "0").strip() in {"1", "true", "yes"},
+            reconnect_initial_sec=1.0,
+            reconnect_max_sec=10.0,
+            client_name="price_sse",
+            logger=self._logger,
         )
 
         self._time_window_sec = max(30, int(os.getenv("LUVATRIX_ORDERBOOK_TIME_WINDOW_SEC", "120")))
@@ -242,6 +288,13 @@ class TradingDashboardApp:
             1.0,
             float(os.getenv("LUVATRIX_ORDERBOOK_SNAPSHOT_STALE_AFTER_SEC", "10.0")),
         )
+        default_ob_sse_url = ""
+        if self._selected_pair:
+            quoted_pair = urllib.parse.quote(self._selected_pair, safe="-")
+            default_ob_sse_url = (
+                f"{self._snapshot_base_url}/sse/orderbook/{quoted_pair}?levels={self._snapshot_levels}"
+            )
+        self._snapshot_sse_url = os.getenv("LUVATRIX_ORDERBOOK_SNAPSHOT_SSE_URL", default_ob_sse_url).strip()
         self._lock_inferred_tick = os.getenv("LUVATRIX_ORDERBOOK_LOCK_INFERRED_TICK", "1").strip().lower() not in {
             "0",
             "false",
@@ -259,10 +312,8 @@ class TradingDashboardApp:
         # Blur intentionally disabled: keep strict per-bin fidelity to market levels.
         self._gradient_blur_px = 0
         self._maker_mode = os.getenv("LUVATRIX_ORDERBOOK_MAKER_MODE", "0").strip().lower() in {"1", "true", "yes"}
-        self._maker_fee_rate = max(
-            0.0,
-            float(os.getenv("LUVATRIX_ORDERBOOK_MAKER_FEE_RATE", "0.0")),
-        )
+        self._maker_fee_rate, self._maker_fee_source = self._resolve_maker_fee_rate()
+        self._warned_zero_maker_fee = False
         self._bin_pad_ticks = max(0, int(np.ceil(self._fit_pad_ticks)))
         self._bin_count = (2 * self._levels_per_side) + (2 * self._bin_pad_ticks)
         self._global_bin_count = max(self._bin_count * 8, 256)
@@ -301,6 +352,14 @@ class TradingDashboardApp:
             stale_after_sec=self._snapshot_stale_after_sec,
         )
         self._snapshot_feed = _OrderBookSnapshotFeed(self._snapshot_client)
+        self._orderbook_sse = _SSEPriceClient(
+            self._snapshot_sse_url,
+            insecure_tls=os.getenv("LUVATRIX_ORDERBOOK_SNAPSHOT_SSE_INSECURE_TLS", "0").strip() in {"1", "true", "yes"},
+            reconnect_initial_sec=1.0,
+            reconnect_max_sec=10.0,
+            client_name="orderbook_sse",
+            logger=self._logger,
+        )
         self._x_tick_label_h_cache: int | None = None
         self._last_key_debug = ""
         self._keyboard_status = "init"
@@ -321,15 +380,84 @@ class TradingDashboardApp:
             "true",
             "yes",
         }
+        self._maker_scalar_probe_log = os.getenv("LUVATRIX_ORDERBOOK_MAKER_SCALAR_PROBE", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
         self._mode_badge_rect: tuple[int, int, int, int] | None = None
 
+    def _resolve_maker_fee_rate(self) -> tuple[float, str]:
+        raw = os.getenv("LUVATRIX_ORDERBOOK_MAKER_FEE_RATE")
+        if raw is not None and raw.strip() != "":
+            try:
+                return max(0.0, float(raw)), "env"
+            except ValueError:
+                self._logger.warning("invalid LUVATRIX_ORDERBOOK_MAKER_FEE_RATE=%r; attempting CoinbaseAPI fallback", raw)
+
+        try:
+            from dotenv import load_dotenv
+
+            load_dotenv()
+        except Exception:
+            pass
+
+        api_key = os.getenv("COINBASE_API_KEY")
+        api_secret = os.getenv("COINBASE_API_SECRET")
+        if not api_key or not api_secret:
+            return 0.0, "default"
+
+        CoinbaseAPI = None
+        try:
+            from coinbase_trader_api import CoinbaseAPI as CoinbaseAPIImport
+
+            CoinbaseAPI = CoinbaseAPIImport
+        except (ModuleNotFoundError, ImportError):
+            try:
+                from coinbase_trader_api.CoinbaseAPI import CoinbaseAPI as CoinbaseAPIImport
+
+                CoinbaseAPI = CoinbaseAPIImport
+            except (ModuleNotFoundError, ImportError):
+                local_pkg_root = Path("/Users/aleccandidato/Projects/CoinbaseTraderBot")
+                if str(local_pkg_root) not in sys.path:
+                    sys.path.insert(0, str(local_pkg_root))
+                try:
+                    from CoinbaseAPI import CoinbaseAPI as CoinbaseAPIImport
+
+                    CoinbaseAPI = CoinbaseAPIImport
+                except (ModuleNotFoundError, ImportError):
+                    try:
+                        from coinbase_trader_api import CoinbaseAPI as CoinbaseAPIImport
+
+                        CoinbaseAPI = CoinbaseAPIImport
+                    except (ModuleNotFoundError, ImportError):
+                        self._logger.warning("CoinbaseAPI import failed; maker fee defaulting to 0")
+                        return 0.0, "default"
+
+        try:
+            client = CoinbaseAPI(api_key, api_secret)
+            fees = client.get_maker_taker_fees()
+            maker_raw = fees.get("maker_fee_rate") if isinstance(fees, dict) else None
+            maker_fee = max(0.0, float(maker_raw))
+            if np.isfinite(maker_fee):
+                self._logger.info("resolved maker fee from CoinbaseAPI: %.12g", maker_fee)
+                return maker_fee, "coinbase_api"
+        except Exception as exc:  # noqa: BLE001 - preserve app startup if fee lookup fails
+            self._logger.warning("CoinbaseAPI fee lookup failed: %s; maker fee defaulting to 0", exc)
+        return 0.0, "default"
+
     def _toggle_mode(self) -> None:
-        was_maker = bool(self._maker_mode)
         self._maker_mode = not self._maker_mode
         mode = "maker" if self._maker_mode else "market"
-        self._reproject_all_heatmaps_for_mode_change(was_maker=was_maker, is_maker=self._maker_mode)
+        if self._maker_mode and self._maker_fee_rate <= 0.0 and not self._warned_zero_maker_fee:
+            self._warned_zero_maker_fee = True
+            self._last_stream_error = (
+                "maker fee=0 (no scaling). Set LUVATRIX_ORDERBOOK_MAKER_FEE_RATE, e.g. 0.006."
+            )
+            self._logger.warning("maker mode enabled with zero fee; scaling disabled")
+        # Keep toggle non-destructive: market-space history remains untouched.
+        # Maker transforms are applied at render-time only.
         self._dbg(f"mode toggle -> {mode}")
-        self._recompute_latest_column_for_mode()
 
     def _reproject_all_heatmaps_for_mode_change(self, *, was_maker: bool, is_maker: bool) -> None:
         if was_maker == is_maker:
@@ -375,6 +503,102 @@ class TradingDashboardApp:
                 out[i1, :] += heatmap[src_row, :] * w1
         return out
 
+    def _remap_heatmap_rows_between(
+        self,
+        heatmap: np.ndarray,
+        src_min: float,
+        dst_min: float,
+        ratio: float,
+        *,
+        dst_tick: float,
+    ) -> np.ndarray:
+        if heatmap.ndim != 2:
+            return heatmap
+        rows, _cols = heatmap.shape
+        if rows <= 0:
+            return heatmap
+        if abs(ratio - 1.0) < 1e-12 and abs(dst_min - src_min) < (1e-12 * max(1.0, abs(src_min), abs(dst_min))):
+            return heatmap
+        out = np.zeros_like(heatmap)
+        for src_row in range(rows):
+            p = float(src_min) + (float(src_row) + 0.5) * self._tick_size
+            mapped_p = p * float(ratio)
+            target = ((mapped_p - float(dst_min)) / float(max(1e-12, dst_tick))) - 0.5
+            i0 = int(np.floor(target))
+            w1 = float(target - i0)
+            w0 = 1.0 - w1
+            if 0 <= i0 < rows:
+                out[i0, :] += heatmap[src_row, :] * w0
+            i1 = i0 + 1
+            if 0 <= i1 < rows:
+                out[i1, :] += heatmap[src_row, :] * w1
+        return out
+
+    def _remap_heatmap_rows_resample(
+        self,
+        heatmap: np.ndarray,
+        *,
+        src_min: float,
+        src_tick: float,
+        dst_min: float,
+        dst_tick: float,
+        dst_rows: int,
+        ratio: float,
+    ) -> np.ndarray:
+        if heatmap.ndim != 2:
+            return heatmap
+        src_rows, cols = heatmap.shape
+        if src_rows <= 0 or dst_rows <= 0:
+            return np.zeros((max(0, dst_rows), cols), dtype=heatmap.dtype)
+        if src_tick <= 0.0 or dst_tick <= 0.0:
+            return np.zeros((dst_rows, cols), dtype=heatmap.dtype)
+
+        out = np.zeros((dst_rows, cols), dtype=np.float32)
+        for src_row in range(src_rows):
+            p = float(src_min) + (float(src_row) + 0.5) * float(src_tick)
+            mapped_p = p * float(ratio)
+            target = ((mapped_p - float(dst_min)) / float(dst_tick)) - 0.5
+            i0 = int(np.floor(target))
+            w1 = float(target - i0)
+            w0 = 1.0 - w1
+            if 0 <= i0 < dst_rows:
+                out[i0, :] += heatmap[src_row, :] * w0
+            i1 = i0 + 1
+            if 0 <= i1 < dst_rows:
+                out[i1, :] += heatmap[src_row, :] * w1
+        return out
+
+    def _display_price_window(self) -> tuple[float, float]:
+        # Market mode displays the native market-space window.
+        if (not self._maker_mode) or self._maker_fee_rate <= 0.0:
+            return float(self._price_min), float(self._price_max)
+        if (not np.isfinite(self._latest_bid_prices).any()) or (not np.isfinite(self._latest_ask_prices).any()):
+            return float(self._price_min), float(self._price_max)
+
+        fee = float(max(0.0, self._maker_fee_rate))
+        eff_low_bid = float(np.nanmin(self._latest_bid_prices)) * float(max(0.0, 1.0 - fee))
+        eff_high_ask = float(np.nanmax(self._latest_ask_prices)) * float(1.0 + fee)
+        market_range = float(self._bin_count) * self._tick_size
+        eff_range = max(0.0, float(eff_high_ask - eff_low_bid))
+        target_range = max(market_range, eff_range + (2.0 * self._tick_size))
+        mid = 0.5 * (eff_low_bid + eff_high_ask)
+        lo = self._snap_to_tick(mid - 0.5 * target_range)
+        hi = lo + target_range
+        return float(lo), float(hi)
+
+    def _display_bin_layout(self, axis_price_min: float, axis_price_max: float) -> tuple[int, float]:
+        # Market mode keeps native ladder resolution.
+        if (not self._maker_mode) or self._maker_fee_rate <= 0.0:
+            return int(self._bin_count), float(self._tick_size)
+        axis_range = max(0.0, float(axis_price_max - axis_price_min))
+        # Maker mode: expand render-bin resolution so each source (market) bin occupies
+        # fewer pixels while fitting the wider effective-price envelope.
+        render_bins = int(max(self._bin_count, np.ceil(axis_range / max(self._tick_size, 1e-12))))
+        render_bins = min(render_bins, max(self._bin_count, 1024))
+        render_tick = axis_range / float(max(1, render_bins))
+        render_tick = max(render_tick, 1e-12)
+        return render_bins, float(render_tick)
+
     def _recompute_latest_column_for_mode(self) -> None:
         bid_prices = self._latest_bid_prices.copy()
         ask_prices = self._latest_ask_prices.copy()
@@ -402,7 +626,9 @@ class TradingDashboardApp:
             highest_ask,
             roll_column=False,
             roll_steps=0,
-            write_steps=max(1, self._columns_per_second()),
+            # Only touch the most recent column on toggle to avoid rewriting a
+            # multi-column time span with a single frame and causing artifacts.
+            write_steps=1,
         )
 
     def _poll_keyboard_toggles(self, events: list[object]) -> None:
@@ -501,6 +727,33 @@ class TradingDashboardApp:
             return
         self._last_console_stream_meta = msg
         print(msg)
+
+    def _parse_sse_orderbook_snapshot(self, payload: dict) -> OrderBookSnapshot | None:
+        if not isinstance(payload, dict):
+            return None
+        try:
+            snap = self._snapshot_client._parse_snapshot(payload)  # noqa: SLF001 - shared parser
+        except Exception as exc:  # noqa: BLE001 - keep stream loop resilient
+            self._last_stream_error = f"sse orderbook parse error: {exc}"
+            self._dbg(self._last_stream_error)
+            return None
+        if self._selected_pair and snap.product_id != self._selected_pair:
+            return None
+        return snap
+
+    def _maybe_log_orderbook_stream_counts(self, *, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and (now - self._last_stream_count_log_mono) < 10.0:
+            return
+        self._last_stream_count_log_mono = now
+        self._logger.info(
+            "orderbook_sse stats updates=%d heartbeats=%d errors=%d connected=%s fallback=%s",
+            self._orderbook_update_count,
+            self._heartbeat_count,
+            self._orderbook_error_count,
+            self._orderbook_sse.connected,
+            self._fallback_to_snapshot,
+        )
 
     def _emit_console_snapshot_book(
         self,
@@ -722,6 +975,46 @@ class TradingDashboardApp:
             f"api_ask_bin={api_ask_bin} api_ask_px={api_ask_px:.12g} api_ask_sz={api_ask_size:.12g} "
             f"bid_shift_bins={bid_shift_bins if bid_shift_bins is not None else '--'} "
             f"ask_shift_bins={ask_shift_bins if ask_shift_bins is not None else '--'}"
+        )
+
+    def _emit_maker_scalar_probe_line(
+        self,
+        *,
+        snapshot: OrderBookSnapshot,
+        bid_prices: np.ndarray,
+        ask_prices: np.ndarray,
+    ) -> None:
+        if not self._maker_mode:
+            return
+        fee = float(max(0.0, self._maker_fee_rate))
+        best_bid = float(np.nanmax(bid_prices)) if np.isfinite(bid_prices).any() else float("nan")
+        best_ask = float(np.nanmin(ask_prices)) if np.isfinite(ask_prices).any() else float("nan")
+        if not np.isfinite(best_bid) or not np.isfinite(best_ask):
+            return
+
+        eff_bid = best_bid * (1.0 - fee)
+        eff_ask = best_ask * (1.0 + fee)
+        expected_bid_bin = self._bin_index_for_price(eff_bid)
+        expected_ask_bin = self._bin_index_for_price(eff_ask)
+
+        bid_col = self._bid_heatmap[:, -1] if self._bid_heatmap.shape[1] > 0 else np.zeros((0,), dtype=np.float32)
+        ask_col = self._ask_heatmap[:, -1] if self._ask_heatmap.shape[1] > 0 else np.zeros((0,), dtype=np.float32)
+        actual_bid_bin = int(np.argmax(bid_col)) if bid_col.size > 0 else -1
+        actual_ask_bin = int(np.argmax(ask_col)) if ask_col.size > 0 else -1
+
+        bid_clipped = not (0 <= expected_bid_bin < self._bin_count)
+        ask_clipped = not (0 <= expected_ask_bin < self._bin_count)
+        api_ts = int(snapshot.timestamp) if snapshot.timestamp is not None else None
+        print(
+            "[maker-scalar-probe] "
+            f"api_ts={api_ts if api_ts is not None else '--'} "
+            f"fee={fee:.6g} "
+            f"mkt_bid={best_bid:.12g} mkt_ask={best_ask:.12g} "
+            f"eff_bid={eff_bid:.12g} eff_ask={eff_ask:.12g} "
+            f"expected_bid_bin={expected_bid_bin} expected_ask_bin={expected_ask_bin} "
+            f"actual_bid_bin={actual_bid_bin} actual_ask_bin={actual_ask_bin} "
+            f"bid_clipped={int(bid_clipped)} ask_clipped={int(ask_clipped)} "
+            f"bin_count={self._bin_count} pmin={self._price_min:.12g} pmax={self._price_max:.12g}"
         )
 
     def _fs(self, px: float) -> float:
@@ -1174,6 +1467,12 @@ class TradingDashboardApp:
                 roll_cols=roll_cols,
                 write_cols=sec_cols,
             )
+        if self._maker_scalar_probe_log:
+            self._emit_maker_scalar_probe_line(
+                snapshot=snapshot,
+                bid_prices=bid_prices,
+                ask_prices=ask_prices,
+            )
         if snapshot.timestamp is not None:
             self._last_snapshot_ts = int(snapshot.timestamp)
         self._last_snapshot_fingerprint = fingerprint
@@ -1400,15 +1699,11 @@ class TradingDashboardApp:
         write_steps: int = 1,
     ) -> None:
         self._ensure_heatmap_buffers()
-        plot_bid_prices = bid_prices.copy()
-        plot_ask_prices = ask_prices.copy()
-        if self._maker_mode and self._maker_fee_rate > 0.0:
-            bid_factor = float(max(0.0, 1.0 - self._maker_fee_rate))
-            ask_factor = float(1.0 + self._maker_fee_rate)
-            bid_mask = np.isfinite(plot_bid_prices)
-            ask_mask = np.isfinite(plot_ask_prices)
-            plot_bid_prices[bid_mask] = plot_bid_prices[bid_mask] * bid_factor
-            plot_ask_prices[ask_mask] = plot_ask_prices[ask_mask] * ask_factor
+        # Always store market-space distributions in the rolling heatmaps.
+        # Maker mode transforms are applied only at render-time so toggling is
+        # reversible and cannot destroy historical data.
+        plot_bid_prices = bid_prices
+        plot_ask_prices = ask_prices
 
         old_min = self._price_min
         old_max = self._price_max
@@ -1492,16 +1787,62 @@ class TradingDashboardApp:
             return updated
         if self._source == "snapshot":
             updated = False
-            snaps = self._snapshot_feed.drain(limit=64)
-            if self._snapshot_feed.last_error:
-                self._last_stream_error = self._snapshot_feed.last_error
-                self._dbg(f"snapshot feed error: {self._last_stream_error}")
-            if snaps and self._debug_log:
-                self._dbg(f"snapshot drain count={len(snaps)}")
-            for snap in snaps:
-                if self._apply_snapshot(snap):
-                    updated = True
-            self._stream_status = "connected" if self._snapshot_feed.connected else "connecting"
+            now_mono = time.monotonic()
+
+            events = self._orderbook_sse.drain(limit=512)
+            if self._orderbook_sse.last_error:
+                self._last_stream_error = self._orderbook_sse.last_error
+            for event_type, payload in events:
+                if event_type == "heartbeat":
+                    self._heartbeat_count += 1
+                    self._last_heartbeat_mono = now_mono
+                    continue
+                if event_type == "error":
+                    self._orderbook_error_count += 1
+                    if isinstance(payload, dict):
+                        msg = payload.get("message")
+                        if isinstance(msg, str) and msg.strip():
+                            self._last_stream_error = msg.strip()
+                    continue
+                if event_type in {"orderbook_update", "message"}:
+                    snap = self._parse_sse_orderbook_snapshot(payload)
+                    if snap is None:
+                        continue
+                    self._orderbook_update_count += 1
+                    self._last_orderbook_update_mono = now_mono
+                    if self._apply_snapshot(snap):
+                        updated = True
+                    continue
+
+            stale_stream = False
+            if self._last_orderbook_update_mono > 0.0:
+                stale_stream = (now_mono - self._last_orderbook_update_mono) >= self._stream_stale_after_sec
+                if stale_stream:
+                    self._last_stream_error = (
+                        f"orderbook_update stale for {now_mono - self._last_orderbook_update_mono:.1f}s"
+                    )
+
+            use_fallback = self._fallback_to_snapshot and (
+                (not self._orderbook_sse.connected) or stale_stream or (self._last_orderbook_update_mono <= 0.0)
+            )
+            if use_fallback:
+                snaps = self._snapshot_feed.drain(limit=64)
+                if self._snapshot_feed.last_error:
+                    self._last_stream_error = self._snapshot_feed.last_error
+                    self._dbg(f"snapshot fallback error: {self._last_stream_error}")
+                for snap in snaps:
+                    if self._apply_snapshot(snap):
+                        updated = True
+
+            self._maybe_log_orderbook_stream_counts()
+            if stale_stream:
+                self._stream_status = "stale"
+            elif self._orderbook_sse.connected:
+                self._stream_status = "connected"
+            elif use_fallback and self._snapshot_feed.connected:
+                self._stream_status = "fallback"
+            else:
+                self._stream_status = "connecting"
             return updated
 
         self._elapsed += max(0.0, dt)
@@ -1557,14 +1898,40 @@ class TradingDashboardApp:
         source_start = self._plot_w - visible_cols
         bid_bins = self._bid_heatmap[:, source_start:]
         ask_bins = self._ask_heatmap[:, source_start:]
+        axis_price_min, axis_price_max = self._display_price_window()
+        render_bin_count, axis_tick = self._display_bin_layout(axis_price_min, axis_price_max)
+        if self._maker_mode and self._maker_fee_rate > 0.0:
+            fee = float(max(0.0, self._maker_fee_rate))
+            bid_ratio = float(max(0.0, 1.0 - fee))
+            ask_ratio = float(1.0 + fee)
+            bid_bins = self._remap_heatmap_rows_resample(
+                bid_bins,
+                src_min=self._price_min,
+                src_tick=self._tick_size,
+                dst_min=axis_price_min,
+                dst_tick=axis_tick,
+                dst_rows=render_bin_count,
+                ratio=bid_ratio,
+            )
+            ask_bins = self._remap_heatmap_rows_resample(
+                ask_bins,
+                src_min=self._price_min,
+                src_tick=self._tick_size,
+                dst_min=axis_price_min,
+                dst_tick=axis_tick,
+                dst_rows=render_bin_count,
+                ratio=ask_ratio,
+            )
+        else:
+            render_bin_count = int(self._bin_count)
 
         bid_img = np.zeros((ph, pw), dtype=np.float32)
         ask_img = np.zeros((ph, pw), dtype=np.float32)
         src_idx = (np.arange(self._plot_w, dtype=np.float32) * float(visible_cols) / float(self._plot_w)).astype(np.int32)
         src_idx = np.clip(src_idx, 0, visible_cols - 1)
-        for b in range(self._bin_count):
-            row_start = ph - int(round((b + 1) * ph / self._bin_count))
-            row_end = ph - int(round(b * ph / self._bin_count)) - 1
+        for b in range(render_bin_count):
+            row_start = ph - int(round((b + 1) * ph / render_bin_count))
+            row_end = ph - int(round(b * ph / render_bin_count)) - 1
             row_start = max(0, min(ph - 1, row_start))
             row_end = max(0, min(ph - 1, row_end))
             if row_end < row_start:
@@ -1580,15 +1947,23 @@ class TradingDashboardApp:
         if ask_max > 0.0:
             ask_img = ask_img / ask_max
 
-        base = np.array([14, 20, 28], dtype=np.float32).reshape(1, 1, 3)
+        # Plot A background switched to off-white while keeping the same
+        # grid/tint overlays and heatmap composition behavior.
+        base = np.array([244, 242, 236], dtype=np.float32).reshape(1, 1, 3)
         if self._maker_mode:
             bid_color = np.array([88, 162, 242], dtype=np.float32).reshape(1, 1, 3)  # blue
             ask_color = np.array([242, 148, 72], dtype=np.float32).reshape(1, 1, 3)  # orange
         else:
             bid_color = np.array([45, 220, 95], dtype=np.float32).reshape(1, 1, 3)  # green
             ask_color = np.array([230, 70, 70], dtype=np.float32).reshape(1, 1, 3)  # red
-        rgb = base + (bid_img[:, :, None] * bid_color) + (ask_img[:, :, None] * ask_color)
-        rgb = np.clip(rgb, 0, 255).astype(np.uint8)
+        # Light background requires alpha blending (not additive color accumulation),
+        # otherwise the heatmap washes out to near-white.
+        rgb_f = np.broadcast_to(base, (ph, pw, 3)).astype(np.float32).copy()
+        bid_alpha = np.clip(bid_img[:, :, None] * 1.0, 0.0, 1.0)
+        ask_alpha = np.clip(ask_img[:, :, None] * 1.0, 0.0, 1.0)
+        rgb_f = (1.0 - bid_alpha) * rgb_f + bid_alpha * bid_color
+        rgb_f = (1.0 - ask_alpha) * rgb_f + ask_alpha * ask_color
+        rgb = np.clip(rgb_f, 0, 255).astype(np.uint8)
 
         # Peak-bin borders per timestamp-column: compute strongest bin independently
         # for each displayed column from the corresponding heatmap source column.
@@ -1606,8 +1981,8 @@ class TradingDashboardApp:
                 bmx = 0.0
             if bmx > 0.0 and bcol is not None:
                 bbin = int(np.argmax(bcol))
-                b_row_start = ph - int(round((bbin + 1) * ph / self._bin_count))
-                b_row_end = ph - int(round(bbin * ph / self._bin_count)) - 1
+                b_row_start = ph - int(round((bbin + 1) * ph / render_bin_count))
+                b_row_end = ph - int(round(bbin * ph / render_bin_count)) - 1
                 b_row_start = max(0, min(ph - 1, b_row_start))
                 b_row_end = max(0, min(ph - 1, b_row_end))
                 top_end = min(ph - 1, b_row_start + border_px - 1)
@@ -1623,8 +1998,8 @@ class TradingDashboardApp:
                 amx = 0.0
             if amx > 0.0 and acol is not None:
                 abin = int(np.argmax(acol))
-                a_row_start = ph - int(round((abin + 1) * ph / self._bin_count))
-                a_row_end = ph - int(round(abin * ph / self._bin_count)) - 1
+                a_row_start = ph - int(round((abin + 1) * ph / render_bin_count))
+                a_row_end = ph - int(round(abin * ph / render_bin_count)) - 1
                 a_row_start = max(0, min(ph - 1, a_row_start))
                 a_row_end = max(0, min(ph - 1, a_row_end))
                 top_end = min(ph - 1, a_row_start + border_px - 1)
@@ -1656,8 +2031,10 @@ class TradingDashboardApp:
         else:
             stripe_mask = (secs_ago % 3) == 2
         if np.any(stripe_mask):
-            tint = np.array([26, 40, 58], dtype=np.float32).reshape(1, 1, 3)
-            alpha = 0.16
+            # On a light base, use a subtle warm-gray tint so time cadence
+            # columns remain visible without overpowering heatmap colors.
+            tint = np.array([224, 220, 210], dtype=np.float32).reshape(1, 1, 3)
+            alpha = 0.24
             rgb_f = rgb.astype(np.float32)
             rgb_f[:, stripe_mask, :] = (1.0 - alpha) * rgb_f[:, stripe_mask, :] + alpha * tint
             rgb = np.clip(rgb_f, 0, 255).astype(np.uint8)
@@ -1668,8 +2045,8 @@ class TradingDashboardApp:
         # Price-bin background guides: true boundaries from the same bin partition.
         minor_grid = (82, 96, 114, 46)
         major_grid = (106, 122, 142, 84)
-        for b in range(self._bin_count + 1):
-            y = y0 + ph - int(round(b * ph / self._bin_count))
+        for b in range(render_bin_count + 1):
+            y = y0 + ph - int(round(b * ph / render_bin_count))
             y = max(y0, min(y1, y))
             color = major_grid if (b % 5 == 0) else minor_grid
             draw_hline(canvas, x0, x1, y, color)
@@ -1755,6 +2132,7 @@ class TradingDashboardApp:
                 f"stream: {self._stream_status} | mode: {'maker' if self._maker_mode else 'market'} | "
                 f"book_ts: {book_ts_text} | heatmap_ts: {heatmap_ts_text}"
             )
+            stream_meta = f"{stream_meta} | fee:{self._maker_fee_rate:.6g}({self._maker_fee_source})"
             stream_meta = f"{stream_meta} | kbd_status: {self._keyboard_status}"
             if self._last_key_debug:
                 stream_meta = f"{stream_meta} | kbd: {self._last_key_debug[:64]}"
@@ -1775,18 +2153,31 @@ class TradingDashboardApp:
                     )
             draw_text(canvas, x0 + 8, 4, stream_meta, label, font_size_px=self._fs(8.0))
 
-        # Label each ordered price bin (not row centers). Major cadence labels are larger and emboldened.
-        for b in range(self._bin_count):
-            row_start = ph - int(round((b + 1) * ph / self._bin_count))
-            row_end = ph - int(round(b * ph / self._bin_count)) - 1
+        # Label thinning for readability: keep full grid, but adapt y-rule labels
+        # to available pixel height. Between major labels, include up to 5
+        # uniformly spaced minor labels.
+        min_label_px = max(8, int(round(self._fs(10.0))))
+        max_labels_fit = max(2, ph // min_label_px)
+        label_stride = max(1, int(np.ceil(float(render_bin_count) / float(max_labels_fit))))
+        max_between_labels = 5
+        major_every_labels = max(1, max_between_labels + 1)  # up to 5 in-between => every 6th is major
+        major_stride = max(label_stride, label_stride * major_every_labels)
+        label_bins = list(range(0, render_bin_count, label_stride))
+        if (render_bin_count - 1) not in label_bins:
+            label_bins.append(render_bin_count - 1)
+
+        # Label each displayed price row (not row centers). Major cadence labels are larger and emboldened.
+        for b in label_bins:
+            row_start = ph - int(round((b + 1) * ph / render_bin_count))
+            row_end = ph - int(round(b * ph / render_bin_count)) - 1
             row_start = max(0, min(ph - 1, row_start))
             row_end = max(0, min(ph - 1, row_end))
             if row_end < row_start:
                 continue
             y_center = y0 + (row_start + row_end) // 2
-            price = self._price_min + float(b) * self._tick_size
+            price = axis_price_min + float(b) * axis_tick
             text = self._format_price_axis(price)
-            is_major = (b % 5) == 0
+            is_major = (b % major_stride) == 0 or b in {0, render_bin_count - 1}
             draw_hline(canvas, x1, min(self._width - 1, x1 + (6 if is_major else 3)), y_center, frame)
             rule_font = self._fs(9.0 if is_major else 7.25)
             t_w, t_h = text_size(text, font_size_px=rule_font)
@@ -1995,7 +2386,9 @@ class TradingDashboardApp:
             self._sse.start()
         if self._source == "snapshot":
             self._stream_status = "connecting"
-            self._snapshot_feed.start()
+            self._orderbook_sse.start()
+            if self._fallback_to_snapshot:
+                self._snapshot_feed.start()
         self._elapsed = 1.0
         for _ in range(self._plot_w):
             self._step_market(1.0)
@@ -2025,7 +2418,9 @@ class TradingDashboardApp:
         if self._source == "sse":
             self._sse.stop()
         if self._source == "snapshot":
+            self._orderbook_sse.stop()
             self._snapshot_feed.stop()
+            self._maybe_log_orderbook_stream_counts(force=True)
         return None
 
 
