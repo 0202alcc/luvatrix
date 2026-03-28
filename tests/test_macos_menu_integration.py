@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from luvatrix_core.platform.frame_pipeline import PresentationMode
 from luvatrix_core.platform.macos.vulkan_backend import MoltenVKMacOSBackend
 from luvatrix_core.platform.macos.window_system import MacOSWindowHandle
 
@@ -17,7 +18,8 @@ class _FakeWindowSystem:
         height: int,
         title: str,
         use_metal_layer: bool = True,
-        preserve_aspect_ratio: bool = False,
+        presentation_mode: PresentationMode | str = PresentationMode.STRETCH,
+        lock_window_size: bool = False,
         menu_config=None,
     ) -> MacOSWindowHandle:
         class _Layer:

@@ -20,6 +20,7 @@ from luvatrix_core.core import (
     UnifiedRuntime,
     WindowMatrix,
 )
+from luvatrix_core.platform import PresentationMode, normalize_presentation_mode
 from luvatrix_core.platform.macos import MacOSVulkanPresenter
 from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource
 from luvatrix_core.platform.macos.sensors import (
@@ -117,6 +118,17 @@ def main() -> None:
     )
     run.add_argument("--render", choices=["headless", "macos"], default="headless")
     run.add_argument(
+        "--presentation-mode",
+        choices=[mode.value for mode in PresentationMode],
+        default=None,
+        help="Presentation fit mode. Default: pixel_preserve for macos, stretch for headless.",
+    )
+    run.add_argument(
+        "--lock-window-size",
+        action="store_true",
+        help="Prevent the macOS window from being user-resizable; presentation fits inside the fixed window size.",
+    )
+    run.add_argument(
         "--width",
         type=int,
         default=None,
@@ -155,6 +167,7 @@ def main() -> None:
 
     if args.command == "run-app":
         width, height = _resolve_run_dimensions(args.render, args.width, args.height)
+        presentation_mode = _resolve_presentation_mode(args.render, args.presentation_mode)
         matrix = WindowMatrix(height=height, width=width)
         providers = {}
         hdi_source = None
@@ -178,7 +191,13 @@ def main() -> None:
                     print("[luvatrix] Vulkan preflight notice:")
                     print(preflight_issue)
                     print("[luvatrix] Falling back to layer-blit mode if Vulkan cannot initialize.")
-                presenter = MacOSVulkanPresenter(width=width, height=height, title="Luvatrix App")
+                presenter = MacOSVulkanPresenter(
+                    width=width,
+                    height=height,
+                    title="Luvatrix App",
+                    presentation_mode=presentation_mode,
+                    lock_window_size=bool(args.lock_window_size),
+                )
                 target = VulkanTarget(presenter=presenter)
                 hdi_source = _MacOSPresenterHDISource(presenter)
             if isinstance(hdi_source, _MacOSPresenterHDISource):
@@ -285,6 +304,14 @@ def _resolve_run_dimensions(render: str, width: int | None, height: int | None) 
             return _fit_aspect(display_size[0], display_size[1], scale=0.82, aspect_ratio=aspect)
         return (1280, 720)
     return (640, 360)
+
+
+def _resolve_presentation_mode(render: str, requested_mode: str | None) -> PresentationMode:
+    if requested_mode:
+        return normalize_presentation_mode(requested_mode)
+    if render == "macos":
+        return PresentationMode.PIXEL_PRESERVE
+    return PresentationMode.STRETCH
 
 
 def _fit_aspect(screen_w: int, screen_h: int, *, scale: float, aspect_ratio: float) -> tuple[int, int]:

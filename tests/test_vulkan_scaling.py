@@ -5,22 +5,45 @@ import unittest
 
 import torch
 
+from luvatrix_core.platform.frame_pipeline import PresentationMode
 from luvatrix_core.platform.vulkan_scaling import RenderScaleController, compute_blit_rect
 
 
 class VulkanScalingTests(unittest.TestCase):
     def test_compute_blit_rect_stretch(self) -> None:
         self.assertEqual(
-            compute_blit_rect(src_w=320, src_h=180, dst_w=800, dst_h=600, preserve_aspect_ratio=False),
+            compute_blit_rect(
+                src_w=320,
+                src_h=180,
+                dst_w=800,
+                dst_h=600,
+                presentation_mode=PresentationMode.STRETCH,
+            ),
             (0, 0, 800, 600),
         )
 
     def test_compute_blit_rect_preserve_aspect(self) -> None:
         x0, y0, x1, y1 = compute_blit_rect(
-            src_w=320, src_h=180, dst_w=800, dst_h=600, preserve_aspect_ratio=True
+            src_w=320,
+            src_h=180,
+            dst_w=800,
+            dst_h=600,
+            presentation_mode=PresentationMode.PRESERVE_ASPECT,
         )
         self.assertEqual((x0, x1), (0, 800))
         self.assertEqual((y0, y1), (75, 525))
+
+    def test_compute_blit_rect_pixel_preserve_uses_integer_scale(self) -> None:
+        self.assertEqual(
+            compute_blit_rect(
+                src_w=3,
+                src_h=2,
+                dst_w=10,
+                dst_h=8,
+                presentation_mode=PresentationMode.PIXEL_PRESERVE,
+            ),
+            (0, 1, 9, 7),
+        )
 
     def test_render_scale_controller_from_env_quantizes(self) -> None:
         old = os.environ.get("LUVATRIX_INTERNAL_RENDER_SCALE")

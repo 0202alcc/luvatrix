@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Protocol
 
+from ..frame_pipeline import PresentationMode, normalize_presentation_mode
+
 
 @dataclass
 class MacOSWindowHandle:
@@ -31,7 +33,8 @@ class MacOSWindowSystem(Protocol):
         height: int,
         title: str,
         use_metal_layer: bool = True,
-        preserve_aspect_ratio: bool = False,
+        presentation_mode: PresentationMode | str = PresentationMode.STRETCH,
+        lock_window_size: bool = False,
         menu_config: MacOSMenuConfig | None = None,
     ) -> MacOSWindowHandle:
         ...
@@ -99,18 +102,21 @@ class AppKitWindowSystem:
         height: int,
         title: str,
         use_metal_layer: bool = True,
-        preserve_aspect_ratio: bool = False,
+        presentation_mode: PresentationMode | str = PresentationMode.STRETCH,
+        lock_window_size: bool = False,
         menu_config: MacOSMenuConfig | None = None,
     ) -> MacOSWindowHandle:
         ns = self._imports()
         app = ns["NSApp"]() or ns["NSApplication"].sharedApplication()
         app.setActivationPolicy_(ns["NSApplicationActivationPolicyRegular"])
+        mode = normalize_presentation_mode(presentation_mode)
         style = (
             ns["NSWindowStyleMaskTitled"]
             | ns["NSWindowStyleMaskClosable"]
-            | ns["NSWindowStyleMaskResizable"]
             | ns["NSWindowStyleMaskMiniaturizable"]
         )
+        if not lock_window_size:
+            style |= ns["NSWindowStyleMaskResizable"]
         frame = ns["NSMakeRect"](0.0, 0.0, float(width), float(height))
         window = ns["NSWindow"].alloc().initWithContentRect_styleMask_backing_defer_(
             frame, style, ns["NSBackingStoreBuffered"], False
@@ -118,7 +124,7 @@ class AppKitWindowSystem:
         window.setTitle_(title)
         layer_cls = ns["CAMetalLayer"] if use_metal_layer else ns["CALayer"]
         layer = layer_cls.layer()
-        if preserve_aspect_ratio:
+        if mode != PresentationMode.STRETCH:
             layer.setContentsGravity_("resizeAspect")
             try:
                 import Quartz  # type: ignore
@@ -131,6 +137,12 @@ class AppKitWindowSystem:
         content_view = window.contentView()
         content_view.setWantsLayer_(True)
         content_view.setLayer_(layer)
+        if lock_window_size:
+            try:
+                window.setContentMinSize_(frame.size)
+                window.setContentMaxSize_(frame.size)
+            except Exception:
+                pass
         window.makeKeyAndOrderFront_(None)
         self._install_main_menu(app=app, menu_config=menu_config)
         app.activateIgnoringOtherApps_(True)

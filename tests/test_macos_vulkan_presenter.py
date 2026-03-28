@@ -4,6 +4,7 @@ import unittest
 
 import torch
 
+from luvatrix_core.platform.frame_pipeline import PresentationMode
 from luvatrix_core.platform.macos.vulkan_presenter import (
     MacOSVulkanPresenter,
     PresenterState,
@@ -147,9 +148,19 @@ class MacOSVulkanPresenterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             MacOSVulkanPresenter(width=2, height=20000, backend=_FakeBackend())
 
-    def test_presenter_default_backend_inherits_aspect_ratio_setting(self) -> None:
+    def test_presenter_default_backend_inherits_presentation_settings(self) -> None:
+        presenter = MacOSVulkanPresenter(
+            width=2,
+            height=2,
+            presentation_mode=PresentationMode.PIXEL_PRESERVE,
+            lock_window_size=True,
+        )
+        self.assertEqual(getattr(presenter.backend, "presentation_mode", None), PresentationMode.PIXEL_PRESERVE)
+        self.assertTrue(bool(getattr(presenter.backend, "lock_window_size", False)))
+
+    def test_presenter_legacy_aspect_flag_maps_to_presentation_mode(self) -> None:
         presenter = MacOSVulkanPresenter(width=2, height=2, preserve_aspect_ratio=True)
-        self.assertTrue(bool(getattr(presenter.backend, "preserve_aspect_ratio", False)))
+        self.assertEqual(presenter.presentation_mode, PresentationMode.PRESERVE_ASPECT)
 
     def test_pump_and_should_close_delegate_to_backend(self) -> None:
         backend = _FakeBackend()

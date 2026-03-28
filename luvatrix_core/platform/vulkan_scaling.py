@@ -6,7 +6,7 @@ from typing import Sequence
 
 import torch
 
-from .frame_pipeline import resize_rgba_bilinear
+from .frame_pipeline import PresentationMode, normalize_presentation_mode, resize_rgba_bilinear
 
 
 @dataclass
@@ -87,15 +87,24 @@ def compute_blit_rect(
     src_h: int,
     dst_w: int,
     dst_h: int,
-    preserve_aspect_ratio: bool,
+    presentation_mode: PresentationMode | str = PresentationMode.STRETCH,
+    preserve_aspect_ratio: bool | None = None,
 ) -> tuple[int, int, int, int]:
     if src_w <= 0 or src_h <= 0 or dst_w <= 0 or dst_h <= 0:
         return (0, 0, 0, 0)
-    if not preserve_aspect_ratio:
+    if preserve_aspect_ratio is not None:
+        mode = PresentationMode.PRESERVE_ASPECT if preserve_aspect_ratio else PresentationMode.STRETCH
+    else:
+        mode = normalize_presentation_mode(presentation_mode)
+    if mode == PresentationMode.STRETCH:
         return (0, 0, dst_w, dst_h)
     scale = min(float(dst_w) / float(src_w), float(dst_h) / float(src_h))
-    blit_w = max(1, int(round(src_w * scale)))
-    blit_h = max(1, int(round(src_h * scale)))
+    if mode == PresentationMode.PIXEL_PRESERVE and scale >= 1.0:
+        blit_w = max(1, int(src_w * max(1, int(scale))))
+        blit_h = max(1, int(src_h * max(1, int(scale))))
+    else:
+        blit_w = max(1, int(round(src_w * scale)))
+        blit_h = max(1, int(round(src_h * scale)))
     x0 = (dst_w - blit_w) // 2
     y0 = (dst_h - blit_h) // 2
     return (x0, y0, x0 + blit_w, y0 + blit_h)

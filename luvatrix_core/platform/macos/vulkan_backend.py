@@ -38,7 +38,7 @@ from luvatrix_core.core.debug_menu import (
     DebugMenuDispatcher,
     DebugMenuDispatchResult,
 )
-from ..frame_pipeline import prepare_frame_for_extent
+from ..frame_pipeline import PresentationMode, normalize_presentation_mode, prepare_frame_for_extent
 from ..vulkan_scaling import RenderScaleController, compute_blit_rect
 from ..vulkan_compat import SwapchainOutOfDateError, VulkanKHRCompatMixin, decode_vk_string
 from luvatrix_core.perf.copy_telemetry import add_copy_telemetry
@@ -65,9 +65,15 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
     _initialized: bool = False
     _frames_presented: int = 0
     window_system: MacOSWindowSystem | None = None
+    presentation_mode: PresentationMode | str = PresentationMode.STRETCH
+    lock_window_size: bool = False
     preserve_aspect_ratio: bool = False
 
     def __post_init__(self) -> None:
+        if self.preserve_aspect_ratio and self.presentation_mode == PresentationMode.STRETCH:
+            self.presentation_mode = PresentationMode.PRESERVE_ASPECT
+        self.presentation_mode = normalize_presentation_mode(self.presentation_mode)
+        self.preserve_aspect_ratio = self.presentation_mode == PresentationMode.PRESERVE_ASPECT
         self._window_handle: MacOSWindowHandle | None = None
         self._pending_rgba: torch.Tensor | None = None
         self._vulkan_available = False
@@ -262,7 +268,8 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             height,
             title,
             use_metal_layer=True,
-            preserve_aspect_ratio=self.preserve_aspect_ratio,
+            presentation_mode=self.presentation_mode,
+            lock_window_size=self.lock_window_size,
             menu_config=menu_config,
         )
 
@@ -844,7 +851,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             source,
             target_w=swap_w,
             target_h=swap_h,
-            preserve_aspect_ratio=self.preserve_aspect_ratio,
+            presentation_mode=self.presentation_mode,
         )
 
     def _prepare_scaled_source_frame(self, rgba: torch.Tensor) -> torch.Tensor:
@@ -1085,7 +1092,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             src_h=src_h,
             dst_w=dst_w,
             dst_h=dst_h,
-            preserve_aspect_ratio=self.preserve_aspect_ratio,
+            presentation_mode=self.presentation_mode,
         )
         blit = vk.VkImageBlit(
             srcSubresource=vk.VkImageSubresourceLayers(
@@ -1111,7 +1118,9 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
             1,
             [blit],
-            getattr(vk, "VK_FILTER_LINEAR", 1),
+            getattr(vk, "VK_FILTER_NEAREST", 0)
+            if self.presentation_mode == PresentationMode.PIXEL_PRESERVE
+            else getattr(vk, "VK_FILTER_LINEAR", 1),
         )
 
     def _queue_submit(self, queue, submit, fence) -> None:
@@ -1342,11 +1351,13 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
                 )
                 image_view.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
                 image_view.setImageScaling_(
-                    NSImageScaleProportionallyUpOrDown if self.preserve_aspect_ratio else NSImageScaleAxesIndependently
+                    NSImageScaleProportionallyUpOrDown
+                    if self.presentation_mode != PresentationMode.STRETCH
+                    else NSImageScaleAxesIndependently
                 )
                 content_view.addSubview_(image_view)
                 self._fallback_image_view = image_view
-                if self.preserve_aspect_ratio:
+                if self.presentation_mode != PresentationMode.STRETCH:
                     try:
                         content_view.setWantsLayer_(True)
                         content_view.layer().setBackgroundColor_(quartz_module.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0))
@@ -1373,8 +1384,10 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         try:
             fallback_layer = quartz_module.CALayer.layer()
             fallback_layer.setFrame_(bounds)
-            fallback_layer.setContentsGravity_("resizeAspect" if self.preserve_aspect_ratio else "resize")
-            if self.preserve_aspect_ratio:
+            fallback_layer.setContentsGravity_(
+                "resizeAspect" if self.presentation_mode != PresentationMode.STRETCH else "resize"
+            )
+            if self.presentation_mode != PresentationMode.STRETCH:
                 try:
                     fallback_layer.setBackgroundColor_(quartz_module.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0))
                 except Exception:
@@ -1398,8 +1411,10 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             fallback_view.setWantsLayer_(True)
             fallback_layer = quartz_module.CALayer.layer()
             fallback_layer.setFrame_(fallback_view.bounds())
-            fallback_layer.setContentsGravity_("resizeAspect" if self.preserve_aspect_ratio else "resize")
-            if self.preserve_aspect_ratio:
+            fallback_layer.setContentsGravity_(
+                "resizeAspect" if self.presentation_mode != PresentationMode.STRETCH else "resize"
+            )
+            if self.presentation_mode != PresentationMode.STRETCH:
                 try:
                     fallback_layer.setBackgroundColor_(quartz_module.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0))
                 except Exception:
@@ -1421,8 +1436,10 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             # Secondary clean path: child CALayer (still avoids writing host CAMetalLayer contents).
             fallback_layer = quartz_module.CALayer.layer()
             fallback_layer.setFrame_(bounds)
-            fallback_layer.setContentsGravity_("resizeAspect" if self.preserve_aspect_ratio else "resize")
-            if self.preserve_aspect_ratio:
+            fallback_layer.setContentsGravity_(
+                "resizeAspect" if self.presentation_mode != PresentationMode.STRETCH else "resize"
+            )
+            if self.presentation_mode != PresentationMode.STRETCH:
                 try:
                     fallback_layer.setBackgroundColor_(quartz_module.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0))
                 except Exception:
@@ -1899,7 +1916,18 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         return self._render_scale_controller.effective_scale()
 
     def _prepare_fallback_frame(self, rgba: torch.Tensor) -> torch.Tensor:
-        return self._prepare_scaled_source_frame(rgba)
+        source = self._prepare_scaled_source_frame(rgba)
+        if self._window_handle is None and self._swapchain_extent is None:
+            return source
+        target_w, target_h = self._resolve_surface_size()
+        if target_w <= 0 or target_h <= 0:
+            return source
+        return prepare_frame_for_extent(
+            source,
+            target_w=target_w,
+            target_h=target_h,
+            presentation_mode=self.presentation_mode,
+        )
 
     def _update_render_scale(self, elapsed_ms: float, fallback_active: bool) -> None:
         enabled = fallback_active or self._vulkan_internal_scale_enabled

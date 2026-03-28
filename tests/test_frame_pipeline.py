@@ -4,7 +4,12 @@ import unittest
 
 import torch
 
-from luvatrix_core.platform.frame_pipeline import prepare_frame_for_extent, resize_rgba_bilinear
+from luvatrix_core.platform.frame_pipeline import (
+    PresentationMode,
+    expand_rgba_integer,
+    prepare_frame_for_extent,
+    resize_rgba_bilinear,
+)
 
 
 class FramePipelineTests(unittest.TestCase):
@@ -18,7 +23,7 @@ class FramePipelineTests(unittest.TestCase):
         frame = torch.zeros((2, 4, 4), dtype=torch.uint8)
         frame[:, :, 0] = 120
         frame[:, :, 3] = 255
-        out = prepare_frame_for_extent(frame, target_w=8, target_h=8, preserve_aspect_ratio=False)
+        out = prepare_frame_for_extent(frame, target_w=8, target_h=8, presentation_mode=PresentationMode.STRETCH)
         self.assertEqual(tuple(out.shape), (8, 8, 4))
         # Stretch mode should not introduce letterbox bars.
         self.assertGreater(out[:, :, 0].float().mean().item(), 0.0)
@@ -27,7 +32,12 @@ class FramePipelineTests(unittest.TestCase):
         frame = torch.zeros((2, 4, 4), dtype=torch.uint8)
         frame[:, :, 1] = 200
         frame[:, :, 3] = 255
-        out = prepare_frame_for_extent(frame, target_w=8, target_h=8, preserve_aspect_ratio=True)
+        out = prepare_frame_for_extent(
+            frame,
+            target_w=8,
+            target_h=8,
+            presentation_mode=PresentationMode.PRESERVE_ASPECT,
+        )
         self.assertEqual(tuple(out.shape), (8, 8, 4))
         # 2:1 source into 1:1 target => top/bottom bars are black.
         self.assertEqual(int(out[0, :, 0].sum().item()), 0)
@@ -37,10 +47,57 @@ class FramePipelineTests(unittest.TestCase):
         # Center row contains scaled content.
         self.assertGreater(int(out[4, :, 1].sum().item()), 0)
 
+    def test_expand_rgba_integer_repeats_pixels_exactly(self) -> None:
+        frame = torch.tensor(
+            [
+                [[10, 20, 30, 255], [40, 50, 60, 255]],
+                [[70, 80, 90, 255], [100, 110, 120, 255]],
+            ],
+            dtype=torch.uint8,
+        )
+        out = expand_rgba_integer(frame, scale=2)
+        self.assertEqual(tuple(out.shape), (4, 4, 4))
+        self.assertTrue(torch.equal(out[0:2, 0:2], frame[0, 0].view(1, 1, 4).expand(2, 2, 4)))
+        self.assertTrue(torch.equal(out[2:4, 2:4], frame[1, 1].view(1, 1, 4).expand(2, 2, 4)))
+
+    def test_prepare_frame_pixel_preserve_uses_integer_scale_and_black_padding(self) -> None:
+        frame = torch.zeros((2, 3, 4), dtype=torch.uint8)
+        frame[:, :, 0] = 255
+        frame[:, :, 3] = 255
+        out = prepare_frame_for_extent(
+            frame,
+            target_w=10,
+            target_h=8,
+            presentation_mode=PresentationMode.PIXEL_PRESERVE,
+        )
+        self.assertEqual(tuple(out.shape), (8, 10, 4))
+        self.assertTrue(torch.all(out[0, :, 0:3] == 0))
+        self.assertTrue(torch.all(out[-1, :, 0:3] == 0))
+        self.assertTrue(torch.all(out[:, -1, 0:3] == 0))
+        self.assertTrue(torch.all(out[1:7, 0:9, 0] == 255))
+
+    def test_prepare_frame_pixel_preserve_downscales_with_nearest(self) -> None:
+        frame = torch.tensor(
+            [
+                [[0, 0, 0, 255], [255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]],
+                [[10, 10, 10, 255], [20, 20, 20, 255], [30, 30, 30, 255], [40, 40, 40, 255]],
+            ],
+            dtype=torch.uint8,
+        )
+        out = prepare_frame_for_extent(
+            frame,
+            target_w=2,
+            target_h=1,
+            presentation_mode=PresentationMode.PIXEL_PRESERVE,
+        )
+        self.assertEqual(tuple(out.shape), (1, 2, 4))
+        self.assertEqual(out[0, 0, 0].item(), 0)
+        self.assertEqual(out[0, 1, 1].item(), 255)
+
     def test_prepare_frame_rejects_invalid_target(self) -> None:
         frame = torch.zeros((2, 2, 4), dtype=torch.uint8)
         with self.assertRaises(ValueError):
-            prepare_frame_for_extent(frame, target_w=0, target_h=2, preserve_aspect_ratio=True)
+            prepare_frame_for_extent(frame, target_w=0, target_h=2, presentation_mode=PresentationMode.PRESERVE_ASPECT)
 
 
 if __name__ == "__main__":
