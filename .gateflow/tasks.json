@@ -184,10 +184,11 @@
       "milestone_id": "AU-019",
       "notes": [
         "Handoff intent: complete T-1002 for milestone AU-019 without breaking protocol or determinism constraints.",
-        "Execution outline seed: Dedicated dynamic marketbook renderer (depth ladder, spread, imbalance traces)."
+        "Execution outline seed: Dedicated dynamic marketbook renderer (depth ladder, spread, imbalance traces).",
+        "2026-04-01 planning sync: task branch codex/t-t-1002-marketbook-renderer contains substantial renderer implementation in examples/trading_dashboard/ and the runtime smoke test uv run pytest tests/test_plot_app_protocol_example.py -q passed (5 passed). Dedicated regression/docs follow-on remains tracked separately in T-1004."
       ],
       "stage_multiplier_applied": 1,
-      "status": "Backlog",
+      "status": "Verification Review",
       "task_type": "standard",
       "title": "Dedicated dynamic marketbook renderer (depth ladder, spread, imbalance traces)."
     },

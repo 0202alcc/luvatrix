@@ -406,11 +406,17 @@
           "event": "reopened",
           "framework": "gateflow_v1",
           "note": "integrated dependency path added for U-021 plot module outputs"
+        },
+        {
+          "date": "2026-04-01",
+          "event": "active",
+          "framework": "gateflow_v1",
+          "note": "planning state synced to reflect active T-1002 renderer implementation and verification progress"
         }
       ],
       "name": "Custom marketbook dynamic plotting system (built on U-021 plot foundations)",
       "start_week": 9,
-      "status": "Planned",
+      "status": "In Progress",
       "task_ids": [
         "T-1001",
         "T-1002",
