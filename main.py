@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import logging
 import math
 from pathlib import Path
 import platform
 import json
 import os
 import subprocess
+import sys
+import sysconfig
 
 from luvatrix_core.core import (
     HDIEvent,
@@ -29,6 +32,9 @@ from luvatrix_core.platform.macos.sensors import (
 from luvatrix_core.platform.vulkan_setup import detect_vulkan_preflight_issue
 from luvatrix_core.targets.base import DisplayFrame, RenderTarget
 from luvatrix_core.targets.vulkan_target import VulkanTarget
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class _NoopHDISource:
@@ -166,6 +172,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "run-app":
+        _warn_if_not_free_threaded()
         width, height = _resolve_run_dimensions(args.render, args.width, args.height)
         presentation_mode = _resolve_presentation_mode(args.render, args.presentation_mode)
         matrix = WindowMatrix(height=height, width=width)
@@ -312,6 +319,27 @@ def _resolve_presentation_mode(render: str, requested_mode: str | None) -> Prese
     if render == "macos":
         return PresentationMode.PIXEL_PRESERVE
     return PresentationMode.STRETCH
+
+
+def _is_free_threaded_runtime() -> bool:
+    gil_api = getattr(sys, "_is_gil_enabled", None)
+    if callable(gil_api):
+        try:
+            return not bool(gil_api())
+        except Exception:
+            pass
+    return bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
+
+
+def _warn_if_not_free_threaded() -> None:
+    if _is_free_threaded_runtime():
+        return
+    LOGGER.warning(
+        "App launched without the free-threaded Python runtime; expected Python 3.14+freethreaded "
+        "(no-GIL). Current interpreter=%s, SOABI=%s",
+        sys.executable,
+        sysconfig.get_config_var("SOABI"),
+    )
 
 
 def _fit_aspect(screen_w: int, screen_h: int, *, scale: float, aspect_ratio: float) -> tuple[int, int]:

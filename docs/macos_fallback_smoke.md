@@ -5,7 +5,7 @@ Use this to validate the clean fallback present path (no experimental Vulkan):
 ```bash
 unset LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN
 unset LUVATRIX_ENABLE_LEGACY_CAMETAL_FALLBACK
-uv run --python 3.14 python examples/app_protocol/run_full_suite_interactive.py --aspect stretch --force-fallback
+uv run --python 3.14+freethreaded python examples/app_protocol/run_full_suite_interactive.py --aspect stretch --force-fallback
 ```
 
 Expected:
@@ -18,5 +18,5 @@ Emergency legacy path (debug only):
 
 ```bash
 LUVATRIX_ENABLE_LEGACY_CAMETAL_FALLBACK=1 \
-uv run --python 3.14 python examples/app_protocol/run_full_suite_interactive.py --aspect stretch --force-fallback
+uv run --python 3.14+freethreaded python examples/app_protocol/run_full_suite_interactive.py --aspect stretch --force-fallback
 ```

@@ -170,7 +170,7 @@ Use a guarded smoke job:
 1. Run only on macOS runners with GUI support.
 2. Gate execution behind env var flag (default disabled).
 3. Run short smoke command:
-   `uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger --render macos --ticks 120 --fps 30`
+   `uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --render macos --ticks 120 --fps 30`
 4. Treat this as smoke (non-deterministic), keep deterministic unit/integration suite as required gate.
 
 ## 11. UI Component Protocol Note
