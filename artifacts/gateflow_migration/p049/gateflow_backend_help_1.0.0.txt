@@ -1,7 +1,0 @@
-usage: gateflow backend [-h] {status,migrate,export} ...
-
-positional arguments:
-  {status,migrate,export}
-
-options:
-  -h, --help            show this help message and exit

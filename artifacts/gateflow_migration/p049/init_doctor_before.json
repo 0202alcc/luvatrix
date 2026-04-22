@@ -1,8 +1,0 @@
-{
-  "missing": [],
-  "mode": "file",
-  "ok": true,
-  "root": ".",
-  "sqlite_path": null,
-  "target_backend": "file-ledgers"
-}

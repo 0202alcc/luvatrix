@@ -1,9 +1,0 @@
-{
-  "events_processed_p95": 0.0,
-  "events_processed_total": 3,
-  "hdi_events_coalesced_total": 1533,
-  "hdi_events_dropped_total": 0,
-  "hdi_queue_latency_p95_ns_max": 2692000,
-  "pending_max": 0,
-  "pending_p95": 0.0
-}

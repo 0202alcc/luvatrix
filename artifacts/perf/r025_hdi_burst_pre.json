@@ -1,6 +1,0 @@
-{
-  "events_processed_p95": 64.0,
-  "events_processed_total": 512,
-  "pending_max": 192,
-  "pending_p95": 128.0
-}
