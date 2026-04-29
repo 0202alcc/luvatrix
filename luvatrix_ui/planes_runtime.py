@@ -18,8 +18,6 @@ from luvatrix_ui.ui_ir import BoundingBoxSpec
 from luvatrix_ui.text.component import TextComponent
 from luvatrix_ui.text.renderer import FontSpec, TextAppearance, TextMeasureRequest, TextSizeSpec
 
-from luvatrix_core.core.ui_frame_renderer import MatrixUIFrameRenderer
-
 
 EventHandler = Callable[[dict[str, Any], dict[str, Any]], object | None]
 
@@ -56,6 +54,7 @@ class PlaneApp:
         self._plane_dir = self._plane_path.parent
         self._handlers: dict[str, EventHandler] = dict(handlers or {})
         self._strict = strict
+        from luvatrix_core.core.ui_frame_renderer import MatrixUIFrameRenderer  # lazy: breaks import cycle
         self._renderer = MatrixUIFrameRenderer()
         self.state: dict[str, Any] = {}
         self._svg_markup_cache: dict[Path, str] = {}

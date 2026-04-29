@@ -18,6 +18,10 @@ class FrameRateControllerTests(unittest.TestCase):
         rate = FrameRateController(target_fps=60, present_fps=240)
         self.assertEqual(rate.present_fps, 60)
 
+    def test_present_fps_allows_scene_default_120_when_target_matches(self) -> None:
+        rate = FrameRateController(target_fps=120, present_fps=120)
+        self.assertEqual(rate.present_fps, 120)
+
     def test_should_present_tracks_cadence(self) -> None:
         rate = FrameRateController(target_fps=120, present_fps=30)
         dt = 1.0 / 120.0

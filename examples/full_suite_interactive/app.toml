@@ -6,6 +6,7 @@ optional_capabilities = [
   "hdi.keyboard",
   "hdi.mouse",
   "hdi.trackpad",
+  "hdi.touch",
   "sensor.thermal",
   "sensor.power",
   "sensor.motion",
@@ -13,3 +14,8 @@ optional_capabilities = [
   "sensor.microphone",
   "sensor.speaker",
 ]
+
+[display]
+native_width = 393
+native_height = 852
+bar_color_rgba = [0, 0, 0, 255]

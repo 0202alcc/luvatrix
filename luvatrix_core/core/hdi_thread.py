@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, replace
+import math
 import threading
 import time
 from typing import Callable, Literal, Protocol
 
 
-HDIDevice = Literal["keyboard", "mouse", "trackpad"]
+HDIDevice = Literal["keyboard", "mouse", "trackpad", "touch"]
 HDIStatus = Literal["OK", "NOT_DETECTED", "UNAVAILABLE", "DENIED"]
 
 
@@ -69,6 +70,8 @@ class HDIThread:
         self._thread: threading.Thread | None = None
         self._last_error: Exception | None = None
         self._keyboard_state: dict[str, _KeyPressState] = {}
+        self._touch_state: dict[int, _TouchPoint] = {}
+        self._last_gesture: _GestureState | None = None
         self._last_tap_up_ns: dict[str, int] = {}
         self._last_window_active = True
         self._next_synth_event_id = 2_000_000_000
@@ -159,9 +162,54 @@ class HDIThread:
             return self._normalize_keyboard_events(event, active)
         if event.device in ("mouse", "trackpad"):
             return [self._normalize_pointer_event(event, active)]
+        if event.device == "touch":
+            return self._normalize_touch_events(event, active)
         if active:
             return [event]
         return [replace(event, status="NOT_DETECTED", payload=None)]
+
+    def _normalize_touch_events(self, event: HDIEvent, active: bool) -> list[HDIEvent]:
+        if not active:
+            return [replace(event, status="NOT_DETECTED", payload=None)]
+        if event.payload is None or not isinstance(event.payload, dict):
+            return [replace(event, status="NOT_DETECTED", payload=None)]
+        payload = dict(event.payload)
+        phase = str(payload.get("phase", event.event_type)).lower()
+        if phase not in ("down", "move", "up", "cancel"):
+            phase = "move" if event.event_type in ("pointer_move", "touch_move") else phase
+        try:
+            touch_id = int(payload.get("touch_id", 0))
+        except (TypeError, ValueError):
+            return [replace(event, status="NOT_DETECTED", payload=None)]
+        normalized = self._normalize_position_payload(event, payload, requires_position=True)
+        if normalized.status != "OK" or not isinstance(normalized.payload, dict):
+            if phase in ("up", "cancel"):
+                self._touch_state.pop(touch_id, None)
+            return [normalized]
+
+        safe_payload = dict(normalized.payload)
+        safe_payload["touch_id"] = touch_id
+        safe_payload["phase"] = phase
+        for key in ("force", "major_radius", "tap_count"):
+            if key in payload:
+                safe_payload[key] = payload[key]
+        touch_event = replace(normalized, device="touch", event_type="touch", payload=safe_payload, status="OK")
+
+        before_count = len(self._touch_state)
+        if phase in ("down", "move"):
+            self._touch_state[touch_id] = _TouchPoint(
+                touch_id=touch_id,
+                x=float(safe_payload["x"]),
+                y=float(safe_payload["y"]),
+            )
+        elif phase in ("up", "cancel"):
+            self._touch_state.pop(touch_id, None)
+
+        out = [touch_event]
+        gesture = self._synthesize_touch_gesture(event, phase=phase, before_count=before_count)
+        if gesture is not None:
+            out.extend(gesture)
+        return out
 
     def _normalize_keyboard_events(self, event: HDIEvent, active: bool) -> list[HDIEvent]:
         if not active:
@@ -231,6 +279,15 @@ class HDIThread:
                 event, payload=None
             )
         payload = dict(event.payload)
+        return self._normalize_position_payload(event, payload, requires_position=requires_position)
+
+    def _normalize_position_payload(
+        self,
+        event: HDIEvent,
+        payload: dict[str, object],
+        *,
+        requires_position: bool,
+    ) -> HDIEvent:
         left, top, width, height = self._window_geometry_provider()
         if width <= 0 or height <= 0:
             return replace(event, status="NOT_DETECTED", payload=None)
@@ -279,12 +336,79 @@ class HDIThread:
             "rotation",
             "click_count",
             "phase",
+            "touch_id",
         ):
             if key in payload:
                 safe_payload[key] = payload[key]
         if not safe_payload and requires_position:
             return replace(event, status="NOT_DETECTED", payload=None)
         return replace(event, payload=safe_payload, status="OK")
+
+    def _synthesize_touch_gesture(
+        self,
+        event: HDIEvent,
+        *,
+        phase: str,
+        before_count: int,
+    ) -> list[HDIEvent] | None:
+        if len(self._touch_state) < 2:
+            if before_count >= 2 and self._last_gesture is not None:
+                final = self._gesture_events(event, phase="up", current=self._last_gesture, previous=self._last_gesture)
+                self._last_gesture = None
+                return final
+            self._last_gesture = None
+            return None
+
+        current = _gesture_state_from_touches(self._touch_state)
+        previous = self._last_gesture or current
+        gesture_phase = "down" if before_count < 2 or self._last_gesture is None else phase
+        if gesture_phase in ("up", "cancel") and len(self._touch_state) >= 2:
+            gesture_phase = "move"
+        if gesture_phase not in ("down", "move", "up", "cancel"):
+            gesture_phase = "move"
+        self._last_gesture = current
+        return self._gesture_events(event, phase=gesture_phase, current=current, previous=previous)
+
+    def _gesture_events(
+        self,
+        event: HDIEvent,
+        *,
+        phase: str,
+        current: "_GestureState",
+        previous: "_GestureState",
+    ) -> list[HDIEvent]:
+        translation_x = current.centroid_x - previous.centroid_x
+        translation_y = current.centroid_y - previous.centroid_y
+        scale = 1.0 if previous.distance <= 1e-6 else current.distance / previous.distance
+        rotation = current.angle - previous.angle
+        base_payload = {
+            "phase": phase,
+            "centroid_x": current.centroid_x,
+            "centroid_y": current.centroid_y,
+            "translation_x": translation_x,
+            "translation_y": translation_y,
+            "scale": scale,
+            "rotation": rotation,
+            "touch_count": len(self._touch_state),
+        }
+        out: list[HDIEvent] = []
+        for kind in ("pan", "pinch", "rotate"):
+            event_id = self._next_synth_event_id
+            self._next_synth_event_id += 1
+            payload = dict(base_payload)
+            payload["kind"] = kind
+            out.append(
+                HDIEvent(
+                    event_id=event_id,
+                    ts_ns=event.ts_ns,
+                    window_id=event.window_id,
+                    device="touch",
+                    event_type="gesture",
+                    status="OK",
+                    payload=payload,
+                )
+            )
+        return out
 
     def _project_to_target(
         self,
@@ -437,10 +561,16 @@ def _is_scroll_event(event: HDIEvent) -> bool:
 
 
 def _is_motion_event(event: HDIEvent) -> bool:
+    if event.device == "touch" and event.event_type == "touch":
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        return str(payload.get("phase", "")).lower() == "move"
     return _is_move_event(event) or _is_scroll_event(event)
 
 
 def _motion_coalesce_key(event: HDIEvent) -> tuple[str, str]:
+    if event.device == "touch" and event.event_type == "touch":
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        return ("touch_move", str(payload.get("touch_id", "")))
     if _is_move_event(event):
         return ("move", "")
     if _is_scroll_event(event):
@@ -495,6 +625,37 @@ class _KeyPressState:
     down_ts_ns: int
     hold_started: bool
     last_hold_tick_ns: int
+
+
+@dataclass
+class _TouchPoint:
+    touch_id: int
+    x: float
+    y: float
+
+
+@dataclass
+class _GestureState:
+    centroid_x: float
+    centroid_y: float
+    distance: float
+    angle: float
+
+
+def _gesture_state_from_touches(touches: dict[int, _TouchPoint]) -> _GestureState:
+    ordered = [touches[k] for k in sorted(touches)]
+    centroid_x = sum(p.x for p in ordered) / float(len(ordered))
+    centroid_y = sum(p.y for p in ordered) / float(len(ordered))
+    a = ordered[0]
+    b = ordered[1]
+    dx = b.x - a.x
+    dy = b.y - a.y
+    return _GestureState(
+        centroid_x=centroid_x,
+        centroid_y=centroid_y,
+        distance=(dx * dx + dy * dy) ** 0.5,
+        angle=math.atan2(dy, dx),
+    )
 
 
 def _percentile_int(values: list[int], q: float) -> int:

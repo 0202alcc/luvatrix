@@ -7,7 +7,15 @@ from luvatrix_core.core.hdi_thread import HDIEvent, HDIEventSource
 
 
 class MacOSWindowHDISource(HDIEventSource):
-    """Collects local keyboard/mouse/trackpad events for a specific AppKit window."""
+    """Collects local keyboard/mouse/trackpad events for a specific AppKit window.
+
+    Keyboard and mouse are sourced from IOKit HID directly (hardware rate, no
+    WindowServer round-trip) when available. Trackpad gestures (scroll, pinch,
+    rotate, pressure) continue to use the NSEvent local monitor.
+
+    If IOKit HID is unavailable (import error, NULL manager, etc.) the source
+    falls back silently to the original all-NSEvent path.
+    """
 
     def __init__(self, window_handle) -> None:
         self._window_handle = window_handle
@@ -15,7 +23,27 @@ class MacOSWindowHDISource(HDIEventSource):
         self._queued_events: deque[HDIEvent] = deque()
         self._monitor = None
         self._last_mouse_buttons_mask = 0
+        # IOKit path (populated by _install_iohid; None → NSEvent fallback).
+        self._iohid = None
+        self._last_window_active_local = True
+        self._install_iohid()
         self._install_monitor()
+
+    # ── IOKit HID setup ───────────────────────────────────────────────────────
+
+    def _install_iohid(self) -> None:
+        try:
+            from luvatrix_core.platform.macos.iohid_source import IOKitHIDSource
+            from AppKit import NSEvent  # type: ignore
+            src = IOKitHIDSource()
+            src.start()
+            loc = NSEvent.mouseLocation()
+            src.calibrate_position(float(loc.x), float(loc.y))
+            self._iohid = src
+        except Exception:
+            pass
+
+    # ── NSEvent monitor setup ─────────────────────────────────────────────────
 
     def _install_monitor(self) -> None:
         try:
@@ -44,18 +72,29 @@ class MacOSWindowHDISource(HDIEventSource):
             )
         except Exception:
             return
-        mask = (
-            NSEventMaskKeyDown
-            | NSEventMaskKeyUp
-            | NSEventMaskScrollWheel
-            | NSEventMaskPressure
-            | NSEventMaskMagnify
-            | NSEventMaskRotate
-            | NSEventMaskLeftMouseDown
-            | NSEventMaskLeftMouseUp
-            | NSEventMaskRightMouseDown
-            | NSEventMaskRightMouseUp
-        )
+
+        # When IOKit is active: watch only trackpad gesture events.
+        # When falling back to NSEvent-only: watch everything (original mask).
+        if self._iohid is not None:
+            mask = (
+                NSEventMaskScrollWheel
+                | NSEventMaskPressure
+                | NSEventMaskMagnify
+                | NSEventMaskRotate
+            )
+        else:
+            mask = (
+                NSEventMaskKeyDown
+                | NSEventMaskKeyUp
+                | NSEventMaskScrollWheel
+                | NSEventMaskPressure
+                | NSEventMaskMagnify
+                | NSEventMaskRotate
+                | NSEventMaskLeftMouseDown
+                | NSEventMaskLeftMouseUp
+                | NSEventMaskRightMouseDown
+                | NSEventMaskRightMouseUp
+            )
 
         def handler(event):
             try:
@@ -168,19 +207,111 @@ class MacOSWindowHDISource(HDIEventSource):
 
         self._monitor = NSEvent.addLocalMonitorForEventsMatchingMask_handler_(mask, handler)
 
+    # ── poll ──────────────────────────────────────────────────────────────────
+
     def poll(self, window_active: bool, ts_ns: int) -> list[HDIEvent]:
+        out: list[HDIEvent] = []
+
+        if self._iohid is not None:
+            out.extend(self._poll_iohid(window_active, ts_ns))
+        else:
+            out.extend(self._poll_nsevent(ts_ns))
+
+        # Always drain NSEvent queue (trackpad gestures, or full events on fallback).
+        while self._queued_events:
+            out.append(self._queued_events.popleft())
+
+        self._last_window_active_local = window_active
+        return out
+
+    def _poll_iohid(self, window_active: bool, ts_ns: int) -> list[HDIEvent]:
+        """Drain the IOKit HID source and synthesise a pointer_move event."""
+        out: list[HDIEvent] = []
+
+        # On window activation: discard events accumulated while inactive and
+        # resync the accumulated mouse position from NSEvent.
+        just_activated = window_active and not self._last_window_active_local
+        if just_activated:
+            self._iohid.drain_events()  # discard stale cross-app events
+            try:
+                from AppKit import NSEvent  # type: ignore
+                loc = NSEvent.mouseLocation()
+                self._iohid.calibrate_position(float(loc.x), float(loc.y))
+            except Exception:
+                pass
+
+        # Get window geometry for converting screen → window-local coordinates.
+        window = self._window_handle.window
+        try:
+            frame = window.frame()
+            win_x = float(frame.origin.x)
+            win_y = float(frame.origin.y)
+            view = window.contentView()
+            view_h = float(view.bounds().size.height)
+        except Exception:
+            win_x = win_y = view_h = 0.0
+
+        for ev in self._iohid.drain_events():
+            if ev.device == "keyboard":
+                out.append(
+                    HDIEvent(
+                        event_id=self._next_id,
+                        ts_ns=ev.ts_ns,
+                        window_id="logger-demo",
+                        device="keyboard",
+                        event_type=ev.event_type,
+                        status="OK",
+                        payload=ev.payload,
+                    )
+                )
+                self._next_id += 1
+            elif ev.device == "mouse" and ev.event_type == "click":
+                payload = dict(ev.payload) if isinstance(ev.payload, dict) else {}
+                sx = float(payload.pop("screen_x", 0.0))
+                sy = float(payload.pop("screen_y", 0.0))
+                payload["x"] = sx - win_x
+                payload["y"] = _to_top_left_y(sy - win_y, view_h)
+                out.append(
+                    HDIEvent(
+                        event_id=self._next_id,
+                        ts_ns=ev.ts_ns,
+                        window_id="logger-demo",
+                        device="mouse",
+                        event_type="click",
+                        status="OK",
+                        payload=payload,
+                    )
+                )
+                self._next_id += 1
+
+        # Emit one pointer_move per poll with the latest accumulated position.
+        sx, sy = self._iohid.current_screen_xy()
+        px = sx - win_x
+        py = _to_top_left_y(sy - win_y, view_h)
+        out.append(
+            HDIEvent(
+                event_id=self._next_id,
+                ts_ns=ts_ns,
+                window_id="logger-demo",
+                device="mouse",
+                event_type="pointer_move",
+                status="OK",
+                payload={"x": px, "y": py, "buttons_mask": int(self._iohid.current_buttons_mask())},
+            )
+        )
+        self._next_id += 1
+        return out
+
+    def _poll_nsevent(self, ts_ns: int) -> list[HDIEvent]:
+        """Original NSEvent-only mouse position / button polling path (fallback)."""
         try:
             from AppKit import NSEvent  # type: ignore
         except Exception:
             return []
         out: list[HDIEvent] = []
-        while self._queued_events:
-            out.append(self._queued_events.popleft())
-        had_click_event = any(event.event_type == "click" for event in out)
+        had_click_event = any(event.event_type == "click" for event in self._queued_events)
         window = self._window_handle.window
         view = window.contentView()
-        # Prefer window-local sampling. Global screen conversion can drift on some
-        # setups (multiple displays / scaling), which yields incorrect hit-testing.
         local_point = None
         try:
             local_point = window.mouseLocationOutsideOfEventStream()
@@ -227,7 +358,15 @@ class MacOSWindowHDISource(HDIEventSource):
         self._next_id += 1
         return out
 
+    # ── cleanup ───────────────────────────────────────────────────────────────
+
     def close(self) -> None:
+        if self._iohid is not None:
+            try:
+                self._iohid.stop()
+            except Exception:
+                pass
+            self._iohid = None
         if self._monitor is None:
             return
         try:
@@ -239,6 +378,7 @@ class MacOSWindowHDISource(HDIEventSource):
             NSEvent.removeMonitor_(self._monitor)
         finally:
             self._monitor = None
+
 
 def _to_top_left_y(local_y: float, view_height: float) -> float:
     h = max(1.0, float(view_height))

@@ -8,23 +8,37 @@ import platform
 import sys
 import time
 import tomllib
-from typing import Callable, Literal, Protocol
+from typing import TYPE_CHECKING, Callable, Literal, Protocol
 
-import torch
-
-from luvatrix_ui.component_schema import ComponentBase, DisplayableArea
-from luvatrix_ui.controls.svg_component import SVGComponent
-from luvatrix_ui.controls.stained_glass_button import StainedGlassButtonComponent, StainedGlassButtonRenderBatch
-from luvatrix_ui.controls.svg_renderer import SVGRenderBatch
-from luvatrix_ui.text.component import TextComponent
-from luvatrix_ui.text.renderer import TextLayoutMetrics, TextMeasureRequest, TextRenderBatch
+if TYPE_CHECKING:
+    import torch
+    from luvatrix_ui.component_schema import ComponentBase, DisplayableArea
+    from luvatrix_ui.controls.svg_component import SVGComponent
+    from luvatrix_ui.controls.stained_glass_button import StainedGlassButtonComponent, StainedGlassButtonRenderBatch
+    from luvatrix_ui.controls.svg_renderer import SVGRenderBatch
+    from luvatrix_ui.text.component import TextComponent
+    from luvatrix_ui.text.renderer import TextLayoutMetrics, TextMeasureRequest, TextRenderBatch
 
 from .hdi_thread import HDIEvent, HDIThread
 from .coordinates import CoordinateFrameRegistry
 from .frame_rate_controller import FrameRateController
 from .protocol_governance import CURRENT_PROTOCOL_VERSION, check_protocol_compatibility
+from .scene_graph import (
+    CircleNode,
+    ClearNode,
+    RectNode,
+    SceneBlitEvent,
+    SceneFrame,
+    SceneGraphBuffer,
+    SceneNode,
+    ShaderKind,
+    ShaderRectNode,
+    SceneTelemetry,
+    TextNode,
+)
 from .sensor_manager import SensorManagerThread, SensorSample
 from .window_matrix import CallBlitEvent, FullRewrite, ReplaceRect, ShiftFrame, WindowMatrix, WriteBatch
+from luvatrix_core import accel
 from luvatrix_core.perf.copy_telemetry import (
     add_copy_telemetry,
     begin_copy_telemetry_frame,
@@ -93,6 +107,9 @@ class AppManifest:
     min_runtime_protocol_version: str | None = None
     max_runtime_protocol_version: str | None = None
     debug_policy: AppDebugPolicy = field(default_factory=AppDebugPolicy)
+    display_native_width: int | None = None
+    display_native_height: int | None = None
+    display_bar_color_rgba: tuple[int, int, int, int] = (0, 0, 0, 255)
 
 
 @dataclass(frozen=True)
@@ -119,7 +136,11 @@ class AppContext:
     granted_capabilities: set[str]
     security_audit_logger: Callable[[dict[str, object]], None] | None = None
     sensor_read_min_interval_s: float = 0.2
+    logical_width_px: float | None = None
+    logical_height_px: float | None = None
     coordinate_frames: CoordinateFrameRegistry | None = None
+    scene_buffer: SceneGraphBuffer | None = None
+    runtime_telemetry_provider: Callable[[], dict[str, object]] | None = None
     _last_sensor_read_ns: dict[str, int] = field(default_factory=dict)
     _ui_renderer: AppUIRenderer | None = field(default=None, init=False, repr=False)
     _ui_display: DisplayableArea | None = field(default=None, init=False, repr=False)
@@ -128,10 +149,28 @@ class AppContext:
     _ui_scroll_shift: tuple[int, int] | None = field(default=None, init=False, repr=False)
     _ui_clear_color: tuple[int, int, int, int] = field(default=(0, 0, 0, 255), init=False, repr=False)
     _last_ui_copy_telemetry: dict[str, int] = field(default_factory=dict, init=False, repr=False)
+    _scene_nodes: list[SceneNode] | None = field(default=None, init=False, repr=False)
+    _scene_started_ns: int = field(default=0, init=False, repr=False)
+    _scene_quality_tier: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
+        if self.logical_width_px is None:
+            self.logical_width_px = float(self.matrix.width)
+        if self.logical_height_px is None:
+            self.logical_height_px = float(self.matrix.height)
         if self.coordinate_frames is None:
-            self.coordinate_frames = CoordinateFrameRegistry(width=self.matrix.width, height=self.matrix.height)
+            self.coordinate_frames = CoordinateFrameRegistry(
+                width=int(round(float(self.logical_width_px))),
+                height=int(round(float(self.logical_height_px))),
+            )
+
+    @property
+    def display_width_px(self) -> float:
+        return float(self.logical_width_px if self.logical_width_px is not None else self.matrix.width)
+
+    @property
+    def display_height_px(self) -> float:
+        return float(self.logical_height_px if self.logical_height_px is not None else self.matrix.height)
 
     def submit_write_batch(self, batch: WriteBatch) -> CallBlitEvent:
         self._require_capability("window.write")
@@ -194,6 +233,10 @@ class AppContext:
         return capability in self.granted_capabilities
 
     @property
+    def supports_scene_graph(self) -> bool:
+        return self.scene_buffer is not None
+
+    @property
     def default_coordinate_frame(self) -> str:
         assert self.coordinate_frames is not None
         return self.coordinate_frames.default_frame
@@ -230,10 +273,11 @@ class AppContext:
         dirty_rects: list[tuple[int, int, int, int]] | None = None,
         scroll_shift: tuple[int, int] | None = None,
     ) -> None:
+        from luvatrix_ui.component_schema import DisplayableArea  # lazy: avoids import cycle
         if self._ui_renderer is not None:
             raise RuntimeError("ui frame is already active")
-        width = float(self.matrix.width if content_width_px is None else content_width_px)
-        height = float(self.matrix.height if content_height_px is None else content_height_px)
+        width = float(self.display_width_px if content_width_px is None else content_width_px)
+        height = float(self.display_height_px if content_height_px is None else content_height_px)
         self._ui_display = DisplayableArea(
             content_width_px=width,
             content_height_px=height,
@@ -242,8 +286,29 @@ class AppContext:
         )
         self._ui_renderer = renderer
         self._ui_components = []
-        self._ui_dirty_rects = _normalize_dirty_rects(dirty_rects, self.matrix.width, self.matrix.height)
-        self._ui_scroll_shift = _normalize_scroll_shift(scroll_shift)
+        scale_x = float(self.matrix.width) / max(1.0, width)
+        scale_y = float(self.matrix.height) / max(1.0, height)
+        if dirty_rects is None:
+            scaled_dirty_rects = None
+        else:
+            scaled_dirty_rects = [
+                (
+                    int(round(float(x) * scale_x)),
+                    int(round(float(y) * scale_y)),
+                    max(1, int(round(float(w) * scale_x))),
+                    max(1, int(round(float(h) * scale_y))),
+                )
+                for (x, y, w, h) in dirty_rects
+            ]
+        self._ui_dirty_rects = _normalize_dirty_rects(scaled_dirty_rects, self.matrix.width, self.matrix.height)
+        if scroll_shift is None:
+            scaled_scroll_shift = None
+        else:
+            scaled_scroll_shift = (
+                int(round(float(scroll_shift[0]) * scale_x)),
+                int(round(float(scroll_shift[1]) * scale_y)),
+            )
+        self._ui_scroll_shift = _normalize_scroll_shift(scaled_scroll_shift)
         self._ui_clear_color = (
             int(clear_color[0]),
             int(clear_color[1]),
@@ -258,6 +323,11 @@ class AppContext:
         self._ui_components.append(component)
 
     def finalize_ui_frame(self) -> CallBlitEvent:
+        from luvatrix_ui.text.component import TextComponent  # lazy: avoids import cycle
+        from luvatrix_ui.text.renderer import TextRenderBatch
+        from luvatrix_ui.controls.svg_component import SVGComponent
+        from luvatrix_ui.controls.svg_renderer import SVGRenderBatch
+        from luvatrix_ui.controls.stained_glass_button import StainedGlassButtonComponent, StainedGlassButtonRenderBatch
         if self._ui_renderer is None or self._ui_display is None:
             raise RuntimeError("ui frame is not active; call begin_ui_frame first")
         begin_copy_telemetry_frame()
@@ -286,7 +356,7 @@ class AppContext:
             frame = renderer.end_frame()
             if self._ui_dirty_rects:
                 if self._ui_scroll_shift is not None and (self._ui_scroll_shift[0] != 0 or self._ui_scroll_shift[1] != 0):
-                    fill = torch.tensor(self._ui_clear_color, dtype=torch.uint8)
+                    fill = accel.from_sequence(list(self._ui_clear_color), (4,))
                     ops = [
                         ShiftFrame(dx=int(self._ui_scroll_shift[0]), dy=int(self._ui_scroll_shift[1]), fill_rgba_4=fill)
                     ]
@@ -296,9 +366,9 @@ class AppContext:
                 patch_bytes = 0
                 for (x, y, w, h) in self._ui_dirty_rects:
                     started = time.perf_counter_ns()
-                    patch = frame[y : y + h, x : x + w, :].clone()
+                    patch = accel.clone(frame[y : y + h, x : x + w, :])
                     ui_pack_ns += time.perf_counter_ns() - started
-                    patch_bytes += int(patch.numel())
+                    patch_bytes += accel.numel(patch)
                     ops.append(
                         ReplaceRect(
                             x=x,
@@ -314,8 +384,8 @@ class AppContext:
                     ui_pack_ns=ui_pack_ns,
                 )
                 return self.submit_write_batch(WriteBatch(ops))
-            add_copy_telemetry(copy_count=1, copy_bytes=int(frame.numel()))
-            return self.submit_write_batch(WriteBatch([FullRewrite(frame)]))
+            add_copy_telemetry(copy_count=1, copy_bytes=accel.numel(frame))
+            return self.submit_write_batch(WriteBatch([FullRewrite(frame, take_ownership=True)]))
         finally:
             self._last_ui_copy_telemetry = snapshot_copy_telemetry()
             self._ui_renderer = None
@@ -328,6 +398,141 @@ class AppContext:
         payload = dict(self._last_ui_copy_telemetry)
         self._last_ui_copy_telemetry = {}
         return payload
+
+    def runtime_telemetry(self) -> dict[str, object]:
+        if self.runtime_telemetry_provider is None:
+            return {}
+        payload = self.runtime_telemetry_provider()
+        return payload if isinstance(payload, dict) else {}
+
+    def begin_scene_frame(self, *, adaptive_quality_tier: int = 0) -> None:
+        self._require_capability("window.write")
+        if self.scene_buffer is None:
+            raise RuntimeError("scene graph rendering is not enabled for this runtime")
+        if self._scene_nodes is not None:
+            raise RuntimeError("scene frame is already active")
+        self._scene_nodes = []
+        self._scene_started_ns = time.perf_counter_ns()
+        self._scene_quality_tier = int(adaptive_quality_tier)
+
+    def add_scene_node(self, node: SceneNode) -> None:
+        if self._scene_nodes is None:
+            raise RuntimeError("scene frame is not active; call begin_scene_frame first")
+        self._scene_nodes.append(node)
+
+    def clear_scene(self, color_rgba: tuple[int, int, int, int]) -> None:
+        self.add_scene_node(ClearNode(color_rgba=color_rgba))
+
+    def draw_shader_rect(
+        self,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        shader: ShaderKind = "solid",
+        color_rgba: tuple[int, int, int, int] = (0, 0, 0, 255),
+        uniforms: tuple[float, ...] = (),
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            ShaderRectNode(
+                x=x,
+                y=y,
+                width=width,
+                height=height,
+                shader=shader,
+                color_rgba=color_rgba,
+                uniforms=uniforms,
+                z_index=z_index,
+            )
+        )
+
+    def draw_rect(
+        self,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        color_rgba: tuple[int, int, int, int],
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(RectNode(x=x, y=y, width=width, height=height, color_rgba=color_rgba, z_index=z_index))
+
+    def draw_circle(
+        self,
+        *,
+        cx: float,
+        cy: float,
+        radius: float,
+        fill_rgba: tuple[int, int, int, int],
+        stroke_rgba: tuple[int, int, int, int] = (0, 0, 0, 0),
+        stroke_width: float = 0.0,
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            CircleNode(
+                cx=cx,
+                cy=cy,
+                radius=radius,
+                fill_rgba=fill_rgba,
+                stroke_rgba=stroke_rgba,
+                stroke_width=stroke_width,
+                z_index=z_index,
+            )
+        )
+
+    def draw_text(
+        self,
+        text: str,
+        *,
+        x: float,
+        y: float,
+        font_family: str = "Comic Mono",
+        font_size_px: float = 14.0,
+        color_rgba: tuple[int, int, int, int] = (255, 255, 255, 255),
+        max_width_px: float | None = None,
+        z_index: int = 0,
+        cache_key: str | None = None,
+    ) -> None:
+        self.add_scene_node(
+            TextNode(
+                text=text,
+                x=x,
+                y=y,
+                font_family=font_family,
+                font_size_px=font_size_px,
+                color_rgba=color_rgba,
+                max_width_px=max_width_px,
+                z_index=z_index,
+                cache_key=cache_key,
+            )
+        )
+
+    def finalize_scene_frame(self) -> SceneBlitEvent:
+        if self.scene_buffer is None:
+            raise RuntimeError("scene graph rendering is not enabled for this runtime")
+        if self._scene_nodes is None:
+            raise RuntimeError("scene frame is not active; call begin_scene_frame first")
+        scene_encode_ms = (time.perf_counter_ns() - self._scene_started_ns) / 1_000_000.0
+        try:
+            frame = SceneFrame(
+                revision=0,
+                logical_width=max(1, int(round(self.display_width_px))),
+                logical_height=max(1, int(round(self.display_height_px))),
+                display_width=int(self.matrix.width),
+                display_height=int(self.matrix.height),
+                ts_ns=time.time_ns(),
+                nodes=tuple(self._scene_nodes),
+                telemetry=SceneTelemetry(scene_encode_ms=scene_encode_ms),
+                adaptive_quality_tier=int(self._scene_quality_tier),
+            )
+            return self.scene_buffer.submit(frame)
+        finally:
+            self._scene_nodes = None
+            self._scene_started_ns = 0
+            self._scene_quality_tier = 0
 
     def _require_capability(self, capability: str) -> None:
         if capability not in self.granted_capabilities:
@@ -395,6 +600,28 @@ class AppContext:
                 payload["delta_y"] = tdy
             except (TypeError, ValueError):
                 return event
+        if "centroid_x" in payload and "centroid_y" in payload:
+            try:
+                x = float(payload["centroid_x"])
+                y = float(payload["centroid_y"])
+                tx, ty = self.coordinate_frames.from_render_coords((x, y), frame=frame)
+                payload["centroid_x"] = tx
+                payload["centroid_y"] = ty
+            except (TypeError, ValueError):
+                return event
+        if "translation_x" in payload and "translation_y" in payload:
+            try:
+                dx = float(payload["translation_x"])
+                dy = float(payload["translation_y"])
+                tdx, tdy = self.coordinate_frames.transform_vector(
+                    (dx, dy),
+                    from_frame="screen_tl",
+                    to_frame=frame,
+                )
+                payload["translation_x"] = tdx
+                payload["translation_y"] = tdy
+            except (TypeError, ValueError):
+                return event
         return HDIEvent(
             event_id=event.event_id,
             ts_ns=event.ts_ns,
@@ -404,6 +631,27 @@ class AppContext:
             status=event.status,
             payload=payload,
         )
+
+
+def read_app_display_config(
+    app_dir: str | Path,
+) -> tuple[int | None, int | None, tuple[int, int, int, int]]:
+    """Return (native_width, native_height, bar_color_rgba) from app.toml [display] section.
+
+    Called before the runtime starts so callers can size the WindowMatrix and presenters
+    before constructing UnifiedRuntime.  Returns (None, None, (0,0,0,255)) when the
+    [display] section is absent or the file does not exist.
+    """
+    toml_path = Path(app_dir) / "app.toml"
+    if not toml_path.exists():
+        return None, None, (0, 0, 0, 255)
+    with toml_path.open("rb") as f:
+        raw = tomllib.load(f)
+    d = raw.get("display", {})
+    w = int(d["native_width"]) if "native_width" in d else None
+    h = int(d["native_height"]) if "native_height" in d else None
+    bar = d.get("bar_color_rgba", [0, 0, 0, 255])
+    return w, h, (int(bar[0]), int(bar[1]), int(bar[2]), int(bar[3]))
 
 
 class AppRuntime:
@@ -416,10 +664,16 @@ class AppRuntime:
         capability_audit_logger: Callable[[dict[str, object]], None] | None = None,
         host_os: str | None = None,
         host_arch: str | None = None,
+        logical_width_px: float | None = None,
+        logical_height_px: float | None = None,
+        scene_buffer: SceneGraphBuffer | None = None,
     ) -> None:
         self._matrix = matrix
         self._hdi = hdi
         self._sensor_manager = sensor_manager
+        self._logical_width_px = float(logical_width_px) if logical_width_px is not None else float(matrix.width)
+        self._logical_height_px = float(logical_height_px) if logical_height_px is not None else float(matrix.height)
+        self._scene_buffer = scene_buffer
         self._capability_decider = capability_decider or (lambda capability: True)
         self._capability_audit_logger = capability_audit_logger
         self._host_os = _normalize_os_name(host_os or platform.system())
@@ -456,6 +710,11 @@ class AppRuntime:
         runtime_raw = raw.get("runtime", {})
         runtime_kind, runtime_transport, process_command = _coerce_runtime_config(runtime_raw)
         debug_policy = _coerce_debug_policy(raw.get("debug_policy", None))
+        display_raw = raw.get("display", {})
+        display_native_width = int(display_raw["native_width"]) if "native_width" in display_raw else None
+        display_native_height = int(display_raw["native_height"]) if "native_height" in display_raw else None
+        bar_raw = display_raw.get("bar_color_rgba", [0, 0, 0, 255])
+        display_bar_color_rgba = (int(bar_raw[0]), int(bar_raw[1]), int(bar_raw[2]), int(bar_raw[3]))
         manifest = AppManifest(
             app_id=app_id,
             protocol_version=protocol_version,
@@ -470,6 +729,9 @@ class AppRuntime:
             min_runtime_protocol_version=min_runtime_protocol_version,
             max_runtime_protocol_version=max_runtime_protocol_version,
             debug_policy=debug_policy,
+            display_native_width=display_native_width,
+            display_native_height=display_native_height,
+            display_bar_color_rgba=display_bar_color_rgba,
         )
         self._validate_manifest(manifest)
         return manifest
@@ -556,7 +818,13 @@ class AppRuntime:
             sensor_manager=self._sensor_manager,
             granted_capabilities=granted_capabilities,
             security_audit_logger=self._capability_audit_logger,
-            coordinate_frames=CoordinateFrameRegistry(width=self._matrix.width, height=self._matrix.height),
+            logical_width_px=self._logical_width_px,
+            logical_height_px=self._logical_height_px,
+            scene_buffer=self._scene_buffer,
+            coordinate_frames=CoordinateFrameRegistry(
+                width=int(round(self._logical_width_px)),
+                height=int(round(self._logical_height_px)),
+            ),
         )
 
     def resolve_debug_policy_profile(self, manifest: AppManifest) -> dict[str, object]:

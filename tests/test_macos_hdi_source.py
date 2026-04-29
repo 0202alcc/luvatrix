@@ -55,6 +55,8 @@ class MacOSHDISourceTests(unittest.TestCase):
         source._queued_events = deque()
         source._monitor = None
         source._last_mouse_buttons_mask = 0
+        source._iohid = None  # exercise NSEvent fallback path
+        source._last_window_active_local = True
         prev = sys.modules.get("AppKit")
         sys.modules["AppKit"] = fake_appkit
         try:
@@ -116,6 +118,8 @@ class MacOSHDISourceTests(unittest.TestCase):
         source._queued_events = deque()
         source._monitor = None
         source._last_mouse_buttons_mask = 0
+        source._iohid = None  # exercise NSEvent fallback path
+        source._last_window_active_local = True
         prev = sys.modules.get("AppKit")
         sys.modules["AppKit"] = fake_appkit
         try:
@@ -138,6 +142,136 @@ class MacOSHDISourceTests(unittest.TestCase):
         fake_nsevent = types.SimpleNamespace(pressedMouseButtons=lambda: 3)
         self.assertEqual(_read_pressed_mouse_buttons_mask(NSEvent=fake_nsevent), 3)
 
+    def test_poll_uses_iohid_screen_position(self) -> None:
+        """When _iohid is set, poll() emits pointer_move using IOKit screen coords."""
+
+        class _Bounds:
+            class size:
+                height = 100.0
+
+        class _View:
+            def bounds(self):
+                return _Bounds()
+
+        class _Frame:
+            class origin:
+                x = 50.0
+                y = 20.0
+
+        class _Window:
+            def contentView(self):
+                return _View()
+
+            def frame(self):
+                return _Frame()
+
+        class _FakeIOHID:
+            def drain_events(self):
+                return []
+
+            def current_screen_xy(self):
+                # Screen x=150, y=70 in NSEvent bottom-left coords.
+                return (150.0, 70.0)
+
+            def current_buttons_mask(self):
+                return 0
+
+        source = object.__new__(MacOSWindowHDISource)
+        source._window_handle = types.SimpleNamespace(window=_Window())
+        source._next_id = 1
+        source._queued_events = deque()
+        source._monitor = None
+        source._last_mouse_buttons_mask = 0
+        source._iohid = _FakeIOHID()
+        source._last_window_active_local = True
+
+        events = source.poll(window_active=True, ts_ns=99)
+
+        move = next(e for e in events if e.event_type == "pointer_move")
+        payload = move.payload or {}
+        # window-local x: 150 - 50 = 100
+        self.assertAlmostEqual(float(payload["x"]), 100.0)
+        # window-local y (top-left): _to_top_left_y(70 - 20, 100) = _to_top_left_y(50, 100) = 49
+        self.assertAlmostEqual(float(payload["y"]), 49.0)
+
+    def test_poll_iohid_flushes_on_activation(self) -> None:
+        """Events accumulated while inactive are discarded on window re-activation."""
+        from luvatrix_core.core.hdi_thread import HDIEvent
+
+        class _Bounds:
+            class size:
+                height = 100.0
+
+        class _View:
+            def bounds(self):
+                return _Bounds()
+
+        class _Frame:
+            class origin:
+                x = 0.0
+                y = 0.0
+
+        class _Window:
+            def contentView(self):
+                return _View()
+
+            def frame(self):
+                return _Frame()
+
+        stale_event = HDIEvent(
+            event_id=0, ts_ns=1, window_id="", device="keyboard",
+            event_type="key_down", status="OK", payload={"key": "a", "code": 0},
+        )
+
+        drained = []
+
+        class _FakeIOHID:
+            def __init__(self):
+                self._pending = [stale_event]
+
+            def drain_events(self):
+                out = list(self._pending)
+                drained.extend(out)
+                self._pending.clear()
+                return out
+
+            def calibrate_position(self, x, y):
+                pass
+
+            def current_screen_xy(self):
+                return (0.0, 0.0)
+
+            def current_buttons_mask(self):
+                return 0
+
+        fake_appkit = types.SimpleNamespace(
+            NSEvent=types.SimpleNamespace(mouseLocation=lambda: types.SimpleNamespace(x=0.0, y=0.0))
+        )
+
+        source = object.__new__(MacOSWindowHDISource)
+        source._window_handle = types.SimpleNamespace(window=_Window())
+        source._next_id = 1
+        source._queued_events = deque()
+        source._monitor = None
+        source._last_mouse_buttons_mask = 0
+        source._iohid = _FakeIOHID()
+        source._last_window_active_local = False  # was inactive
+
+        prev = sys.modules.get("AppKit")
+        sys.modules["AppKit"] = fake_appkit
+        try:
+            events = source.poll(window_active=True, ts_ns=1)
+        finally:
+            if prev is None:
+                sys.modules.pop("AppKit", None)
+            else:
+                sys.modules["AppKit"] = prev
+
+        # The stale keyboard event was drained-and-discarded on activation,
+        # so it must not appear in the returned events.
+        keyboard_events = [e for e in events if e.device == "keyboard"]
+        self.assertEqual(keyboard_events, [])
+        self.assertEqual(len(drained), 1)  # drain WAS called (to discard)
 
 
 if __name__ == "__main__":

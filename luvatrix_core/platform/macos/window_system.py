@@ -100,6 +100,7 @@ class AppKitWindowSystem:
         title: str,
         use_metal_layer: bool = True,
         preserve_aspect_ratio: bool = False,
+        resizable: bool = True,
         menu_config: MacOSMenuConfig | None = None,
     ) -> MacOSWindowHandle:
         ns = self._imports()
@@ -108,9 +109,10 @@ class AppKitWindowSystem:
         style = (
             ns["NSWindowStyleMaskTitled"]
             | ns["NSWindowStyleMaskClosable"]
-            | ns["NSWindowStyleMaskResizable"]
             | ns["NSWindowStyleMaskMiniaturizable"]
         )
+        if resizable:
+            style |= ns["NSWindowStyleMaskResizable"]
         frame = ns["NSMakeRect"](0.0, 0.0, float(width), float(height))
         window = ns["NSWindow"].alloc().initWithContentRect_styleMask_backing_defer_(
             frame, style, ns["NSBackingStoreBuffered"], False

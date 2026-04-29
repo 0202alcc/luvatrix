@@ -7,25 +7,47 @@ import hashlib
 import math
 import os
 from pathlib import Path
+import sys
 from typing import Any
 
-import numpy as np
-import torch
-import torch.nn.functional as F
+try:
+    import torch
+    import torch.nn.functional as F
+    _HAS_TORCH = True
+except ImportError:
+    torch = None  # type: ignore[assignment]
+    F = None  # type: ignore[assignment]
+    _HAS_TORCH = False
 
-from PIL import Image, ImageDraw, ImageFont
+from luvatrix_core import accel
+
+np = getattr(accel, "_np", None)
+if np is None and _HAS_TORCH:
+    try:
+        import numpy as np  # type: ignore[no-redef]
+    except ImportError:
+        np = None
+_HAS_NUMPY = np is not None
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    _HAS_PIL = True
+except ImportError:
+    Image = None  # type: ignore[assignment]
+    ImageDraw = None  # type: ignore[assignment]
+    ImageFont = None  # type: ignore[assignment]
+    _HAS_PIL = False
 
 from luvatrix_ui.component_schema import DisplayableArea
 from luvatrix_ui.controls.stained_glass_button import StainedGlassButtonRenderBatch, StainedGlassButtonRenderCommand
 from luvatrix_ui.controls.svg_renderer import SVGRenderBatch, SVGRenderCommand
-from luvatrix_ui.text.renderer import FontSpec, TextLayoutMetrics, TextMeasureRequest, TextRenderBatch, TextRenderCommand
+from luvatrix_ui.text.renderer import FontSpec, TextAppearance, TextLayoutMetrics, TextMeasureRequest, TextRenderBatch, TextRenderCommand
 
 from luvatrix_core.render.svg import SvgDocument
 
-
 @dataclass(frozen=True)
 class _GlyphBitmap:
-    alpha_mask: np.ndarray
+    alpha_mask: object
     x_offset: int
     y_offset: int
     advance: float
@@ -34,7 +56,7 @@ class _GlyphBitmap:
 @dataclass
 class _FontAtlas:
     key: tuple[str, int]
-    font: ImageFont.FreeTypeFont | ImageFont.ImageFont
+    font: object
     size_px: float
     ascent: float
     descent: float
@@ -50,6 +72,11 @@ class MatrixUIFrameRenderer:
     _frame: torch.Tensor | None = None
     _grid_x: torch.Tensor | None = None
     _grid_y: torch.Tensor | None = None
+    _frame_buffer: object | None = None
+    _frame_buffer_shape: tuple[int, int, int] | None = None
+    _grid_shape: tuple[int, int] | None = None
+    _scale_x: float = 1.0
+    _scale_y: float = 1.0
     _svg_cache: dict[str, SvgDocument] = field(default_factory=dict)
     _font_atlas_cache: dict[tuple[str, int], _FontAtlas] = field(default_factory=dict)
     _bitmap_cache_enabled_default: bool = field(default_factory=lambda: _env_flag("LUVATRIX_SCROLL_BITMAP_CACHE_ENABLED", False))
@@ -66,6 +93,7 @@ class MatrixUIFrameRenderer:
     _bitmap_cache_misses: int = 0
     _stained_glass_cache_hits: int = 0
     _stained_glass_cache_misses: int = 0
+    _last_font_source: str = "uninitialized"
 
     def begin_frame(self, display: DisplayableArea, clear_color: tuple[int, int, int, int]) -> None:
         self._display = display
@@ -73,13 +101,29 @@ class MatrixUIFrameRenderer:
         height = int(round(display.viewport_height_px or display.content_height_px))
         if width <= 0 or height <= 0:
             raise ValueError("frame dimensions must be > 0")
-        self._frame = torch.zeros((height, width, 4), dtype=torch.uint8)
+        self._scale_x = float(width) / max(1.0, float(display.content_width_px))
+        self._scale_y = float(height) / max(1.0, float(display.content_height_px))
+        frame_shape = (height, width, 4)
+        if self._frame_buffer is None or self._frame_buffer_shape != frame_shape:
+            self._frame_buffer = accel.zeros(frame_shape)
+            self._frame_buffer_shape = frame_shape
+        self._frame = self._frame_buffer
         self._frame[:, :, 0] = clear_color[0]
         self._frame[:, :, 1] = clear_color[1]
         self._frame[:, :, 2] = clear_color[2]
         self._frame[:, :, 3] = clear_color[3]
-        self._grid_x = torch.arange(width, dtype=torch.float32).unsqueeze(0).expand(height, width)
-        self._grid_y = torch.arange(height, dtype=torch.float32).unsqueeze(1).expand(height, width)
+        grid_shape = (height, width)
+        if self._grid_shape != grid_shape:
+            if _HAS_TORCH:
+                self._grid_x = torch.arange(width, dtype=torch.float32).unsqueeze(0).expand(height, width)
+                self._grid_y = torch.arange(height, dtype=torch.float32).unsqueeze(1).expand(height, width)
+            elif _HAS_NUMPY:
+                self._grid_x = np.broadcast_to(np.arange(width, dtype=np.float32).reshape(1, width), (height, width))
+                self._grid_y = np.broadcast_to(np.arange(height, dtype=np.float32).reshape(height, 1), (height, width))
+            else:
+                self._grid_x = None
+                self._grid_y = None
+            self._grid_shape = grid_shape
         self._bitmap_cache_hits = 0
         self._bitmap_cache_misses = 0
         self._stained_glass_cache_hits = 0
@@ -101,6 +145,15 @@ class MatrixUIFrameRenderer:
             "hits": int(self._stained_glass_cache_hits),
             "misses": int(self._stained_glass_cache_misses),
             "entry_count": int(len(self._stained_glass_backdrop_cache)),
+        }
+
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "torch": bool(_HAS_TORCH),
+            "numpy": bool(_HAS_NUMPY),
+            "pil": bool(_HAS_PIL),
+            "accel": accel.BACKEND,
+            "font_source": self._last_font_source,
         }
 
     def prepare_font(self, font: FontSpec, *, size_px: float, charset: str) -> None:
@@ -129,6 +182,7 @@ class MatrixUIFrameRenderer:
         if self._frame is None:
             raise RuntimeError("begin_frame must be called before draw_text_batch")
         for command in batch.commands:
+            command = self._scale_text_command(command)
             if self._bitmap_cache_enabled() and self._command_is_pixel_aligned(command.x, command.y):
                 key = self._text_bitmap_key(command)
                 cached = self._text_bitmap_cache.get(key)
@@ -166,8 +220,11 @@ class MatrixUIFrameRenderer:
 
     def draw_svg_batch(self, batch: SVGRenderBatch) -> None:
         if self._frame is None or self._grid_x is None or self._grid_y is None:
-            raise RuntimeError("begin_frame must be called before draw_svg_batch")
+            if self._frame is None:
+                raise RuntimeError("begin_frame must be called before draw_svg_batch")
+            return
         for command in batch.commands:
+            command = self._scale_svg_command(command)
             if (
                 self._bitmap_cache_enabled()
                 and self._command_is_pixel_aligned(command.x, command.y)
@@ -193,17 +250,99 @@ class MatrixUIFrameRenderer:
         if self._frame is None:
             raise RuntimeError("begin_frame must be called before draw_stained_glass_button_batch")
         for command in batch.commands:
-            self._render_stained_glass_button(command)
+            self._render_stained_glass_button(self._scale_stained_glass_button_command(command))
 
     def end_frame(self) -> torch.Tensor:
         if self._frame is None:
             raise RuntimeError("begin_frame must be called before end_frame")
-        out = self._frame.clone()
+        out = accel.clone(self._frame)
         self._display = None
         self._frame = None
-        self._grid_x = None
-        self._grid_y = None
+        self._scale_x = 1.0
+        self._scale_y = 1.0
         return out
+
+    def _scale_text_command(self, command: TextRenderCommand) -> TextRenderCommand:
+        sx = float(self._scale_x)
+        sy = float(self._scale_y)
+        if abs(sx - 1.0) <= 1e-9 and abs(sy - 1.0) <= 1e-9:
+            return command
+        return TextRenderCommand(
+            component_id=command.component_id,
+            text=command.text,
+            x=float(command.x) * sx,
+            y=float(command.y) * sy,
+            frame=command.frame,
+            font=command.font,
+            font_size_px=float(command.font_size_px) * sy,
+            appearance=TextAppearance(
+                color_hex=command.appearance.color_hex,
+                opacity=command.appearance.opacity,
+                letter_spacing_px=float(command.appearance.letter_spacing_px) * sx,
+                line_height_multiplier=command.appearance.line_height_multiplier,
+                underline=command.appearance.underline,
+                strike=command.appearance.strike,
+            ),
+            max_width_px=(float(command.max_width_px) * sx if command.max_width_px is not None else None),
+        )
+
+    def _scale_svg_command(self, command: SVGRenderCommand) -> SVGRenderCommand:
+        sx = float(self._scale_x)
+        sy = float(self._scale_y)
+        if abs(sx - 1.0) <= 1e-9 and abs(sy - 1.0) <= 1e-9:
+            return command
+        return SVGRenderCommand(
+            component_id=command.component_id,
+            svg_markup=command.svg_markup,
+            x=float(command.x) * sx,
+            y=float(command.y) * sy,
+            width=float(command.width) * sx,
+            height=float(command.height) * sy,
+            frame=command.frame,
+            opacity=float(command.opacity),
+        )
+
+    def _scale_stained_glass_button_command(
+        self,
+        command: StainedGlassButtonRenderCommand,
+    ) -> StainedGlassButtonRenderCommand:
+        sx = float(self._scale_x)
+        sy = float(self._scale_y)
+        s = (sx + sy) * 0.5
+        if abs(sx - 1.0) <= 1e-9 and abs(sy - 1.0) <= 1e-9:
+            return command
+        return StainedGlassButtonRenderCommand(
+            component_id=command.component_id,
+            x=float(command.x) * sx,
+            y=float(command.y) * sy,
+            width=float(command.width) * sx,
+            height=float(command.height) * sy,
+            frame=command.frame,
+            opacity=command.opacity,
+            corner_radius_px=float(command.corner_radius_px) * s,
+            kernel_size=max(3, int(round(float(command.kernel_size) * s)) | 1),
+            sigma_px=float(command.sigma_px) * s,
+            convolution_strength=command.convolution_strength,
+            scatter_sigma_px=float(command.scatter_sigma_px) * s,
+            refract_px=float(command.refract_px) * s,
+            refract_calm_radius=command.refract_calm_radius,
+            refract_transition=command.refract_transition,
+            chromatic_aberration_px=float(command.chromatic_aberration_px) * s,
+            tint_delta_rgba=command.tint_delta_rgba,
+            color_filter_rgb=command.color_filter_rgb,
+            pane_mix=command.pane_mix,
+            edge_highlight_alpha=command.edge_highlight_alpha,
+            depth_highlight_alpha=command.depth_highlight_alpha,
+            depth_shadow_alpha=command.depth_shadow_alpha,
+            rim_darken_alpha=command.rim_darken_alpha,
+            label=command.label,
+            label_color_hex=command.label_color_hex,
+            label_font=command.label_font,
+            label_font_size_px=float(command.label_font_size_px) * sy,
+            backdrop_cache_enabled=command.backdrop_cache_enabled,
+            roi_inset_px=float(command.roi_inset_px) * s,
+            downsample_factor=command.downsample_factor,
+        )
 
     def _doc_for_markup(self, svg_markup: str) -> SvgDocument:
         key = hashlib.sha256(svg_markup.encode("utf-8")).hexdigest()
@@ -226,7 +365,7 @@ class MatrixUIFrameRenderer:
                 return False
         return True
 
-    def _bitmap_cacheable(self, bitmap: torch.Tensor) -> bool:
+    def _bitmap_cacheable(self, bitmap: object) -> bool:
         if bitmap.ndim != 3:
             return False
         h = int(bitmap.shape[0])
@@ -235,8 +374,8 @@ class MatrixUIFrameRenderer:
             return False
         return int(h * w) <= int(self._bitmap_cache_max_pixels)
 
-    def _cache_put(self, cache: OrderedDict[tuple[Any, ...], torch.Tensor], key: tuple[Any, ...], value: torch.Tensor) -> None:
-        cache[key] = value.clone()
+    def _cache_put(self, cache: OrderedDict[tuple[Any, ...], object], key: tuple[Any, ...], value: object) -> None:
+        cache[key] = accel.clone(value)
         cache.move_to_end(key)
         while len(cache) > int(self._bitmap_cache_max_entries):
             cache.popitem(last=False)
@@ -267,9 +406,15 @@ class MatrixUIFrameRenderer:
     def _rasterize_svg_bitmap(self, command: SVGRenderCommand) -> torch.Tensor:
         width = max(1, int(round(float(command.width))))
         height = max(1, int(round(float(command.height))))
-        frame = torch.zeros((height, width, 4), dtype=torch.uint8)
-        grid_x = torch.arange(width, dtype=torch.float32).unsqueeze(0).expand(height, width)
-        grid_y = torch.arange(height, dtype=torch.float32).unsqueeze(1).expand(height, width)
+        frame = accel.zeros((height, width, 4))
+        if _HAS_TORCH:
+            grid_x = torch.arange(width, dtype=torch.float32).unsqueeze(0).expand(height, width)
+            grid_y = torch.arange(height, dtype=torch.float32).unsqueeze(1).expand(height, width)
+        elif _HAS_NUMPY:
+            grid_x = np.broadcast_to(np.arange(width, dtype=np.float32).reshape(1, width), (height, width))
+            grid_y = np.broadcast_to(np.arange(height, dtype=np.float32).reshape(height, 1), (height, width))
+        else:
+            return frame
         saved_frame = self._frame
         saved_grid_x = self._grid_x
         saved_grid_y = self._grid_y
@@ -307,7 +452,7 @@ class MatrixUIFrameRenderer:
         line_h = max(atlas.line_height, command.font_size_px * command.appearance.line_height_multiplier)
         width = max(1, int(math.ceil(max(widths) if widths else 1.0)))
         height = max(1, int(math.ceil(max(command.font_size_px, float(len(lines)) * line_h))))
-        frame = torch.zeros((height, width, 4), dtype=torch.uint8)
+        frame = accel.zeros((height, width, 4))
         saved_frame = self._frame
         self._frame = frame
         try:
@@ -326,7 +471,7 @@ class MatrixUIFrameRenderer:
             self._frame = saved_frame
 
     def _blend_bitmap(self, bitmap: torch.Tensor, *, x: int, y: int) -> None:
-        if self._frame is None:
+        if self._frame is None or not _HAS_NUMPY:
             return
         h = int(bitmap.shape[0])
         w = int(bitmap.shape[1])
@@ -342,17 +487,20 @@ class MatrixUIFrameRenderer:
         sy0 = y0 - int(y)
         sx1 = sx0 + (x1 - x0)
         sy1 = sy0 + (y1 - y0)
-        src = bitmap[sy0:sy1, sx0:sx1].to(torch.float32)
-        dst = self._frame[y0:y1, x0:x1].to(torch.float32)
-        src_alpha = (src[:, :, 3:4] / 255.0).clamp(0.0, 1.0)
-        dst_alpha = (dst[:, :, 3:4] / 255.0).clamp(0.0, 1.0)
+        src = _as_float32_array(bitmap[sy0:sy1, sx0:sx1])
+        dst = _as_float32_array(self._frame[y0:y1, x0:x1])
+        src_alpha = np.clip(src[:, :, 3:4] / 255.0, 0.0, 1.0)
+        dst_alpha = np.clip(dst[:, :, 3:4] / 255.0, 0.0, 1.0)
         out_alpha = src_alpha + dst_alpha * (1.0 - src_alpha)
         out_rgb = src[:, :, 0:3] * src_alpha + dst[:, :, 0:3] * (1.0 - src_alpha)
-        self._frame[y0:y1, x0:x1, 0:3] = torch.clamp(out_rgb, 0, 255).to(torch.uint8)
-        self._frame[y0:y1, x0:x1, 3:4] = torch.clamp(out_alpha * 255.0, 0, 255).to(torch.uint8)
+        self._frame[y0:y1, x0:x1, 0:3] = _from_uint8_array(np.clip(out_rgb, 0, 255).astype(np.uint8))
+        self._frame[y0:y1, x0:x1, 3:4] = _from_uint8_array(np.clip(out_alpha * 255.0, 0, 255).astype(np.uint8))
 
     def _render_stained_glass_button(self, command: StainedGlassButtonRenderCommand) -> None:
         if self._frame is None:
+            return
+        if not _HAS_TORCH:
+            self._render_button_placeholder(command)
             return
         x = int(round(float(command.x)))
         y = int(round(float(command.y)))
@@ -737,6 +885,24 @@ class MatrixUIFrameRenderer:
                 font_weight=int(font.weight),
             )
 
+    def _render_button_placeholder(self, command: StainedGlassButtonRenderCommand) -> None:
+        x = int(round(float(command.x)))
+        y = int(round(float(command.y)))
+        w = max(1, int(round(float(command.width))))
+        h = max(1, int(round(float(command.height))))
+        self._blend_rect(x, y, w, h, _parse_rgba_u8("#334155", 0.72))
+        self._blend_rect(x, y, w, 1, _parse_rgba_u8("#e2e8f0", 0.45))
+        self._draw_button_label(
+            text=str(command.label),
+            x=float(x),
+            y=float(y),
+            w=float(w),
+            h=float(h),
+            color_hex=command.label_color_hex,
+            font=command.label_font,
+            font_size_px=float(command.label_font_size_px),
+        )
+
     def _ensure_atlas(self, font: FontSpec, size_px: float) -> _FontAtlas:
         if size_px <= 0:
             raise ValueError("font size must be > 0")
@@ -746,6 +912,7 @@ class MatrixUIFrameRenderer:
         if cached is not None:
             return cached
         loaded_font = _load_font(font_path, size_px)
+        self._last_font_source = _font_source_label(loaded_font, font_path)
         ascent, descent = _font_metrics(loaded_font, size_px)
         line_h = max(size_px, float(ascent + descent))
         atlas = _FontAtlas(
@@ -893,7 +1060,7 @@ class MatrixUIFrameRenderer:
                 self._blend_mask(mask, x=x0, y=y0, color=_apply_opacity_u8(circle.stroke, command.opacity))
 
     def _blend_rect(self, x: int, y: int, w: int, h: int, color: tuple[int, int, int, int]) -> None:
-        if self._frame is None or w <= 0 or h <= 0:
+        if self._frame is None or w <= 0 or h <= 0 or not _HAS_NUMPY:
             return
         x0 = max(0, x)
         y0 = max(0, y)
@@ -904,14 +1071,14 @@ class MatrixUIFrameRenderer:
         alpha = color[3] / 255.0
         if alpha <= 0:
             return
-        dst = self._frame[y0:y1, x0:x1, :3].to(torch.float32)
-        src = torch.tensor(color[:3], dtype=torch.float32).view(1, 1, 3)
-        out = torch.clamp(src * alpha + dst * (1.0 - alpha), 0, 255).to(torch.uint8)
-        self._frame[y0:y1, x0:x1, :3] = out
+        dst = _as_float32_array(self._frame[y0:y1, x0:x1, :3])
+        src = np.asarray(color[:3], dtype=np.float32).reshape(1, 1, 3)
+        out = np.clip(src * alpha + dst * (1.0 - alpha), 0, 255).astype(np.uint8)
+        self._frame[y0:y1, x0:x1, :3] = _from_uint8_array(out)
         self._frame[y0:y1, x0:x1, 3] = 255
 
-    def _blend_mask(self, mask: torch.Tensor, *, x: int, y: int, color: tuple[int, int, int, int]) -> None:
-        if self._frame is None:
+    def _blend_mask(self, mask: object, *, x: int, y: int, color: tuple[int, int, int, int]) -> None:
+        if self._frame is None or not _HAS_NUMPY:
             return
         h, w = mask.shape
         if h <= 0 or w <= 0:
@@ -927,22 +1094,24 @@ class MatrixUIFrameRenderer:
         sx1 = sx0 + (x1 - x0)
         sy1 = sy0 + (y1 - y0)
         patch_mask = mask[sy0:sy1, sx0:sx1]
-        if not bool(patch_mask.any()):
+        patch_mask_np = _as_bool_array(patch_mask)
+        if not bool(np.any(patch_mask_np)):
             return
         alpha = color[3] / 255.0
         if alpha <= 0:
             return
-        dst = self._frame[y0:y1, x0:x1, :3].to(torch.float32)
-        src = torch.tensor(color[:3], dtype=torch.float32).view(1, 1, 3)
-        blended = torch.clamp(src * alpha + dst * (1.0 - alpha), 0, 255).to(torch.uint8)
-        self._frame[y0:y1, x0:x1, :3] = torch.where(
-            patch_mask.unsqueeze(-1),
-            blended,
-            self._frame[y0:y1, x0:x1, :3],
-        )
+        dst = _as_float32_array(self._frame[y0:y1, x0:x1, :3])
+        src = np.asarray(color[:3], dtype=np.float32).reshape(1, 1, 3)
+        blended = np.clip(src * alpha + dst * (1.0 - alpha), 0, 255).astype(np.uint8)
+        current = _as_uint8_array(self._frame[y0:y1, x0:x1, :3])
+        out = np.where(patch_mask_np[:, :, None], blended, current)
+        self._frame[y0:y1, x0:x1, :3] = _from_uint8_array(out)
         self._frame[y0:y1, x0:x1, 3] = 255
 
-    def _blend_alpha_mask(self, mask: np.ndarray, *, x: int, y: int, color: tuple[int, int, int, int]) -> None:
+    def _blend_alpha_mask(self, mask: object, *, x: int, y: int, color: tuple[int, int, int, int]) -> None:
+        if not _HAS_NUMPY:
+            self._blend_alpha_mask_pure(mask, x=x, y=y, color=color)
+            return
         if self._frame is None:
             return
         h, w = mask.shape
@@ -965,8 +1134,8 @@ class MatrixUIFrameRenderer:
             return
 
         patch = self._frame[y0:y1, x0:x1]
-        dst_rgb = patch[:, :, :3].to(torch.float32).cpu().numpy()
-        dst_alpha = patch[:, :, 3].to(torch.float32).cpu().numpy() / 255.0
+        dst_rgb = _as_float32_array(patch[:, :, :3])
+        dst_alpha = _as_float32_array(patch[:, :, 3]) / 255.0
         src_rgb = np.asarray(color[:3], dtype=np.float32).reshape(1, 1, 3)
 
         out_alpha = src_alpha + dst_alpha * (1.0 - src_alpha)
@@ -974,8 +1143,44 @@ class MatrixUIFrameRenderer:
         safe = np.where(out_alpha > 1e-6, out_alpha, 1.0)
         out_rgb = out_rgb_num / safe[:, :, None]
 
-        patch[:, :, :3] = torch.from_numpy(np.clip(out_rgb, 0, 255).astype(np.uint8))
-        patch[:, :, 3] = torch.from_numpy(np.clip(out_alpha * 255.0, 0, 255).astype(np.uint8))
+        patch[:, :, :3] = _from_uint8_array(np.clip(out_rgb, 0, 255).astype(np.uint8))
+        patch[:, :, 3] = _from_uint8_array(np.clip(out_alpha * 255.0, 0, 255).astype(np.uint8))
+
+    def _blend_alpha_mask_pure(self, mask: object, *, x: int, y: int, color: tuple[int, int, int, int]) -> None:
+        if self._frame is None or not hasattr(self._frame, "_data"):
+            return
+        mask_shape = getattr(mask, "shape", None)
+        if mask_shape is None or len(mask_shape) != 2:
+            return
+        h, w = int(mask_shape[0]), int(mask_shape[1])
+        frame_h, frame_w, frame_c = self._frame.shape
+        if frame_c != 4:
+            return
+        mask_data = getattr(mask, "_data", None)
+        if mask_data is None:
+            return
+        for my in range(h):
+            fy = int(y) + my
+            if fy < 0 or fy >= frame_h:
+                continue
+            for mx in range(w):
+                fx = int(x) + mx
+                if fx < 0 or fx >= frame_w:
+                    continue
+                coverage = int(mask_data[my * w + mx])
+                if coverage <= 0:
+                    continue
+                src_a = (coverage / 255.0) * (float(color[3]) / 255.0)
+                base = (fy * frame_w + fx) * 4
+                dst_a = self._frame._data[base + 3] / 255.0
+                out_a = src_a + dst_a * (1.0 - src_a)
+                safe = out_a if out_a > 1e-6 else 1.0
+                for ci in range(3):
+                    dst = float(self._frame._data[base + ci])
+                    src = float(color[ci])
+                    out = (src * src_a + dst * dst_a * (1.0 - src_a)) / safe
+                    self._frame._data[base + ci] = max(0, min(255, int(round(out))))
+                self._frame._data[base + 3] = max(0, min(255, int(round(out_a * 255.0))))
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -1009,6 +1214,8 @@ def _resolve_font_path(font: FontSpec) -> str:
 
 @lru_cache(maxsize=64)
 def _load_font(font_path: str, size_px: float) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    if not _HAS_PIL:
+        return _FallbackFont(size_px)
     size = max(1, int(round(size_px)))
     try:
         return ImageFont.truetype(font_path, size=size)
@@ -1016,7 +1223,20 @@ def _load_font(font_path: str, size_px: float) -> ImageFont.FreeTypeFont | Image
         return ImageFont.load_default()
 
 
+def _font_source_label(font: object, font_path: str) -> str:
+    if isinstance(font, _FallbackFont):
+        return "fallback-bitmap"
+    path = str(font_path or "").strip()
+    if path:
+        name = Path(path).name
+        if name:
+            return name
+    return "pil-default"
+
+
 def _font_metrics(font: ImageFont.FreeTypeFont | ImageFont.ImageFont, size_px: float) -> tuple[int, int]:
+    if isinstance(font, _FallbackFont):
+        return font.getmetrics()
     try:
         ascent, descent = font.getmetrics()
         return int(max(1, ascent)), int(max(0, descent))
@@ -1025,15 +1245,17 @@ def _font_metrics(font: ImageFont.FreeTypeFont | ImageFont.ImageFont, size_px: f
 
 
 def _rasterize_glyph(font: ImageFont.FreeTypeFont | ImageFont.ImageFont, size_px: float, ch: str) -> _GlyphBitmap:
+    if isinstance(font, _FallbackFont):
+        return font.rasterize(ch)
     if ch == "":
-        return _GlyphBitmap(alpha_mask=np.zeros((1, 1), dtype=np.uint8), x_offset=0, y_offset=0, advance=0.0)
+        return _GlyphBitmap(alpha_mask=_zeros_mask(1, 1), x_offset=0, y_offset=0, advance=0.0)
     left, top, right, bottom = font.getbbox(ch)
     width = max(1, int(right - left))
     height = max(1, int(bottom - top))
     image = Image.new("L", (width, height), 0)
     draw = ImageDraw.Draw(image)
     draw.text((-left, -top), ch, fill=255, font=font)
-    mask = np.asarray(image, dtype=np.uint8)
+    mask = _mask_from_pillow_image(image)
 
     try:
         advance = float(font.getlength(ch))
@@ -1042,6 +1264,159 @@ def _rasterize_glyph(font: ImageFont.FreeTypeFont | ImageFont.ImageFont, size_px
     if ch == " ":
         advance = max(advance, size_px * 0.33)
     return _GlyphBitmap(alpha_mask=mask, x_offset=int(left), y_offset=int(top), advance=max(1.0, advance))
+
+
+class _FallbackFont:
+    """Small bitmap font used on embedded targets without Pillow."""
+
+    def __init__(self, size_px: float) -> None:
+        self.size_px = max(1.0, float(size_px))
+        self.scale = max(1, int(round(self.size_px / 7.0)))
+        self.height = 7 * self.scale
+        self.width = 5 * self.scale
+
+    def getmetrics(self) -> tuple[int, int]:
+        return int(self.height), max(1, int(round(self.scale)))
+
+    def rasterize(self, ch: str) -> _GlyphBitmap:
+        if ch == "":
+            return _GlyphBitmap(alpha_mask=_zeros_mask(1, 1), x_offset=0, y_offset=0, advance=0.0)
+        if ch == " ":
+            return _GlyphBitmap(
+                alpha_mask=_zeros_mask(self.height, max(1, 3 * self.scale)),
+                x_offset=0,
+                y_offset=0,
+                advance=float(max(1, 3 * self.scale)),
+            )
+        pattern = _FALLBACK_GLYPHS.get(ch.lower(), _FALLBACK_GLYPHS["?"])
+        mask = _mask_from_pattern(pattern, self.scale)
+        return _GlyphBitmap(
+            alpha_mask=mask,
+            x_offset=0,
+            y_offset=0,
+            advance=float(mask.shape[1] + self.scale),
+        )
+
+
+_FALLBACK_GLYPHS: dict[str, tuple[str, ...]] = {
+    "a": ("01110", "10001", "10001", "11111", "10001", "10001", "10001"),
+    "b": ("11110", "10001", "10001", "11110", "10001", "10001", "11110"),
+    "c": ("01111", "10000", "10000", "10000", "10000", "10000", "01111"),
+    "d": ("11110", "10001", "10001", "10001", "10001", "10001", "11110"),
+    "e": ("11111", "10000", "10000", "11110", "10000", "10000", "11111"),
+    "f": ("11111", "10000", "10000", "11110", "10000", "10000", "10000"),
+    "g": ("01111", "10000", "10000", "10011", "10001", "10001", "01111"),
+    "h": ("10001", "10001", "10001", "11111", "10001", "10001", "10001"),
+    "i": ("11111", "00100", "00100", "00100", "00100", "00100", "11111"),
+    "j": ("00111", "00010", "00010", "00010", "00010", "10010", "01100"),
+    "k": ("10001", "10010", "10100", "11000", "10100", "10010", "10001"),
+    "l": ("10000", "10000", "10000", "10000", "10000", "10000", "11111"),
+    "m": ("10001", "11011", "10101", "10101", "10001", "10001", "10001"),
+    "n": ("10001", "11001", "10101", "10011", "10001", "10001", "10001"),
+    "o": ("01110", "10001", "10001", "10001", "10001", "10001", "01110"),
+    "p": ("11110", "10001", "10001", "11110", "10000", "10000", "10000"),
+    "q": ("01110", "10001", "10001", "10001", "10101", "10010", "01101"),
+    "r": ("11110", "10001", "10001", "11110", "10100", "10010", "10001"),
+    "s": ("01111", "10000", "10000", "01110", "00001", "00001", "11110"),
+    "t": ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
+    "u": ("10001", "10001", "10001", "10001", "10001", "10001", "01110"),
+    "v": ("10001", "10001", "10001", "10001", "10001", "01010", "00100"),
+    "w": ("10001", "10001", "10001", "10101", "10101", "10101", "01010"),
+    "x": ("10001", "10001", "01010", "00100", "01010", "10001", "10001"),
+    "y": ("10001", "10001", "01010", "00100", "00100", "00100", "00100"),
+    "z": ("11111", "00001", "00010", "00100", "01000", "10000", "11111"),
+    "0": ("01110", "10001", "10011", "10101", "11001", "10001", "01110"),
+    "1": ("00100", "01100", "00100", "00100", "00100", "00100", "01110"),
+    "2": ("01110", "10001", "00001", "00010", "00100", "01000", "11111"),
+    "3": ("11110", "00001", "00001", "01110", "00001", "00001", "11110"),
+    "4": ("00010", "00110", "01010", "10010", "11111", "00010", "00010"),
+    "5": ("11111", "10000", "10000", "11110", "00001", "00001", "11110"),
+    "6": ("01110", "10000", "10000", "11110", "10001", "10001", "01110"),
+    "7": ("11111", "00001", "00010", "00100", "01000", "01000", "01000"),
+    "8": ("01110", "10001", "10001", "01110", "10001", "10001", "01110"),
+    "9": ("01110", "10001", "10001", "01111", "00001", "00001", "01110"),
+    ":": ("00000", "00100", "00100", "00000", "00100", "00100", "00000"),
+    "_": ("00000", "00000", "00000", "00000", "00000", "00000", "11111"),
+    "|": ("00100", "00100", "00100", "00100", "00100", "00100", "00100"),
+    "-": ("00000", "00000", "00000", "11111", "00000", "00000", "00000"),
+    ".": ("00000", "00000", "00000", "00000", "00000", "01100", "01100"),
+    ",": ("00000", "00000", "00000", "00000", "00000", "00100", "01000"),
+    "?": ("01110", "10001", "00001", "00010", "00100", "00000", "00100"),
+}
+
+
+def _zeros_mask(height: int, width: int) -> object:
+    height = max(1, int(height))
+    width = max(1, int(width))
+    if _HAS_NUMPY:
+        return np.zeros((height, width), dtype=np.uint8)
+    return accel.zeros((height, width))
+
+
+def _mask_from_pillow_image(image: object) -> object:
+    if _HAS_NUMPY:
+        return np.asarray(image, dtype=np.uint8)
+    width, height = image.size
+    mask = accel.zeros((height, width))
+    data = bytes(image.tobytes())
+    mask._data[: len(data)] = data
+    return mask
+
+
+def _mask_from_pattern(pattern: tuple[str, ...], scale: int) -> object:
+    scale = max(1, int(scale))
+    height = max(1, len(pattern) * scale)
+    width = max(1, (len(pattern[0]) if pattern else 1) * scale)
+    if _HAS_NUMPY:
+        rows = []
+        for row in pattern:
+            bits = [255 if item == "1" else 0 for item in row]
+            expanded = np.repeat(np.asarray(bits, dtype=np.uint8), scale)
+            rows.extend([expanded] * scale)
+        return np.vstack(rows) if rows else np.zeros((height, width), dtype=np.uint8)
+    mask = accel.zeros((height, width))
+    for py, row in enumerate(pattern):
+        for px, item in enumerate(row):
+            if item != "1":
+                continue
+            for sy in range(scale):
+                y = py * scale + sy
+                for sx in range(scale):
+                    x = px * scale + sx
+                    mask._data[y * width + x] = 255
+    return mask
+
+
+def _as_uint8_array(value: object) -> object:
+    if not _HAS_NUMPY:
+        return value
+    if _HAS_TORCH and torch.is_tensor(value):
+        return value.detach().cpu().numpy().astype(np.uint8, copy=False)
+    return np.asarray(value, dtype=np.uint8)
+
+
+def _as_float32_array(value: object) -> object:
+    if not _HAS_NUMPY:
+        return value
+    if _HAS_TORCH and torch.is_tensor(value):
+        return value.detach().cpu().numpy().astype(np.float32, copy=False)
+    return np.asarray(value, dtype=np.float32)
+
+
+def _as_bool_array(value: object) -> object:
+    if not _HAS_NUMPY:
+        return value
+    if _HAS_TORCH and torch.is_tensor(value):
+        return value.detach().cpu().numpy().astype(bool, copy=False)
+    return np.asarray(value, dtype=bool)
+
+
+def _from_uint8_array(value: object) -> object:
+    if not _HAS_NUMPY:
+        return value
+    if _HAS_TORCH:
+        return torch.from_numpy(np.asarray(value, dtype=np.uint8))
+    return np.asarray(value, dtype=np.uint8)
 
 
 def _resolve_system_font_path(family: str) -> str:
@@ -1055,7 +1430,22 @@ def _resolve_system_font_path(family: str) -> str:
         "courier",
         "dejavusansmono",
     )
+    py_packages_dir = Path(__file__).resolve().parents[2]
+    bundled_font_dirs = [
+        py_packages_dir / "luvatrix_assets" / "fonts",
+        py_packages_dir / "assets" / "fonts",
+    ]
+    for entry in sys.path:
+        if entry:
+            bundled_font_dirs.append(Path(entry) / "luvatrix_assets" / "fonts")
+    extra_font_dirs = [
+        Path(item)
+        for item in os.getenv("LUVATRIX_FONT_DIRS", "").split(os.pathsep)
+        if item.strip()
+    ]
     font_dirs = (
+        *extra_font_dirs,
+        *bundled_font_dirs,
         Path.home() / "Library/Fonts",
         Path("/Library/Fonts"),
         Path("/System/Library/Fonts"),

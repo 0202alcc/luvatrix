@@ -30,6 +30,7 @@ class _FakeWindowSystem:
         title: str,
         use_metal_layer: bool = True,
         preserve_aspect_ratio: bool = False,
+        menu_config=None,
     ) -> MacOSWindowHandle:
         self.created += 1
         self.last_title = title

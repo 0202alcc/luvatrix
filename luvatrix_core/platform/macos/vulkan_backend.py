@@ -1111,7 +1111,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
             1,
             [blit],
-            getattr(vk, "VK_FILTER_LINEAR", 1),
+            getattr(vk, "VK_FILTER_NEAREST", 0),
         )
 
     def _queue_submit(self, queue, submit, fence) -> None:

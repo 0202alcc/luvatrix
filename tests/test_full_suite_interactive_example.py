@@ -4,8 +4,9 @@ import unittest
 
 from luvatrix_core.core.sensor_manager import SensorSample
 
-from examples.app_protocol.full_suite_interactive.app_main import (
+from examples.full_suite_interactive.app_main import (
     InteractionState,
+    _apply_hdi_events,
     _build_scene_svg,
     _detect_frame_switch,
     _mouse_label_text,
@@ -74,6 +75,41 @@ class FullSuiteInteractiveExampleTests(unittest.TestCase):
 
         events = [_Event({"phase": "down", "key": "2"})]
         self.assertEqual(_detect_frame_switch(events, "screen_tl"), "cartesian_bl")
+
+    def test_apply_hdi_events_tracks_native_touches_and_gestures(self) -> None:
+        class _Event:
+            def __init__(self, event_type, payload) -> None:
+                self.device = "touch"
+                self.event_type = event_type
+                self.status = "OK"
+                self.payload = payload
+
+        state = InteractionState()
+        _apply_hdi_events(
+            state,
+            [
+                _Event("touch", {"touch_id": 1, "phase": "down", "x": 10.0, "y": 20.0}),
+                _Event("touch", {"touch_id": 2, "phase": "down", "x": 30.0, "y": 40.0}),
+                _Event(
+                    "gesture",
+                    {
+                        "kind": "pinch",
+                        "phase": "move",
+                        "centroid_x": 20.0,
+                        "centroid_y": 30.0,
+                        "translation_x": 0.0,
+                        "translation_y": 0.0,
+                        "scale": 1.25,
+                        "rotation": 0.0,
+                    },
+                ),
+            ],
+            surface_height=100,
+        )
+        self.assertEqual(state.touch_count, 2)
+        self.assertEqual(state.active_touches[1], (10.0, 20.0))
+        self.assertEqual(state.gesture_scale, 1.25)
+        self.assertTrue(state.mouse_in_window)
 
 
 if __name__ == "__main__":

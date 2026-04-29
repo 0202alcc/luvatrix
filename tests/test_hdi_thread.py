@@ -72,6 +72,56 @@ class HDIThreadTests(unittest.TestCase):
         assert isinstance(payload, dict)
         self.assertEqual(payload.get("phase"), "down")
 
+    def test_touch_moves_coalesce_per_touch_id_and_preserve_transitions(self) -> None:
+        source = _ScriptedHDISource(
+            [
+                [
+                    HDIEvent(1, 1, "w", "touch", "touch", "OK", {"touch_id": 1, "phase": "down", "x": 1, "y": 1}),
+                    HDIEvent(2, 2, "w", "touch", "touch", "OK", {"touch_id": 1, "phase": "move", "x": 2, "y": 2}),
+                    HDIEvent(3, 3, "w", "touch", "touch", "OK", {"touch_id": 2, "phase": "move", "x": 10, "y": 10}),
+                    HDIEvent(4, 4, "w", "touch", "touch", "OK", {"touch_id": 1, "phase": "move", "x": 3, "y": 3}),
+                    HDIEvent(5, 5, "w", "touch", "touch", "OK", {"touch_id": 1, "phase": "up", "x": 3, "y": 3}),
+                ]
+            ]
+        )
+        thread = HDIThread(
+            source=source,
+            max_queue_size=16,
+            poll_interval_s=0.001,
+            window_geometry_provider=lambda: (0.0, 0.0, 100.0, 100.0),
+        )
+        thread.start()
+        time.sleep(0.01)
+        thread.stop()
+        touch_events = [e for e in thread.poll_events(max_events=32) if e.device == "touch" and e.event_type == "touch"]
+        phases = [(e.payload["touch_id"], e.payload["phase"], e.payload["x"]) for e in touch_events]
+        self.assertEqual(phases, [(1, "down", 1.0), (1, "move", 3.0), (2, "move", 10.0), (1, "up", 3.0)])
+
+    def test_touch_gestures_are_synthesized_from_two_active_touches(self) -> None:
+        source = _ScriptedHDISource(
+            [
+                [
+                    HDIEvent(1, 1, "w", "touch", "touch", "OK", {"touch_id": 1, "phase": "down", "x": 10, "y": 10}),
+                    HDIEvent(2, 2, "w", "touch", "touch", "OK", {"touch_id": 2, "phase": "down", "x": 20, "y": 10}),
+                    HDIEvent(3, 3, "w", "touch", "touch", "OK", {"touch_id": 2, "phase": "move", "x": 30, "y": 10}),
+                ]
+            ]
+        )
+        thread = HDIThread(
+            source=source,
+            max_queue_size=32,
+            poll_interval_s=0.001,
+            window_geometry_provider=lambda: (0.0, 0.0, 100.0, 100.0),
+        )
+        thread.start()
+        time.sleep(0.01)
+        thread.stop()
+        gestures = [e for e in thread.poll_events(max_events=64) if e.device == "touch" and e.event_type == "gesture"]
+        kinds = {e.payload["kind"] for e in gestures}
+        self.assertEqual(kinds, {"pan", "pinch", "rotate"})
+        pinch_events = [e for e in gestures if e.payload["kind"] == "pinch"]
+        self.assertTrue(any(e.payload["scale"] > 1.0 for e in pinch_events))
+
     def test_inactive_window_marks_pointer_not_detected(self) -> None:
         source = _ScriptedHDISource(
             [[HDIEvent(1, 1, "w", "mouse", "pointer_move", "OK", {"x": 1, "y": 2})]]

@@ -354,6 +354,10 @@ dependencies = [
     { name = "coinbasetraderbot" },
     { name = "numpy" },
     { name = "pillow" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-metal", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
     { name = "pytz" },
     { name = "torch" },
     { name = "vulkan" },
@@ -366,10 +370,14 @@ dev = [
 macos = [
     { name = "pyobjc-core" },
     { name = "pyobjc-framework-cocoa" },
+    { name = "pyobjc-framework-metal" },
     { name = "pyobjc-framework-quartz" },
 ]
 vulkan = [
     { name = "vulkan" },
+]
+web = [
+    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -378,15 +386,21 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'dev'", specifier = ">=3.10.8" },
     { name = "numpy", specifier = ">=2.4.2" },
     { name = "pillow", specifier = ">=10.3.0" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin'", specifier = ">=12.1" },
     { name = "pyobjc-core", marker = "extra == 'macos'", specifier = ">=12.1" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'", specifier = ">=12.1" },
     { name = "pyobjc-framework-cocoa", marker = "extra == 'macos'", specifier = ">=12.1" },
+    { name = "pyobjc-framework-metal", marker = "sys_platform == 'darwin'", specifier = ">=12.1" },
+    { name = "pyobjc-framework-metal", marker = "extra == 'macos'", specifier = ">=12.1" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'", specifier = ">=12.1" },
     { name = "pyobjc-framework-quartz", marker = "extra == 'macos'", specifier = ">=12.1" },
     { name = "pytz", specifier = ">=2026.1.post1" },
     { name = "torch", specifier = ">=2.4.0" },
     { name = "vulkan", specifier = ">=1.3.275.1" },
     { name = "vulkan", marker = "extra == 'vulkan'", specifier = ">=1.3.275.1" },
+    { name = "websockets", marker = "extra == 'web'", specifier = ">=13.0" },
 ]
-provides-extras = ["plot", "macos", "vulkan", "dev"]
+provides-extras = ["plot", "macos", "vulkan", "web", "dev"]
 
 [[package]]
 name = "markupsafe"
@@ -742,6 +756,20 @@ sdist = { url = "https://files.pythonhosted.org/packages/02/a3/16ca9a15e77c061a9
 wheels = [
     { url = "https://files.pythonhosted.org/packages/59/bb/f777cc9e775fc7dae77b569254570fe46eb842516b3e4fe383ab49eab598/pyobjc_framework_cocoa-12.1-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:03342a60fc0015bcdf9b93ac0b4f457d3938e9ef761b28df9564c91a14f0129a", size = 384932, upload-time = "2025-11-14T09:42:29.771Z" },
     { url = "https://files.pythonhosted.org/packages/58/27/b457b7b37089cad692c8aada90119162dfb4c4a16f513b79a8b2b022b33b/pyobjc_framework_cocoa-12.1-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:6ba1dc1bfa4da42d04e93d2363491275fb2e2be5c20790e561c8a9e09b8cf2cc", size = 388970, upload-time = "2025-11-14T09:42:53.964Z" },
+]
+
+[[package]]
+name = "pyobjc-framework-metal"
+version = "12.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e7/06/a84f7eb8561d5631954b9458cfca04b690b80b5b85ce70642bc89335f52a/pyobjc_framework_metal-12.1.tar.gz", hash = "sha256:bb554877d5ee2bf3f340ad88e8fe1b85baab7b5ec4bd6ae0f4f7604147e3eae7", size = 181847, upload-time = "2025-11-14T10:17:34.157Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/8a/890dbc66bdae2ec839e28a15f16696ed1ab34b3cf32d58ed4dcd76183f25/pyobjc_framework_metal-12.1-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:2440db9b7057b6bafbabe8a2c5dde044865569176058ee34a7d138df0fc96c8c", size = 75876, upload-time = "2025-11-14T09:55:24.905Z" },
+    { url = "https://files.pythonhosted.org/packages/4d/73/df12913fa33b52ff0e2c3cb7d578849a198b2a141d6e07e8930856a40851/pyobjc_framework_metal-12.1-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:476eeba3bebc2b3010e352b6bd28e3732432a3d5a8d5c3fb1cebd257dc7ea41e", size = 76483, upload-time = "2025-11-14T09:55:30.656Z" },
 ]
 
 [[package]]
