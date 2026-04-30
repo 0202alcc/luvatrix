@@ -34,28 +34,43 @@ _IOS_LOG_DEVICE_PATH = f"/Documents/{_IOS_LOG_FILENAME}"
 
 
 def _setup_syslog_redirect() -> None:
-    """Route Python stdout/stderr through POSIX syslog() and a Documents log file.
+    """Route Python stdout/stderr through POSIX syslog() and (if available) UDP.
 
     Without an attached debugger, iOS apps have fd 1/2 connected to /dev/null.
-    Syslog writes to the unified log; the file at Documents/luvatrix_run.log can
-    be polled by the Mac-side CLI via `devicectl device copy from`.
+    If LUVATRIX_MAC_LOG_IP / LUVATRIX_MAC_LOG_PORT are set (by the Mac-side CLI),
+    each log line is also sent as a UDP packet to the Mac terminal in real time.
     """
     try:
         import ctypes as _ctypes
+        import socket as _socket
+
         _libc = _ctypes.CDLL("/usr/lib/libSystem.dylib")
         _libc.syslog.argtypes = [_ctypes.c_int, _ctypes.c_char_p, _ctypes.c_char_p]
         _libc.syslog.restype = None
         _LOG_NOTICE = 5
 
-        # Open a log file in the app's Documents directory (accessible via devicectl copy).
-        _log_file = None
-        try:
-            docs_dir = _os.path.expanduser("~/Documents")
-            _os.makedirs(docs_dir, exist_ok=True)
-            log_path = _os.path.join(docs_dir, _IOS_LOG_FILENAME)
-            _log_file = open(log_path, "w", buffering=1, encoding="utf-8", errors="replace")  # noqa: SIM115
-        except Exception:
-            pass
+        # UDP forwarding to the Mac terminal (set by run-app CLI before launch).
+        _udp_sock = None
+        _udp_addr: tuple[str, int] | None = None
+        mac_ip = _os.environ.get("LUVATRIX_MAC_LOG_IP", "")
+        mac_port_str = _os.environ.get("LUVATRIX_MAC_LOG_PORT", "51423")
+        if mac_ip:
+            try:
+                _udp_sock = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+                _udp_addr = (mac_ip, int(mac_port_str))
+            except Exception:
+                pass
+
+        def _emit(line: str) -> None:
+            try:
+                _libc.syslog(_LOG_NOTICE, b"%s", line.encode("utf-8", errors="replace"))
+            except Exception:
+                pass
+            if _udp_sock is not None and _udp_addr is not None:
+                try:
+                    _udp_sock.sendto(line.encode("utf-8", errors="replace") + b"\n", _udp_addr)
+                except Exception:
+                    pass
 
         class _TeeWriter:
             def __init__(self) -> None:
@@ -66,34 +81,13 @@ def _setup_syslog_redirect() -> None:
                 while "\n" in self._buf:
                     line, self._buf = self._buf.split("\n", 1)
                     if line:
-                        try:
-                            _libc.syslog(_LOG_NOTICE, b"%s", line.encode("utf-8", errors="replace"))
-                        except Exception:
-                            pass
-                        if _log_file is not None:
-                            try:
-                                _log_file.write(line + "\n")
-                            except Exception:
-                                pass
+                        _emit(line)
                 return len(s)
 
             def flush(self) -> None:
                 if self._buf:
-                    try:
-                        _libc.syslog(_LOG_NOTICE, b"%s", self._buf.encode("utf-8", errors="replace"))
-                    except Exception:
-                        pass
-                    if _log_file is not None:
-                        try:
-                            _log_file.write(self._buf + "\n")
-                        except Exception:
-                            pass
+                    _emit(self._buf)
                     self._buf = ""
-                if _log_file is not None:
-                    try:
-                        _log_file.flush()
-                    except Exception:
-                        pass
 
             def fileno(self) -> int:
                 return 2
@@ -1355,15 +1349,30 @@ def _run_ios_device(
         )
         subprocess.run(install_command, check=True)
 
-    # Start the syslog stream BEFORE the launch command so early app output
-    # isn't missed and so the devicectl connection is already established.
-    log_proc: subprocess.Popen | None = None
+    # Start UDP log server so Python output from the device appears in this terminal.
+    udp_sock = None
+    udp_stop = None
+    udp_thread: threading.Thread | None = None
     log_thread: threading.Thread | None = None
+    log_proc = None
     if not import_probe:
+        # Try native syslog streaming first; fall back to UDP.
         log_proc, log_thread = _start_device_log_stream(device_id)
         if log_proc is not None:
             print("[ios] streaming device logs — Ctrl+C to stop", flush=True)
-            time.sleep(0.5)  # Let the stream connect before we launch
+            time.sleep(0.5)
+        else:
+            udp_port = 51423
+            mac_ip = _get_mac_local_ip()
+            if mac_ip:
+                try:
+                    udp_sock, udp_thread, udp_stop = _start_udp_log_server(udp_port)
+                    print(f"[ios] UDP log server listening on {mac_ip}:{udp_port}", flush=True)
+                    log_thread = udp_thread
+                except OSError as exc:
+                    print(f"[ios] UDP server failed: {exc} — use Console.app to see logs", flush=True)
+            else:
+                print("[ios] could not determine local IP — use Console.app to see logs", flush=True)
 
     print(f"[ios] launching com.luvatrix.app on {display_name}")
     launch_ok = False
@@ -1372,6 +1381,10 @@ def _run_ios_device(
         "--device", device_id, "--terminate-existing",
     ]
     launch_env = dict(launch_config)
+    # Inject UDP log forwarding coordinates so the iOS app can send output back.
+    if udp_sock is not None and mac_ip:
+        launch_env["LUVATRIX_MAC_LOG_IP"] = mac_ip
+        launch_env["LUVATRIX_MAC_LOG_PORT"] = str(udp_port)
     if launch_env:
         launch_command.extend(["--environment-variables", json.dumps(launch_env)])
     launch_command.append("com.luvatrix.app")
@@ -1439,8 +1452,10 @@ def _run_ios_device(
             capture_output=True,
         )
     finally:
-        if log_proc is not None and log_proc.poll() is None:
+        if log_proc is not None and hasattr(log_proc, "poll") and log_proc.poll() is None:
             log_proc.terminate()
+        if udp_stop is not None:
+            udp_stop.set()
         if not launch_ok:
             print(f"[ios] preserved failed launch bundle for inspection: {app_path}")
 
@@ -1502,21 +1517,12 @@ def _start_device_log_stream(
             proc = None
 
     if proc is None:
-        # Fall back to polling Documents/luvatrix_run.log via devicectl copy from.
-        print("[ios] falling back to file-poll log streaming", flush=True)
-        stop_event = threading.Event()
-        poll_thread = _start_log_file_poll(device_id, stop_event)
-        # Return a sentinel object that has terminate() so callers can stop the poll.
-        class _PollHandle:
-            def terminate(self) -> None:
-                stop_event.set()
-            def wait(self, timeout: float | None = None) -> int:
-                if poll_thread is not None:
-                    poll_thread.join(timeout=timeout)
-                return 0
-        handle = _PollHandle()
-        handle.stdout = None  # type: ignore[attr-defined]
-        return handle, poll_thread  # type: ignore[return-value]
+        print(
+            "[ios] device log streaming unavailable — using UDP forwarding.\n"
+            "[ios] Python output will appear here once the app starts.",
+            flush=True,
+        )
+        return None, None
 
     def _read() -> None:
         assert proc.stdout is not None
@@ -1543,61 +1549,39 @@ def _start_device_log_stream(
     return proc, t
 
 
-def _start_log_file_poll(
-    device_id: str,
-    stop_event: threading.Event,
-) -> threading.Thread:
-    """Poll Documents/luvatrix_run.log on the device every 0.5s via devicectl copy."""
+def _start_udp_log_server(port: int = 51423) -> tuple["socket.socket", threading.Thread, threading.Event]:
+    """Listen for UDP log packets from the iOS app and print them to stdout."""
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("0.0.0.0", port))
+    sock.settimeout(0.5)
+    stop = threading.Event()
 
-    def _poll() -> None:
-        local_copy = Path(tempfile.mkdtemp()) / "luvatrix_run.log"
-        bytes_read = 0
-        attempts = 0
-        connected = False
-        cmd = [
-            "xcrun", "devicectl", "device", "copy", "from",
-            "--device", device_id,
-            "--domain-type", "appDataContainer",
-            "--domain-identifier", "com.luvatrix.app",
-            "--source", _IOS_LOG_DEVICE_PATH,
-            "--destination", str(local_copy),
-        ]
-        print(f"[ios-log] poll cmd: {' '.join(cmd)}", flush=True)
-        while not stop_event.is_set():
-            stop_event.wait(0.5)
-            if stop_event.is_set():
-                break
-            attempts += 1
+    def _recv() -> None:
+        while not stop.is_set():
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-                if result.returncode != 0:
-                    if not connected:
-                        if attempts <= 3 or attempts % 10 == 0:
-                            err = (result.stderr or result.stdout or "").strip()
-                            print(f"[ios-log] waiting for log file (attempt {attempts}): {err[:120]}", flush=True)
-                    continue
-                connected = True
-            except subprocess.TimeoutExpired:
-                if attempts <= 3:
-                    print(f"[ios-log] devicectl copy timed out (attempt {attempts})", flush=True)
-                continue
-            except OSError as exc:
-                print(f"[ios-log] devicectl error: {exc}", flush=True)
-                break
-            try:
-                data = local_copy.read_bytes()
-                new_data = data[bytes_read:]
-                if new_data:
-                    text = new_data.decode("utf-8", errors="replace")
-                    for line in text.splitlines():
-                        print(line, flush=True)
-                    bytes_read = len(data)
+                data, _ = sock.recvfrom(65535)
+                print(data.decode("utf-8", errors="replace"), end="", flush=True)
             except OSError:
-                pass
+                continue
+        sock.close()
 
-    t = threading.Thread(target=_poll, daemon=True, name="ios-log-poll")
+    t = threading.Thread(target=_recv, daemon=True, name="ios-udp-log")
     t.start()
-    return t
+    return sock, t, stop
+
+
+def _get_mac_local_ip() -> str:
+    """Return this machine's LAN IP (used by iOS app to send UDP logs back)."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return ""
 
 
 def _copy_ios_import_probe_report(device_id: str, tmp_dir: Path) -> None:
