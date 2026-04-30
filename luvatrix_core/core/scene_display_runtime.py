@@ -1,13 +1,44 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import fcntl
 import logging
+import os
+import select as _select
 import threading
 import time
 from typing import Callable
 
 from luvatrix_core.core.scene_graph import SceneBlitEvent, SceneFrame, SceneGraphBuffer
 from luvatrix_core.targets.scene_target import SceneRenderTarget
+
+
+# ---------------------------------------------------------------------------
+# Pipe-based VSYNC pacing helpers.
+# Python creates an os.pipe(); the write end fd is handed to Swift via an env
+# var.  CADisplayLink's tick() writes one byte per display refresh; the Python
+# present thread blocks on select() on the read end instead of time.sleep().
+# select() releases the GIL, so the app loop thread runs freely while waiting.
+# ---------------------------------------------------------------------------
+
+def create_vsync_pipe() -> tuple[int, int] | None:
+    """Create a pipe for VSYNC signalling.  Returns (read_fd, write_fd)."""
+    try:
+        r_fd, w_fd = os.pipe()
+        # Non-blocking write so Swift never stalls if the pipe fills up.
+        flags = fcntl.fcntl(w_fd, fcntl.F_GETFL)
+        fcntl.fcntl(w_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        return (r_fd, w_fd)
+    except Exception:
+        return None
+
+
+def destroy_vsync_pipe(read_fd: int, write_fd: int) -> None:
+    for fd in (read_fd, write_fd):
+        try:
+            os.close(fd)
+        except OSError:
+            pass
 
 
 LOGGER = logging.getLogger(__name__)
@@ -35,6 +66,11 @@ class SceneDisplayTelemetry:
     present_commits: int = 0
     app_active: int = 1
     last_error: str = ""
+    last_nd_ms_x10: int = 0
+    last_enc_ms_x10: int = 0
+    last_txt_ms_x10: int = 0
+    last_ovl_ms_x10: int = 0
+    last_cmt_ms_x10: int = 0
 
 
 class _RollingRate:
@@ -64,10 +100,12 @@ class SceneDisplayRuntime:
         target: SceneRenderTarget,
         *,
         active_provider: Callable[[], bool] | None = None,
+        vsync_read_fd: int | None = None,
     ) -> None:
         self._scene_buffer = scene_buffer
         self._target = target
         self._active_provider = active_provider
+        self._vsync_read_fd: int | None = vsync_read_fd
         self._last_error: Exception | None = None
         self._last_present_ns = 0
         self._coalesced_frames = 0
@@ -137,6 +175,11 @@ class SceneDisplayRuntime:
             present_commits=int(target_telemetry.get("present_commits", 0)),
             app_active=int(self.is_active()),
             last_error="" if self._last_error is None else repr(self._last_error),
+            last_nd_ms_x10=int(target_telemetry.get("last_nd_ms_x10", 0)),
+            last_enc_ms_x10=int(target_telemetry.get("last_enc_ms_x10", 0)),
+            last_txt_ms_x10=int(target_telemetry.get("last_txt_ms_x10", 0)),
+            last_ovl_ms_x10=int(target_telemetry.get("last_ovl_ms_x10", 0)),
+            last_cmt_ms_x10=int(target_telemetry.get("last_cmt_ms_x10", 0)),
         )
 
     def run_once(self, timeout: float | None = None, *, repeat_latest: bool = False) -> SceneRenderTick | None:
@@ -205,6 +248,7 @@ class SceneDisplayRuntime:
 
     def _present_loop(self, *, present_fps: int, repeat_latest: bool) -> None:
         interval = 1.0 / float(present_fps)
+        vsync_fd = self._vsync_read_fd
         next_at = time.perf_counter()
         was_active = self.is_active()
         while not self._present_stop.is_set():
@@ -219,15 +263,32 @@ class SceneDisplayRuntime:
             if not was_active:
                 next_at = now
                 was_active = True
-            if now < next_at:
-                self._present_stop.wait(next_at - now)
-                continue
+            if vsync_fd is not None:
+                # VSYNC mode: block on CADisplayLink pipe signal or timeout.
+                # select() releases the GIL so the app loop runs freely.
+                ready, _, _ = _select.select([vsync_fd], [], [], min(interval, 0.05))
+                if self._present_stop.is_set():
+                    break
+                if ready:
+                    # Drain accumulated bytes (one per CADisplayLink tick).
+                    # Extra bytes mean we were late; count them as coalesced.
+                    try:
+                        data = os.read(vsync_fd, 4096)
+                        extra = len(data) - 1
+                        if extra > 0:
+                            self._coalesced_frames += extra
+                    except (BlockingIOError, OSError):
+                        pass
+            else:
+                if now < next_at:
+                    self._present_stop.wait(next_at - now)
+                    continue
+                next_at += interval
+                if next_at < now - interval:
+                    next_at = now + interval
             try:
                 self.run_once(timeout=0.0, repeat_latest=repeat_latest)
             except Exception as exc:  # noqa: BLE001
                 self._last_error = exc
                 self._present_stop.set()
                 return
-            next_at += interval
-            if next_at < now - interval:
-                next_at = now + interval

@@ -553,6 +553,25 @@ def run_loop(app_dir: str) -> None:
     # Patch before AppRuntime reads it so _normalize_arch_name doesn't raise.
     _platform.machine = lambda: "arm64"
 
+    # Create a pipe for VSYNC-aligned present pacing when running in scene
+    # mode.  The write end fd is published via env var for Swift's CADisplayLink
+    # tick() to write one byte per refresh; the Python present thread blocks on
+    # select() on the read end instead of sleeping on a software timer.
+    vsync_read_fd: int | None = None
+    _vsync_write_fd: int | None = None
+    if render_mode in ("auto", "scene") and scene_target is not None:
+        from luvatrix_core.core.scene_display_runtime import (
+            create_vsync_pipe as _create_vsync_pipe,
+            destroy_vsync_pipe as _destroy_vsync_pipe,
+        )
+        pipe_fds = _create_vsync_pipe()
+        if pipe_fds is not None:
+            vsync_read_fd, _vsync_write_fd = pipe_fds
+            _os.environ["LUVATRIX_IOS_VSYNC_WRITE_FD"] = str(_vsync_write_fd)
+            print(f"[ios] vsync pipe ready read_fd={vsync_read_fd} write_fd={_vsync_write_fd}", file=_sys.stderr, flush=True)
+        else:
+            print("[ios] vsync pipe unavailable; using software timer", file=_sys.stderr, flush=True)
+
     runtime = UnifiedRuntime(
         matrix=matrix,
         target=target,
@@ -564,6 +583,7 @@ def run_loop(app_dir: str) -> None:
         scene_target=scene_target,
         render_mode=render_mode,
         active_provider=is_app_active,
+        vsync_read_fd=vsync_read_fd,
     )
 
     print(f"[ios] luvatrix accel backend: {accel.BACKEND}", file=_sys.stderr, flush=True)
@@ -608,3 +628,6 @@ def run_loop(app_dir: str) -> None:
         result.ticks_run,
         result.frames_presented,
     )
+    if vsync_read_fd is not None and _vsync_write_fd is not None:
+        _destroy_vsync_pipe(vsync_read_fd, _vsync_write_fd)
+        _os.environ.pop("LUVATRIX_IOS_VSYNC_WRITE_FD", None)

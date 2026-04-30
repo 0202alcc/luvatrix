@@ -1,5 +1,6 @@
 import UIKit
 import QuartzCore
+import os
 
 // MARK: - Python bootstrap helpers
 
@@ -46,7 +47,7 @@ private func loadBundledLaunchConfig() -> [String: String] {
 private func applyBundledLaunchConfig() -> [String: String] {
     let config = loadBundledLaunchConfig()
     for (key, value) in config {
-        if ProcessInfo.processInfo.environment[key] == nil {
+        if getenv(key) == nil {
             setenv(key, value, 1)
         }
     }
@@ -54,7 +55,10 @@ private func applyBundledLaunchConfig() -> [String: String] {
 }
 
 private func envOrConfig(_ key: String, _ config: [String: String], default defaultValue: String) -> String {
-    return ProcessInfo.processInfo.environment[key] ?? config[key] ?? defaultValue
+    if let val = getenv(key) {
+        return String(cString: val)
+    }
+    return config[key] ?? defaultValue
 }
 
 private func callPythonSetupUI(width: Int, height: Int) {
@@ -254,6 +258,9 @@ private func currentKeyWindow() -> UIWindow? {
         .first { $0.isKeyWindow }
 }
 
+private let _appRenderLog = OSLog(subsystem: "com.luvatrix.app", category: "Render")
+private let _appSignposter = OSSignposter(logHandle: _appRenderLog)
+
 final class LuvatrixDisplayLinkTelemetry: NSObject {
     private var displayLink: CADisplayLink?
     private var callbackCount: Int = 0
@@ -262,6 +269,18 @@ final class LuvatrixDisplayLinkTelemetry: NSObject {
     private var measuredFPS: Double = 0.0
     private let telemetryPath: String
     private let requestedFPS: Int
+    private let signposter = OSSignposter(logHandle: _appRenderLog)
+    private var vsyncWriteFD: Int32 = -1
+    private var vsyncFDResolved: Bool = false
+
+    private func resolveVsyncFD() {
+        guard !vsyncFDResolved else { return }
+        vsyncFDResolved = true
+        guard let val = getenv("LUVATRIX_IOS_VSYNC_WRITE_FD"),
+              let str = String(validatingUTF8: val),
+              let fd = Int32(str), fd >= 0 else { return }
+        vsyncWriteFD = fd
+    }
 
     init(requestedFPS: Int) {
         self.requestedFPS = requestedFPS
@@ -300,11 +319,14 @@ final class LuvatrixDisplayLinkTelemetry: NSObject {
     }
 
     @objc private func tick(_ link: CADisplayLink) {
+        let spState = signposter.beginInterval("display_link_tick")
+        defer { signposter.endInterval("display_link_tick", spState) }
         callbackCount += 1
         reportWindowCount += 1
         let now = link.timestamp
         if lastReportTimestamp == 0 {
             lastReportTimestamp = now
+            resolveVsyncFD()
             return
         }
         let elapsed = now - lastReportTimestamp
@@ -313,6 +335,12 @@ final class LuvatrixDisplayLinkTelemetry: NSObject {
             reportWindowCount = 0
             lastReportTimestamp = now
             writeTelemetry(timestamp: now)
+        }
+        // Signal the Python present thread to wake and render the latest frame.
+        if !vsyncFDResolved { resolveVsyncFD() }
+        if vsyncWriteFD >= 0 {
+            var byte: UInt8 = 1
+            write(vsyncWriteFD, &byte, 1)
         }
     }
 
@@ -421,17 +449,24 @@ final class LuvatrixTouchCaptureView: UIView {
         }
 
         setupPython()
+        luvatrix_signpost_init()
 
         let launchConfig = applyBundledLaunchConfig()
         let renderMode = envOrConfig("LUVATRIX_RENDER_MODE", launchConfig, default: "auto")
         let requestedFPS = Int(envOrConfig("LUVATRIX_IOS_PRESENT_FPS", launchConfig, default: "120")) ?? 120
         if renderMode == "scene" || renderMode == "auto" {
             displayLinkTelemetry = LuvatrixDisplayLinkTelemetry(requestedFPS: requestedFPS)
-            displayLinkTelemetry?.start()
+            // Do NOT start() yet — setup_ui sets LUVATRIX_IOS_VSYNC_WRITE_FD and we
+            // need that env var to be visible before the first CADisplayLink tick fires.
         }
 
         // setup_ui must run on the main thread — we are on the main thread here.
+        let setupState = _appSignposter.beginInterval("python_setup_ui")
         callPythonSetupUI(width: w, height: h)
+        _appSignposter.endInterval("python_setup_ui", setupState)
+
+        // Start after setup_ui so resolveVsyncFD() finds the pipe fd on the first tick.
+        displayLinkTelemetry?.start()
 
         if let keyWindow = currentKeyWindow() {
             let capture = LuvatrixTouchCaptureView(frame: keyWindow.bounds)
@@ -470,7 +505,9 @@ final class LuvatrixTouchCaptureView: UIView {
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         setenv("LUVATRIX_IOS_APP_ACTIVE", "1", 1)
+        let restoreState = _appSignposter.beginInterval("foreground_restore")
         callPythonRestoreMetalLayerAfterForeground()
+        _appSignposter.endInterval("foreground_restore", restoreState)
         callPythonSetAppActive(true)
         // Reset the display link so measured_fps reflects post-foreground rate
         displayLinkTelemetry?.stop()

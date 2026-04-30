@@ -426,6 +426,9 @@ class FullSuiteInteractiveApp:
         self._last_fps: float = 0.0
         self._ui_renderer = MatrixUIFrameRenderer() if _HAS_UI else None
         self._debug = os.getenv("LUVATRIX_FSI_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+        self._last_debug_text_ts: float = 0.0
+        self._debug_lines: tuple[str, str, str] = ("", "", "")
+        self._debug_err_chunks: list[str] = []
 
     def init(self, ctx) -> None:
         raw_available = os.getenv("LUVATRIX_FSI_AVAILABLE_SENSORS", "")
@@ -609,26 +612,31 @@ class FullSuiteInteractiveApp:
                 self._last_fps = (self._frame_count - self._win_count) / max(1e-6, win_elapsed)
                 self._win_count = self._frame_count
                 self._win_start = now_t
-            fallback_app_fps = self._last_fps or (self._frame_count / max(1e-6, now_t - self._started))
-            app_fps = float(runtime.get("app_loop_fps", 0.0) or fallback_app_fps)
-            present_fps = float(runtime.get("present_success_fps", 0.0) or 0.0)
-            dl_fps = float(display_link.get("measured_fps", 0.0) or 0.0)
-            debug_lines = (
-                f"a:{app_fps:.0f} p:{present_fps:.0f} dl:{dl_fps:.0f} mx:{int(display_link.get('screen_max_fps', 0) or 0)}",
-                (
-                    f"act:{int(bool(runtime.get('app_active', 1)))} "
-                    f"nil:{int(runtime.get('next_drawable_nil', 0) or 0)} "
-                    f"slow:{int(runtime.get('next_drawable_slow', 0) or 0)} "
-                    f"ms:{float(runtime.get('last_present_ms', 0.0) or 0.0):.1f}"
-                ),
-                (
-                    f"sk:{int(runtime.get('skipped_inactive', 0) or 0)} "
-                    f"rep:{int(runtime.get('repeat_presents', 0) or 0)} "
-                    f"lp:{int(bool(display_link.get('low_power_mode', False)))} "
-                    f"tick:{int(runtime.get('app_loop_ticks', 0) or 0) % 10000}"
-                ),
-            )
-            for idx, line in enumerate(debug_lines):
+            if now_t - self._last_debug_text_ts >= 0.25:
+                fallback_app_fps = self._last_fps or (self._frame_count / max(1e-6, now_t - self._started))
+                app_fps = float(runtime.get("app_loop_fps", 0.0) or fallback_app_fps)
+                present_fps = float(runtime.get("present_success_fps", 0.0) or 0.0)
+                dl_fps = float(display_link.get("measured_fps", 0.0) or 0.0)
+                self._debug_lines = (
+                    f"a:{app_fps:.0f} p:{present_fps:.0f} dl:{dl_fps:.0f} mx:{int(display_link.get('screen_max_fps', 0) or 0)}",
+                    (
+                        f"act:{int(bool(runtime.get('app_active', 1)))} "
+                        f"nil:{int(runtime.get('next_drawable_nil', 0) or 0)} "
+                        f"slow:{int(runtime.get('next_drawable_slow', 0) or 0)} "
+                        f"ms:{float(runtime.get('last_present_ms', 0.0) or 0.0):.1f}"
+                    ),
+                    (
+                        f"nd:{int(runtime.get('last_nd_ms_x10', 0) or 0) / 10:.1f} "
+                        f"enc:{int(runtime.get('last_enc_ms_x10', 0) or 0) / 10:.1f} "
+                        f"txt:{int(runtime.get('last_txt_ms_x10', 0) or 0) / 10:.1f} "
+                        f"ovl:{int(runtime.get('last_ovl_ms_x10', 0) or 0) / 10:.1f} "
+                        f"cmt:{int(runtime.get('last_cmt_ms_x10', 0) or 0) / 10:.1f}"
+                    ),
+                )
+                err = accel_name.replace("\n", " ")
+                self._debug_err_chunks = _debug_text_chunks(err, 38, 4) if err else []
+                self._last_debug_text_ts = now_t
+            for idx, line in enumerate(self._debug_lines):
                 ctx.draw_text(
                     line,
                     x=8.0,
@@ -639,19 +647,17 @@ class FullSuiteInteractiveApp:
                     z_index=30,
                     cache_key=f"runtime_status_{idx}",
                 )
-
-        err = accel_name.replace("\n", " ")
-        for idx, chunk in enumerate(_debug_text_chunks(err, 38, 4) if (self._debug and err) else []):
-            ctx.draw_text(
-                chunk,
-                x=8.0,
-                y=max(0.0, bottom - (106.0 + idx * 14.0)),
-                font_family="Comic Mono",
-                font_size_px=9.0,
-                color_rgba=(254, 202, 202, 255),
-                z_index=30,
-                cache_key=f"runtime_error_{idx}",
-            )
+            for idx, chunk in enumerate(self._debug_err_chunks):
+                ctx.draw_text(
+                    chunk,
+                    x=8.0,
+                    y=max(0.0, bottom - (106.0 + idx * 14.0)),
+                    font_family="Comic Mono",
+                    font_size_px=9.0,
+                    color_rgba=(254, 202, 202, 255),
+                    z_index=30,
+                    cache_key=f"runtime_error_{idx}",
+                )
         ctx.finalize_scene_frame()
 
     def _loop_ui(self, ctx) -> None:

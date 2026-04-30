@@ -14,6 +14,7 @@ class CpuSceneTarget(SceneRenderTarget):
 
     target: RenderTarget
     _started: bool = False
+    _raster_buffer: object = None
 
     def start(self) -> None:
         if self._started:
@@ -24,7 +25,10 @@ class CpuSceneTarget(SceneRenderTarget):
     def present_scene(self, frame: SceneFrame) -> None:
         if not self._started:
             raise RuntimeError("CpuSceneTarget must be started before presenting scenes")
-        rgba = rasterize_scene_frame(frame)
+        
+        self._raster_buffer = rasterize_scene_frame(frame, out=self._raster_buffer)
+        rgba = self._raster_buffer
+
         self.target.present_frame(
             DisplayFrame(
                 revision=frame.revision,

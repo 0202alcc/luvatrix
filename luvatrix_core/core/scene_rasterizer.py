@@ -28,12 +28,18 @@ def _numpy():
     return np
 
 
-def rasterize_scene_frame(frame: SceneFrame):
+def rasterize_scene_frame(frame: SceneFrame, out=None):
     np = _numpy()
-    if np is not None:
-        out = np.zeros((frame.display_height, frame.display_width, 4), dtype=np.uint8)
-    else:
-        out = accel.zeros((frame.display_height, frame.display_width, 4))
+    if out is not None:
+        if out.shape != (frame.display_height, frame.display_width, 4):
+            out = None
+
+    if out is None:
+        if np is not None:
+            out = np.zeros((frame.display_height, frame.display_width, 4), dtype=np.uint8)
+        else:
+            out = accel.zeros((frame.display_height, frame.display_width, 4))
+    
     out[:, :, 3] = 255
     sx = float(frame.display_width) / max(1.0, float(frame.logical_width))
     sy = float(frame.display_height) / max(1.0, float(frame.logical_height))
@@ -129,6 +135,8 @@ def _draw_circle(out, node: CircleNode, *, sx: float, sy: float) -> None:
         patch[stroke] = node.stroke_rgba
 
 
+_TEXT_MASK_CACHE: dict[tuple[str, str, float], object] = {}
+
 def _draw_text(out, node: TextNode, *, sx: float, sy: float) -> None:
     try:
         from PIL import Image, ImageDraw
@@ -136,22 +144,33 @@ def _draw_text(out, node: TextNode, *, sx: float, sy: float) -> None:
     except Exception:
         _draw_debug_text(out, node.text, x=int(node.x * sx), y=int(node.y * sy), scale=max(1, int(node.font_size_px * sy // 7)), color=node.color_rgba)
         return
-    try:
-        font = _load_font(_resolve_system_font_path(node.font_family), max(1.0, node.font_size_px * sy))
-        bbox = font.getbbox(node.text)
-        left, top, right, bottom = bbox
-        width = max(1, int(math.ceil(right - left)))
-        height = max(1, int(math.ceil(bottom - top)))
-        image = Image.new("L", (width, height), 0)
-        draw = ImageDraw.Draw(image)
-        draw.text((-left, -top), node.text, fill=255, font=font)
-        np = _numpy()
-        if np is None:
+    
+    font_size = max(1.0, node.font_size_px * sy)
+    cache_key = (node.text, node.font_family, font_size)
+    mask = _TEXT_MASK_CACHE.get(cache_key)
+
+    if mask is None:
+        try:
+            font = _load_font(_resolve_system_font_path(node.font_family), font_size)
+            bbox = font.getbbox(node.text)
+            left, top, right, bottom = bbox
+            width = max(1, int(math.ceil(right - left)))
+            height = max(1, int(math.ceil(bottom - top)))
+            image = Image.new("L", (width, height), 0)
+            draw = ImageDraw.Draw(image)
+            draw.text((-left, -top), node.text, fill=255, font=font)
+            np = _numpy()
+            if np is None:
+                return
+            mask = np.asarray(image, dtype=np.uint8)
+            # Simple bounded cache
+            if len(_TEXT_MASK_CACHE) > 500:
+                _TEXT_MASK_CACHE.clear()
+            _TEXT_MASK_CACHE[cache_key] = mask
+        except Exception:
+            _draw_debug_text(out, node.text, x=int(node.x * sx), y=int(node.y * sy), scale=max(1, int(node.font_size_px * sy // 7)), color=node.color_rgba)
             return
-        mask = np.asarray(image, dtype=np.uint8)
-    except Exception:
-        _draw_debug_text(out, node.text, x=int(node.x * sx), y=int(node.y * sy), scale=max(1, int(node.font_size_px * sy // 7)), color=node.color_rgba)
-        return
+            
     _blend_alpha_mask(out, mask, x=int(round(node.x * sx)), y=int(round(node.y * sy)), color=node.color_rgba)
 
 

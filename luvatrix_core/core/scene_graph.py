@@ -188,6 +188,7 @@ class SceneFrame:
     nodes: tuple[SceneNode, ...]
     telemetry: SceneTelemetry = field(default_factory=SceneTelemetry)
     adaptive_quality_tier: int = 0
+    animation_t: float = 0.0
 
     def __post_init__(self) -> None:
         for label, value in (
@@ -237,6 +238,7 @@ class SceneGraphBuffer:
                 nodes=frame.nodes,
                 telemetry=frame.telemetry,
                 adaptive_quality_tier=frame.adaptive_quality_tier,
+                animation_t=frame.animation_t,
             )
             self._frame = frame
             event = SceneBlitEvent(

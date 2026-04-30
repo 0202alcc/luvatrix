@@ -191,7 +191,12 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         started_at = time.perf_counter()
         self._require_initialized()
         self._validate_frame(rgba, context.width, context.height)
-        self._capture_presented_frame(rgba)
+        
+        # Only capture and digest frame if debug recording, perf HUD, or frame stepping requires it.
+        # This avoids expensive per-frame contiguous clones and SHA-256 digests on the fast path.
+        if self._recording_active or self._perf_hud_enabled or self._frame_step_state.paused:
+            self._capture_presented_frame(rgba)
+
         self._acquire_next_swapchain_image()
         if self._vulkan_available and self._current_image_index is None:
             return

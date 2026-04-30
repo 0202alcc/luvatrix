@@ -64,6 +64,7 @@ class UnifiedRuntime:
         scene_target: SceneRenderTarget | None = None,
         render_mode: str = "auto",
         active_provider: Callable[[], bool] | None = None,
+        vsync_read_fd: int | None = None,
     ) -> None:
         if render_mode not in ("auto", "matrix", "scene"):
             raise ValueError("render_mode must be one of: auto, matrix, scene")
@@ -93,6 +94,7 @@ class UnifiedRuntime:
                 scene_buffer=self._scene_buffer,
                 target=scene_target,
                 active_provider=active_provider,
+                vsync_read_fd=vsync_read_fd,
             )
             if self._scene_buffer is not None and scene_target is not None
             else None
@@ -135,6 +137,11 @@ class UnifiedRuntime:
                     "next_drawable_slow": scene.next_drawable_slow,
                     "present_commits": scene.present_commits,
                     "scene_last_error": scene.last_error,
+                    "last_nd_ms_x10": scene.last_nd_ms_x10,
+                    "last_enc_ms_x10": scene.last_enc_ms_x10,
+                    "last_txt_ms_x10": scene.last_txt_ms_x10,
+                    "last_ovl_ms_x10": scene.last_ovl_ms_x10,
+                    "last_cmt_ms_x10": scene.last_cmt_ms_x10,
                 }
             )
         return payload

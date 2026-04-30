@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 
 from luvatrix_core import accel
+from luvatrix_core.perf.copy_telemetry import add_copy_telemetry
 from luvatrix_core.targets.metal_target import MetalContext
 
 LOGGER = logging.getLogger(__name__)
@@ -132,6 +134,8 @@ class MacOSMetalBackend:
         if s is None:
             raise RuntimeError("MacOSMetalBackend is not initialized")
 
+        present_started = time.perf_counter_ns()
+
         # Keep the source texture in RGBA order so presentation does not pay a
         # full-frame CPU channel-shuffle before every upload. The drawable is
         # still BGRA; Metal handles the render-target format conversion.
@@ -142,11 +146,18 @@ class MacOSMetalBackend:
             s.src_texture = _create_texture(s.device, w, h)
             s.src_texture_width = w
             s.src_texture_height = h
+            add_copy_telemetry(upload_image_realloc_count=1)
 
         arr = accel.to_contiguous_numpy(rgba)
         region = Metal.MTLRegionMake2D(0, 0, w, h)
+        
+        upload_started = time.perf_counter_ns()
         s.src_texture.replaceRegion_mipmapLevel_withBytes_bytesPerRow_(
             region, 0, arr, w * 4
+        )
+        add_copy_telemetry(
+            upload_bytes=w * h * 4,
+            upload_memcpy_ns=time.perf_counter_ns() - upload_started,
         )
 
         drawable = s.window_handle.layer.nextDrawable()
@@ -189,7 +200,13 @@ class MacOSMetalBackend:
         enc.endEncoding()
 
         cmd.presentDrawable_(drawable)
+        
+        submit_started = time.perf_counter_ns()
         cmd.commit()
+        add_copy_telemetry(
+            queue_submit_ns=time.perf_counter_ns() - submit_started,
+            queue_present_ns=time.perf_counter_ns() - present_started,
+        )
 
     def shutdown(self, context: MetalContext) -> None:
         s = self._state

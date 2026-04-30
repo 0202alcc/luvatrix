@@ -527,6 +527,7 @@ class AppContext:
                 nodes=tuple(self._scene_nodes),
                 telemetry=SceneTelemetry(scene_encode_ms=scene_encode_ms),
                 adaptive_quality_tier=int(self._scene_quality_tier),
+                animation_t=time.perf_counter(),
             )
             return self.scene_buffer.submit(frame)
         finally:
