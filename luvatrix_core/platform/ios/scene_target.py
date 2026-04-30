@@ -430,7 +430,7 @@ class IOSMetalSceneBackend:
 
         layer.setDevice_(device)
         layer.setPixelFormat_(80)
-        layer.setFramebufferOnly_(True)
+        layer.setFramebufferOnly_(False)
         layer.setAllowsNextDrawableTimeout_(False)
 
         set_size = layer.setDrawableSize_
