@@ -29,23 +29,35 @@ _touch_view: object = None
 _touch_view_class: object = None
 
 
-def _setup_syslog_redirect() -> None:
-    """Route Python stdout/stderr through POSIX syslog().
+_IOS_LOG_FILENAME = "luvatrix_run.log"
+_IOS_LOG_DEVICE_PATH = f"/Documents/{_IOS_LOG_FILENAME}"
 
-    Without an attached debugger, iOS apps have fd 1 and fd 2 connected to
-    /dev/null. This replaces sys.stdout and sys.stderr with writers that call
-    syslog() so output enters the OS unified log and becomes visible via
-    `xcrun devicectl device syslog stream` on the Mac.
+
+def _setup_syslog_redirect() -> None:
+    """Route Python stdout/stderr through POSIX syslog() and a Documents log file.
+
+    Without an attached debugger, iOS apps have fd 1/2 connected to /dev/null.
+    Syslog writes to the unified log; the file at Documents/luvatrix_run.log can
+    be polled by the Mac-side CLI via `devicectl device copy from`.
     """
     try:
         import ctypes as _ctypes
         _libc = _ctypes.CDLL("/usr/lib/libSystem.dylib")
-        # syslog(int priority, const char *fmt, const char *msg)
         _libc.syslog.argtypes = [_ctypes.c_int, _ctypes.c_char_p, _ctypes.c_char_p]
         _libc.syslog.restype = None
         _LOG_NOTICE = 5
 
-        class _SyslogWriter:
+        # Open a log file in the app's Documents directory (accessible via devicectl copy).
+        _log_file = None
+        try:
+            docs_dir = _os.path.expanduser("~/Documents")
+            _os.makedirs(docs_dir, exist_ok=True)
+            log_path = _os.path.join(docs_dir, _IOS_LOG_FILENAME)
+            _log_file = open(log_path, "w", buffering=1, encoding="utf-8", errors="replace")  # noqa: SIM115
+        except Exception:
+            pass
+
+        class _TeeWriter:
             def __init__(self) -> None:
                 self._buf: str = ""
 
@@ -58,6 +70,11 @@ def _setup_syslog_redirect() -> None:
                             _libc.syslog(_LOG_NOTICE, b"%s", line.encode("utf-8", errors="replace"))
                         except Exception:
                             pass
+                        if _log_file is not None:
+                            try:
+                                _log_file.write(line + "\n")
+                            except Exception:
+                                pass
                 return len(s)
 
             def flush(self) -> None:
@@ -66,12 +83,22 @@ def _setup_syslog_redirect() -> None:
                         _libc.syslog(_LOG_NOTICE, b"%s", self._buf.encode("utf-8", errors="replace"))
                     except Exception:
                         pass
+                    if _log_file is not None:
+                        try:
+                            _log_file.write(self._buf + "\n")
+                        except Exception:
+                            pass
                     self._buf = ""
+                if _log_file is not None:
+                    try:
+                        _log_file.flush()
+                    except Exception:
+                        pass
 
             def fileno(self) -> int:
                 return 2
 
-        writer = _SyslogWriter()
+        writer = _TeeWriter()
         _sys.stdout = writer
         _sys.stderr = writer
     except Exception:
@@ -1475,12 +1502,21 @@ def _start_device_log_stream(
             proc = None
 
     if proc is None:
-        print(
-            "[ios] device log streaming unavailable on this Xcode/macOS version.\n"
-            "[ios] To see Python output: open Console.app → select your iPhone → filter for 'Luvatrix'.",
-            flush=True,
-        )
-        return None, None
+        # Fall back to polling Documents/luvatrix_run.log via devicectl copy from.
+        print("[ios] falling back to file-poll log streaming", flush=True)
+        stop_event = threading.Event()
+        poll_thread = _start_log_file_poll(device_id, stop_event)
+        # Return a sentinel object that has terminate() so callers can stop the poll.
+        class _PollHandle:
+            def terminate(self) -> None:
+                stop_event.set()
+            def wait(self, timeout: float | None = None) -> int:
+                if poll_thread is not None:
+                    poll_thread.join(timeout=timeout)
+                return 0
+        handle = _PollHandle()
+        handle.stdout = None  # type: ignore[attr-defined]
+        return handle, poll_thread  # type: ignore[return-value]
 
     def _read() -> None:
         assert proc.stdout is not None
@@ -1505,6 +1541,59 @@ def _start_device_log_stream(
     t = threading.Thread(target=_read, daemon=True, name="ios-syslog")
     t.start()
     return proc, t
+
+
+def _start_log_file_poll(
+    device_id: str,
+    stop_event: threading.Event,
+) -> threading.Thread:
+    """Poll Documents/luvatrix_run.log on the device every 0.5s via devicectl copy."""
+
+    def _poll() -> None:
+        local_copy = Path(tempfile.mkdtemp()) / "luvatrix_run.log"
+        bytes_read = 0
+        warned_missing = False
+        while not stop_event.is_set():
+            stop_event.wait(0.5)
+            if stop_event.is_set():
+                break
+            try:
+                subprocess.run(
+                    [
+                        "xcrun", "devicectl", "device", "copy", "from",
+                        "--device", device_id,
+                        "--domain-type", "appDataContainer",
+                        "--domain-identifier", "com.luvatrix.app",
+                        "--source", _IOS_LOG_DEVICE_PATH,
+                        "--destination", str(local_copy),
+                        "--quiet",
+                    ],
+                    capture_output=True,
+                    check=True,
+                    timeout=5,
+                )
+                warned_missing = False
+            except subprocess.CalledProcessError:
+                if not warned_missing:
+                    print("[ios-log] waiting for device log file…", flush=True)
+                    warned_missing = True
+                continue
+            except (subprocess.TimeoutExpired, OSError):
+                continue
+            try:
+                data = local_copy.read_bytes()
+                new_data = data[bytes_read:]
+                if new_data:
+                    text = new_data.decode("utf-8", errors="replace")
+                    for line in text.splitlines():
+                        print(line, flush=True)
+                    bytes_read = len(data)
+            except OSError:
+                pass
+
+    t = threading.Thread(target=_poll, daemon=True, name="ios-log-poll")
+    t.start()
+    return t
 
 
 def _copy_ios_import_probe_report(device_id: str, tmp_dir: Path) -> None:
