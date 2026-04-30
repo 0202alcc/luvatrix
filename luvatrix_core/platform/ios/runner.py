@@ -648,7 +648,7 @@ def _run_ios_simulator(
 ) -> None:
     import shutil
 
-    repo_root = Path(__file__).parent.resolve()
+    repo_root = Path(__file__).parent.parent.parent.parent.resolve()
     ios_dir = repo_root / "ios"
     derived_data_dir = ios_dir / ".build"
     packages_dir = _ios_packages_dir(ios_dir, "simulator")
@@ -1266,7 +1266,7 @@ def _run_ios_device(
 ) -> None:
     import shutil
 
-    repo_root = Path(__file__).parent.resolve()
+    repo_root = Path(__file__).parent.parent.parent.parent.resolve()
     ios_dir = repo_root / "ios"
     packages_dir = _ios_packages_dir(ios_dir, "device")
     _ensure_ios_numpy_available(ios_dir, "device")
