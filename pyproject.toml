@@ -1,29 +1,26 @@
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "luvatrix"
-version = "0.1.1"
-description = "Luvatrix runtime and plotting toolkit"
+version = "0.1.0"
+description = "High-performance interactive UI runtime"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = [
   "numpy>=2.4.2",
   "Pillow>=10.3.0",
   "torch>=2.4.0",
-  "vulkan>=1.3.275.1",
 ]
 
 [project.optional-dependencies]
-plot = []
-macos = [
-  "pyobjc-core>=12.1",
+ios = [
   "pyobjc-framework-cocoa>=12.1",
   "pyobjc-framework-quartz>=12.1",
+  "pyobjc-framework-Metal>=12.1",
 ]
 vulkan = [
   "vulkan>=1.3.275.1",
+]
+web = [
+  "websockets>=13.0",
 ]
 dev = [
   "matplotlib>=3.10.8",
@@ -31,6 +28,13 @@ dev = [
 
 [project.scripts]
 gateflow = "gateflow_cli.wrapper:main"
+luvatrix = "main:main"
+
+[tool.setuptools]
+py-modules = ["main"]
 
 [tool.setuptools.packages.find]
-include = ["gateflow_cli*", "luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
+include = ["gateflow_cli*", "luvatrix*", "luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
+
+[tool.uv.sources]
+coinbasetraderbot = { path = "../CoinbaseTraderBot", editable = true }

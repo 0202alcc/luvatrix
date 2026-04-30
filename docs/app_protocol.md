@@ -27,12 +27,28 @@ Optional platform routing fields:
 2. `[[variants]]` entries with:
    `id`, `os`, optional `arch`, optional `module_root`, optional `entrypoint`
 
+For apps that share one entrypoint across Apple platforms, prefer a simple support declaration:
+
+```toml
+platform_support = ["macos", "ios"]
+```
+
+Use variants only when a supported platform or architecture needs a different module root or entrypoint.
+
 Variant routing behavior:
 
 1. Runtime rejects app if host OS is not in `platform_support` (when provided).
 2. Runtime selects the best matching variant for host `os/arch`.
 3. Arch-specific matches are preferred over OS-only matches.
 4. `module_root` is sandboxed to stay within app folder.
+
+Install validation:
+
+1. Base installs support manifest loading and headless app validation.
+2. Optional renderers validate their extras before launch.
+3. `run-app --render macos` requires the `macos` and `vulkan` extras.
+4. `run-app --render macos-metal` requires the `macos` extra.
+5. `run-app --render web` requires the `web` extra.
 
 ## 2. Lifecycle Contract
 

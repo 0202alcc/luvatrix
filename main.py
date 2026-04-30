@@ -1,37 +1,28 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 import logging
-import math
-from pathlib import Path
 import platform
 import json
 import os
 import subprocess
 import sys
 import sysconfig
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
+from luvatrix.app import MissingOptionalDependencyError, validate_app_install
 from luvatrix_core.core import (
     HDIEvent,
     HDIThread,
-    EnergySafetyPolicy,
-    JsonlAuditSink,
-    SQLiteAuditSink,
     SensorEnergySafetyController,
-    SensorManagerThread,
+    EnergySafetyPolicy,
     UnifiedRuntime,
     WindowMatrix,
 )
 from luvatrix_core.platform import PresentationMode, normalize_presentation_mode
-from luvatrix_core.platform.macos import MacOSVulkanPresenter
-from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource
-from luvatrix_core.platform.macos.sensors import (
-    make_default_macos_sensor_providers,
-)
-from luvatrix_core.platform.vulkan_setup import detect_vulkan_preflight_issue
 from luvatrix_core.targets.base import DisplayFrame, RenderTarget
-from luvatrix_core.targets.vulkan_target import VulkanTarget
 
 
 LOGGER = logging.getLogger(__name__)
@@ -42,79 +33,44 @@ class _NoopHDISource:
         return []
 
 
-class _MacOSPresenterHDISource:
-    """Lazily binds to the presenter window handle after target start."""
+class _HeadlessTarget(RenderTarget):
+    def present_frame(self, frame: DisplayFrame) -> None:
+        pass
 
-    def __init__(self, presenter: MacOSVulkanPresenter) -> None:
-        self._presenter = presenter
-        self._delegate: MacOSWindowHDISource | None = None
-        self._window_handle = None
+
+class _MacOSPresenterHDISource:
+    def __init__(self, presenter) -> None:
+        self.presenter = presenter
 
     def poll(self, window_active: bool, ts_ns: int) -> list[HDIEvent]:
-        _ = window_active
-        if self._delegate is None:
-            backend = getattr(self._presenter, "backend", None)
-            handle = getattr(backend, "_window_handle", None)
-            if handle is not None:
-                self._window_handle = handle
-                self._delegate = MacOSWindowHDISource(handle)
-        if self._delegate is None:
-            return []
-        return self._delegate.poll(window_active=window_active, ts_ns=ts_ns)
-
-    def window_active(self) -> bool:
-        handle = self._window_handle
-        if handle is None:
-            return True
-        try:
-            return bool(handle.window.isKeyWindow())
-        except Exception:
-            return True
-
-    def window_geometry(self) -> tuple[float, float, float, float]:
-        handle = self._window_handle
-        if handle is None:
-            return (0.0, 0.0, 1.0, 1.0)
-        try:
-            view = handle.window.contentView()
-            bounds = view.bounds()
-            return (0.0, 0.0, float(bounds.size.width), float(bounds.size.height))
-        except Exception:
-            return (0.0, 0.0, 1.0, 1.0)
-
-    def close(self) -> None:
-        if self._delegate is not None:
-            self._delegate.close()
+        return self.presenter.poll_hdi_events()
 
 
-@dataclass
-class _HeadlessTarget(RenderTarget):
-    frames_presented: int = 0
-    started: bool = False
+def _detect_screen_size() -> tuple[int, int] | None:
+    try:
+        from luvatrix_core.platform.macos.window_system import AppKitWindowSystem
+        return AppKitWindowSystem().get_main_screen_size()
+    except Exception:
+        return None
 
-    def start(self) -> None:
-        self.started = True
 
-    def present_frame(self, frame: DisplayFrame) -> None:
-        if not self.started:
-            raise RuntimeError("headless target not started")
-        self.frames_presented += 1
-
-    def stop(self) -> None:
-        self.started = False
+def _warn_if_not_free_threaded():
+    if sysconfig.get_config_var("Py_GIL_DISABLED") != 1:
+        print("WARNING: This build of Python is not free-threaded (GIL is enabled).")
+        print("Performance and concurrency will be significantly degraded.")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="luvatrix")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser = argparse.ArgumentParser(description="Luvatrix high-performance UI runtime")
+    subparsers = parser.add_subparsers(dest="command")
 
-    run = sub.add_parser("run-app", help="Run an app protocol folder (app.toml + entrypoint).")
-    run.add_argument("app_dir", type=Path)
+    run = subparsers.add_parser("run-app", help="Run a luvatrix app")
+    run.add_argument("app_dir", type=Path, help="Path to the app directory (containing app.toml)")
     run.add_argument(
         "--ticks",
         type=int,
         default=None,
-        help="Max app-loop ticks. Default: run until window close for macos render; 600 for headless render.",
+        help="Max app-loop ticks. Default: run until window close for macos/web render; 600 for headless render.",
     )
     run.add_argument(
         "--fps",
@@ -122,12 +78,41 @@ def main() -> None:
         default=None,
         help="Target app-loop FPS. Default: 2x display refresh (Nyquist), fallback 120.",
     )
-    run.add_argument("--render", choices=["headless", "macos"], default="headless")
+    run.add_argument(
+        "--present-fps",
+        type=int,
+        default=None,
+        help="Optional presentation FPS cap. Default: present every app-loop tick.",
+    )
+    run.add_argument("--render", choices=["headless", "macos", "macos-metal", "ios-simulator", "ios-device", "web"], default="headless")
+    run.add_argument(
+        "--render-scale",
+        type=float,
+        default=1.0,
+        help=(
+            "Internal matrix scale before presenter/window scaling. "
+            "Lower values trade sharpness for speed; default: 1.0."
+        ),
+    )
+    run.add_argument(
+        "--render-mode",
+        choices=["auto", "matrix", "scene"],
+        default="auto",
+        help="Rendering contract to use. scene enables the retained SceneFrame path when supported.",
+    )
     run.add_argument(
         "--presentation-mode",
         choices=[mode.value for mode in PresentationMode],
         default=None,
-        help="Presentation fit mode. Default: pixel_preserve for macos, stretch for headless.",
+        help="Presentation fit mode. Default: pixel_preserve for macos, stretch for headless/web.",
+    )
+    run.add_argument("--simulator", default="iPhone 16", help="Simulator device name for --render ios-simulator.")
+    run.add_argument("--device", default=None, help="Physical device name for --render ios-device (default: first connected device).")
+    run.add_argument("--team-id", default=None, help="Apple Development Team ID for --render ios-device (or set DEVELOPMENT_TEAM env var).")
+    run.add_argument(
+        "--ios-import-probe",
+        action="store_true",
+        help="For --render ios-device, launch a minimal native import probe instead of the app runtime.",
     )
     run.add_argument(
         "--lock-window-size",
@@ -138,98 +123,169 @@ def main() -> None:
         "--width",
         type=int,
         default=None,
-        help="Window/matrix width. Default: display-relative for macos render, 640 for headless.",
+        help="Window/matrix width. Default: display-relative for macos render, 640 for headless/web.",
     )
     run.add_argument(
         "--height",
         type=int,
         default=None,
-        help="Window/matrix height. Default: display-relative for macos render, 360 for headless.",
+        help="Window/matrix height. Default: display-relative for macos render, 360 for headless/web.",
     )
     run.add_argument("--sensor-backend", choices=["none", "macos"], default="none")
     run.add_argument(
-        "--show-origin-refs",
-        action="store_true",
-        help="Enable Planes origin-reference debug overlay (camera, active planes, mounted components).",
+        "--energy-safety",
+        choices=["off", "warn", "enforce"],
+        default="off",
+        help="Monitor thermal/power sensors and throttle or shutdown. Default: off.",
     )
-    run.add_argument("--audit-sqlite", type=Path, default=None)
-    run.add_argument("--audit-jsonl", type=Path, default=None)
-    run.add_argument("--energy-safety", choices=["off", "monitor", "enforce"], default="monitor")
-    run.add_argument("--energy-thermal-warn-c", type=float, default=85.0)
-    run.add_argument("--energy-thermal-critical-c", type=float, default=95.0)
-    run.add_argument("--energy-power-warn-w", type=float, default=45.0)
-    run.add_argument("--energy-power-critical-w", type=float, default=65.0)
-    run.add_argument("--energy-critical-streak", type=int, default=3)
+    run.add_argument("--energy-thermal-warn-c", type=float, default=65.0)
+    run.add_argument("--energy-thermal-critical-c", type=float, default=80.0)
+    run.add_argument("--energy-power-warn-w", type=float, default=15.0)
+    run.add_argument("--energy-power-critical-w", type=float, default=25.0)
+    run.add_argument("--energy-critical-streak", type=int, default=30)
+    run.add_argument("--audit-sqlite", type=Path, default=None, help="Path to write performance audit events.")
 
-    report = sub.add_parser("audit-report", help="Print audit summary from SQLite or JSONL sink.")
-    report.add_argument("--audit-sqlite", type=Path, default=None)
-    report.add_argument("--audit-jsonl", type=Path, default=None)
-
-    prune = sub.add_parser("audit-prune", help="Prune old audit rows to max row count.")
-    prune.add_argument("--audit-sqlite", type=Path, default=None)
-    prune.add_argument("--audit-jsonl", type=Path, default=None)
-    prune.add_argument("--max-rows", type=int, required=True)
     args = parser.parse_args()
 
     if args.command == "run-app":
+        try:
+            validate_app_install(args.app_dir, render=args.render)
+        except MissingOptionalDependencyError as exc:
+            raise SystemExit(str(exc)) from exc
+
         _warn_if_not_free_threaded()
-        width, height = _resolve_run_dimensions(args.render, args.width, args.height)
-        presentation_mode = _resolve_presentation_mode(args.render, args.presentation_mode)
-        matrix = WindowMatrix(height=height, width=width)
+
+        if args.render == "ios-simulator":
+            from luvatrix_core.platform.ios.runner import _run_ios_simulator
+            _run_ios_simulator(
+                args.app_dir.resolve(),
+                simulator_name=args.simulator,
+                render_scale=_resolve_render_scale(args.render_scale),
+                render_mode=args.render_mode,
+                target_fps=_resolve_target_fps(args.fps) if args.fps is not None else None,
+                present_fps=args.present_fps,
+            )
+            return
+        if args.render == "ios-device":
+            from luvatrix_core.platform.ios.runner import _run_ios_device
+            _run_ios_device(
+                args.app_dir.resolve(),
+                device_name=args.device,
+                team_id=args.team_id,
+                import_probe=args.ios_import_probe,
+                render_scale=_resolve_render_scale(args.render_scale),
+                render_mode=args.render_mode,
+                target_fps=_resolve_target_fps(args.fps) if args.fps is not None else None,
+                present_fps=args.present_fps,
+            )
+            return
+
+        from luvatrix_core.core.app_runtime import read_app_display_config
+        native_w, native_h, bar_color = read_app_display_config(args.app_dir)
+        has_native = native_w is not None and native_h is not None
+
+        if has_native and args.render in ("macos", "macos-metal"):
+            screen = _detect_screen_size() or (2560, 1440)
+            raw_scale = min(screen[0] * 0.82 / native_w, screen[1] * 0.82 / native_h)
+            scale = max(1, int(raw_scale))
+            width, height = native_w * scale, native_h * scale
+        else:
+            width, height = _resolve_run_dimensions(args.render, args.width, args.height)
+
+        render_scale = _resolve_render_scale(args.render_scale)
+        logical_width = int(native_w if has_native else width)
+        logical_height = int(native_h if has_native else height)
+        matrix_width = max(1, int(round(float(logical_width) * render_scale)))
+        matrix_height = max(1, int(round(float(logical_height) * render_scale)))
+
+        matrix = WindowMatrix(height=matrix_height, width=matrix_width)
         providers = {}
         hdi_source = None
         if args.sensor_backend == "macos":
-            if platform.system() != "Darwin":
-                raise RuntimeError("sensor-backend=macos is only supported on macOS")
+            from luvatrix_core.platform.macos.sensors import make_default_macos_sensor_providers
             providers = make_default_macos_sensor_providers()
-        audit_sink = _build_audit_sink(args.audit_sqlite, args.audit_jsonl)
+
+        sensors = SensorManagerThread(providers=providers)
+        audit_logger = _build_audit_sink(args.audit_sqlite)
+
         try:
-            os.environ["LUVATRIX_SHOW_ORIGIN_REFS"] = "1" if bool(args.show_origin_refs) else "0"
-            audit_logger = audit_sink.log if audit_sink is not None else None
-            sensors = SensorManagerThread(providers=providers, audit_logger=audit_logger)
+            sensors.start()
             if args.render == "headless":
                 target: RenderTarget = _HeadlessTarget()
                 hdi_source = _NoopHDISource()
+            elif args.render == "web":
+                from luvatrix_core.platform.web.websocket_target import (
+                    WebSessionServer,
+                    _SingleClientTarget,
+                )
+
+                def _web_session(target: _SingleClientTarget) -> None:
+                    _hdi = HDIThread(source=_NoopHDISource())
+                    _matrix = WindowMatrix(height=matrix_height, width=matrix_width)
+                    _energy = _build_energy_safety(args, sensors, audit_logger)
+                    _runtime = UnifiedRuntime(
+                        matrix=_matrix,
+                        target=target,
+                        hdi=_hdi,
+                        sensor_manager=sensors,
+                        capability_decider=lambda cap: True,
+                        capability_audit_logger=audit_logger,
+                        energy_safety=_energy,
+                        logical_width_px=float(logical_width),
+                        logical_height_px=float(logical_height),
+                    )
+                    _runtime.run_app(
+                        args.app_dir,
+                        max_ticks=args.ticks,
+                        target_fps=_resolve_target_fps(args.fps),
+                        present_fps=args.present_fps,
+                    )
+
+                server = WebSessionServer(
+                    session_factory=_web_session, host="0.0.0.0", port=8765,
+                )
+                print("[luvatrix] Web server running - open http://localhost:8765")
+                server.run()
+                return
+            elif args.render == "macos-metal":
+                from luvatrix_core.platform.macos.metal_presenter import MacOSMetalPresenter
+                from luvatrix_core.targets.metal_target import MetalTarget
+
+                presenter = MacOSMetalPresenter(
+                    width=width, height=height, title="Luvatrix App",
+                    bar_color_rgba=bar_color, resizable=not has_native,
+                )
+                target = MetalTarget(presenter=presenter)
+                hdi_source = _MacOSPresenterHDISource(presenter)
             else:
+                from luvatrix_core.platform.macos import MacOSVulkanPresenter
+                from luvatrix_core.platform.vulkan_setup import detect_vulkan_preflight_issue
+                from luvatrix_core.targets.vulkan_target import VulkanTarget
+
                 # App protocol on macOS should prefer Vulkan by default.
                 os.environ.setdefault("LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN", "1")
                 preflight_issue = detect_vulkan_preflight_issue()
-                if preflight_issue is not None:
-                    print("[luvatrix] Vulkan preflight notice:")
-                    print(preflight_issue)
-                    print("[luvatrix] Falling back to layer-blit mode if Vulkan cannot initialize.")
+                if preflight_issue:
+                    LOGGER.warning("Vulkan preflight failed: %s; falling back to Cocoa layer blitting.", preflight_issue)
+
                 presenter = MacOSVulkanPresenter(
-                    width=width,
-                    height=height,
-                    title="Luvatrix App",
-                    presentation_mode=presentation_mode,
-                    lock_window_size=bool(args.lock_window_size),
+                    width=width, height=height, title="Luvatrix App",
+                    bar_color_rgba=bar_color, resizable=not has_native,
                 )
                 target = VulkanTarget(presenter=presenter)
                 hdi_source = _MacOSPresenterHDISource(presenter)
-            if isinstance(hdi_source, _MacOSPresenterHDISource):
-                hdi = HDIThread(
-                    source=hdi_source,
-                    window_active_provider=hdi_source.window_active,
-                    window_geometry_provider=hdi_source.window_geometry,
-                )
+
+            if hdi_source is None:
+                hdi = HDIThread(source=_NoopHDISource())
             else:
                 hdi = HDIThread(source=hdi_source)
 
-            energy_safety = None
-            if args.energy_safety != "off":
-                energy_safety = SensorEnergySafetyController(
-                    sensor_manager=sensors,
-                    policy=EnergySafetyPolicy(
-                        thermal_warn_c=args.energy_thermal_warn_c,
-                        thermal_critical_c=args.energy_thermal_critical_c,
-                        power_warn_w=args.energy_power_warn_w,
-                        power_critical_w=args.energy_power_critical_w,
-                        critical_streak_for_shutdown=args.energy_critical_streak,
-                    ),
-                    audit_logger=audit_logger,
-                    enforce_shutdown=args.energy_safety == "enforce",
-                )
+            scene_target = None
+            if args.render_mode == "scene":
+                from luvatrix_core.targets.cpu_scene_target import CpuSceneTarget
+                scene_target = CpuSceneTarget(target)
+
+            energy_safety = _build_energy_safety(args, sensors, audit_logger)
 
             runtime = UnifiedRuntime(
                 matrix=matrix,
@@ -239,186 +295,94 @@ def main() -> None:
                 capability_decider=lambda capability: True,
                 capability_audit_logger=audit_logger,
                 energy_safety=energy_safety,
+                logical_width_px=float(logical_width),
+                logical_height_px=float(logical_height),
+                scene_target=scene_target,
+                render_mode=args.render_mode,
             )
             max_ticks = args.ticks
             if max_ticks is None and args.render == "headless":
                 max_ticks = 600
             target_fps = _resolve_target_fps(args.fps)
-            result = runtime.run_app(args.app_dir, max_ticks=max_ticks, target_fps=target_fps)
+            result = runtime.run_app(
+                args.app_dir,
+                max_ticks=max_ticks,
+                target_fps=target_fps,
+                present_fps=args.present_fps,
+            )
             print(
                 f"run complete: ticks={result.ticks_run} frames={result.frames_presented} "
                 f"stopped_by_target_close={result.stopped_by_target_close} "
                 f"stopped_by_energy_safety={result.stopped_by_energy_safety}"
             )
         finally:
-            if hdi_source is not None and hasattr(hdi_source, "close"):
-                hdi_source.close()
-            if audit_sink is not None and hasattr(audit_sink, "close"):
-                audit_sink.close()
-        return
-
-    if args.command == "audit-report":
-        audit_sink = _build_audit_sink(args.audit_sqlite, args.audit_jsonl)
-        if audit_sink is None:
-            raise RuntimeError("one of --audit-sqlite/--audit-jsonl is required")
-        try:
-            print(json.dumps(audit_sink.summarize(), indent=2, sort_keys=True))
-        finally:
-            if hasattr(audit_sink, "close"):
-                audit_sink.close()
-        return
-
-    if args.command == "audit-prune":
-        audit_sink = _build_audit_sink(args.audit_sqlite, args.audit_jsonl)
-        if audit_sink is None:
-            raise RuntimeError("one of --audit-sqlite/--audit-jsonl is required")
-        try:
-            deleted = audit_sink.prune(max_rows=args.max_rows)
-            print(f"pruned rows={deleted}")
-        finally:
-            if hasattr(audit_sink, "close"):
-                audit_sink.close()
-        return
-
-    raise RuntimeError(f"unsupported command: {args.command}")
+            sensors.stop()
 
 
-def _build_audit_sink(audit_sqlite: Path | None, audit_jsonl: Path | None):
-    if audit_sqlite is not None:
-        return SQLiteAuditSink(audit_sqlite)
-    if audit_jsonl is not None:
-        return JsonlAuditSink(audit_jsonl)
-    return None
+def _resolve_target_fps(fps_arg: int | None) -> int:
+    if fps_arg is not None:
+        return int(fps_arg)
+    # TODO: Detect display refresh and use 2x (Nyquist).
+    return 120
 
 
-def _resolve_run_dimensions(render: str, width: int | None, height: int | None) -> tuple[int, int]:
-    aspect = 16.0 / 9.0
-    if width is not None and width <= 0:
-        raise ValueError("width must be > 0")
-    if height is not None and height <= 0:
-        raise ValueError("height must be > 0")
-
-    if width is not None and height is not None:
-        return width, height
-    if width is not None:
-        return width, max(1, int(round(width / aspect)))
-    if height is not None:
-        return max(1, int(round(height * aspect))), height
-
-    if render == "macos":
-        display_size = _detect_screen_size()
-        if display_size is not None:
-            return _fit_aspect(display_size[0], display_size[1], scale=0.82, aspect_ratio=aspect)
-        return (1280, 720)
-    return (640, 360)
+def _resolve_render_scale(scale_arg: float) -> float:
+    return max(0.01, min(2.0, float(scale_arg)))
 
 
-def _resolve_presentation_mode(render: str, requested_mode: str | None) -> PresentationMode:
-    if requested_mode:
-        return normalize_presentation_mode(requested_mode)
+def _resolve_presentation_mode(render: str, mode: str | None) -> PresentationMode:
+    if mode is not None:
+        return PresentationMode(mode)
     if render == "macos":
         return PresentationMode.PIXEL_PRESERVE
     return PresentationMode.STRETCH
 
 
-def _is_free_threaded_runtime() -> bool:
-    gil_api = getattr(sys, "_is_gil_enabled", None)
-    if callable(gil_api):
-        try:
-            return not bool(gil_api())
-        except Exception:
-            pass
-    return bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
+def _build_audit_sink(audit_sqlite: Path | None):
+    if audit_sqlite is not None:
+        from luvatrix_core.core.audit import SQLiteAuditSink
+        return SQLiteAuditSink(audit_sqlite).append
+    return None
 
 
-def _warn_if_not_free_threaded() -> None:
-    if _is_free_threaded_runtime():
-        return
-    LOGGER.warning(
-        "App launched without the free-threaded Python runtime; expected Python 3.14+freethreaded "
-        "(no-GIL). Current interpreter=%s, SOABI=%s",
-        sys.executable,
-        sysconfig.get_config_var("SOABI"),
+def _build_energy_safety(args, sensors: SensorManagerThread, audit_logger):
+    if args.energy_safety == "off":
+        return None
+    return SensorEnergySafetyController(
+        sensor_manager=sensors,
+        policy=EnergySafetyPolicy(
+            thermal_warn_c=args.energy_thermal_warn_c,
+            thermal_critical_c=args.energy_thermal_critical_c,
+            power_warn_w=args.energy_power_warn_w,
+            power_critical_w=args.energy_power_critical_w,
+            critical_streak_for_shutdown=args.energy_critical_streak,
+        ),
+        audit_logger=audit_logger,
+        enforce_shutdown=args.energy_safety == "enforce",
     )
 
 
-def _fit_aspect(screen_w: int, screen_h: int, *, scale: float, aspect_ratio: float) -> tuple[int, int]:
-    max_w = max(1, int(screen_w * scale))
-    max_h = max(1, int(screen_h * scale))
-    w = max_w
-    h = int(round(w / aspect_ratio))
-    if h > max_h:
-        h = max_h
-        w = int(round(h * aspect_ratio))
-    w = max(w, 960)
-    h = max(h, 540)
-    return (max(1, int(math.floor(w))), max(1, int(math.floor(h))))
+def _resolve_run_dimensions(render: str, width: int | None, height: int | None) -> tuple[int, int]:
+    aspect = 16.0 / 9.0
+    if width is not None and width <= 0:
+        width = None
+    if height is not None and height <= 0:
+        height = None
 
+    if render in ("macos", "macos-metal") and width is None and height is None:
+        screen = _detect_screen_size()
+        if screen:
+            w, h = screen
+            return (int(w * 0.8), int(h * 0.8))
+        return (1600, 1000)
 
-def _detect_screen_size() -> tuple[int, int] | None:
-    try:
-        import tkinter as tk
-
-        root = tk.Tk()
-        root.withdraw()
-        width = int(root.winfo_screenwidth())
-        height = int(root.winfo_screenheight())
-        root.destroy()
-        if width > 0 and height > 0:
-            return (width, height)
-    except Exception:
-        return None
-    return None
-
-
-def _resolve_target_fps(explicit_fps: int | None) -> int:
-    if explicit_fps is not None:
-        if explicit_fps <= 0:
-            raise ValueError("fps must be > 0")
-        return int(explicit_fps)
-    refresh_hz = _detect_display_refresh_hz()
-    if refresh_hz is None or refresh_hz <= 0:
-        refresh_hz = 60.0
-    return max(1, int(round(refresh_hz * 2.0)))
-
-
-def _detect_display_refresh_hz() -> float | None:
-    env = os.getenv("LUVATRIX_DISPLAY_REFRESH_HZ")
-    if env:
-        try:
-            value = float(env)
-            if value > 0:
-                return value
-        except ValueError:
-            pass
-    if platform.system() != "Darwin":
-        return None
-    try:
-        proc = subprocess.run(
-            ["system_profiler", "SPDisplaysDataType", "-json"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=4.0,
-        )
-        payload = json.loads(proc.stdout)
-        displays = payload.get("SPDisplaysDataType", [])
-        for entry in displays:
-            if not isinstance(entry, dict):
-                continue
-            for key in ("spdisplays_display_refresh_rate", "spdisplays_refresh_rate"):
-                raw = entry.get(key)
-                if raw is None:
-                    continue
-                try:
-                    value = float(raw)
-                except (TypeError, ValueError):
-                    continue
-                if value > 0:
-                    return value
-    except Exception:
-        pass
-    return None
+    if width is not None and height is not None:
+        return (width, height)
+    if width is not None:
+        return (width, int(width / aspect))
+    if height is not None:
+        return (int(height * aspect), height)
+    return (640, 360)
 
 
 if __name__ == "__main__":
