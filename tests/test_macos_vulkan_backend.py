@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import torch
 
+from luvatrix_core.platform.frame_pipeline import PresentationMode
 from luvatrix_core.platform.macos.vulkan_backend import MoltenVKMacOSBackend
 from luvatrix_core.platform.macos.vulkan_presenter import VulkanContext
 from luvatrix_core.platform.macos.window_system import MacOSWindowHandle
@@ -19,7 +20,8 @@ class _FakeWindowSystem:
         self.destroyed = 0
         self.last_title: str | None = None
         self.last_use_metal_layer: bool | None = None
-        self.last_preserve_aspect_ratio: bool | None = None
+        self.last_presentation_mode: PresentationMode | str | None = None
+        self.last_lock_window_size: bool | None = None
         self.pumped = 0
         self.open_state = True
 
@@ -29,13 +31,15 @@ class _FakeWindowSystem:
         height: int,
         title: str,
         use_metal_layer: bool = True,
-        preserve_aspect_ratio: bool = False,
+        presentation_mode: PresentationMode | str = PresentationMode.STRETCH,
+        lock_window_size: bool = False,
         menu_config=None,
     ) -> MacOSWindowHandle:
         self.created += 1
         self.last_title = title
         self.last_use_metal_layer = use_metal_layer
-        self.last_preserve_aspect_ratio = preserve_aspect_ratio
+        self.last_presentation_mode = presentation_mode
+        self.last_lock_window_size = lock_window_size
         class _Layer:
             def setContents_(self, image) -> None:
                 self.last_image = image
@@ -212,16 +216,21 @@ class MacOSVulkanBackendTests(unittest.TestCase):
         backend = MoltenVKMacOSBackend(window_system=ws)
         backend.initialize(2, 2, "Demo")
         self.assertEqual(ws.created, 1)
-        self.assertFalse(bool(ws.last_preserve_aspect_ratio))
+        self.assertEqual(ws.last_presentation_mode, PresentationMode.STRETCH)
         ctx = VulkanContext(width=2, height=2, title="Demo")
         backend.shutdown(ctx)
         self.assertEqual(ws.destroyed, 1)
 
-    def test_preserve_aspect_ratio_flag_flows_to_window_system(self) -> None:
+    def test_presentation_settings_flow_to_window_system(self) -> None:
         ws = _FakeWindowSystem()
-        backend = MoltenVKMacOSBackend(window_system=ws, preserve_aspect_ratio=True)
+        backend = MoltenVKMacOSBackend(
+            window_system=ws,
+            presentation_mode=PresentationMode.PIXEL_PRESERVE,
+            lock_window_size=True,
+        )
         backend.initialize(2, 2, "Demo")
-        self.assertTrue(bool(ws.last_preserve_aspect_ratio))
+        self.assertEqual(ws.last_presentation_mode, PresentationMode.PIXEL_PRESERVE)
+        self.assertTrue(bool(ws.last_lock_window_size))
 
     def test_should_close_and_pump_events_delegate_to_window_system(self) -> None:
         ws = _FakeWindowSystem()
@@ -1263,6 +1272,23 @@ class MacOSVulkanBackendTests(unittest.TestCase):
         self.assertEqual(int(out[1, 0, 0].item()), 50)
         self.assertEqual(int(out[1, 0, 1].item()), 100)
         self.assertEqual(int(out[1, 0, 2].item()), 150)
+
+    def test_upload_frame_pixel_preserve_integer_scales_with_padding(self) -> None:
+        backend = MoltenVKMacOSBackend(
+            window_system=_FakeWindowSystem(),
+            presentation_mode=PresentationMode.PIXEL_PRESERVE,
+        )
+        backend._swapchain_extent = (10, 8)
+        src = torch.zeros((2, 3, 4), dtype=torch.uint8)
+        src[:, :, 1] = 200
+        src[:, :, 3] = 255
+
+        out = backend._prepare_upload_frame(src)
+
+        self.assertEqual(tuple(out.shape), (8, 10, 4))
+        self.assertTrue(torch.all(out[0, :, :3] == 0))
+        self.assertTrue(torch.all(out[-1, :, :3] == 0))
+        self.assertTrue(torch.any(out[1:7, :, 1] == 200))
 
     def test_vk_instance_uses_mvk_surface_extension_when_metal_missing(self) -> None:
         class _FakeVk:

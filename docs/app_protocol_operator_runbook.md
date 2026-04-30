@@ -7,45 +7,45 @@ Operator procedures for first-party Luvatrix app protocol workloads.
 Headless run (baseline):
 
 ```bash
-uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger --render headless --ticks 300
+uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --render headless --ticks 300
 ```
 
 macOS render run:
 
 ```bash
-uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger --render macos --width 640 --height 360 --ticks 300
+uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --render macos --width 640 --height 360 --ticks 300
 ```
 
 Enable macOS sensor providers:
 
 ```bash
-uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger --render headless --sensor-backend macos --ticks 300
+uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --render headless --sensor-backend macos --ticks 300
 ```
 
 Audit to SQLite and summarize:
 
 ```bash
-uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger --render headless --ticks 120 --audit-sqlite ./.luvatrix/audit.db
-uv run --python 3.14 python main.py audit-report --audit-sqlite ./.luvatrix/audit.db
+uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --render headless --ticks 120 --audit-sqlite ./.luvatrix/audit.db
+uv run --python 3.14+freethreaded python main.py audit-report --audit-sqlite ./.luvatrix/audit.db
 ```
 
 Audit to JSONL and summarize:
 
 ```bash
-uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger --render headless --ticks 120 --audit-jsonl ./.luvatrix/audit.jsonl
-uv run --python 3.14 python main.py audit-report --audit-jsonl ./.luvatrix/audit.jsonl
+uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --render headless --ticks 120 --audit-jsonl ./.luvatrix/audit.jsonl
+uv run --python 3.14+freethreaded python main.py audit-report --audit-jsonl ./.luvatrix/audit.jsonl
 ```
 
 Energy safety monitor mode:
 
 ```bash
-uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger --sensor-backend macos --energy-safety monitor --ticks 300
+uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --sensor-backend macos --energy-safety monitor --ticks 300
 ```
 
 Energy safety enforce mode:
 
 ```bash
-uv run --python 3.14 python main.py run-app examples/app_protocol/input_sensor_logger --sensor-backend macos --energy-safety enforce --energy-critical-streak 3 --ticks 300
+uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --sensor-backend macos --energy-safety enforce --energy-critical-streak 3 --ticks 300
 ```
 
 ## 2. Troubleshooting Decision Tree
@@ -109,8 +109,8 @@ For each operational run:
 Quick verification commands:
 
 ```bash
-uv run --python 3.14 python main.py audit-report --audit-sqlite ./.luvatrix/audit.db
-uv run --python 3.14 python main.py audit-report --audit-jsonl ./.luvatrix/audit.jsonl
+uv run --python 3.14+freethreaded python main.py audit-report --audit-sqlite ./.luvatrix/audit.db
+uv run --python 3.14+freethreaded python main.py audit-report --audit-jsonl ./.luvatrix/audit.jsonl
 ```
 
 ## 5. Operator Test Pack

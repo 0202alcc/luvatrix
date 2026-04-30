@@ -45,7 +45,7 @@ entrypoint = "variant_main:create"
 Run command:
 
 ```bash
-uv run --python 3.14 python main.py run-app /path/to/sample.single_variant --render headless --ticks 120
+uv run --python 3.14+freethreaded python main.py run-app /path/to/sample.single_variant --render headless --ticks 120
 ```
 
 Expected behavior on `macos/arm64`:
@@ -93,7 +93,7 @@ Resolution examples:
 Run command:
 
 ```bash
-uv run --python 3.14 python main.py run-app /path/to/sample.multi_variant --render headless --ticks 120
+uv run --python 3.14+freethreaded python main.py run-app /path/to/sample.multi_variant --render headless --ticks 120
 ```
 
 ## 5. Failure Case: Unsupported Platform

@@ -1,27 +1,17 @@
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "luvatrix"
-version = "0.1.1"
-description = "Luvatrix runtime and plotting toolkit"
+version = "0.1.0"
+description = "High-performance interactive UI runtime"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = [
   "numpy>=2.4.2",
   "Pillow>=10.3.0",
-  "pytz>=2026.1.post1",
   "torch>=2.4.0",
 ]
 
 [project.optional-dependencies]
-plot = []
-trading = [
-  "coinbasetraderbot",
-]
-macos = [
-  "pyobjc-core>=12.1",
+ios = [
   "pyobjc-framework-cocoa>=12.1",
   "pyobjc-framework-quartz>=12.1",
   "pyobjc-framework-Metal>=12.1",
@@ -32,7 +22,6 @@ vulkan = [
 web = [
   "websockets>=13.0",
 ]
-ios = []
 dev = [
   "matplotlib>=3.10.8",
 ]

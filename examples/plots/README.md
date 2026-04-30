@@ -25,21 +25,21 @@ All in-repo plotting demos live here.
 From repo root:
 
 ```bash
-uv run --python 3.14 python main.py run-app examples/plots/plot_demo --render headless --ticks 300 --fps 60 --width 640 --height 360
+uv run --python 3.14+freethreaded python main.py run-app examples/plots/plot_demo --render headless --ticks 300 --fps 60 --width 640 --height 360
 ```
 
 ```bash
-uv run --python 3.14 python main.py run-app examples/plots/static_plot --render headless --ticks 300 --fps 60 --width 640 --height 360
+uv run --python 3.14+freethreaded python main.py run-app examples/plots/static_plot --render headless --ticks 300 --fps 60 --width 640 --height 360
 ```
 
 ```bash
-uv run --python 3.14 python main.py run-app examples/plots/static_plot_2d --render headless --ticks 300 --fps 60 --width 640 --height 360
+uv run --python 3.14+freethreaded python main.py run-app examples/plots/static_plot_2d --render headless --ticks 300 --fps 60 --width 640 --height 360
 ```
 
 ```bash
-uv run --python 3.14 python main.py run-app examples/plots/dynamic_plot_2d --render headless --ticks 300 --fps 60 --width 640 --height 360
+uv run --python 3.14+freethreaded python main.py run-app examples/plots/dynamic_plot_2d --render headless --ticks 300 --fps 60 --width 640 --height 360
 ```
 
 ```bash
-uv run --python 3.14 python main.py run-app examples/plots/fake_websocket_stream --render headless --ticks 300 --fps 60 --width 640 --height 360
+uv run --python 3.14+freethreaded python main.py run-app examples/plots/fake_websocket_stream --render headless --ticks 300 --fps 60 --width 640 --height 360
 ```

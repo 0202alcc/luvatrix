@@ -287,6 +287,9 @@ class SceneDisplayRuntime:
                 if next_at < now - interval:
                     next_at = now + interval
             try:
+                if self._frames_presented % 120 == 0:
+                    vsync_status = f"vsync_fd={vsync_fd}" if vsync_fd is not None else "software_timer"
+                    LOGGER.info("[scene-runtime] tick %s fps=%d active=%d", vsync_status, present_fps, int(active))
                 self.run_once(timeout=0.0, repeat_latest=repeat_latest)
             except Exception as exc:  # noqa: BLE001
                 self._last_error = exc

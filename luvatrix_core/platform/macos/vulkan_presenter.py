@@ -7,6 +7,8 @@ from typing import Protocol
 
 import torch
 
+from ..frame_pipeline import PresentationMode, normalize_presentation_mode
+
 
 class PresenterState(str, Enum):
     UNINITIALIZED = "uninitialized"
@@ -84,6 +86,8 @@ class MacOSVulkanPresenter:
     width: int
     height: int
     title: str = "Luvatrix"
+    presentation_mode: PresentationMode | str = PresentationMode.STRETCH
+    lock_window_size: bool = False
     preserve_aspect_ratio: bool = False
     backend: MacOSVulkanBackend | None = None
     max_dimension: int = 16384
@@ -93,10 +97,16 @@ class MacOSVulkanPresenter:
         self._state = PresenterState.UNINITIALIZED
         self._context: VulkanContext | None = None
         self._last_error: Exception | None = None
+        if self.preserve_aspect_ratio and self.presentation_mode == PresentationMode.STRETCH:
+            self.presentation_mode = PresentationMode.PRESERVE_ASPECT
+        self.presentation_mode = normalize_presentation_mode(self.presentation_mode)
         if self.backend is None:
             from .vulkan_backend import MoltenVKMacOSBackend
 
-            self.backend = MoltenVKMacOSBackend(preserve_aspect_ratio=self.preserve_aspect_ratio)
+            self.backend = MoltenVKMacOSBackend(
+                presentation_mode=self.presentation_mode,
+                lock_window_size=self.lock_window_size,
+            )
         self._validate_dimensions(self.width, self.height)
 
     @property

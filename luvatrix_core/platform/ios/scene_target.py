@@ -430,7 +430,7 @@ class IOSMetalSceneBackend:
 
         layer.setDevice_(device)
         layer.setPixelFormat_(80)
-        layer.setFramebufferOnly_(False)
+        layer.setFramebufferOnly_(True)
         layer.setAllowsNextDrawableTimeout_(False)
 
         set_size = layer.setDrawableSize_
@@ -449,6 +449,7 @@ class IOSMetalSceneBackend:
             window_handle=window_handle,
             window_system=self.window_system,
         )
+        print(f"[ios-metal] initialized scene backend logical={width}x{height}", file=sys.stderr, flush=True)
         return MetalContext(width=width, height=height, title=title)
 
     def present_scene(self, context: MetalContext, frame: SceneFrame) -> None:
@@ -483,11 +484,16 @@ class IOSMetalSceneBackend:
         _sp("luvatrix_sp_nextdrawable_end")
         nd_ms = (t1 - t0) * 1000.0
         self._last_nextdrawable_ms = nd_ms
+        
+        # Periodic heartbeat log to confirm Python-side present loop is running
+        if self._present_commits % 120 == 0:
+            print(f"[ios-metal] heartbeat revision={frame.revision} nodes={len(frame.nodes)} nd_ms={nd_ms:.1f}", file=sys.stderr, flush=True)
+
         if drawable is None:
             self._next_drawable_nil += 1
             if nd_ms > 10.0:
                 self._next_drawable_slow += 1
-                print(f"[ios-metal] nextDrawable blocked {nd_ms:.0f}ms → nil", file=sys.stderr, flush=True)
+                print(f"[ios-metal] nextDrawable blocked {nd_ms:.0f}ms → nil (active={app_active})", file=sys.stderr, flush=True)
             time.sleep(0.004)
             return
         if nd_ms > 10.0:

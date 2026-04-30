@@ -82,7 +82,7 @@ What it showcases:
 Visualize in macOS renderer:
 
 ```bash
-PYTHONPATH=. uv run --python 3.14 python main.py run-app examples/planes_v2/<project_id> --render macos --width 960 --height 540 --fps 60 --ticks 1800
+PYTHONPATH=. uv run --python 3.14+freethreaded python main.py run-app examples/planes_v2/<project_id> --render macos --width 960 --height 540 --fps 60 --ticks 1800
 ```
 
 Run deterministic validation artifact generation:
