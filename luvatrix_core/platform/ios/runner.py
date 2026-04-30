@@ -1440,23 +1440,46 @@ def _start_device_log_stream(
         "traceback",
     )
 
-    cmd = [
-        "xcrun", "devicectl", "device", "--device", device_id, "syslog", "stream",
+    # Try candidate commands in order; use the first one that starts successfully.
+    # devicectl syslog was removed in newer Xcode; fall back to `log stream`.
+    candidates = [
+        # macOS 14+ log stream can target a paired device by UDID.
+        ["/usr/bin/log", "stream", "--device", device_id, "--level", "info",
+         "--predicate", "process == \"Luvatrix\""],
+        # Older Xcode devicectl syslog (Xcode ≤ 15 style).
+        ["xcrun", "devicectl", "device", "syslog", "stream", "--device-id", device_id],
     ]
-    print(f"[ios] syslog cmd: {' '.join(cmd)}", flush=True)
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,  # merge so connection errors appear in the stream
-            text=True,
-            bufsize=1,
+
+    proc = None
+    for cmd in candidates:
+        print(f"[ios] syslog cmd: {' '.join(cmd)}", flush=True)
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+            # Give the process 0.5s to fail fast (bad syntax exits immediately).
+            try:
+                proc.wait(timeout=0.5)
+                # Exited — try next candidate.
+                proc = None
+                continue
+            except subprocess.TimeoutExpired:
+                # Still running — good, use this one.
+                break
+        except (FileNotFoundError, OSError) as exc:
+            print(f"[ios] syslog candidate failed: {exc}", flush=True)
+            proc = None
+
+    if proc is None:
+        print(
+            "[ios] device log streaming unavailable on this Xcode/macOS version.\n"
+            "[ios] To see Python output: open Console.app → select your iPhone → filter for 'Luvatrix'.",
+            flush=True,
         )
-    except FileNotFoundError:
-        print("[ios] xcrun not found — cannot stream logs; use Xcode console instead")
-        return None, None
-    except OSError as exc:
-        print(f"[ios] failed to start log stream: {exc}")
         return None, None
 
     def _read() -> None:
