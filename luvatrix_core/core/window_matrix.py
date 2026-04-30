@@ -8,20 +8,22 @@ import threading
 import time
 from typing import TypeAlias
 
-import torch
-
+from luvatrix_core import accel
 from luvatrix_core.perf.copy_telemetry import add_copy_telemetry
 
 
 LOGGER = logging.getLogger(__name__)
-MAGENTA = torch.tensor([255, 0, 255, 255], dtype=torch.uint8)
 
-TensorLike: TypeAlias = torch.Tensor
+# Plain tuple accepted by both torch and numpy index assignment.
+_MAGENTA_RGBA = (255, 0, 255, 255)
+
+TensorLike: TypeAlias = object  # torch.Tensor on GPU platforms, numpy.ndarray on iOS
 
 
 @dataclass(frozen=True)
 class FullRewrite:
     tensor_h_w_4: TensorLike
+    take_ownership: bool = False
 
 
 @dataclass(frozen=True)
@@ -99,30 +101,30 @@ class WindowMatrix:
         self._next_event_id = 1
         self._revision = 0
         self._revision_snapshot_enabled = os.getenv("LUVATRIX_ENABLE_REVISIONED_SNAPSHOT", "0").strip() == "1"
-        self._revision_snapshot: torch.Tensor | None = None
+        self._revision_snapshot: object | None = None
         self._revision_snapshot_revision = 0
-        bg = torch.tensor(background, dtype=torch.uint8).view(1, 1, 4)
-        self._matrix = bg.expand(height, width, 4).clone()
+        bg = accel.from_sequence(list(background), (1, 1, 4))
+        self._matrix = accel.broadcast_to_clone(bg, (height, width, 4))
         if self._revision_snapshot_enabled:
-            self._revision_snapshot = self._matrix.clone()
+            self._revision_snapshot = accel.clone(self._matrix)
 
     @property
     def revision(self) -> int:
         return self._revision
 
-    def read_snapshot(self) -> torch.Tensor:
+    def read_snapshot(self) -> object:
         """Safe read view for external consumers."""
         with self._write_lock:
             started = time.perf_counter_ns()
-            out = self._matrix.clone()
+            out = accel.clone(self._matrix)
             add_copy_telemetry(
                 copy_count=1,
-                copy_bytes=int(out.numel()),
+                copy_bytes=accel.numel(out),
                 matrix_snapshot_clone_ns=time.perf_counter_ns() - started,
             )
             return out
 
-    def read_revision_snapshot(self, revision: int) -> torch.Tensor | None:
+    def read_revision_snapshot(self, revision: int) -> object | None:
         """Return a zero-copy snapshot only for matching revision when enabled."""
         with self._write_lock:
             if not self._revision_snapshot_enabled:
@@ -133,7 +135,7 @@ class WindowMatrix:
                 return None
             return self._revision_snapshot
 
-    def _unsafe_matrix_view(self) -> torch.Tensor:
+    def _unsafe_matrix_view(self) -> object:
         """Internal-only no-copy handle."""
         return self._matrix
 
@@ -143,15 +145,22 @@ class WindowMatrix:
 
         with self._write_lock:
             offending_pixels = 0
-            if self._is_localized_commit_batch(batch.operations):
+            if len(batch.operations) == 1 and isinstance(batch.operations[0], FullRewrite):
+                op = batch.operations[0]
+                self._matrix, offending_pixels = _sanitize_rgba_array(
+                    op.tensor_h_w_4,
+                    (self.height, self.width, 4),
+                    take_ownership=op.take_ownership,
+                )
+            elif self._is_localized_commit_batch(batch.operations):
                 prepared, offending_pixels = self._prepare_localized_ops(batch.operations)
                 self._apply_prepared_localized_ops(prepared)
             else:
                 stage_started = time.perf_counter_ns()
-                staged = self._matrix.clone()
+                staged = accel.clone(self._matrix)
                 add_copy_telemetry(
                     copy_count=1,
-                    copy_bytes=int(staged.numel()),
+                    copy_bytes=accel.numel(staged),
                     matrix_stage_clone_ns=time.perf_counter_ns() - stage_started,
                 )
                 for op in batch.operations:
@@ -194,46 +203,46 @@ class WindowMatrix:
         with self._event_lock:
             return len(self._events)
 
-    def _apply_operation(self, matrix: torch.Tensor, op: WriteOp) -> tuple[torch.Tensor, int]:
+    def _apply_operation(self, matrix: object, op: WriteOp) -> tuple[object, int]:
         if isinstance(op, FullRewrite):
-            full, offending = _sanitize_rgba_tensor(op.tensor_h_w_4, (self.height, self.width, 4))
+            full, offending = _sanitize_rgba_array(op.tensor_h_w_4, (self.height, self.width, 4))
             return full, offending
         if isinstance(op, PushColumn):
             _validate_index(op.index, self.width, "column index")
-            col, offending = _sanitize_rgba_tensor(op.column_h_4, (self.height, 4))
+            col, offending = _sanitize_rgba_array(op.column_h_4, (self.height, 4))
             if op.index < self.width - 1:
-                src = matrix[:, op.index : self.width - 1, :].clone()
+                src = accel.clone(matrix[:, op.index : self.width - 1, :])
                 matrix[:, op.index + 1 :, :] = src
             matrix[:, op.index, :] = col
             return matrix, offending
         if isinstance(op, ReplaceColumn):
             _validate_index(op.index, self.width, "column index")
-            col, offending = _sanitize_rgba_tensor(op.column_h_4, (self.height, 4))
+            col, offending = _sanitize_rgba_array(op.column_h_4, (self.height, 4))
             matrix[:, op.index, :] = col
             return matrix, offending
         if isinstance(op, PushRow):
             _validate_index(op.index, self.height, "row index")
-            row, offending = _sanitize_rgba_tensor(op.row_w_4, (self.width, 4))
+            row, offending = _sanitize_rgba_array(op.row_w_4, (self.width, 4))
             if op.index < self.height - 1:
-                src = matrix[op.index : self.height - 1, :, :].clone()
+                src = accel.clone(matrix[op.index : self.height - 1, :, :])
                 matrix[op.index + 1 :, :, :] = src
             matrix[op.index, :, :] = row
             return matrix, offending
         if isinstance(op, ReplaceRow):
             _validate_index(op.index, self.height, "row index")
-            row, offending = _sanitize_rgba_tensor(op.row_w_4, (self.width, 4))
+            row, offending = _sanitize_rgba_array(op.row_w_4, (self.width, 4))
             matrix[op.index, :, :] = row
             return matrix, offending
         if isinstance(op, ReplaceRect):
             _validate_rect(op.x, op.y, op.width, op.height, self.width, self.height)
-            patch, offending = _sanitize_rgba_tensor(op.rect_h_w_4, (op.height, op.width, 4))
+            patch, offending = _sanitize_rgba_array(op.rect_h_w_4, (op.height, op.width, 4))
             matrix[op.y : op.y + op.height, op.x : op.x + op.width, :] = patch
             return matrix, offending
         if isinstance(op, ShiftFrame):
-            fill, offending = _sanitize_rgba_tensor(op.fill_rgba_4.view(1, 1, 4), (1, 1, 4))
+            fill, offending = _sanitize_rgba_array(accel.reshape(op.fill_rgba_4, (1, 1, 4)), (1, 1, 4))
             dx = int(op.dx)
             dy = int(op.dy)
-            out = fill.view(1, 1, 4).expand(self.height, self.width, 4).clone()
+            out = accel.broadcast_to_clone(fill, (self.height, self.width, 4))
             if abs(dx) >= self.width or abs(dy) >= self.height:
                 return out, offending
             src = matrix
@@ -249,12 +258,12 @@ class WindowMatrix:
                 ]
             return out, offending
         if isinstance(op, Multiply):
-            color_matrix = _coerce_numeric(op.color_matrix_4x4, (4, 4), "color_matrix_4x4")
-            if not torch.isfinite(color_matrix).all():
+            color_matrix = _coerce_float32(op.color_matrix_4x4, (4, 4), "color_matrix_4x4")
+            if not accel.all_finite(color_matrix):
                 raise ValueError("color_matrix_4x4 must contain only finite values")
-            out = matrix.to(torch.float32)
-            out = torch.matmul(out, color_matrix.transpose(0, 1))
-            out = torch.clamp(torch.round(out), 0, 255).to(torch.uint8)
+            out = accel.to_float32(matrix)
+            out = accel.matmul(out, accel.transpose_2d(color_matrix))
+            out = accel.to_uint8(accel.clamp(accel.round_arr(out), 0, 255))
             return out, 0
         raise TypeError(f"Unsupported write op: {type(op)!r}")
 
@@ -265,32 +274,32 @@ class WindowMatrix:
     def _prepare_localized_ops(
         self,
         operations: list[WriteOp],
-    ) -> tuple[list[tuple[str, int, int, int, int, torch.Tensor]], int]:
-        prepared: list[tuple[str, int, int, int, int, torch.Tensor]] = []
+    ) -> tuple[list[tuple[str, int, int, int, int, object]], int]:
+        prepared: list[tuple[str, int, int, int, int, object]] = []
         offending_pixels = 0
         for op in operations:
             if isinstance(op, ReplaceColumn):
                 _validate_index(op.index, self.width, "column index")
-                col, offending = _sanitize_rgba_tensor(op.column_h_4, (self.height, 4))
+                col, offending = _sanitize_rgba_array(op.column_h_4, (self.height, 4))
                 prepared.append(("column", int(op.index), 0, 1, self.height, col))
                 offending_pixels += offending
                 continue
             if isinstance(op, ReplaceRow):
                 _validate_index(op.index, self.height, "row index")
-                row, offending = _sanitize_rgba_tensor(op.row_w_4, (self.width, 4))
+                row, offending = _sanitize_rgba_array(op.row_w_4, (self.width, 4))
                 prepared.append(("row", 0, int(op.index), self.width, 1, row))
                 offending_pixels += offending
                 continue
             if isinstance(op, ReplaceRect):
                 _validate_rect(op.x, op.y, op.width, op.height, self.width, self.height)
-                patch, offending = _sanitize_rgba_tensor(op.rect_h_w_4, (op.height, op.width, 4))
+                patch, offending = _sanitize_rgba_array(op.rect_h_w_4, (op.height, op.width, 4))
                 prepared.append(("rect", int(op.x), int(op.y), int(op.width), int(op.height), patch))
                 offending_pixels += offending
                 continue
             raise TypeError(f"Unsupported localized write op: {type(op)!r}")
         return prepared, offending_pixels
 
-    def _apply_prepared_localized_ops(self, prepared: list[tuple[str, int, int, int, int, torch.Tensor]]) -> None:
+    def _apply_prepared_localized_ops(self, prepared: list[tuple[str, int, int, int, int, object]]) -> None:
         for kind, x, y, width, height, payload in prepared:
             if kind == "column":
                 self._matrix[:, x, :] = payload
@@ -307,11 +316,11 @@ class WindowMatrix:
         if not self._revision_snapshot_enabled:
             return
         started = time.perf_counter_ns()
-        self._revision_snapshot = self._matrix.clone()
+        self._revision_snapshot = accel.clone(self._matrix)
         self._revision_snapshot_revision = int(self._revision)
         add_copy_telemetry(
             copy_count=1,
-            copy_bytes=int(self._revision_snapshot.numel()),
+            copy_bytes=accel.numel(self._revision_snapshot),
             matrix_snapshot_clone_ns=time.perf_counter_ns() - started,
         )
 
@@ -330,30 +339,23 @@ def _validate_rect(x: int, y: int, width: int, height: int, matrix_width: int, m
         raise ValueError("rect exceeds matrix bounds")
 
 
-def _coerce_numeric(value: torch.Tensor, expected_shape: tuple[int, ...], label: str) -> torch.Tensor:
-    if not torch.is_tensor(value):
-        raise ValueError(f"{label} must be a torch.Tensor")
-    if tuple(value.shape) != expected_shape:
-        raise ValueError(f"{label} has invalid shape: {tuple(value.shape)} expected {expected_shape}")
-    if value.dtype == torch.bool:
-        return value.to(torch.float32)
-    if value.is_floating_point() or value.dtype in (
-        torch.int8,
-        torch.int16,
-        torch.int32,
-        torch.int64,
-        torch.uint8,
-    ):
-        return value.to(torch.float32)
-    raise ValueError(f"{label} must be a numeric tensor, got {value.dtype}")
+def _coerce_float32(value: object, expected_shape: tuple[int, ...], label: str) -> object:
+    return accel.coerce_float32(value, expected_shape, label)
 
 
-def _sanitize_rgba_tensor(value: torch.Tensor, expected_shape: tuple[int, ...]) -> tuple[torch.Tensor, int]:
-    raw = _coerce_numeric(value, expected_shape, "rgba tensor")
-    invalid = ~torch.isfinite(raw) | (raw < 0) | (raw > 255)
-    invalid_pixels = int(torch.any(invalid, dim=-1).sum().item())
-    clamped = torch.clamp(raw, 0, 255).to(torch.uint8)
+def _sanitize_rgba_array(
+    value: object,
+    expected_shape: tuple[int, ...],
+    *,
+    take_ownership: bool = False,
+) -> tuple[object, int]:
+    if accel.is_uint8(value) and hasattr(value, "shape") and tuple(value.shape) == expected_shape:
+        return value if take_ownership else accel.clone(value), 0
+    raw = accel.coerce_float32(value, expected_shape, "rgba array")
+    invalid = ~accel.isfinite(raw) | (raw < 0) | (raw > 255)
+    invalid_pixels = int(accel.any_over_last_dim(invalid).sum())
+    clamped = accel.to_uint8(accel.clamp(raw, 0, 255))
     if invalid_pixels > 0:
-        pixel_mask = torch.any(invalid, dim=-1)
-        clamped[pixel_mask] = MAGENTA
+        pixel_mask = accel.any_over_last_dim(invalid)
+        clamped[pixel_mask] = accel.from_sequence(list(_MAGENTA_RGBA), (4,))
     return clamped, invalid_pixels

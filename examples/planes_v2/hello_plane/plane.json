@@ -107,22 +107,25 @@
       "blend_mode": "delta_rgba",
       "position": {
         "x": "50vw",
-        "y": "10vh",
+        "y": "50vh",
         "frame": "screen_tl"
       },
       "anchor": {
         "x": "50%",
-        "y": 0,
+        "y": "50%",
         "frame_reference": "screen_tl"
       },
       "size": {
         "width": 280,
         "height": 84
       },
+      "functions": {
+        "on_press_single": "handlers::cycle_hover_profile"
+      },
       "props": {
         "material_profile": "water_button",
-        "draggable": true,
-        "label": "Stained Glass",
+        "draggable": false,
+        "label": "Profile 1/5",
         "label_color_hex": "#FFF6F4"
       }
     }

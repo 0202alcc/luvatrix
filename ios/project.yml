@@ -1,0 +1,225 @@
+name: Luvatrix
+options:
+  bundleIdPrefix: com.luvatrix
+  deploymentTarget:
+    iOS: "16.0"
+  defaultConfig: Debug
+  xcodeVersion: "15"
+
+packages: {}
+
+targets:
+  Luvatrix:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Luvatrix
+        excludes:
+          - "**/.DS_Store"
+    info:
+      path: Luvatrix/Info.plist
+      properties:
+        UILaunchScreen: {}
+        LSApplicationCategoryType: public.app-category.games
+        LSSupportsGameMode: true
+        GCSupportsGameMode: true
+        CADisableMinimumFrameDurationOnPhone: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.luvatrix.app
+        DEVELOPMENT_TEAM: BZPRW82LJM
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: Luvatrix/Luvatrix.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_OBJC_BRIDGING_HEADER: Luvatrix/Luvatrix-Bridging-Header.h
+        # Keep header lookup pointed at the resolved framework in build products.
+        # Do not list both XCFramework slices directly; that causes duplicate
+        # Python module definitions.
+        HEADER_SEARCH_PATHS: "$(BUILT_PRODUCTS_DIR)/Python.framework/Headers"
+        GCC_PREPROCESSOR_DEFINITIONS: PY_SSIZE_T_CLEAN=1
+        CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: NO
+        # Without this, Swift's embedded clang compiles the bridging header PCH before
+        # Python.framework's module map is loaded, causing "not defined in any loaded
+        # module map file". Explicitly loading the module map (from the build products
+        # dir where Xcode copies the resolved XCFramework slice) fixes it.
+        OTHER_SWIFT_FLAGS: "-Xcc -fmodule-map-file=$(BUILT_PRODUCTS_DIR)/Python.framework/Headers/module.modulemap"
+      configs:
+        Debug:
+          ONLY_ACTIVE_ARCH: YES
+        Release:
+          ONLY_ACTIVE_ARCH: NO
+
+    dependencies:
+      - framework: Python/PythonSupport.xcframework
+        embed: true
+        codeSign: true
+
+    preBuildScripts:
+      - name: Verify PyPackages
+        script: |
+          if [ "$PLATFORM_NAME" = "iphonesimulator" ]; then
+            PY_PACKAGES_DIR="$PROJECT_DIR/PyPackages-simulator"
+            NUMPY_TAG="cpython-312-iphonesimulator"
+          else
+            PY_PACKAGES_DIR="$PROJECT_DIR/PyPackages-device"
+            NUMPY_TAG="cpython-312-iphoneos"
+          fi
+          if [ ! -d "$PY_PACKAGES_DIR" ]; then
+            PY_PACKAGES_DIR="$PROJECT_DIR/PyPackages"
+          fi
+          if [ ! -d "$PY_PACKAGES_DIR/luvatrix_core" ]; then
+            echo "error: $PY_PACKAGES_DIR not populated. Run ios/scripts/setup_ios.sh first."
+            exit 1
+          fi
+          if ! find "$PY_PACKAGES_DIR/numpy" -name "*${NUMPY_TAG}.so" -print -quit 2>/dev/null | grep -q .; then
+            if [ "${LUVATRIX_ALLOW_PURE_PYTHON_IOS:-0}" != "1" ]; then
+              echo "error: numpy missing or wrong iOS ABI in $PY_PACKAGES_DIR. Run ios/scripts/setup_ios.sh or set LUVATRIX_ALLOW_PURE_PYTHON_IOS=1 to allow the slow fallback."
+              exit 1
+            fi
+            echo "warning: numpy missing or wrong iOS ABI in $PY_PACKAGES_DIR; slow pure-Python fallback allowed."
+          fi
+
+    postBuildScripts:
+      - name: Copy PyPackages into bundle
+        script: |
+          set -e
+          REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd)"
+          if [ "$PLATFORM_NAME" = "iphonesimulator" ]; then
+            PY_PACKAGES_DIR="$PROJECT_DIR/PyPackages-simulator"
+          else
+            PY_PACKAGES_DIR="$PROJECT_DIR/PyPackages-device"
+          fi
+          if [ ! -d "$PY_PACKAGES_DIR" ]; then
+            PY_PACKAGES_DIR="$PROJECT_DIR/PyPackages"
+          fi
+          # Always sync luvatrix_core from the live repo so edits are picked up
+          # without re-running setup_ios.sh.
+          rsync -a --delete \
+            --exclude "__pycache__" --exclude "*.pyc" \
+            "$REPO_ROOT/luvatrix_core/" \
+            "$PY_PACKAGES_DIR/luvatrix_core/"
+          rsync -a --delete \
+            --exclude "__pycache__" --exclude "*.pyc" \
+            "$REPO_ROOT/luvatrix_ui/" \
+            "$PY_PACKAGES_DIR/luvatrix_ui/"
+          SRC="$PY_PACKAGES_DIR"
+          DST="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/PyPackages"
+          rsync -a --delete "$SRC/" "$DST/"
+          # Xcode direct-run fallback. The CLI overwrites this in its temp bundle
+          # with the requested app directory before installing.
+          if [ -d "$REPO_ROOT/examples/full_suite_interactive" ]; then
+            rsync -a --delete \
+              --exclude "__pycache__" --exclude "*.pyc" \
+              "$REPO_ROOT/examples/full_suite_interactive/" \
+              "$DST/luvatrix_app/"
+          fi
+          if [ "${LUVATRIX_IMPORT_PROBE:-0}" = "1" ]; then
+            echo "1" > "$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/LuvatrixImportProbe"
+          else
+            rm -f "$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/LuvatrixImportProbe"
+          fi
+
+      - name: Copy Python stdlib into bundle
+        script: |
+          set -e
+          # Select the correct XCFramework slice for device vs simulator.
+          if [ "$PLATFORM_NAME" = "iphonesimulator" ]; then
+            SLICE="ios-arm64_x86_64-simulator"
+          else
+            SLICE="ios-arm64"
+          fi
+          if [ "${CURRENT_ARCH:-}" = "x86_64" ]; then
+            ARCH_LIB="lib-x86_64"
+          else
+            ARCH_LIB="lib-arm64"
+          fi
+          COMMON_LIB="$PROJECT_DIR/Python/PythonSupport.xcframework/lib"
+          SLICE_LIB="$PROJECT_DIR/Python/PythonSupport.xcframework/$SLICE/lib"
+          ARCH_SPECIFIC_LIB="$PROJECT_DIR/Python/PythonSupport.xcframework/$SLICE/$ARCH_LIB"
+          DST="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/python"
+          mkdir -p "$DST"
+          rm -rf "$DST/lib"
+          mkdir -p "$DST/lib"
+          if [ -d "$COMMON_LIB" ]; then
+            rsync -a "$COMMON_LIB/" "$DST/lib/"
+          fi
+          if [ -d "$SLICE_LIB" ]; then
+            rsync -a "$SLICE_LIB/" "$DST/lib/"
+          fi
+          if [ -d "$ARCH_SPECIFIC_LIB" ]; then
+            rsync -a "$ARCH_SPECIFIC_LIB/" "$DST/lib/"
+          fi
+          LIBPYTHON_LINK="$DST/lib/libpython3.12.dylib"
+          if [ -L "$LIBPYTHON_LINK" ]; then
+            rm "$LIBPYTHON_LINK"
+            ln -s "../../Frameworks/Python.framework/Python" "$LIBPYTHON_LINK"
+          fi
+        outputFiles:
+          - $(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/python
+
+      - name: Process PyPackages native extensions
+        script: |
+          set -e
+          if [ "$PLATFORM_NAME" = "iphonesimulator" ]; then
+            PLATFORM_FAMILY_NAME="iOS-simulator"
+          else
+            PLATFORM_FAMILY_NAME="iOS"
+          fi
+          CODESIGNING_FOLDER_PATH="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app"
+          PRODUCT_BUNDLE_IDENTIFIER="${PRODUCT_BUNDLE_IDENTIFIER:-com.luvatrix.app}"
+          . "$PROJECT_DIR/Python/PythonSupport.xcframework/build/utils.sh"
+          process_dylibs "Python/PythonSupport.xcframework" "PyPackages"
+          FRAMEWORK_ROOT="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/Frameworks"
+          if [ -d "$FRAMEWORK_ROOT" ]; then
+            find "$FRAMEWORK_ROOT" -maxdepth 1 -name "*.framework" -type d -print | while IFS= read -r framework; do
+              info_plist="$framework/Info.plist"
+              [ -f "$info_plist" ] || continue
+              executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist" 2>/dev/null || basename "$framework" .framework)"
+              case "$executable" in
+                Python)
+                  continue
+                  ;;
+              esac
+              safe_suffix="$(printf '%s' "$executable" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9][^a-z0-9]*/-/g; s/^-//; s/-$//')"
+              if [ -n "$safe_suffix" ]; then
+                /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${PRODUCT_BUNDLE_IDENTIFIER}.pyext.${safe_suffix}" "$info_plist"
+              fi
+              if [ "${CODE_SIGNING_ALLOWED:-YES}" != "NO" ]; then
+                SIGN_IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:-}"
+                if [ -z "$SIGN_IDENTITY" ]; then
+                  SIGN_IDENTITY="${CODE_SIGN_IDENTITY:-}"
+                fi
+                if [ -z "$SIGN_IDENTITY" ]; then
+                  SIGN_IDENTITY="-"
+                fi
+                /usr/bin/codesign --force --sign "$SIGN_IDENTITY" "$framework"
+              fi
+            done
+          fi
+
+      - name: Sign Python stdlib extensions
+        script: |
+          set -e
+          if [ "${CODE_SIGNING_ALLOWED:-YES}" = "NO" ]; then
+            exit 0
+          fi
+          SIGN_IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:-}"
+          if [ -z "$SIGN_IDENTITY" ]; then
+            SIGN_IDENTITY="${CODE_SIGN_IDENTITY:-}"
+          fi
+          if [ -z "$SIGN_IDENTITY" ]; then
+            SIGN_IDENTITY="-"
+          fi
+          PY_ROOT="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/python"
+          if [ ! -d "$PY_ROOT" ]; then
+            exit 0
+          fi
+          find "$PY_ROOT" \( -name "*.so" -o -name "*.dylib" \) -print | while IFS= read -r binary; do
+            if [ -e "$binary" ] && [ ! -L "$binary" ]; then
+              /usr/bin/codesign --force --sign "$SIGN_IDENTITY" "$binary"
+            fi
+          done

@@ -3,21 +3,25 @@
     "debug.menu.bundle.export": false,
     "debug.menu.capture.record.toggle": true,
     "debug.menu.capture.screenshot": true,
+    "debug.menu.capture.screenshot.clipboard": true,
     "debug.menu.frame.step": false,
+    "debug.menu.overlay.origin_refs.toggle": true,
     "debug.menu.overlay.toggle": true,
     "debug.menu.perf.hud.toggle": true,
     "debug.menu.replay.start": true
   },
   "actions": [
     "debug.menu.capture.screenshot",
+    "debug.menu.capture.screenshot.clipboard",
     "debug.menu.capture.record.toggle",
     "debug.menu.overlay.toggle",
+    "debug.menu.overlay.origin_refs.toggle",
     "debug.menu.replay.start",
     "debug.menu.frame.step",
     "debug.menu.perf.hud.toggle",
     "debug.menu.bundle.export"
   ],
-  "app_id": "examples.hello_plane",
+  "app_id": "examples.full_suite_interactive",
   "functional_wiring_enabled": true,
   "menu_wiring_enabled": true,
   "profile": {

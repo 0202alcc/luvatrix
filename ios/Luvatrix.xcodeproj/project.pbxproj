@@ -1,0 +1,481 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		218CECE1EC57342B65652098 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8896C28887D187CDBCA8354 /* main.swift */; };
+		3BD473B88644598961F63601 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61213F89A6A4DE3D03CF454E /* AppDelegate.swift */; };
+		9405EB3E653CCC3FC3F7E47C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7921384591E0C229DDE5A73F /* Assets.xcassets */; };
+		A643FDDC3C673D390556E8A0 /* PythonSupport.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B9A630BDAACD3E769650BB30 /* PythonSupport.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		BF82641C8F296ED6B17C5F97 /* PythonBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = 3E16DB9766E14E9B259B1994 /* PythonBridge.m */; };
+		CA1FEFCCAB0AEDAA285FC64D /* PythonSupport.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9A630BDAACD3E769650BB30 /* PythonSupport.xcframework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C46ADADFE7296C89C5F9DE83 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				A643FDDC3C673D390556E8A0 /* PythonSupport.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		3E16DB9766E14E9B259B1994 /* PythonBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PythonBridge.m; sourceTree = "<group>"; };
+		4C62DEFF7E6DFFF3E7D0DA68 /* Luvatrix.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Luvatrix.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		595633B91D1538CB963D417E /* Luvatrix.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Luvatrix.entitlements; sourceTree = "<group>"; };
+		61213F89A6A4DE3D03CF454E /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		6D816955E6279DE6449BB05D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7921384591E0C229DDE5A73F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		93343642DC49F4C2FAE37C34 /* PythonBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PythonBridge.h; sourceTree = "<group>"; };
+		B8896C28887D187CDBCA8354 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		B9A630BDAACD3E769650BB30 /* PythonSupport.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = PythonSupport.xcframework; path = Python/PythonSupport.xcframework; sourceTree = "<group>"; };
+		C2F2377D7C94E7D7754E0095 /* Luvatrix-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Luvatrix-Bridging-Header.h"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1B73E0F9098AFF32CE4B09BE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CA1FEFCCAB0AEDAA285FC64D /* PythonSupport.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		20E93CC44E24D342501318D7 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B9A630BDAACD3E769650BB30 /* PythonSupport.xcframework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		5EB44B930952443BCE0883E0 = {
+			isa = PBXGroup;
+			children = (
+				C4602BE9B1ED9E54E6F79758 /* Luvatrix */,
+				20E93CC44E24D342501318D7 /* Frameworks */,
+				DE4844678A212F27CBD3CA26 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C4602BE9B1ED9E54E6F79758 /* Luvatrix */ = {
+			isa = PBXGroup;
+			children = (
+				61213F89A6A4DE3D03CF454E /* AppDelegate.swift */,
+				7921384591E0C229DDE5A73F /* Assets.xcassets */,
+				6D816955E6279DE6449BB05D /* Info.plist */,
+				C2F2377D7C94E7D7754E0095 /* Luvatrix-Bridging-Header.h */,
+				595633B91D1538CB963D417E /* Luvatrix.entitlements */,
+				B8896C28887D187CDBCA8354 /* main.swift */,
+				93343642DC49F4C2FAE37C34 /* PythonBridge.h */,
+				3E16DB9766E14E9B259B1994 /* PythonBridge.m */,
+			);
+			path = Luvatrix;
+			sourceTree = "<group>";
+		};
+		DE4844678A212F27CBD3CA26 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4C62DEFF7E6DFFF3E7D0DA68 /* Luvatrix.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0B182F29CB15DECF7E50B8E5 /* Luvatrix */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 69E01054BAFC05CFA3EE77CA /* Build configuration list for PBXNativeTarget "Luvatrix" */;
+			buildPhases = (
+				6E4538410401CB52256AA3B1 /* Verify PyPackages */,
+				287E808EC2253E22DAA4FABD /* Sources */,
+				8A85C8FABE2E6CC7D75F7903 /* Resources */,
+				1B73E0F9098AFF32CE4B09BE /* Frameworks */,
+				C46ADADFE7296C89C5F9DE83 /* Embed Frameworks */,
+				201FA979A1DBCE322493E721 /* Copy PyPackages into bundle */,
+				E671EF36E2EBE87E11EF376F /* Copy Python stdlib into bundle */,
+				9CF7EEB2C174760D1EA38506 /* Process PyPackages native extensions */,
+				68D2DB353F2579E838C192BA /* Sign Python stdlib extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Luvatrix;
+			packageProductDependencies = (
+			);
+			productName = Luvatrix;
+			productReference = 4C62DEFF7E6DFFF3E7D0DA68 /* Luvatrix.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1D31BEAC238BACC4900E799C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					0B182F29CB15DECF7E50B8E5 = {
+						DevelopmentTeam = BZPRW82LJM;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = D72FE7270D0837FDE74FFED1 /* Build configuration list for PBXProject "Luvatrix" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 5EB44B930952443BCE0883E0;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = DE4844678A212F27CBD3CA26 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0B182F29CB15DECF7E50B8E5 /* Luvatrix */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8A85C8FABE2E6CC7D75F7903 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9405EB3E653CCC3FC3F7E47C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		201FA979A1DBCE322493E721 /* Copy PyPackages into bundle */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy PyPackages into bundle";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nREPO_ROOT=\"$(cd \"$PROJECT_DIR/..\" && pwd)\"\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n  PY_PACKAGES_DIR=\"$PROJECT_DIR/PyPackages-simulator\"\nelse\n  PY_PACKAGES_DIR=\"$PROJECT_DIR/PyPackages-device\"\nfi\nif [ ! -d \"$PY_PACKAGES_DIR\" ]; then\n  PY_PACKAGES_DIR=\"$PROJECT_DIR/PyPackages\"\nfi\n# Always sync luvatrix_core from the live repo so edits are picked up\n# without re-running setup_ios.sh.\nrsync -a --delete \\\n  --exclude \"__pycache__\" --exclude \"*.pyc\" \\\n  \"$REPO_ROOT/luvatrix_core/\" \\\n  \"$PY_PACKAGES_DIR/luvatrix_core/\"\nrsync -a --delete \\\n  --exclude \"__pycache__\" --exclude \"*.pyc\" \\\n  \"$REPO_ROOT/luvatrix_ui/\" \\\n  \"$PY_PACKAGES_DIR/luvatrix_ui/\"\nSRC=\"$PY_PACKAGES_DIR\"\nDST=\"$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/PyPackages\"\nrsync -a --delete \"$SRC/\" \"$DST/\"\n# Xcode direct-run fallback. The CLI overwrites this in its temp bundle\n# with the requested app directory before installing.\nif [ -d \"$REPO_ROOT/examples/full_suite_interactive\" ]; then\n  rsync -a --delete \\\n    --exclude \"__pycache__\" --exclude \"*.pyc\" \\\n    \"$REPO_ROOT/examples/full_suite_interactive/\" \\\n    \"$DST/luvatrix_app/\"\nfi\nif [ \"${LUVATRIX_IMPORT_PROBE:-0}\" = \"1\" ]; then\n  echo \"1\" > \"$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/LuvatrixImportProbe\"\nelse\n  rm -f \"$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/LuvatrixImportProbe\"\nfi\n";
+		};
+		68D2DB353F2579E838C192BA /* Sign Python stdlib extensions */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Sign Python stdlib extensions";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nif [ \"${CODE_SIGNING_ALLOWED:-YES}\" = \"NO\" ]; then\n  exit 0\nfi\nSIGN_IDENTITY=\"${EXPANDED_CODE_SIGN_IDENTITY:-}\"\nif [ -z \"$SIGN_IDENTITY\" ]; then\n  SIGN_IDENTITY=\"${CODE_SIGN_IDENTITY:-}\"\nfi\nif [ -z \"$SIGN_IDENTITY\" ]; then\n  SIGN_IDENTITY=\"-\"\nfi\nPY_ROOT=\"$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/python\"\nif [ ! -d \"$PY_ROOT\" ]; then\n  exit 0\nfi\nfind \"$PY_ROOT\" \\( -name \"*.so\" -o -name \"*.dylib\" \\) -print | while IFS= read -r binary; do\n  if [ -e \"$binary\" ] && [ ! -L \"$binary\" ]; then\n    /usr/bin/codesign --force --sign \"$SIGN_IDENTITY\" \"$binary\"\n  fi\ndone\n";
+		};
+		6E4538410401CB52256AA3B1 /* Verify PyPackages */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Verify PyPackages";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n  PY_PACKAGES_DIR=\"$PROJECT_DIR/PyPackages-simulator\"\n  NUMPY_TAG=\"cpython-312-iphonesimulator\"\nelse\n  PY_PACKAGES_DIR=\"$PROJECT_DIR/PyPackages-device\"\n  NUMPY_TAG=\"cpython-312-iphoneos\"\nfi\nif [ ! -d \"$PY_PACKAGES_DIR\" ]; then\n  PY_PACKAGES_DIR=\"$PROJECT_DIR/PyPackages\"\nfi\nif [ ! -d \"$PY_PACKAGES_DIR/luvatrix_core\" ]; then\n  echo \"error: $PY_PACKAGES_DIR not populated. Run ios/scripts/setup_ios.sh first.\"\n  exit 1\nfi\nif ! find \"$PY_PACKAGES_DIR/numpy\" -name \"*${NUMPY_TAG}.so\" -print -quit 2>/dev/null | grep -q .; then\n  if [ \"${LUVATRIX_ALLOW_PURE_PYTHON_IOS:-0}\" != \"1\" ]; then\n    echo \"error: numpy missing or wrong iOS ABI in $PY_PACKAGES_DIR. Run ios/scripts/setup_ios.sh or set LUVATRIX_ALLOW_PURE_PYTHON_IOS=1 to allow the slow fallback.\"\n    exit 1\n  fi\n  echo \"warning: numpy missing or wrong iOS ABI in $PY_PACKAGES_DIR; slow pure-Python fallback allowed.\"\nfi\n";
+		};
+		9CF7EEB2C174760D1EA38506 /* Process PyPackages native extensions */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Process PyPackages native extensions";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n  PLATFORM_FAMILY_NAME=\"iOS-simulator\"\nelse\n  PLATFORM_FAMILY_NAME=\"iOS\"\nfi\nCODESIGNING_FOLDER_PATH=\"$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app\"\nPRODUCT_BUNDLE_IDENTIFIER=\"${PRODUCT_BUNDLE_IDENTIFIER:-com.luvatrix.app}\"\n. \"$PROJECT_DIR/Python/PythonSupport.xcframework/build/utils.sh\"\nprocess_dylibs \"Python/PythonSupport.xcframework\" \"PyPackages\"\nFRAMEWORK_ROOT=\"$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/Frameworks\"\nif [ -d \"$FRAMEWORK_ROOT\" ]; then\n  find \"$FRAMEWORK_ROOT\" -maxdepth 1 -name \"*.framework\" -type d -print | while IFS= read -r framework; do\n    info_plist=\"$framework/Info.plist\"\n    [ -f \"$info_plist\" ] || continue\n    executable=\"$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' \"$info_plist\" 2>/dev/null || basename \"$framework\" .framework)\"\n    case \"$executable\" in\n      Python)\n        continue\n        ;;\n    esac\n    safe_suffix=\"$(printf '%s' \"$executable\" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9][^a-z0-9]*/-/g; s/^-//; s/-$//')\"\n    if [ -n \"$safe_suffix\" ]; then\n      /usr/libexec/PlistBuddy -c \"Set :CFBundleIdentifier ${PRODUCT_BUNDLE_IDENTIFIER}.pyext.${safe_suffix}\" \"$info_plist\"\n    fi\n    if [ \"${CODE_SIGNING_ALLOWED:-YES}\" != \"NO\" ]; then\n      SIGN_IDENTITY=\"${EXPANDED_CODE_SIGN_IDENTITY:-}\"\n      if [ -z \"$SIGN_IDENTITY\" ]; then\n        SIGN_IDENTITY=\"${CODE_SIGN_IDENTITY:-}\"\n      fi\n      if [ -z \"$SIGN_IDENTITY\" ]; then\n        SIGN_IDENTITY=\"-\"\n      fi\n      /usr/bin/codesign --force --sign \"$SIGN_IDENTITY\" \"$framework\"\n    fi\n  done\nfi\n";
+		};
+		E671EF36E2EBE87E11EF376F /* Copy Python stdlib into bundle */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy Python stdlib into bundle";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/python",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n# Select the correct XCFramework slice for device vs simulator.\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n  SLICE=\"ios-arm64_x86_64-simulator\"\nelse\n  SLICE=\"ios-arm64\"\nfi\nif [ \"${CURRENT_ARCH:-}\" = \"x86_64\" ]; then\n  ARCH_LIB=\"lib-x86_64\"\nelse\n  ARCH_LIB=\"lib-arm64\"\nfi\nCOMMON_LIB=\"$PROJECT_DIR/Python/PythonSupport.xcframework/lib\"\nSLICE_LIB=\"$PROJECT_DIR/Python/PythonSupport.xcframework/$SLICE/lib\"\nARCH_SPECIFIC_LIB=\"$PROJECT_DIR/Python/PythonSupport.xcframework/$SLICE/$ARCH_LIB\"\nDST=\"$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/python\"\nmkdir -p \"$DST\"\nrm -rf \"$DST/lib\"\nmkdir -p \"$DST/lib\"\nif [ -d \"$COMMON_LIB\" ]; then\n  rsync -a \"$COMMON_LIB/\" \"$DST/lib/\"\nfi\nif [ -d \"$SLICE_LIB\" ]; then\n  rsync -a \"$SLICE_LIB/\" \"$DST/lib/\"\nfi\nif [ -d \"$ARCH_SPECIFIC_LIB\" ]; then\n  rsync -a \"$ARCH_SPECIFIC_LIB/\" \"$DST/lib/\"\nfi\nLIBPYTHON_LINK=\"$DST/lib/libpython3.12.dylib\"\nif [ -L \"$LIBPYTHON_LINK\" ]; then\n  rm \"$LIBPYTHON_LINK\"\n  ln -s \"../../Frameworks/Python.framework/Python\" \"$LIBPYTHON_LINK\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		287E808EC2253E22DAA4FABD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3BD473B88644598961F63601 /* AppDelegate.swift in Sources */,
+				BF82641C8F296ED6B17C5F97 /* PythonBridge.m in Sources */,
+				218CECE1EC57342B65652098 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		11B1D3D89044FBE26B21200C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		2F7C01026E7DB30B8C9DA22E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO;
+				CODE_SIGN_ENTITLEMENTS = Luvatrix/Luvatrix.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = BZPRW82LJM;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"Python\"",
+				);
+				GCC_PREPROCESSOR_DEFINITIONS = "PY_SSIZE_T_CLEAN=1";
+				HEADER_SEARCH_PATHS = "$(BUILT_PRODUCTS_DIR)/Python.framework/Headers";
+				INFOPLIST_FILE = Luvatrix/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				ONLY_ACTIVE_ARCH = NO;
+				OTHER_SWIFT_FLAGS = "-Xcc -fmodule-map-file=$(BUILT_PRODUCTS_DIR)/Python.framework/Headers/module.modulemap";
+				PRODUCT_BUNDLE_IDENTIFIER = com.luvatrix.app;
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "Luvatrix/Luvatrix-Bridging-Header.h";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		9AE15B20C9C1E718434E4E7B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO;
+				CODE_SIGN_ENTITLEMENTS = Luvatrix/Luvatrix.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = BZPRW82LJM;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"Python\"",
+				);
+				GCC_PREPROCESSOR_DEFINITIONS = "PY_SSIZE_T_CLEAN=1";
+				HEADER_SEARCH_PATHS = "$(BUILT_PRODUCTS_DIR)/Python.framework/Headers";
+				INFOPLIST_FILE = Luvatrix/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_SWIFT_FLAGS = "-Xcc -fmodule-map-file=$(BUILT_PRODUCTS_DIR)/Python.framework/Headers/module.modulemap";
+				PRODUCT_BUNDLE_IDENTIFIER = com.luvatrix.app;
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "Luvatrix/Luvatrix-Bridging-Header.h";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D6915B7585AB4A442BFFC4F8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		69E01054BAFC05CFA3EE77CA /* Build configuration list for PBXNativeTarget "Luvatrix" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9AE15B20C9C1E718434E4E7B /* Debug */,
+				2F7C01026E7DB30B8C9DA22E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D72FE7270D0837FDE74FFED1 /* Build configuration list for PBXProject "Luvatrix" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D6915B7585AB4A442BFFC4F8 /* Debug */,
+				11B1D3D89044FBE26B21200C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1D31BEAC238BACC4900E799C /* Project object */;
+}

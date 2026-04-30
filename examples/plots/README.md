@@ -19,6 +19,7 @@ All in-repo plotting demos live here.
 5. `fake_websocket_stream/`
    - Fake websocket-style 2-D tick stream using `Dynamic2DStreamBuffer` (gaps + occasional out-of-order packets).
 
+
 ## Run
 
 From repo root:

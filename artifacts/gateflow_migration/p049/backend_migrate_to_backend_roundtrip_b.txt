@@ -1,6 +1,0 @@
-{
-  "mode": "backend",
-  "rollback": "gateflow backend migrate --to file",
-  "sqlite_path": "/Users/aleccandidato/Projects/luvatrix/.gateflow/gateflow.db",
-  "status": "ok"
-}

@@ -30,3 +30,15 @@ tmp/
 # GateFlow local sync runtime state
 .gateflow/sync_state.json
 .gateflow/gateflow.db
+
+# iOS Xcode derived data and ephemeral app bundle
+ios/.build/
+ios/.build*/
+ios/PyPackages/
+ios/PyPackages/luvatrix_app/
+ios/PyPackages-device/
+ios/PyPackages-simulator/
+ios/Python/
+ios/Luvatrix.xcodeproj/xcuserdata/
+ios/Luvatrix.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate

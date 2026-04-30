@@ -32,9 +32,9 @@ from luvatrix_core.platform.macos import (
 )
 from luvatrix_core.targets.vulkan_target import VulkanTarget
 
-from examples.app_protocol.full_suite_interactive.app_main import select_sensors
+from examples.full_suite_interactive.app_main import select_sensors
 
-APP_DIR = Path(__file__).resolve().parent / "full_suite_interactive"
+APP_DIR = Path(__file__).resolve().parents[1] / "full_suite_interactive"
 
 
 class NullHDISource(HDIEventSource):

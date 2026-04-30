@@ -6,9 +6,8 @@ import threading
 import time
 from typing import Optional
 
-import torch
-
 from .window_matrix import CallBlitEvent, WindowMatrix
+from luvatrix_core import accel
 from luvatrix_core.perf.copy_telemetry import begin_copy_telemetry_frame, snapshot_copy_telemetry
 from luvatrix_core.targets.base import DisplayFrame, RenderTarget
 
@@ -123,10 +122,10 @@ class DisplayRuntime:
         return dict(self._last_copy_telemetry)
 
 
-def _build_frame(snapshot: torch.Tensor, revision: int) -> DisplayFrame:
+def _build_frame(snapshot: object, revision: int) -> DisplayFrame:
     if snapshot.ndim != 3 or snapshot.shape[2] != 4:
         raise ValueError(f"invalid snapshot shape: {tuple(snapshot.shape)}")
-    if snapshot.dtype != torch.uint8:
+    if not accel.is_uint8(snapshot):
         raise ValueError(f"invalid snapshot dtype: {snapshot.dtype}")
     height, width, _ = snapshot.shape
     return DisplayFrame(

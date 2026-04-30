@@ -1,7 +1,0 @@
-usage: gateflow sync [-h] {from-main,status,apply} ...
-
-positional arguments:
-  {from-main,status,apply}
-
-options:
-  -h, --help            show this help message and exit

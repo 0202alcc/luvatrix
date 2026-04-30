@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import unittest
 
 import torch
@@ -43,20 +44,22 @@ class RendererE2ETests(unittest.TestCase):
         presenter = MacOSVulkanPresenter(width=2, height=2, backend=backend)
         target = VulkanTarget(presenter=presenter)
         runtime = DisplayRuntime(matrix=matrix, target=target)
+        payload = torch.tensor(
+            [
+                [[10, 20, 30, 255], [40, 50, 60, 255]],
+                [[70, 80, 90, 255], [100, 110, 120, 255]],
+            ],
+            dtype=torch.uint8,
+        )
+        # Submit before starting so the background thread finds the event immediately.
+        matrix.submit_write_batch(WriteBatch([FullRewrite(payload)]))
         runtime.start()
         try:
-            payload = torch.tensor(
-                [
-                    [[10, 20, 30, 255], [40, 50, 60, 255]],
-                    [[70, 80, 90, 255], [100, 110, 120, 255]],
-                ],
-                dtype=torch.uint8,
-            )
-            matrix.submit_write_batch(WriteBatch([FullRewrite(payload)]))
-            tick = runtime.run_once(timeout=0.01)
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline and not backend.presented:
+                time.sleep(0.005)
         finally:
             runtime.stop()
-        self.assertIsNotNone(tick)
         self.assertEqual(backend.initialized, 1)
         self.assertEqual(backend.shutdowns, 1)
         self.assertEqual(len(backend.presented), 1)

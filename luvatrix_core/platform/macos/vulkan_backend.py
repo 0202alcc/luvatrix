@@ -197,7 +197,12 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         started_at = time.perf_counter()
         self._require_initialized()
         self._validate_frame(rgba, context.width, context.height)
-        self._capture_presented_frame(rgba)
+        
+        # Only capture and digest frame if debug recording, perf HUD, or frame stepping requires it.
+        # This avoids expensive per-frame contiguous clones and SHA-256 digests on the fast path.
+        if self._recording_active or self._perf_hud_enabled or self._frame_step_state.paused:
+            self._capture_presented_frame(rgba)
+
         self._acquire_next_swapchain_image()
         if self._vulkan_available and self._current_image_index is None:
             return
@@ -1118,9 +1123,13 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
             1,
             [blit],
+<<<<<<< HEAD
             getattr(vk, "VK_FILTER_NEAREST", 0)
             if self.presentation_mode == PresentationMode.PIXEL_PRESERVE
             else getattr(vk, "VK_FILTER_LINEAR", 1),
+=======
+            getattr(vk, "VK_FILTER_NEAREST", 0),
+>>>>>>> codex/t-t-1002-marketbook-renderer
         )
 
     def _queue_submit(self, queue, submit, fence) -> None:

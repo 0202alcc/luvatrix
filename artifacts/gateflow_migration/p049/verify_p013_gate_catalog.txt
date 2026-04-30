@@ -1,1 +1,0 @@
-PASS: ops/ci/p013_gate_catalog.json (3 gates)

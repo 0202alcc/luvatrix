@@ -27,14 +27,13 @@ dev = [
 ]
 
 [project.scripts]
-gateflow = "gateflow_cli.wrapper:main"
 luvatrix = "main:main"
 
 [tool.setuptools]
 py-modules = ["main"]
 
 [tool.setuptools.packages.find]
-include = ["gateflow_cli*", "luvatrix*", "luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
+include = ["luvatrix*", "luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
 
 [tool.uv.sources]
 coinbasetraderbot = { path = "../CoinbaseTraderBot", editable = true }
