@@ -1552,34 +1552,38 @@ def _start_log_file_poll(
     def _poll() -> None:
         local_copy = Path(tempfile.mkdtemp()) / "luvatrix_run.log"
         bytes_read = 0
-        warned_missing = False
+        attempts = 0
+        connected = False
+        cmd = [
+            "xcrun", "devicectl", "device", "copy", "from",
+            "--device", device_id,
+            "--domain-type", "appDataContainer",
+            "--domain-identifier", "com.luvatrix.app",
+            "--source", _IOS_LOG_DEVICE_PATH,
+            "--destination", str(local_copy),
+        ]
+        print(f"[ios-log] poll cmd: {' '.join(cmd)}", flush=True)
         while not stop_event.is_set():
             stop_event.wait(0.5)
             if stop_event.is_set():
                 break
+            attempts += 1
             try:
-                subprocess.run(
-                    [
-                        "xcrun", "devicectl", "device", "copy", "from",
-                        "--device", device_id,
-                        "--domain-type", "appDataContainer",
-                        "--domain-identifier", "com.luvatrix.app",
-                        "--source", _IOS_LOG_DEVICE_PATH,
-                        "--destination", str(local_copy),
-                        "--quiet",
-                    ],
-                    capture_output=True,
-                    check=True,
-                    timeout=5,
-                )
-                warned_missing = False
-            except subprocess.CalledProcessError:
-                if not warned_missing:
-                    print("[ios-log] waiting for device log file…", flush=True)
-                    warned_missing = True
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                if result.returncode != 0:
+                    if not connected:
+                        if attempts <= 3 or attempts % 10 == 0:
+                            err = (result.stderr or result.stdout or "").strip()
+                            print(f"[ios-log] waiting for log file (attempt {attempts}): {err[:120]}", flush=True)
+                    continue
+                connected = True
+            except subprocess.TimeoutExpired:
+                if attempts <= 3:
+                    print(f"[ios-log] devicectl copy timed out (attempt {attempts})", flush=True)
                 continue
-            except (subprocess.TimeoutExpired, OSError):
-                continue
+            except OSError as exc:
+                print(f"[ios-log] devicectl error: {exc}", flush=True)
+                break
             try:
                 data = local_copy.read_bytes()
                 new_data = data[bytes_read:]
