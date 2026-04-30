@@ -1441,8 +1441,7 @@ def _start_device_log_stream(
     )
 
     cmd = [
-        "xcrun", "devicectl", "device", "syslog", "stream",
-        "--device", device_id,
+        "xcrun", "devicectl", "device", "--device", device_id, "syslog", "stream",
     ]
     print(f"[ios] syslog cmd: {' '.join(cmd)}", flush=True)
     try:
