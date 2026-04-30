@@ -10,7 +10,9 @@ import os
 import subprocess
 import threading
 import time
+from typing import Any
 
+from luvatrix.app import MissingOptionalDependencyError, validate_app_install
 from luvatrix_core.core import (
     HDIEvent,
     HDIThread,
@@ -22,16 +24,7 @@ from luvatrix_core.core import (
     UnifiedRuntime,
     WindowMatrix,
 )
-from luvatrix_core.platform.macos import MacOSVulkanPresenter
-from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource
-from luvatrix_core.platform.macos.metal_presenter import MacOSMetalPresenter
-from luvatrix_core.platform.macos.sensors import (
-    make_default_macos_sensor_providers,
-)
-from luvatrix_core.platform.vulkan_setup import detect_vulkan_preflight_issue
 from luvatrix_core.targets.base import DisplayFrame, RenderTarget
-from luvatrix_core.targets.metal_target import MetalTarget
-from luvatrix_core.targets.vulkan_target import VulkanTarget
 
 
 class _NoopHDISource:
@@ -42,9 +35,9 @@ class _NoopHDISource:
 class _MacOSPresenterHDISource:
     """Lazily binds to the presenter window handle after target start."""
 
-    def __init__(self, presenter: MacOSVulkanPresenter | MacOSMetalPresenter) -> None:
+    def __init__(self, presenter: Any) -> None:
         self._presenter = presenter
-        self._delegate: MacOSWindowHDISource | None = None
+        self._delegate: Any | None = None
         self._window_handle = None
 
     def poll(self, window_active: bool, ts_ns: int) -> list[HDIEvent]:
@@ -53,6 +46,7 @@ class _MacOSPresenterHDISource:
             backend = getattr(self._presenter, "backend", None)
             handle = getattr(backend, "_window_handle", None)
             if handle is not None:
+                from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource
                 self._window_handle = handle
                 self._delegate = MacOSWindowHDISource(handle)
         if self._delegate is None:
@@ -184,9 +178,21 @@ def main() -> None:
     prune.add_argument("--audit-sqlite", type=Path, default=None)
     prune.add_argument("--audit-jsonl", type=Path, default=None)
     prune.add_argument("--max-rows", type=int, required=True)
+
+    validate = sub.add_parser("validate-app", help="Validate app manifest and optional install requirements.")
+    validate.add_argument("app_dir", type=Path)
+    validate.add_argument(
+        "--render",
+        choices=["headless", "macos", "macos-metal", "ios-simulator", "ios-device", "web"],
+        default="headless",
+    )
     args = parser.parse_args()
 
     if args.command == "run-app":
+        try:
+            validate_app_install(args.app_dir, render=args.render)
+        except MissingOptionalDependencyError as exc:
+            raise SystemExit(str(exc)) from exc
         if args.render == "ios-simulator":
             _run_ios_simulator(
                 args.app_dir.resolve(),
@@ -232,6 +238,9 @@ def main() -> None:
         if args.sensor_backend == "macos":
             if platform.system() != "Darwin":
                 raise RuntimeError("sensor-backend=macos is only supported on macOS")
+            from luvatrix_core.platform.macos.sensors import (
+                make_default_macos_sensor_providers,
+            )
             providers = make_default_macos_sensor_providers()
         audit_sink = _build_audit_sink(args.audit_sqlite, args.audit_jsonl)
         try:
@@ -307,6 +316,9 @@ def main() -> None:
                 server.run()
                 return
             elif args.render == "macos-metal":
+                from luvatrix_core.platform.macos.metal_presenter import MacOSMetalPresenter
+                from luvatrix_core.targets.metal_target import MetalTarget
+
                 presenter = MacOSMetalPresenter(
                     width=width, height=height, title="Luvatrix App",
                     bar_color_rgba=bar_color, resizable=not has_native,
@@ -314,6 +326,10 @@ def main() -> None:
                 target = MetalTarget(presenter=presenter)
                 hdi_source = _MacOSPresenterHDISource(presenter)
             else:
+                from luvatrix_core.platform.macos import MacOSVulkanPresenter
+                from luvatrix_core.platform.vulkan_setup import detect_vulkan_preflight_issue
+                from luvatrix_core.targets.vulkan_target import VulkanTarget
+
                 # App protocol on macOS should prefer Vulkan by default.
                 os.environ.setdefault("LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN", "1")
                 preflight_issue = detect_vulkan_preflight_issue()
@@ -386,6 +402,18 @@ def main() -> None:
                 hdi_source.close()
             if audit_sink is not None and hasattr(audit_sink, "close"):
                 audit_sink.close()
+        return
+
+    if args.command == "validate-app":
+        try:
+            validation = validate_app_install(args.app_dir, render=args.render)
+        except MissingOptionalDependencyError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(
+            f"app validation ok: app_id={validation.manifest.app_id} "
+            f"render={validation.render} platform={validation.target_platform} "
+            f"variant={validation.resolved_variant.variant_id}"
+        )
         return
 
     if args.command == "audit-report":

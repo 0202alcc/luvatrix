@@ -17,15 +17,32 @@ Base package:
 pip install luvatrix
 ```
 
-Optional Vulkan Python binding:
+Optional platform/runtime extras:
 ```bash
+pip install "luvatrix[macos]"
 pip install "luvatrix[vulkan]"
+pip install "luvatrix[macos,vulkan]"
+pip install "luvatrix[web]"
 ```
 
 Important:
 - `pip` can install Python bindings, but it does not install the native Vulkan SDK/loader.
 - On macOS, install Vulkan SDK or MoltenVK + Vulkan loader separately.
 - `luvatrix` now prints a Vulkan preflight notice at runtime if these native components are missing.
+- `run-app --render macos` uses the Vulkan-backed macOS renderer and expects `luvatrix[macos,vulkan]`.
+- `run-app --render macos-metal` uses the Metal-backed macOS renderer and expects `luvatrix[macos]`.
+- iOS render modes use native Xcode packaging; `luvatrix[ios]` is reserved for Python-installable iOS helpers.
+
+Public app-developer API:
+```python
+from luvatrix.app import AppContext, validate_app_install
+```
+
+Validate an app manifest and render target before launching:
+```bash
+luvatrix validate-app examples/full_suite_interactive --render headless
+luvatrix validate-app examples/full_suite_interactive --render macos
+```
 
 ## Planning Document
 
@@ -159,6 +176,13 @@ Notes:
 ## Unified Runtime CLI
 
 App manifests can now include optional `platform_support` and `[[variants]]` blocks so runtime picks only the host-compatible variant entrypoint/module root.
+For a macOS+iOS app with the same Python entrypoint on both platforms, declare:
+
+```toml
+platform_support = ["macos", "ios"]
+```
+
+Use `[[variants]]` only when a platform or architecture needs a different `module_root` or `entrypoint`.
 
 Run any app protocol folder (`app.toml` + entrypoint) headless:
 ```bash
