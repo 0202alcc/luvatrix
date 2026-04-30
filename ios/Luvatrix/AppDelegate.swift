@@ -272,14 +272,22 @@ final class LuvatrixDisplayLinkTelemetry: NSObject {
     private let signposter = OSSignposter(logHandle: _appRenderLog)
     private var vsyncWriteFD: Int32 = -1
     private var vsyncFDResolved: Bool = false
+    private var vsyncResolveAttempts: Int = 0
 
     private func resolveVsyncFD() {
-        guard !vsyncFDResolved else { return }
-        vsyncFDResolved = true
-        guard let val = getenv("LUVATRIX_IOS_VSYNC_WRITE_FD"),
+        if vsyncFDResolved { return }
+        vsyncResolveAttempts += 1
+        
+        if let val = getenv("LUVATRIX_IOS_VSYNC_WRITE_FD"),
               let str = String(validatingUTF8: val),
-              let fd = Int32(str), fd >= 0 else { return }
-        vsyncWriteFD = fd
+              let fd = Int32(str), fd >= 0 {
+            vsyncWriteFD = fd
+            vsyncFDResolved = true
+            print("[ios-displaylink] resolved vsync fd \(fd) on attempt \(vsyncResolveAttempts)")
+        } else if vsyncResolveAttempts > 600 { // Stop trying after ~5-10 seconds of ticks
+            vsyncFDResolved = true
+            print("[ios-displaylink] giving up on vsync fd resolution after \(vsyncResolveAttempts) attempts")
+        }
     }
 
     init(requestedFPS: Int) {
@@ -326,9 +334,8 @@ final class LuvatrixDisplayLinkTelemetry: NSObject {
         let now = link.timestamp
         if lastReportTimestamp == 0 {
             lastReportTimestamp = now
-            resolveVsyncFD()
-            return
         }
+        resolveVsyncFD()
         let elapsed = now - lastReportTimestamp
         if elapsed >= 0.5 {
             measuredFPS = Double(reportWindowCount) / max(0.001, elapsed)

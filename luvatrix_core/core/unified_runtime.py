@@ -196,18 +196,19 @@ class UnifiedRuntime:
             active_target.start()
         started = True
         scene_present_loop_started = False
-        if self._scene_display_runtime is not None and self._scene_target in active_targets:
-            self._scene_display_runtime.start_present_loop(
-                present_fps=present_fps or target_fps,
-                repeat_latest=True,
-            )
-            scene_present_loop_started = True
         ctx.hdi.start()
         ctx.sensor_manager.start()
         last = time.perf_counter()
         was_active = self._is_active()
         try:
             lifecycle.init(ctx)
+            if self._scene_display_runtime is not None and self._scene_target in active_targets:
+                self._scene_display_runtime.start_present_loop(
+                    present_fps=present_fps or target_fps,
+                    repeat_latest=True,
+                )
+                scene_present_loop_started = True
+
             tick_idx = 0
             while max_ticks is None or tick_idx < max_ticks:
                 for active_target in active_targets:
