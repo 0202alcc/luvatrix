@@ -31,12 +31,8 @@ class _FakeWindowSystem:
         height: int,
         title: str,
         use_metal_layer: bool = True,
-<<<<<<< HEAD
         presentation_mode: PresentationMode | str = PresentationMode.STRETCH,
         lock_window_size: bool = False,
-=======
-        preserve_aspect_ratio: bool = False,
->>>>>>> codex/t-t-1002-marketbook-renderer
         menu_config=None,
     ) -> MacOSWindowHandle:
         self.created += 1

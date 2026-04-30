@@ -102,13 +102,8 @@ class AppKitWindowSystem:
         height: int,
         title: str,
         use_metal_layer: bool = True,
-<<<<<<< HEAD
         presentation_mode: PresentationMode | str = PresentationMode.STRETCH,
         lock_window_size: bool = False,
-=======
-        preserve_aspect_ratio: bool = False,
-        resizable: bool = True,
->>>>>>> codex/t-t-1002-marketbook-renderer
         menu_config: MacOSMenuConfig | None = None,
     ) -> MacOSWindowHandle:
         ns = self._imports()
@@ -120,11 +115,7 @@ class AppKitWindowSystem:
             | ns["NSWindowStyleMaskClosable"]
             | ns["NSWindowStyleMaskMiniaturizable"]
         )
-<<<<<<< HEAD
         if not lock_window_size:
-=======
-        if resizable:
->>>>>>> codex/t-t-1002-marketbook-renderer
             style |= ns["NSWindowStyleMaskResizable"]
         frame = ns["NSMakeRect"](0.0, 0.0, float(width), float(height))
         window = ns["NSWindow"].alloc().initWithContentRect_styleMask_backing_defer_(

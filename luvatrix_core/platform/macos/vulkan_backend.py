@@ -1123,13 +1123,9 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             getattr(vk, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL", 7),
             1,
             [blit],
-<<<<<<< HEAD
             getattr(vk, "VK_FILTER_NEAREST", 0)
             if self.presentation_mode == PresentationMode.PIXEL_PRESERVE
             else getattr(vk, "VK_FILTER_LINEAR", 1),
-=======
-            getattr(vk, "VK_FILTER_NEAREST", 0),
->>>>>>> codex/t-t-1002-marketbook-renderer
         )
 
     def _queue_submit(self, queue, submit, fence) -> None:
