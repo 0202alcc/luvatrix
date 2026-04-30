@@ -272,14 +272,22 @@ final class LuvatrixDisplayLinkTelemetry: NSObject {
     private let signposter = OSSignposter(logHandle: _appRenderLog)
     private var vsyncWriteFD: Int32 = -1
     private var vsyncFDResolved: Bool = false
+    private var vsyncResolveAttempts: Int = 0
 
     private func resolveVsyncFD() {
         guard !vsyncFDResolved else { return }
-        vsyncFDResolved = true
+        // Give up after ~600 ticks (~5s at 120Hz) so we stop calling getenv forever
+        // if the app is running in matrix/non-scene mode with no pipe.
+        vsyncResolveAttempts += 1
+        guard vsyncResolveAttempts <= 600 else { vsyncFDResolved = true; return }
         guard let val = getenv("LUVATRIX_IOS_VSYNC_WRITE_FD"),
               let str = String(validatingUTF8: val),
               let fd = Int32(str), fd >= 0 else { return }
+        // Only mark resolved once we have a valid fd so we keep retrying until
+        // run_loop finishes its Python imports and creates the pipe (~1-2s).
+        vsyncFDResolved = true
         vsyncWriteFD = fd
+        print("[ios-vsync] resolved fd=\(fd) after \(vsyncResolveAttempts) ticks")
     }
 
     init(requestedFPS: Int) {
