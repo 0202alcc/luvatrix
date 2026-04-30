@@ -154,6 +154,7 @@ class UnifiedRuntime:
         target_fps: int = 60,
         present_fps: int | None = None,
         display_timeout: float = 0.0,
+        on_targets_started: "Callable[[], None] | None" = None,
     ) -> UnifiedRunResult:
         if max_ticks is not None and max_ticks <= 0:
             raise ValueError("max_ticks must be > 0")
@@ -162,7 +163,7 @@ class UnifiedRuntime:
         manifest = self._app_runtime.load_manifest(app_path)
         debug_policy_profile = self._app_runtime.resolve_debug_policy_profile(manifest)
         granted = self._app_runtime.resolve_capabilities(manifest)
-        ctx = self._app_runtime.build_context(granted_capabilities=granted)
+        ctx = self._app_runtime.build_context(granted_capabilities=granted, manifest=manifest)
         ctx.runtime_telemetry_provider = self._runtime_telemetry
         resolved = self._app_runtime.resolve_variant(app_path, manifest)
         if manifest.runtime_kind == "process":
@@ -195,6 +196,8 @@ class UnifiedRuntime:
         for active_target in active_targets:
             active_target.start()
         started = True
+        if on_targets_started is not None:
+            on_targets_started()
         scene_present_loop_started = False
         if self._scene_display_runtime is not None and self._scene_target in active_targets:
             self._scene_display_runtime.start_present_loop(

@@ -16,6 +16,7 @@ from luvatrix_ui.text.renderer import TextLayoutMetrics, TextMeasureRequest, Tex
 from luvatrix_core.core.app_runtime import (
     APP_PROTOCOL_VERSION,
     AppRuntime,
+    read_app_display_config,
 )
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
 from luvatrix_core.core.sensor_manager import SensorManagerThread, SensorSample
@@ -201,7 +202,64 @@ class AppRuntimeTests(unittest.TestCase):
             self.assertEqual(manifest.runtime_transport, "stdio_jsonl")
             self.assertEqual(manifest.process_command, ["python", "-u", "worker.py"])
 
-    def test_manifest_process_runtime_requires_command(self) -> None:
+    def test_read_app_display_config_reads_title_and_icon(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "x"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'required_capabilities = []',
+                        'optional_capabilities = []',
+                        "[display]",
+                        'native_width = 200',
+                        'native_height = 100',
+                        'bar_color_rgba = [10, 20, 30, 40]',
+                        'title = "Custom App"',
+                        'icon = "assets/app_icon.png"',
+                    ]
+                )
+            )
+            native_w, native_h, bar_color, title, icon = read_app_display_config(root)
+            self.assertEqual(native_w, 200)
+            self.assertEqual(native_h, 100)
+            self.assertEqual(bar_color, (10, 20, 30, 40))
+            self.assertEqual(title, "Custom App")
+            self.assertEqual(icon, "assets/app_icon.png")
+
+    def test_manifest_loads_display_title_and_icon(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "x"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'required_capabilities = []',
+                        'optional_capabilities = []',
+                        "[display]",
+                        'native_width = 200',
+                        'native_height = 100',
+                        'bar_color_rgba = [10, 20, 30, 40]',
+                        'title = "Custom App"',
+                        'icon = "assets/app_icon.png"',
+                    ]
+                )
+            )
+            (root / "app_main.py").write_text("def create():\n    return object()\n")
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=SensorManagerThread(providers={}),
+            )
+            manifest = runtime.load_manifest(root)
+            self.assertEqual(manifest.display_title, "Custom App")
+            self.assertEqual(manifest.display_icon, "assets/app_icon.png")
+
+    def test_manifest_parses_v2_process_runtime_block(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "app.toml").write_text(
@@ -585,7 +643,7 @@ class AppRuntimeTests(unittest.TestCase):
                         'app_id = "x"',
                         'protocol_version = "1"',
                         'entrypoint = "app_main:create"',
-                        'min_runtime_protocol_version = "3"',
+                        'min_runtime_protocol_version = "4"',
                         "required_capabilities = []",
                         "optional_capabilities = []",
                     ]

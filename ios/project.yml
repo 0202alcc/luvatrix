@@ -96,8 +96,12 @@ targets:
           if [ ! -d "$PY_PACKAGES_DIR" ]; then
             PY_PACKAGES_DIR="$PROJECT_DIR/PyPackages"
           fi
-          # Always sync luvatrix_core from the live repo so edits are picked up
+          # Always sync local luvatrix packages from the live repo so edits are picked up
           # without re-running setup_ios.sh.
+          rsync -a --delete \
+            --exclude "__pycache__" --exclude "*.pyc" \
+            "$REPO_ROOT/luvatrix/" \
+            "$PY_PACKAGES_DIR/luvatrix/"
           rsync -a --delete \
             --exclude "__pycache__" --exclude "*.pyc" \
             "$REPO_ROOT/luvatrix_core/" \

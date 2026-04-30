@@ -1,5 +1,5 @@
 app_id = "examples.hello_world"
-protocol_version = "1"
+protocol_version = "3"
 entrypoint = "app_main:create"
 required_capabilities = ["window.write"]
 
@@ -7,3 +7,10 @@ required_capabilities = ["window.write"]
 native_width = 393
 native_height = 852
 bar_color_rgba = [0, 0, 0, 255]
+default_coordinate_frame = "screen_tl"
+title = "Hello World App"
+icon = "assets/icon.png"
+
+[render]
+preferred = "auto"
+fallbacks = ["scene", "ui", "matrix"]

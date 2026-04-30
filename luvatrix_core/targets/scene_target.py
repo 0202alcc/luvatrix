@@ -11,7 +11,7 @@ class SceneRenderTarget(Protocol):
     def start(self) -> None:
         ...
 
-    def present_scene(self, frame: SceneFrame) -> None:
+    def present_scene(self, frame: SceneFrame, target_present_time: float | None = None) -> None:
         ...
 
     def stop(self) -> None:
@@ -45,10 +45,10 @@ class SceneTargetAdapter(RenderTarget):
     def present_frame(self, frame) -> None:
         raise RuntimeError("SceneTargetAdapter does not accept DisplayFrame; use present_scene")
 
-    def present_scene(self, frame: SceneFrame) -> None:
+    def present_scene(self, frame: SceneFrame, target_present_time: float | None = None) -> None:
         if not self._started:
             raise RuntimeError("SceneTargetAdapter must be started before presenting scenes")
-        self.scene_target.present_scene(frame)
+        self.scene_target.present_scene(frame, target_present_time=target_present_time)
 
     def stop(self) -> None:
         if not self._started:

@@ -1,6 +1,7 @@
 app_id = "examples.full_suite_interactive"
-protocol_version = "1"
+protocol_version = "3"
 entrypoint = "app_main:create"
+platform_support = ["macos", "ios"]
 required_capabilities = ["window.write"]
 optional_capabilities = [
   "hdi.keyboard",
@@ -19,3 +20,11 @@ optional_capabilities = [
 native_width = 393
 native_height = 852
 bar_color_rgba = [0, 0, 0, 255]
+default_coordinate_frame = "screen_tl"
+
+[input]
+coordinate_frames = ["screen_tl", "cartesian_bl", "cartesian_center"]
+
+[render]
+preferred = "auto"
+fallbacks = ["scene", "ui", "matrix"]

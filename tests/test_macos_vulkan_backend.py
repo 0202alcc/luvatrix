@@ -22,6 +22,7 @@ class _FakeWindowSystem:
         self.last_use_metal_layer: bool | None = None
         self.last_presentation_mode: PresentationMode | str | None = None
         self.last_lock_window_size: bool | None = None
+        self.last_bar_color_rgba: tuple[int, int, int, int] | None = None
         self.pumped = 0
         self.open_state = True
 
@@ -34,12 +35,14 @@ class _FakeWindowSystem:
         presentation_mode: PresentationMode | str = PresentationMode.STRETCH,
         lock_window_size: bool = False,
         menu_config=None,
+        bar_color_rgba: tuple[int, int, int, int] | None = None,
     ) -> MacOSWindowHandle:
         self.created += 1
         self.last_title = title
         self.last_use_metal_layer = use_metal_layer
         self.last_presentation_mode = presentation_mode
         self.last_lock_window_size = lock_window_size
+        self.last_bar_color_rgba = bar_color_rgba
         class _Layer:
             def setContents_(self, image) -> None:
                 self.last_image = image
@@ -231,6 +234,12 @@ class MacOSVulkanBackendTests(unittest.TestCase):
         backend.initialize(2, 2, "Demo")
         self.assertEqual(ws.last_presentation_mode, PresentationMode.PIXEL_PRESERVE)
         self.assertTrue(bool(ws.last_lock_window_size))
+
+    def test_bar_color_flows_to_window_system(self) -> None:
+        ws = _FakeWindowSystem()
+        backend = MoltenVKMacOSBackend(window_system=ws, bar_color_rgba=(8, 16, 24, 255))
+        backend.initialize(2, 2, "Demo")
+        self.assertEqual(ws.last_bar_color_rgba, (8, 16, 24, 255))
 
     def test_should_close_and_pump_events_delegate_to_window_system(self) -> None:
         ws = _FakeWindowSystem()

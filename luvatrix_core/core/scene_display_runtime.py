@@ -182,7 +182,13 @@ class SceneDisplayRuntime:
             last_cmt_ms_x10=int(target_telemetry.get("last_cmt_ms_x10", 0)),
         )
 
-    def run_once(self, timeout: float | None = None, *, repeat_latest: bool = False) -> SceneRenderTick | None:
+    def run_once(
+        self,
+        timeout: float | None = None,
+        *,
+        repeat_latest: bool = False,
+        target_present_time: float | None = None,
+    ) -> SceneRenderTick | None:
         if not self.is_active():
             self._skipped_inactive += 1
             return None
@@ -215,7 +221,7 @@ class SceneDisplayRuntime:
         self._attempt_rate.mark()
         started = time.perf_counter_ns()
         try:
-            self._target.present_scene(frame)
+            self._target.present_scene(frame, target_present_time=target_present_time)
         except Exception as exc:  # noqa: BLE001
             self._last_error = exc
             LOGGER.exception("SceneDisplayRuntime present failed: %s", exc)
@@ -269,17 +275,25 @@ class SceneDisplayRuntime:
                 ready, _, _ = _select.select([vsync_fd], [], [], min(interval, 0.05))
                 if self._present_stop.is_set():
                     break
+                target_present_time: float | None = None
                 if ready:
                     # Drain accumulated bytes (one per CADisplayLink tick).
                     # Extra bytes mean we were late; count them as coalesced.
                     try:
+                        import struct as _struct
+
                         data = os.read(vsync_fd, 4096)
-                        extra = len(data) - 1
+                        n_packets = len(data) // 8
+                        extra = n_packets - 1
                         if extra > 0:
                             self._coalesced_frames += extra
+                        if n_packets > 0:
+                            last_bytes = data[(n_packets - 1) * 8 : n_packets * 8]
+                            (target_present_time,) = _struct.unpack_from("<d", last_bytes)
                     except (BlockingIOError, OSError):
                         pass
             else:
+                target_present_time = None
                 if now < next_at:
                     self._present_stop.wait(next_at - now)
                     continue
@@ -290,7 +304,7 @@ class SceneDisplayRuntime:
                 if self._frames_presented % 120 == 0:
                     vsync_status = f"vsync_fd={vsync_fd}" if vsync_fd is not None else "software_timer"
                     LOGGER.info("[scene-runtime] tick %s fps=%d active=%d", vsync_status, present_fps, int(active))
-                self.run_once(timeout=0.0, repeat_latest=repeat_latest)
+                self.run_once(timeout=0.0, repeat_latest=repeat_latest, target_present_time=target_present_time)
             except Exception as exc:  # noqa: BLE001
                 self._last_error = exc
                 self._present_stop.set()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import logging
 import time
 from dataclasses import dataclass, field
@@ -13,6 +14,66 @@ LOGGER = logging.getLogger(__name__)
 # MTLPixelFormat
 _MTL_PIXEL_FORMAT_RGBA8_UNORM = 70
 _MTL_PIXEL_FORMAT_BGRA8_UNORM = 80
+
+# MTLTextureUsage
+_MTL_TEXTURE_USAGE_SHADER_READ = 1
+
+# MTLResourceOptions (storage mode)
+_MTL_RESOURCE_STORAGE_MODE_SHARED = 0
+
+# MTLPrimitiveType
+_MTL_PRIMITIVE_TYPE_TRIANGLE_STRIP = 4
+
+# MTLLoadAction / MTLStoreAction
+_MTL_LOAD_ACTION_CLEAR = 2
+_MTL_STORE_ACTION_STORE = 1
+
+# MTLSamplerMinMagFilter
+_MTL_SAMPLER_MIN_MAG_FILTER_NEAREST = 0
+
+# ── Metal structs for PyObjC compatibility ────────────────────────────────────
+
+class _MTLOrigin(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_ulong), ("y", ctypes.c_ulong), ("z", ctypes.c_ulong)]
+
+
+class _MTLSize(ctypes.Structure):
+    _fields_ = [("width", ctypes.c_ulong), ("height", ctypes.c_ulong), ("depth", ctypes.c_ulong)]
+
+
+class _MTLRegion(ctypes.Structure):
+    _fields_ = [("origin", _MTLOrigin), ("size", _MTLSize)]
+
+
+class _MTLClearColor(ctypes.Structure):
+    _fields_ = [
+        ("red", ctypes.c_double),
+        ("green", ctypes.c_double),
+        ("blue", ctypes.c_double),
+        ("alpha", ctypes.c_double),
+    ]
+
+
+class _MTLViewport(ctypes.Structure):
+    _fields_ = [
+        ("originX", ctypes.c_double),
+        ("originY", ctypes.c_double),
+        ("width", ctypes.c_double),
+        ("height", ctypes.c_double),
+        ("znear", ctypes.c_double),
+        ("zfar", ctypes.c_double),
+    ]
+
+
+class _CGSize(ctypes.Structure):
+    _fields_ = [("width", ctypes.c_double), ("height", ctypes.c_double)]
+
+
+def _coerce_struct(bound_method, arg_index: int, struct: ctypes.Structure) -> ctypes.Structure:
+    expected = bound_method.method.method_argtypes[arg_index]
+    if isinstance(struct, expected):
+        return struct
+    return expected.from_buffer_copy(bytes(struct))
 
 # MTLTextureUsage
 _MTL_TEXTURE_USAGE_SHADER_READ = 1
@@ -86,6 +147,7 @@ class MacOSMetalBackend:
     window_system: object = field(default=None)
     bar_color_rgba: tuple[int, int, int, int] = field(default=(0, 0, 0, 255))
     resizable: bool = field(default=True)
+    icon_path: str | None = field(default=None)
     _state: _MetalState | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -97,8 +159,13 @@ class MacOSMetalBackend:
         import Metal
 
         window_handle = self.window_system.create_window(
-            width, height, title, use_metal_layer=True, preserve_aspect_ratio=False,
-            resizable=self.resizable,
+            width,
+            height,
+            title,
+            use_metal_layer=True,
+            lock_window_size=not self.resizable,
+            bar_color_rgba=self.bar_color_rgba,
+            icon_path=self.icon_path,
         )
         layer = window_handle.layer
 
@@ -113,6 +180,18 @@ class MacOSMetalBackend:
         layer.setDevice_(device)
         layer.setPixelFormat_(_MTL_PIXEL_FORMAT_BGRA8_UNORM)
         layer.setFramebufferOnly_(False)
+        try:
+            layer.setAllowsNextDrawableTimeout_(False)
+        except Exception:
+            pass
+        try:
+            import Quartz  # type: ignore
+            scale = float(window_handle.window.backingScaleFactor())
+            layer.setContentsScale_(scale)
+            if hasattr(layer, "setDrawableSize_"):
+                layer.setDrawableSize_(Quartz.CGSizeMake(float(width) * scale, float(height) * scale))
+        except Exception:
+            pass
 
         pipeline_state = _compile_pipeline(device, layer)
         sampler_state = _create_sampler(device)
@@ -148,13 +227,21 @@ class MacOSMetalBackend:
             s.src_texture_height = h
             add_copy_telemetry(upload_image_realloc_count=1)
 
-        arr = accel.to_contiguous_numpy(rgba)
-        region = Metal.MTLRegionMake2D(0, 0, w, h)
+        arr, upload_bytes = _upload_buffer(rgba)
+        replace_region = s.src_texture.replaceRegion_mipmapLevel_withBytes_bytesPerRow_
+        region = ((0, 0, 0), (w, h, 1))
+
+        try:
+            scale = float(s.window_handle.window.backingScaleFactor())
+            if hasattr(s.window_handle.layer, "setContentsScale_"):
+                s.window_handle.layer.setContentsScale_(scale)
+            if hasattr(s.window_handle.layer, "setDrawableSize_"):
+                s.window_handle.layer.setDrawableSize_(_CGSize(float(context.width) * scale, float(context.height) * scale))
+        except Exception:
+            pass
         
         upload_started = time.perf_counter_ns()
-        s.src_texture.replaceRegion_mipmapLevel_withBytes_bytesPerRow_(
-            region, 0, arr, w * 4
-        )
+        replace_region(region, 0, upload_bytes, w * 4)
         add_copy_telemetry(
             upload_bytes=w * h * 4,
             upload_memcpy_ns=time.perf_counter_ns() - upload_started,
@@ -172,7 +259,13 @@ class MacOSMetalBackend:
 
         # Letterbox/pillarbox: map native canvas into drawable preserving aspect ratio.
         native_h, native_w = h, w
-        drawable_w, drawable_h = context.width, context.height
+        texture = drawable.texture()
+        try:
+            drawable_w = float(texture.width())
+            drawable_h = float(texture.height())
+        except Exception:
+            drawable_w = float(context.width)
+            drawable_h = float(context.height)
         scale = min(drawable_w / native_w, drawable_h / native_h)
         vp_w = native_w * scale
         vp_h = native_h * scale
@@ -191,7 +284,7 @@ class MacOSMetalBackend:
 
         enc = cmd.renderCommandEncoderWithDescriptor_(pass_desc)
         enc.setRenderPipelineState_(s.pipeline_state)
-        enc.setViewport_(Metal.MTLViewport(vp_x, vp_y, vp_w, vp_h, 0.0, 1.0))
+        enc.setViewport_((vp_x, vp_y, vp_w, vp_h, 0.0, 1.0))
         enc.setFragmentTexture_atIndex_(s.src_texture, 0)
         enc.setFragmentSamplerState_atIndex_(s.sampler_state, 0)
         enc.drawPrimitives_vertexStart_vertexCount_(
@@ -233,6 +326,29 @@ class MacOSMetalBackend:
         if s is None:
             return True
         return not s.window_system.is_window_open(s.window_handle)
+
+
+def _upload_buffer(rgba) -> tuple[object, object]:
+    """Return a contiguous owner plus a buffer object usable by PyObjC."""
+    if hasattr(rgba, "data_ptr") and callable(rgba.data_ptr) and hasattr(rgba, "contiguous"):
+        owner = rgba.contiguous()
+        if hasattr(owner, "numpy"):
+            owner = owner.numpy()
+        return owner, owner
+
+    ctypes_view = getattr(rgba, "ctypes", None)
+    if ctypes_view is not None and hasattr(ctypes_view, "data_as"):
+        if not getattr(getattr(rgba, "flags", None), "c_contiguous", True):
+            try:
+                import numpy as np  # type: ignore
+                rgba = np.ascontiguousarray(rgba)
+                ctypes_view = rgba.ctypes
+            except Exception:
+                pass
+        return rgba, rgba
+
+    owner = accel.to_contiguous_numpy(rgba)
+    return owner, owner
 
 
 def _compile_pipeline(device, layer) -> object:

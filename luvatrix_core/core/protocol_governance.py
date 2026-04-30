@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-CURRENT_PROTOCOL_VERSION = "2"
-SUPPORTED_PROTOCOL_VERSIONS = {"1", "2"}
-DEPRECATED_PROTOCOL_VERSIONS: set[str] = {"1"}
+CURRENT_PROTOCOL_VERSION = "3"
+SUPPORTED_PROTOCOL_VERSIONS = {"1", "2", "3"}
+DEPRECATED_PROTOCOL_VERSIONS: set[str] = {"1", "2"}
 
 
 @dataclass(frozen=True)

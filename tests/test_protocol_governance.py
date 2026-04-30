@@ -11,8 +11,13 @@ class ProtocolGovernanceTests(unittest.TestCase):
         self.assertTrue(result.accepted)
         self.assertIsNotNone(result.warning)
 
-    def test_supported_v2_protocol_is_accepted_without_warning(self) -> None:
+    def test_supported_v2_protocol_is_accepted_with_warning(self) -> None:
         result = check_protocol_compatibility("2")
+        self.assertTrue(result.accepted)
+        self.assertIsNotNone(result.warning)
+
+    def test_supported_v3_protocol_is_accepted_without_warning(self) -> None:
+        result = check_protocol_compatibility("3")
         self.assertTrue(result.accepted)
         self.assertIsNone(result.warning)
 
@@ -21,7 +26,7 @@ class ProtocolGovernanceTests(unittest.TestCase):
         self.assertFalse(result.accepted)
 
     def test_min_runtime_bound_is_enforced(self) -> None:
-        result = check_protocol_compatibility("1", min_runtime_version="3")
+        result = check_protocol_compatibility("1", min_runtime_version="4")
         self.assertFalse(result.accepted)
 
     def test_max_runtime_bound_is_enforced(self) -> None:

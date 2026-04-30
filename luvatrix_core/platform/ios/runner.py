@@ -518,7 +518,7 @@ def run_loop(app_dir: str) -> None:
         f"suffix:{ext_suffixes}"
     )
 
-    native_w, native_h, bar_color = read_app_display_config(app_dir)
+    native_w, native_h, bar_color, _, _ = read_app_display_config(app_dir)
     logical_w = native_w if native_w else _logical_width
     logical_h = native_h if native_h else _logical_height
     if accel.BACKEND == "pure":
@@ -795,10 +795,10 @@ def _build_ios_device_app(
 
 
 def _sync_local_packages(repo_root: Path, packages_dir: Path) -> None:
-    """Sync luvatrix_core and luvatrix_ui from source into the iOS PyPackages dir."""
+    """Sync public and internal luvatrix packages into the iOS PyPackages dir."""
     import shutil
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc")
-    for pkg in ("luvatrix_core", "luvatrix_ui"):
+    for pkg in ("luvatrix", "luvatrix_core", "luvatrix_ui"):
         src = repo_root / pkg
         dst = packages_dir / pkg
         if not src.is_dir():
@@ -1680,5 +1680,4 @@ def _find_simulator_udid(devices_json: dict, name: str) -> str | None:
             elif available_udid is None:
                 available_udid = device["udid"]
     return booted_udid or available_udid
-
 

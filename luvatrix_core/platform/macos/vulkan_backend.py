@@ -68,6 +68,8 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
     presentation_mode: PresentationMode | str = PresentationMode.STRETCH
     lock_window_size: bool = False
     preserve_aspect_ratio: bool = False
+    bar_color_rgba: tuple[int, int, int, int] = (0, 0, 0, 255)
+    icon_path: str | None = None
 
     def __post_init__(self) -> None:
         if self.preserve_aspect_ratio and self.presentation_mode == PresentationMode.STRETCH:
@@ -276,6 +278,8 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             presentation_mode=self.presentation_mode,
             lock_window_size=self.lock_window_size,
             menu_config=menu_config,
+            bar_color_rgba=self.bar_color_rgba,
+            icon_path=self.icon_path,
         )
 
     def configure_debug_menu(

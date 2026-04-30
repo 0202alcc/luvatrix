@@ -21,7 +21,9 @@ class _FakeWindowSystem:
         presentation_mode: PresentationMode | str = PresentationMode.STRETCH,
         lock_window_size: bool = False,
         menu_config=None,
+        bar_color_rgba: tuple[int, int, int, int] | None = None,
     ) -> MacOSWindowHandle:
+        _ = bar_color_rgba
         class _Layer:
             pass
 

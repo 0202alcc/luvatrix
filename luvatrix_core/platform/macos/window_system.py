@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Protocol
 
 from ..frame_pipeline import PresentationMode, normalize_presentation_mode
@@ -36,6 +37,8 @@ class MacOSWindowSystem(Protocol):
         presentation_mode: PresentationMode | str = PresentationMode.STRETCH,
         lock_window_size: bool = False,
         menu_config: MacOSMenuConfig | None = None,
+        bar_color_rgba: tuple[int, int, int, int] | None = None,
+        icon_path: str | Path | None = None,
     ) -> MacOSWindowHandle:
         ...
 
@@ -62,6 +65,9 @@ class AppKitWindowSystem:
                 NSApplication,
                 NSApplicationActivationPolicyRegular,
                 NSBackingStoreBuffered,
+                NSBezierPath,
+                NSColor,
+                NSImage,
                 NSMakeRect,
                 NSWindow,
                 NSWindowStyleMaskClosable,
@@ -86,6 +92,9 @@ class AppKitWindowSystem:
             "NSApplication": NSApplication,
             "NSApplicationActivationPolicyRegular": NSApplicationActivationPolicyRegular,
             "NSBackingStoreBuffered": NSBackingStoreBuffered,
+            "NSBezierPath": NSBezierPath,
+            "NSColor": NSColor,
+            "NSImage": NSImage,
             "NSMakeRect": NSMakeRect,
             "NSWindow": NSWindow,
             "NSWindowStyleMaskClosable": NSWindowStyleMaskClosable,
@@ -105,10 +114,13 @@ class AppKitWindowSystem:
         presentation_mode: PresentationMode | str = PresentationMode.STRETCH,
         lock_window_size: bool = False,
         menu_config: MacOSMenuConfig | None = None,
+        bar_color_rgba: tuple[int, int, int, int] | None = None,
+        icon_path: str | Path | None = None,
     ) -> MacOSWindowHandle:
         ns = self._imports()
         app = ns["NSApp"]() or ns["NSApplication"].sharedApplication()
         app.setActivationPolicy_(ns["NSApplicationActivationPolicyRegular"])
+        self._set_application_icon(app, ns, bar_color_rgba, icon_path=icon_path)
         mode = normalize_presentation_mode(presentation_mode)
         style = (
             ns["NSWindowStyleMaskTitled"]
@@ -147,6 +159,54 @@ class AppKitWindowSystem:
         self._install_main_menu(app=app, menu_config=menu_config)
         app.activateIgnoringOtherApps_(True)
         return MacOSWindowHandle(window=window, layer=layer)
+
+    def _set_application_icon(
+        self,
+        app: object,
+        ns: dict[str, object],
+        color_rgba: tuple[int, int, int, int] | None = None,
+        icon_path: str | Path | None = None,
+    ) -> None:
+        try:
+            if icon_path is not None:
+                image = self._load_image_from_path(ns, Path(icon_path))
+                if image is not None:
+                    app.setApplicationIconImage_(image)
+                    return
+            default_icon = Path(__file__).resolve().parents[3] / "assets" / "icon.png"
+            if default_icon.exists():
+                image = self._load_image_from_path(ns, default_icon)
+                if image is not None:
+                    app.setApplicationIconImage_(image)
+                    return
+            if color_rgba is None:
+                return
+            r, g, b, a = color_rgba
+            image = ns["NSImage"].alloc().initWithSize_((64.0, 64.0))
+            image.lockFocus()
+            ns["NSColor"].colorWithRed_green_blue_alpha_(
+                max(0.0, min(1.0, float(r) / 255.0)),
+                max(0.0, min(1.0, float(g) / 255.0)),
+                max(0.0, min(1.0, float(b) / 255.0)),
+                max(0.0, min(1.0, float(a) / 255.0)),
+            ).setFill()
+            ns["NSBezierPath"].fillRect_(ns["NSMakeRect"](0.0, 0.0, 64.0, 64.0))
+            image.unlockFocus()
+            app.setApplicationIconImage_(image)
+        except Exception:
+            return
+
+    def _load_image_from_path(self, ns: dict[str, object], path: Path) -> object | None:
+        try:
+            image = ns["NSImage"].alloc().initWithContentsOfFile_(str(path))
+            if image is None:
+                return None
+            size = image.size()
+            if size is None or size.width == 0 or size.height == 0:
+                return None
+            return image
+        except Exception:
+            return None
 
     def destroy_window(self, handle: MacOSWindowHandle) -> None:
         window = handle.window

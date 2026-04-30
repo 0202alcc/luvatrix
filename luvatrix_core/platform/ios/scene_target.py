@@ -452,7 +452,7 @@ class IOSMetalSceneBackend:
         print(f"[ios-metal] initialized scene backend logical={width}x{height}", file=sys.stderr, flush=True)
         return MetalContext(width=width, height=height, title=title)
 
-    def present_scene(self, context: MetalContext, frame: SceneFrame) -> None:
+    def present_scene(self, context: MetalContext, frame: SceneFrame, *, target_present_time: float | None = None) -> None:
         from rubicon.objc import ObjCClass
 
         s = self._state
@@ -580,7 +580,10 @@ class IOSMetalSceneBackend:
         _sp("luvatrix_sp_overlay_end")
 
         enc.endEncoding()
-        cmd.presentDrawable_(drawable)
+        if target_present_time is not None and target_present_time > 0.0:
+            cmd.presentDrawable_atTime_(drawable, target_present_time)
+        else:
+            cmd.presentDrawable_(drawable)
         cmd.commit()
         t5 = time.perf_counter()
         self._present_commits += 1
@@ -654,10 +657,10 @@ class IOSMetalSceneTarget:
         self._context = self.backend.initialize(self.width, self.height, self.title)
         self._started = True
 
-    def present_scene(self, frame: SceneFrame) -> None:
+    def present_scene(self, frame: SceneFrame, target_present_time: float | None = None) -> None:
         if not self._started or self._context is None:
             raise RuntimeError("IOSMetalSceneTarget must be started before presenting scenes")
-        self.backend.present_scene(self._context, frame)
+        self.backend.present_scene(self._context, frame, target_present_time=target_present_time)
 
     def stop(self) -> None:
         if not self._started:

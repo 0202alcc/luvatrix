@@ -3,6 +3,10 @@ from __future__ import annotations
 import unittest
 
 import torch
+try:
+    import numpy as np
+except Exception:  # pragma: no cover - optional dependency in minimal installs
+    np = None
 
 from luvatrix_core.platform.frame_pipeline import PresentationMode
 from luvatrix_core.platform.macos.vulkan_presenter import (
@@ -24,6 +28,7 @@ class _FakeBackend:
         self.raise_on_resize = False
         self.pumped = 0
         self.close_state = False
+        self.last_rgba = None
 
     def initialize(self, width: int, height: int, title: str) -> VulkanContext:
         self.init_calls += 1
@@ -37,6 +42,7 @@ class _FakeBackend:
         if self.raise_on_present:
             raise RuntimeError("present failed")
         self.last_context = context
+        self.last_rgba = rgba
 
     def resize(self, context: VulkanContext, width: int, height: int) -> VulkanContext:
         self.resize_calls += 1
@@ -104,6 +110,17 @@ class MacOSVulkanPresenterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             presenter.present_rgba(torch.zeros((1, 2, 4), dtype=torch.uint8), revision=1)
         self.assertEqual(backend.present_calls, 0)
+
+    @unittest.skipIf(np is None, "numpy not installed")
+    def test_numpy_uint8_frame_is_coerced_to_torch(self) -> None:
+        backend = _FakeBackend()
+        presenter = MacOSVulkanPresenter(width=2, height=2, backend=backend)
+        presenter.initialize()
+        presenter.present_rgba(np.zeros((2, 2, 4), dtype=np.uint8), revision=1)
+
+        self.assertEqual(backend.present_calls, 1)
+        self.assertTrue(torch.is_tensor(backend.last_rgba))
+        self.assertEqual(backend.last_rgba.dtype, torch.uint8)
 
     def test_initialize_failure_transitions_to_failed(self) -> None:
         backend = _FakeBackend()

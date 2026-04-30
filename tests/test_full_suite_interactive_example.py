@@ -3,14 +3,10 @@ from __future__ import annotations
 import unittest
 
 from luvatrix_core.core.sensor_manager import SensorSample
+from luvatrix.app import InputState, apply_hdi_events
 
 from examples.full_suite_interactive.app_main import (
-    InteractionState,
-    _apply_hdi_events,
-    _build_scene_svg,
-    _detect_frame_switch,
     _mouse_label_text,
-    _next_coord_frame,
     format_dashboard,
     select_sensors,
 )
@@ -27,7 +23,7 @@ class FullSuiteInteractiveExampleTests(unittest.TestCase):
             select_sensors(["sensor.unknown"], ["thermal.temperature"])
 
     def test_format_dashboard_reports_out_of_bounds(self) -> None:
-        state = InteractionState(mouse_in_window=False, mouse_error="window not active / pointer out of bounds")
+        state = InputState(mouse_in_window=False, mouse_error="window not active / pointer out of bounds")
         samples = {
             "thermal.temperature": SensorSample(
                 sample_id=1,
@@ -54,28 +50,6 @@ class FullSuiteInteractiveExampleTests(unittest.TestCase):
         self.assertIn("x=20.0", label)
         self.assertIn("y=49.0", label)
 
-    def test_build_scene_svg_contains_cursor_circle_when_mouse_visible(self) -> None:
-        state = InteractionState(mouse_x=20.0, mouse_y=30.0, mouse_in_window=True)
-        markup = _build_scene_svg(120, 80, state)
-        self.assertIn("<svg", markup)
-        self.assertIn("<circle", markup)
-
-    def test_coord_frame_switch_mapping(self) -> None:
-        self.assertEqual(_next_coord_frame("screen_tl", "1"), "screen_tl")
-        self.assertEqual(_next_coord_frame("screen_tl", "2"), "cartesian_bl")
-        self.assertEqual(_next_coord_frame("screen_tl", "3"), "cartesian_center")
-        self.assertEqual(_next_coord_frame("screen_tl", "c"), "cartesian_bl")
-
-    def test_detect_frame_switch_from_keyboard_press_event(self) -> None:
-        class _Event:
-            def __init__(self, payload) -> None:
-                self.device = "keyboard"
-                self.status = "OK"
-                self.payload = payload
-
-        events = [_Event({"phase": "down", "key": "2"})]
-        self.assertEqual(_detect_frame_switch(events, "screen_tl"), "cartesian_bl")
-
     def test_apply_hdi_events_tracks_native_touches_and_gestures(self) -> None:
         class _Event:
             def __init__(self, event_type, payload) -> None:
@@ -84,8 +58,8 @@ class FullSuiteInteractiveExampleTests(unittest.TestCase):
                 self.status = "OK"
                 self.payload = payload
 
-        state = InteractionState()
-        _apply_hdi_events(
+        state = InputState()
+        apply_hdi_events(
             state,
             [
                 _Event("touch", {"touch_id": 1, "phase": "down", "x": 10.0, "y": 20.0}),
@@ -104,7 +78,6 @@ class FullSuiteInteractiveExampleTests(unittest.TestCase):
                     },
                 ),
             ],
-            surface_height=100,
         )
         self.assertEqual(state.touch_count, 2)
         self.assertEqual(state.active_touches[1], (10.0, 20.0))

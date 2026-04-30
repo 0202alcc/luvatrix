@@ -172,6 +172,54 @@ class UnifiedRuntimeTests(unittest.TestCase):
             self.assertEqual(matrix.revision, 5)
             self.assertIn(("thermal.temperature", True, "unified_runtime"), sensors.set_calls)
 
+    def test_on_targets_started_runs_after_target_start_before_app_init(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            marker = app_dir / "target_started"
+            (app_dir / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "test.unified.hook"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'required_capabilities = ["window.write"]',
+                        "optional_capabilities = []",
+                    ]
+                )
+            )
+            (app_dir / "app_main.py").write_text(
+                "\n".join(
+                    [
+                        "from pathlib import Path",
+                        "",
+                        "class _App:",
+                        "    def init(self, ctx):",
+                        f"        assert Path({str(marker)!r}).exists()",
+                        "    def loop(self, ctx, dt):",
+                        "        pass",
+                        "    def stop(self, ctx):",
+                        "        pass",
+                        "",
+                        "def create():",
+                        "    return _App()",
+                    ]
+                )
+            )
+            target = _RecordingTarget()
+            runtime = UnifiedRuntime(
+                matrix=WindowMatrix(height=1, width=1),
+                target=target,
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=_FakeSensorManager(),
+                capability_decider=lambda _cap: True,
+            )
+
+            def on_targets_started() -> None:
+                self.assertEqual(target.started, 1)
+                marker.write_text("1", encoding="utf-8")
+
+            runtime.run_app(app_dir, max_ticks=1, target_fps=1000, on_targets_started=on_targets_started)
+
     def test_unified_runtime_stops_when_energy_safety_requests_shutdown(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             app_dir = Path(td)

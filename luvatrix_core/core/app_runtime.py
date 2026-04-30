@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 from .hdi_thread import HDIEvent, HDIThread
 from .coordinates import CoordinateFrameRegistry
+from .coordinates import PRESET_CARTESIAN_BL, PRESET_CARTESIAN_CENTER, PRESET_SCREEN_TL
 from .frame_rate_controller import FrameRateController
 from .protocol_governance import CURRENT_PROTOCOL_VERSION, check_protocol_compatibility
 from .scene_graph import (
@@ -109,7 +110,12 @@ class AppManifest:
     debug_policy: AppDebugPolicy = field(default_factory=AppDebugPolicy)
     display_native_width: int | None = None
     display_native_height: int | None = None
+    display_title: str | None = None
+    display_icon: str | None = None
     display_bar_color_rgba: tuple[int, int, int, int] = (0, 0, 0, 255)
+    display_default_coordinate_frame: str = PRESET_SCREEN_TL
+    render_preferred: str = "auto"
+    render_fallbacks: list[str] = field(default_factory=lambda: ["scene", "ui", "matrix"])
 
 
 @dataclass(frozen=True)
@@ -141,6 +147,7 @@ class AppContext:
     coordinate_frames: CoordinateFrameRegistry | None = None
     scene_buffer: SceneGraphBuffer | None = None
     runtime_telemetry_provider: Callable[[], dict[str, object]] | None = None
+    app_manifest: AppManifest | None = None
     _last_sensor_read_ns: dict[str, int] = field(default_factory=dict)
     _ui_renderer: AppUIRenderer | None = field(default=None, init=False, repr=False)
     _ui_display: DisplayableArea | None = field(default=None, init=False, repr=False)
@@ -159,9 +166,13 @@ class AppContext:
         if self.logical_height_px is None:
             self.logical_height_px = float(self.matrix.height)
         if self.coordinate_frames is None:
+            default_frame = PRESET_SCREEN_TL
+            if self.app_manifest is not None:
+                default_frame = self.app_manifest.display_default_coordinate_frame
             self.coordinate_frames = CoordinateFrameRegistry(
                 width=int(round(float(self.logical_width_px))),
                 height=int(round(float(self.logical_height_px))),
+                default_frame=default_frame,
             )
 
     @property
@@ -636,23 +647,25 @@ class AppContext:
 
 def read_app_display_config(
     app_dir: str | Path,
-) -> tuple[int | None, int | None, tuple[int, int, int, int]]:
-    """Return (native_width, native_height, bar_color_rgba) from app.toml [display] section.
+) -> tuple[int | None, int | None, tuple[int, int, int, int], str | None, str | None]:
+    """Return (native_width, native_height, bar_color_rgba, title, icon) from app.toml [display] section.
 
     Called before the runtime starts so callers can size the WindowMatrix and presenters
-    before constructing UnifiedRuntime.  Returns (None, None, (0,0,0,255)) when the
-    [display] section is absent or the file does not exist.
+    before constructing UnifiedRuntime.  Returns (None, None, (0,0,0,255), None, None)
+    when the [display] section is absent or the file does not exist.
     """
     toml_path = Path(app_dir) / "app.toml"
     if not toml_path.exists():
-        return None, None, (0, 0, 0, 255)
+        return None, None, (0, 0, 0, 255), None, None
     with toml_path.open("rb") as f:
         raw = tomllib.load(f)
     d = raw.get("display", {})
     w = int(d["native_width"]) if "native_width" in d else None
     h = int(d["native_height"]) if "native_height" in d else None
     bar = d.get("bar_color_rgba", [0, 0, 0, 255])
-    return w, h, (int(bar[0]), int(bar[1]), int(bar[2]), int(bar[3]))
+    title = str(d["title"]) if "title" in d else None
+    icon = str(d["icon"]) if "icon" in d else None
+    return w, h, (int(bar[0]), int(bar[1]), int(bar[2]), int(bar[3])), title, icon
 
 
 class AppRuntime:
@@ -714,8 +727,16 @@ class AppRuntime:
         display_raw = raw.get("display", {})
         display_native_width = int(display_raw["native_width"]) if "native_width" in display_raw else None
         display_native_height = int(display_raw["native_height"]) if "native_height" in display_raw else None
+        display_title = _coerce_optional_str(display_raw.get("title"), "display.title")
+        display_icon = _coerce_optional_str(display_raw.get("icon"), "display.icon")
         bar_raw = display_raw.get("bar_color_rgba", [0, 0, 0, 255])
         display_bar_color_rgba = (int(bar_raw[0]), int(bar_raw[1]), int(bar_raw[2]), int(bar_raw[3]))
+        display_default_coordinate_frame = _coerce_optional_str(
+            display_raw.get("default_coordinate_frame"),
+            "display.default_coordinate_frame",
+        ) or PRESET_SCREEN_TL
+        render_raw = raw.get("render", {})
+        render_preferred, render_fallbacks = _coerce_render_config(render_raw)
         manifest = AppManifest(
             app_id=app_id,
             protocol_version=protocol_version,
@@ -732,7 +753,12 @@ class AppRuntime:
             debug_policy=debug_policy,
             display_native_width=display_native_width,
             display_native_height=display_native_height,
+            display_title=display_title,
+            display_icon=display_icon,
             display_bar_color_rgba=display_bar_color_rgba,
+            display_default_coordinate_frame=display_default_coordinate_frame,
+            render_preferred=render_preferred,
+            render_fallbacks=render_fallbacks,
         )
         self._validate_manifest(manifest)
         return manifest
@@ -754,7 +780,7 @@ class AppRuntime:
         app_path = Path(app_dir).resolve()
         manifest = self.load_manifest(app_path)
         granted = self.resolve_capabilities(manifest)
-        ctx = self.build_context(granted_capabilities=granted)
+        ctx = self.build_context(granted_capabilities=granted, manifest=manifest)
         resolved = self.resolve_variant(app_path, manifest)
         lifecycle = self.load_lifecycle(resolved.module_dir, resolved.entrypoint)
 
@@ -812,7 +838,10 @@ class AppRuntime:
                 self._audit_capability("denied_optional", capability)
         return granted
 
-    def build_context(self, granted_capabilities: set[str]) -> AppContext:
+    def build_context(self, granted_capabilities: set[str], manifest: AppManifest | None = None) -> AppContext:
+        default_frame = PRESET_SCREEN_TL
+        if manifest is not None:
+            default_frame = manifest.display_default_coordinate_frame
         return AppContext(
             matrix=self._matrix,
             hdi=self._hdi,
@@ -822,9 +851,11 @@ class AppRuntime:
             logical_width_px=self._logical_width_px,
             logical_height_px=self._logical_height_px,
             scene_buffer=self._scene_buffer,
+            app_manifest=manifest,
             coordinate_frames=CoordinateFrameRegistry(
                 width=int(round(self._logical_width_px)),
                 height=int(round(self._logical_height_px)),
+                default_frame=default_frame,
             ),
         )
 
@@ -949,6 +980,12 @@ class AppRuntime:
             raise ValueError(
                 "debug_policy.disable_debug_root_approval is required when enable_default_debug_root=false"
             )
+        _validate_coordinate_frame_name(manifest.display_default_coordinate_frame, "display.default_coordinate_frame")
+        _validate_render_mode(manifest.render_preferred, "render.preferred", allow_auto=True)
+        if not manifest.render_fallbacks:
+            raise ValueError("render.fallbacks must contain at least one render mode")
+        for idx, mode in enumerate(manifest.render_fallbacks):
+            _validate_render_mode(mode, f"render.fallbacks[{idx}]", allow_auto=False)
 
     def _audit_capability(self, action: str, capability: str) -> None:
         if self._capability_audit_logger is None:
@@ -1002,6 +1039,32 @@ def _coerce_runtime_config(value: object) -> tuple[Literal["python_inproc", "pro
             raise ValueError("runtime.command entries must be non-empty strings")
         command.append(item)
     return (raw_kind, raw_transport, command)
+
+
+def _coerce_render_config(value: object) -> tuple[str, list[str]]:
+    if value is None:
+        return ("auto", ["scene", "ui", "matrix"])
+    if not isinstance(value, dict):
+        raise ValueError("render must be a table/object")
+    preferred = _coerce_optional_str(value.get("preferred"), "render.preferred") or "auto"
+    raw_fallbacks = value.get("fallbacks", ["scene", "ui", "matrix"])
+    fallbacks = _coerce_string_list(raw_fallbacks, "render.fallbacks")
+    return (preferred, fallbacks)
+
+
+def _validate_render_mode(value: str, field_name: str, *, allow_auto: bool) -> None:
+    allowed = {"scene", "ui", "matrix"}
+    if allow_auto:
+        allowed = allowed | {"auto"}
+    if value not in allowed:
+        raise ValueError(f"{field_name} must be one of: {', '.join(sorted(allowed))}")
+
+
+def _validate_coordinate_frame_name(value: str, field_name: str) -> None:
+    if value not in {PRESET_SCREEN_TL, PRESET_CARTESIAN_BL, PRESET_CARTESIAN_CENTER}:
+        raise ValueError(
+            f"{field_name} must be one of: {PRESET_SCREEN_TL}, {PRESET_CARTESIAN_BL}, {PRESET_CARTESIAN_CENTER}"
+        )
 
 
 def _coerce_debug_policy(value: object) -> AppDebugPolicy:

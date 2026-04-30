@@ -195,7 +195,7 @@ def main() -> None:
 
     manifest = runtime.load_manifest(APP_DIR)
     granted = runtime.resolve_capabilities(manifest)
-    ctx = runtime.build_context(granted_capabilities=granted)
+    ctx = runtime.build_context(granted_capabilities=granted, manifest=manifest)
     lifecycle = runtime.load_lifecycle(APP_DIR, manifest.entrypoint)
     for sensor in requested_sensors:
         if _sensor_capability(sensor) in granted:

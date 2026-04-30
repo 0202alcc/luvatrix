@@ -347,8 +347,10 @@ final class LuvatrixDisplayLinkTelemetry: NSObject {
         // Signal the Python present thread to wake and render the latest frame.
         if !vsyncFDResolved { resolveVsyncFD() }
         if vsyncWriteFD >= 0 {
-            var byte: UInt8 = 1
-            write(vsyncWriteFD, &byte, 1)
+            var ts: Double = link.targetTimestamp
+            withUnsafeBytes(of: &ts) { buf in
+                write(vsyncWriteFD, buf.baseAddress!, 8)
+            }
         }
     }
 

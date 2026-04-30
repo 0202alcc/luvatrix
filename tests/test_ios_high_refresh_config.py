@@ -18,6 +18,12 @@ class IOSHighRefreshConfigTests(unittest.TestCase):
         project_yml = (ROOT / "ios" / "project.yml").read_text(encoding="utf-8")
         self.assertIn("CADisableMinimumFrameDurationOnPhone: true", project_yml)
 
+    def test_ios_package_sync_includes_public_luvatrix_api(self) -> None:
+        project_yml = (ROOT / "ios" / "project.yml").read_text(encoding="utf-8")
+        setup_script = (ROOT / "ios" / "scripts" / "setup_ios.sh").read_text(encoding="utf-8")
+        self.assertIn('"$REPO_ROOT/luvatrix/"', project_yml)
+        self.assertIn('"$REPO_ROOT/luvatrix/"', setup_script)
+
 
 if __name__ == "__main__":
     unittest.main()

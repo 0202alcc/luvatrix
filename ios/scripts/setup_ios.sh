@@ -145,6 +145,13 @@ fi
 # ── 5. luvatrix packages ──────────────────────────────────────────────────────
 copy_luvatrix_packages() {
     local target_dir="$1"
+    echo "→ Copying luvatrix → ${target_dir#$REPO_ROOT/}"
+    rsync -a --delete \
+        --exclude "__pycache__" \
+        --exclude "*.pyc" \
+        "$REPO_ROOT/luvatrix/" \
+        "$target_dir/luvatrix/"
+
     echo "→ Copying luvatrix_core → ${target_dir#$REPO_ROOT/}"
     rsync -a --delete \
         --exclude "__pycache__" \

@@ -41,13 +41,15 @@ class _RecordingSceneTarget:
         self.started = 0
         self.stopped = 0
         self.presented: list[SceneFrame] = []
+        self.target_present_times: list[float | None] = []
         self.pumped = 0
 
     def start(self) -> None:
         self.started += 1
 
-    def present_scene(self, frame: SceneFrame) -> None:
+    def present_scene(self, frame: SceneFrame, target_present_time: float | None = None) -> None:
         self.presented.append(frame)
+        self.target_present_times.append(target_present_time)
 
     def stop(self) -> None:
         self.stopped += 1

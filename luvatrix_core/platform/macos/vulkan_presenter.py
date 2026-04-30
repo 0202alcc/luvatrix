@@ -89,6 +89,8 @@ class MacOSVulkanPresenter:
     presentation_mode: PresentationMode | str = PresentationMode.STRETCH
     lock_window_size: bool = False
     preserve_aspect_ratio: bool = False
+    bar_color_rgba: tuple[int, int, int, int] = (0, 0, 0, 255)
+    icon_path: str | None = None
     backend: MacOSVulkanBackend | None = None
     max_dimension: int = 16384
 
@@ -106,6 +108,8 @@ class MacOSVulkanPresenter:
             self.backend = MoltenVKMacOSBackend(
                 presentation_mode=self.presentation_mode,
                 lock_window_size=self.lock_window_size,
+                bar_color_rgba=self.bar_color_rgba,
+                icon_path=self.icon_path,
             )
         self._validate_dimensions(self.width, self.height)
 
@@ -132,11 +136,12 @@ class MacOSVulkanPresenter:
                 raise RuntimeError("failed to initialize macOS Vulkan presenter") from exc
             self._state = PresenterState.READY
 
-    def present_rgba(self, rgba: torch.Tensor, revision: int) -> None:
+    def present_rgba(self, rgba, revision: int) -> None:
         with self._lock:
             if self._state != PresenterState.READY:
                 raise RuntimeError(f"presenter must be READY to present frames (state={self._state.value})")
             assert self._context is not None
+            rgba = self._coerce_frame(rgba)
             self._validate_frame(rgba)
             try:
                 self.backend.present(self._context, rgba, revision)
@@ -216,6 +221,19 @@ class MacOSVulkanPresenter:
             raise ValueError(
                 f"width/height exceed max_dimension={self.max_dimension}: got {width}x{height}"
             )
+
+    def _coerce_frame(self, rgba) -> torch.Tensor:
+        if torch.is_tensor(rgba):
+            return rgba
+        if not hasattr(rgba, "shape"):
+            raise ValueError("rgba frame must be an array-like RGBA buffer")
+        dtype = getattr(rgba, "dtype", None)
+        if dtype is not None and str(dtype) != "uint8":
+            raise ValueError(f"rgba frame must use uint8, got {dtype}")
+        try:
+            return torch.as_tensor(rgba, dtype=torch.uint8)
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"rgba frame could not be converted to torch.Tensor: {exc}") from exc
 
     def _validate_frame(self, rgba: torch.Tensor) -> None:
         if not torch.is_tensor(rgba):

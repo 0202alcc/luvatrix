@@ -28,6 +28,7 @@ class MacOSMetalPresenter:
     backend: MetalBackend | None = None
     bar_color_rgba: tuple[int, int, int, int] = (0, 0, 0, 255)
     resizable: bool = True
+    icon_path: str | None = None
     max_dimension: int = 16384
 
     def __post_init__(self) -> None:
@@ -40,6 +41,7 @@ class MacOSMetalPresenter:
             self.backend = MacOSMetalBackend(
                 bar_color_rgba=self.bar_color_rgba,
                 resizable=self.resizable,
+                icon_path=self.icon_path,
             )
         self._validate_dimensions(self.width, self.height)
 

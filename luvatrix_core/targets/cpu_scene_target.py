@@ -22,7 +22,8 @@ class CpuSceneTarget(SceneRenderTarget):
         self.target.start()
         self._started = True
 
-    def present_scene(self, frame: SceneFrame) -> None:
+    def present_scene(self, frame: SceneFrame, target_present_time: float | None = None) -> None:
+        _ = target_present_time
         if not self._started:
             raise RuntimeError("CpuSceneTarget must be started before presenting scenes")
         
