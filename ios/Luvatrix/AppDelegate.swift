@@ -29,7 +29,7 @@ private func setupPython() {
     let sysPathUpdate = """
 import sys
 sys.path.insert(0, '\(pyPackages)')
-print("[ios-python] sys.path updated: \(sys.path[:3])", flush=True)
+print("[ios-python] sys.path updated: " + repr(sys.path[:3]), flush=True)
 """
     if LuvatrixPyRunSimpleString(sysPathUpdate) != 0 {
         print("[ios-python] WARNING: Failed to update sys.path")
