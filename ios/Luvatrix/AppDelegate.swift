@@ -349,7 +349,7 @@ final class LuvatrixDisplayLinkTelemetry: NSObject {
         if vsyncWriteFD >= 0 {
             var ts: Double = link.targetTimestamp
             withUnsafeBytes(of: &ts) { buf in
-                write(vsyncWriteFD, buf.baseAddress!, 8)
+                _ = write(vsyncWriteFD, buf.baseAddress!, 8)
             }
         }
     }
