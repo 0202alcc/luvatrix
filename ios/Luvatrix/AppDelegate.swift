@@ -16,6 +16,12 @@ private func setupPython() {
     setenv("PYTHONHOME", pythonHome, 1)
     // Prevent .pyc writes to read-only bundle
     setenv("PYTHONDONTWRITEBYTECODE", "1", 1)
+    // Enable verbose output for debugging
+    setenv("PYTHONVERBOSE", "0", 1)
+    // Set path to bundled packages
+    setenv("PYTHONPATH", pyPackages, 1)
+
+    print("[ios-python] Setting up Python: PYTHONHOME=\(pythonHome), PYTHONPATH=\(pyPackages)")
 
     LuvatrixPyInitialize()
 
@@ -23,8 +29,11 @@ private func setupPython() {
     let sysPathUpdate = """
 import sys
 sys.path.insert(0, '\(pyPackages)')
+print("[ios-python] sys.path updated: \(sys.path[:3])", flush=True)
 """
-    LuvatrixPyRunSimpleString(sysPathUpdate)
+    if LuvatrixPyRunSimpleString(sysPathUpdate) != 0 {
+        print("[ios-python] WARNING: Failed to update sys.path")
+    }
 }
 
 private func loadBundledLaunchConfig() -> [String: String] {
@@ -35,6 +44,7 @@ private func loadBundledLaunchConfig() -> [String: String] {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
           let raw = try? JSONSerialization.jsonObject(with: data, options: []),
           let dict = raw as? [String: Any] else {
+        print("[ios-config] WARNING: Could not load launch config from \(path)")
         return [:]
     }
     var out: [String: String] = [:]
@@ -49,6 +59,7 @@ private func applyBundledLaunchConfig() -> [String: String] {
     for (key, value) in config {
         if getenv(key) == nil {
             setenv(key, value, 1)
+            print("[ios-config] Set env: \(key)=\(value)")
         }
     }
     return config
