@@ -150,6 +150,7 @@ class AndroidHDISource(HDIEventSource):
             raw_events = drain()
         except Exception:
             return
+        parsed: list[dict[str, Any]] = []
         for raw in raw_events or ():
             try:
                 event = json.loads(str(raw))
@@ -157,6 +158,8 @@ class AndroidHDISource(HDIEventSource):
                 continue
             if not isinstance(event, dict):
                 continue
+            parsed.append(event)
+        for event in _coalesce_touch_moves(parsed):
             self._scale_touch_event(event)
             _enqueue_bridge_event(event)
 
@@ -201,6 +204,28 @@ def _enqueue_bridge_event(event: dict[str, Any]) -> None:
             phase,
             scan_code=_int(event.get("scan_code"), 0),
         )
+
+
+def _coalesce_touch_moves(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    pending_moves: dict[int, dict[str, Any]] = {}
+
+    def flush_moves() -> None:
+        nonlocal pending_moves
+        if pending_moves:
+            out.extend(pending_moves.values())
+            pending_moves = {}
+
+    for event in events:
+        device = str(event.get("device", ""))
+        phase = str(event.get("phase", "")).lower()
+        if device == "touch" and phase == "move":
+            pending_moves[_int(event.get("touch_id"), 0)] = event
+            continue
+        flush_moves()
+        out.append(event)
+    flush_moves()
+    return out
 
 
 def _float(value: object, fallback: float) -> float:

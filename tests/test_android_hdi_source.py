@@ -55,6 +55,30 @@ class AndroidHDISourceTests(unittest.TestCase):
         self.assertEqual(android_input_telemetry()["active_touches"], 0)
         self.assertEqual(android_input_telemetry()["last_phase"], "cancel")
 
+    def test_bridge_touch_moves_are_coalesced_to_latest_per_poll(self) -> None:
+        class _Bridge:
+            def getWidth(self) -> int:
+                return 100
+
+            def getHeight(self) -> int:
+                return 200
+
+            def drainInputEventsJson(self) -> list[str]:
+                return [
+                    '{"device":"touch","touch_id":1,"phase":"move","x":10,"y":20}',
+                    '{"device":"touch","touch_id":1,"phase":"move","x":30,"y":40}',
+                    '{"device":"touch","touch_id":2,"phase":"move","x":50,"y":60}',
+                ]
+
+        events = AndroidHDISource(_Bridge(), logical_width=10, logical_height=20).poll(window_active=True, ts_ns=1)
+
+        self.assertEqual(len(events), 2)
+        by_id = {event.payload["touch_id"]: event.payload for event in events}
+        self.assertEqual(by_id[1]["x"], 3.0)
+        self.assertEqual(by_id[1]["y"], 4.0)
+        self.assertEqual(by_id[2]["x"], 5.0)
+        self.assertEqual(by_id[2]["y"], 6.0)
+
 
 if __name__ == "__main__":
     unittest.main()

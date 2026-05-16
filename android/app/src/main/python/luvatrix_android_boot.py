@@ -155,6 +155,7 @@ def _run_visual_runtime(view):
         target=target,
         hdi=HDIThread(
             source=AndroidHDISource(view, logical_width=float(width), logical_height=float(height)),
+            poll_interval_s=1.0 / 1000.0,
             window_geometry_provider=lambda: (0.0, 0.0, float(width), float(height)),
             target_extent_provider=lambda: (float(width), float(height)),
         ),
