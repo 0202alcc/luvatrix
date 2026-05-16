@@ -1,0 +1,16 @@
+# ninja log v5
+0	63	1778912558293266474	CMakeFiles/luvatrix_vulkan_renderer.dir/luvatrix_vulkan_renderer.cpp.o	42f2667f2a6e009d
+0	205	1778912579539909711	CMakeFiles/luvatrix_vulkan_renderer.dir/luvatrix_vulkan_renderer.cpp.o	42f2667f2a6e009d
+205	328	1778912579662834795	/Users/aleccandidato/Projects/luvatrix/android/app/build/intermediates/cxx/Debug/73414y1y/obj/arm64-v8a/libluvatrix_vulkan_renderer.so	4fd0fd75312c0fb7
+0	640	1778939461752955696	CMakeFiles/luvatrix_vulkan_renderer.dir/luvatrix_vulkan_renderer.cpp.o	42f2667f2a6e009d
+641	817	1778939461931774861	/Users/aleccandidato/Projects/luvatrix/android/app/build/intermediates/cxx/Debug/73414y1y/obj/arm64-v8a/libluvatrix_vulkan_renderer.so	4fd0fd75312c0fb7
+2	742	1778940178279942888	CMakeFiles/luvatrix_vulkan_renderer.dir/luvatrix_vulkan_renderer.cpp.o	42f2667f2a6e009d
+742	850	1778940178391087461	/Users/aleccandidato/Projects/luvatrix/android/app/build/intermediates/cxx/Debug/73414y1y/obj/arm64-v8a/libluvatrix_vulkan_renderer.so	4fd0fd75312c0fb7
+2	777	1778940271158436137	CMakeFiles/luvatrix_vulkan_renderer.dir/luvatrix_vulkan_renderer.cpp.o	42f2667f2a6e009d
+777	897	1778940271285825606	/Users/aleccandidato/Projects/luvatrix/android/app/build/intermediates/cxx/Debug/73414y1y/obj/arm64-v8a/libluvatrix_vulkan_renderer.so	4fd0fd75312c0fb7
+3	812	1778940386256029250	CMakeFiles/luvatrix_vulkan_renderer.dir/luvatrix_vulkan_renderer.cpp.o	42f2667f2a6e009d
+812	956	1778940386406220173	/Users/aleccandidato/Projects/luvatrix/android/app/build/intermediates/cxx/Debug/73414y1y/obj/arm64-v8a/libluvatrix_vulkan_renderer.so	4fd0fd75312c0fb7
+2	1227	1778940958745954288	CMakeFiles/luvatrix_vulkan_renderer.dir/luvatrix_vulkan_renderer.cpp.o	42f2667f2a6e009d
+1227	1351	1778940958878450863	/Users/aleccandidato/Projects/luvatrix/android/app/build/intermediates/cxx/Debug/73414y1y/obj/arm64-v8a/libluvatrix_vulkan_renderer.so	4fd0fd75312c0fb7
+2	870	1778964225199122899	CMakeFiles/luvatrix_vulkan_renderer.dir/luvatrix_vulkan_renderer.cpp.o	42f2667f2a6e009d
+870	1031	1778964225369871625	/Users/aleccandidato/Projects/luvatrix/android/app/build/intermediates/cxx/Debug/73414y1y/obj/arm64-v8a/libluvatrix_vulkan_renderer.so	4fd0fd75312c0fb7

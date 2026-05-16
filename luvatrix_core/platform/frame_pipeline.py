@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import TYPE_CHECKING
 
-import torch
-import torch.nn.functional as F
+if TYPE_CHECKING:
+    import torch
+
+try:
+    import torch
+    import torch.nn.functional as F
+except Exception:
+    torch = None  # type: ignore[assignment]
+    F = None  # type: ignore[assignment]
 
 
 class PresentationMode(str, Enum):
@@ -18,7 +26,13 @@ def normalize_presentation_mode(mode: PresentationMode | str) -> PresentationMod
     return PresentationMode(str(mode))
 
 
+def _require_torch() -> None:
+    if torch is None or F is None:
+        raise RuntimeError("frame resizing requires torch; use the desktop extra or a platform-native presenter path")
+
+
 def resize_rgba_bilinear(rgba: torch.Tensor, target_h: int, target_w: int) -> torch.Tensor:
+    _require_torch()
     if target_h <= 0 or target_w <= 0:
         raise ValueError("target dimensions must be > 0")
     src = rgba.to(torch.float32).permute(2, 0, 1).unsqueeze(0)
@@ -28,6 +42,7 @@ def resize_rgba_bilinear(rgba: torch.Tensor, target_h: int, target_w: int) -> to
 
 
 def resize_rgba_nearest(rgba: torch.Tensor, target_h: int, target_w: int) -> torch.Tensor:
+    _require_torch()
     if target_h <= 0 or target_w <= 0:
         raise ValueError("target dimensions must be > 0")
     src = rgba.to(torch.float32).permute(2, 0, 1).unsqueeze(0)
@@ -37,6 +52,7 @@ def resize_rgba_nearest(rgba: torch.Tensor, target_h: int, target_w: int) -> tor
 
 
 def expand_rgba_integer(rgba: torch.Tensor, scale: int) -> torch.Tensor:
+    _require_torch()
     if scale <= 0:
         raise ValueError("scale must be > 0")
     if scale == 1:
@@ -93,6 +109,7 @@ def prepare_pixel_preserve_frame(rgba: torch.Tensor, target_w: int, target_h: in
 
 
 def center_rgba_on_canvas(rgba: torch.Tensor, target_w: int, target_h: int) -> torch.Tensor:
+    _require_torch()
     src_h, src_w, _ = rgba.shape
     canvas = torch.zeros((target_h, target_w, 4), dtype=torch.uint8)
     canvas[:, :, 3] = 255

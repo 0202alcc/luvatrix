@@ -1,6 +1,7 @@
 app_id = "examples.full_suite_interactive"
 protocol_version = "1"
 entrypoint = "app_main:create"
+platform_support = ["macos", "ios", "android"]
 required_capabilities = ["window.write"]
 optional_capabilities = [
   "hdi.keyboard",

@@ -935,8 +935,17 @@ def _detect_ios_app_python_versions(app_path: Path) -> set[str]:
 
 
 def _ios_extension_module_name(relative_path: Path) -> str:
-    """Match Python-Apple-support's dotted module name derivation."""
-    return relative_path.as_posix().split(".", 1)[0].replace("/", ".")
+    """Match Python-Apple-support's dotted module name derivation.
+
+    Excludes test modules (ending in _tests) as they don't have Info.plist
+    files and cannot be signed frameworks. See:
+    https://github.com/beeware/python-apple-support/issues/XXX
+    """
+    module_base = relative_path.as_posix().split(".", 1)[0]
+    # Skip test modules that don't have Info.plist
+    if module_base.endswith("_tests"):
+        return ""
+    return module_base.replace("/", ".")
 
 
 def _write_framework_info_plist(framework_dir: Path, executable: str, identifier: str) -> None:
@@ -975,6 +984,9 @@ def _prepare_ios_extension_frameworks(app_path: Path) -> list[Path]:
     On iOS, CPython's FileFinder prefers `.fwork` marker files that point to
     signed framework binaries in the app bundle. Plain `.so` files in
     site-packages are not enough for third-party packages on physical devices.
+
+    Test modules (ending in _tests) are excluded as they don't have Info.plist
+    files and cannot be signed as frameworks.
     """
     packages_dir = app_path / "PyPackages"
     frameworks_dir = app_path / "Frameworks"
@@ -983,6 +995,9 @@ def _prepare_ios_extension_frameworks(app_path: Path) -> list[Path]:
     for so_path in sorted(packages_dir.rglob("*.so")):
         rel = so_path.relative_to(packages_dir)
         module_name = _ios_extension_module_name(rel)
+        # Skip test modules (they don't have Info.plist and can't be signed)
+        if not module_name:
+            continue
         framework_name = f"{module_name}.framework"
         executable = module_name
         framework_dir = frameworks_dir / framework_name

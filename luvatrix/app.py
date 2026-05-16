@@ -22,6 +22,7 @@ from luvatrix_core.core.window_matrix import WindowMatrix
 
 PLATFORM_MACOS = "macos"
 PLATFORM_IOS = "ios"
+PLATFORM_ANDROID = "android"
 PLATFORM_LINUX = "linux"
 PLATFORM_WINDOWS = "windows"
 PLATFORM_WEB = "web"
@@ -29,6 +30,7 @@ PLATFORM_WEB = "web"
 SUPPORTED_APP_PLATFORMS = (
     PLATFORM_MACOS,
     PLATFORM_IOS,
+    PLATFORM_ANDROID,
     PLATFORM_LINUX,
     PLATFORM_WINDOWS,
     PLATFORM_WEB,
@@ -40,6 +42,8 @@ RENDER_PLATFORM: dict[str, str | None] = {
     "macos-metal": PLATFORM_MACOS,
     "ios-simulator": PLATFORM_IOS,
     "ios-device": PLATFORM_IOS,
+    "android-emulator": PLATFORM_ANDROID,
+    "android-device": PLATFORM_ANDROID,
     "web": PLATFORM_WEB,
 }
 
@@ -57,6 +61,12 @@ RENDER_EXTRA_MODULES: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
     ),
     "ios-device": (
         ("ios", ()),
+    ),
+    "android-emulator": (
+        ("android", ()),
+    ),
+    "android-device": (
+        ("android", ()),
     ),
     "web": (
         ("web", ("websockets",)),
@@ -187,6 +197,7 @@ def _normalize_host_os(value: str) -> str:
         "linux": PLATFORM_LINUX,
         "windows": PLATFORM_WINDOWS,
         "win": PLATFORM_WINDOWS,
+        "android": PLATFORM_ANDROID,
         "ios": PLATFORM_IOS,
         "web": PLATFORM_WEB,
         "wasm": PLATFORM_WEB,
@@ -198,6 +209,7 @@ def _normalize_host_os(value: str) -> str:
 
 __all__ = [
     "APP_PROTOCOL_VERSION",
+    "PLATFORM_ANDROID",
     "PLATFORM_IOS",
     "PLATFORM_LINUX",
     "PLATFORM_MACOS",
