@@ -71,6 +71,10 @@ struct GlyphBitmap {
 
 struct ParsedScene {
     Rgba background;
+    bool has_rainbow_background = false;
+    double background_t = 0.0;
+    double background_rotation = 0.0;
+    double background_scroll_y = 0.0;
     std::vector<RectPrimitive> rects;
     std::vector<CirclePrimitive> circles;
     std::vector<TextPrimitive> texts;
@@ -174,6 +178,18 @@ Rgba parse_scene_background(const std::string& json) {
     return Rgba{clamp255(base_r + rotate_boost), clamp255(base_g + scroll_boost), clamp255(base_b), 255};
 }
 
+void parse_background_uniforms(const std::string& json, ParsedScene& scene) {
+    auto uniforms = json.find("\"uniforms\"");
+    auto open = json.find('[', uniforms);
+    if (uniforms == std::string::npos || open == std::string::npos) return;
+    scene.has_rainbow_background = true;
+    scene.background_t = number_after(json, open + 1).value_or(0.0);
+    auto comma1 = json.find(',', open + 1);
+    scene.background_rotation = number_after(json, comma1 == std::string::npos ? open + 1 : comma1 + 1).value_or(0.0);
+    auto comma2 = comma1 == std::string::npos ? std::string::npos : json.find(',', comma1 + 1);
+    scene.background_scroll_y = number_after(json, comma2 == std::string::npos ? open + 1 : comma2 + 1).value_or(0.0);
+}
+
 std::string::size_type value_pos_after_key(const std::string& json, const std::string& key) {
     auto key_pos = json.find("\"" + key + "\"");
     if (key_pos == std::string::npos) return std::string::npos;
@@ -261,6 +277,7 @@ ParsedScene parse_scene(const std::string& json) {
             scene.background = parse_color_array(node, "color", scene.background);
         } else if (type == "shader_rect" && parse_string_key(node, "shader") == "full_suite_background") {
             scene.background = parse_scene_background(node);
+            parse_background_uniforms(node, scene);
         } else if (type == "rect") {
             scene.rects.push_back(RectPrimitive{
                 parse_number_key(node, "x"),
@@ -611,6 +628,55 @@ uint32_t pack_bgra(Rgba color) {
         | (static_cast<uint32_t>(clamp255(color.a)) << 24);
 }
 
+Rgba hsv_to_rgba(double h, double s, double v) {
+    h = h - std::floor(h);
+    double c = v * s;
+    double x = c * (1.0 - std::fabs(std::fmod(h * 6.0, 2.0) - 1.0));
+    double m = v - c;
+    double r = 0.0;
+    double g = 0.0;
+    double b = 0.0;
+    if (h < 1.0 / 6.0) {
+        r = c; g = x; b = 0.0;
+    } else if (h < 2.0 / 6.0) {
+        r = x; g = c; b = 0.0;
+    } else if (h < 3.0 / 6.0) {
+        r = 0.0; g = c; b = x;
+    } else if (h < 4.0 / 6.0) {
+        r = 0.0; g = x; b = c;
+    } else if (h < 5.0 / 6.0) {
+        r = x; g = 0.0; b = c;
+    } else {
+        r = c; g = 0.0; b = x;
+    }
+    return Rgba{
+        clamp255(static_cast<int>((r + m) * 255.0)),
+        clamp255(static_cast<int>((g + m) * 255.0)),
+        clamp255(static_cast<int>((b + m) * 255.0)),
+        255,
+    };
+}
+
+void fill_rainbow_background(std::vector<uint32_t>& pixels, int width, int height, const ParsedScene& scene) {
+    constexpr int kPaletteSize = 1024;
+    std::array<uint32_t, kPaletteSize> palette{};
+    double t = scene.background_t * 0.0025 + scene.background_rotation * 0.01 + scene.background_scroll_y * 0.002;
+    for (int i = 0; i < kPaletteSize; ++i) {
+        double hue = (static_cast<double>(i) / static_cast<double>(kPaletteSize)) + t;
+        double value = 0.84 + 0.10 * (static_cast<double>((i * 37) & 255) / 255.0);
+        palette[static_cast<size_t>(i)] = pack_bgra(hsv_to_rgba(hue, 0.82, value));
+    }
+    int phase = static_cast<int>(std::floor(t * static_cast<double>(kPaletteSize))) & (kPaletteSize - 1);
+    int x_step = std::max(1, kPaletteSize / std::max(1, width));
+    int y_step = std::max(1, kPaletteSize / std::max(1, height));
+    for (int y = 0; y < height; ++y) {
+        int row = (phase + y * y_step * 2) & (kPaletteSize - 1);
+        for (int x = 0; x < width; ++x) {
+            pixels[static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)] = palette[(row + x * x_step * 3) & (kPaletteSize - 1)];
+        }
+    }
+}
+
 void blend_pixel(std::vector<uint32_t>& pixels, int width, int height, int x, int y, Rgba src) {
     if (x < 0 || y < 0 || x >= width || y >= height || src.a <= 0) return;
     uint32_t& dst = pixels[static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)];
@@ -878,6 +944,7 @@ void draw_text_pixels(
 
 std::vector<uint32_t> rasterize_scene_pixels(const ParsedScene& scene, int width, int height, int logical_width, int logical_height) {
     std::vector<uint32_t> pixels(static_cast<size_t>(width) * static_cast<size_t>(height), pack_bgra(scene.background));
+    if (scene.has_rainbow_background) fill_rainbow_background(pixels, width, height, scene);
     double scale_x = static_cast<double>(width) / static_cast<double>(std::max(1, logical_width));
     double scale_y = static_cast<double>(height) / static_cast<double>(std::max(1, logical_height));
     for (const auto& rect : scene.rects) draw_rect_pixels(pixels, width, height, scale_x, scale_y, rect);

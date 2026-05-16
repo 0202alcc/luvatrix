@@ -9,6 +9,7 @@ from examples.full_suite_interactive.app_main import (
     _apply_hdi_events,
     _build_scene_svg,
     _detect_frame_switch,
+    _debug_env_default_on,
     _effective_touch_pressure,
     _mouse_label_text,
     _next_coord_frame,
@@ -148,6 +149,15 @@ class FullSuiteInteractiveExampleTests(unittest.TestCase):
         self.assertEqual(_touch_bubble_radius(0.0), 24.0)
         self.assertEqual(_touch_bubble_radius(1.0), 88.0)
         self.assertEqual(_pointer_bubble_radius(InteractionState()), 30.0)
+
+    def test_debug_mode_defaults_on(self) -> None:
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(_debug_env_default_on("LUVATRIX_FSI_DEBUG"))
+        with patch.dict(os.environ, {"LUVATRIX_FSI_DEBUG": "0"}):
+            self.assertFalse(_debug_env_default_on("LUVATRIX_FSI_DEBUG"))
 
 
 if __name__ == "__main__":

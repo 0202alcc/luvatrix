@@ -333,6 +333,13 @@ def _frame_clear_color(state: InteractionState, t: int) -> tuple[int, int, int, 
     return (r, g, b, 255)
 
 
+def _debug_env_default_on(name: str) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return True
+    return value.strip().lower() not in ("0", "false", "no", "off")
+
+
 def _build_scene_svg(width: int, height: int, state: InteractionState) -> str:
     if not state.mouse_in_window:
         return (
@@ -456,7 +463,7 @@ class FullSuiteInteractiveApp:
         self._win_start = 0.0
         self._last_fps: float = 0.0
         self._ui_renderer = MatrixUIFrameRenderer() if _HAS_UI else None
-        self._debug = os.getenv("LUVATRIX_FSI_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+        self._debug = _debug_env_default_on("LUVATRIX_FSI_DEBUG")
         self._last_debug_text_ts: float = 0.0
         self._debug_lines: tuple[str, str, str] = ("", "", "")
         self._debug_err_chunks: list[str] = []
@@ -547,38 +554,49 @@ class FullSuiteInteractiveApp:
     def _loop_scene(self, ctx) -> None:
         ctx.begin_scene_frame()
         ctx.clear_scene((0, 0, 0, 255))
+        elapsed = float(time.perf_counter() - self._started)
         ctx.draw_shader_rect(
             x=0.0,
             y=0.0,
             width=float(self._width),
             height=float(self._height),
             shader="full_suite_background",
-            uniforms=(float(time.perf_counter() - self._started) * 120.0, float(self._state.rotation), float(self._state.scroll_y)),
+            uniforms=(elapsed * 120.0, float(self._state.rotation), float(self._state.scroll_y)),
             z_index=0,
         )
+        if self._debug:
+            self._draw_origin_marker(ctx, 0.0, 0.0, "bg", z_index=40)
         if self._state.active_touches:
             for idx, (touch_id, (touch_x, touch_y)) in enumerate(sorted(self._state.active_touches.items())):
+                cx = max(0.0, min(float(self._width), touch_x))
+                cy = max(0.0, min(float(self._height), touch_y))
                 radius = _touch_bubble_radius(self._state.pressure)
                 ctx.draw_circle(
-                    cx=max(0.0, min(float(self._width), touch_x)),
-                    cy=max(0.0, min(float(self._height), touch_y)),
+                    cx=cx,
+                    cy=cy,
                     radius=radius,
                     fill_rgba=(102, 221, 255, 96),
                     stroke_rgba=(248, 250, 252, 255),
                     stroke_width=2.0,
                     z_index=10 + idx,
                 )
+                if self._debug:
+                    self._draw_origin_marker(ctx, cx, cy, f"touch{touch_id}", z_index=42 + idx)
         elif self._state.mouse_in_window:
+            cx = max(0.0, min(float(self._width), self._state.mouse_x))
+            cy = max(0.0, min(float(self._height), self._state.mouse_y))
             radius = _pointer_bubble_radius(self._state)
             ctx.draw_circle(
-                cx=max(0.0, min(float(self._width), self._state.mouse_x)),
-                cy=max(0.0, min(float(self._height), self._state.mouse_y)),
+                cx=cx,
+                cy=cy,
                 radius=radius,
                 fill_rgba=(255, 102, 170, 96) if self._state.left_down else (102, 221, 255, 96),
                 stroke_rgba=(255, 136, 204, 255) if self._state.right_down else (232, 247, 255, 255),
                 stroke_width=2.0,
                 z_index=10,
             )
+            if self._debug:
+                self._draw_origin_marker(ctx, cx, cy, "pointer", z_index=42)
             dx, dy = ctx.from_render_coords(self._state.mouse_x, self._state.mouse_y, frame=self._coord_frame)
             text_x = max(0.0, min(float(self._width - 180), self._state.mouse_x + 12.0))
             text_y = max(0.0, min(float(self._height - 24), self._state.mouse_y - 22.0))
@@ -592,6 +610,8 @@ class FullSuiteInteractiveApp:
                 z_index=20,
                 cache_key="mouse_label",
             )
+            if self._debug:
+                self._draw_origin_marker(ctx, text_x, text_y, "mouse_label", z_index=43)
 
         bottom = float(self._height)
         scene_lines = [
@@ -607,16 +627,20 @@ class FullSuiteInteractiveApp:
             ),
         ]
         for text, offset, size, color, key in scene_lines:
+            x = 8.0
+            y = max(0.0, bottom - offset)
             ctx.draw_text(
                 text,
-                x=8.0,
-                y=max(0.0, bottom - offset),
+                x=x,
+                y=y,
                 font_family="Comic Mono",
                 font_size_px=size,
                 color_rgba=color,
                 z_index=30,
                 cache_key=key,
             )
+            if self._debug:
+                self._draw_origin_marker(ctx, x, y, "", z_index=44)
 
         accel_name = os.getenv("LUVATRIX_IOS_ACCEL_IMPORT_ERROR", "")
         if _HAS_UI and self._ui_renderer is not None and hasattr(self._ui_renderer, "diagnostics"):
@@ -668,28 +692,58 @@ class FullSuiteInteractiveApp:
                 self._debug_err_chunks = _debug_text_chunks(err, 38, 4) if err else []
                 self._last_debug_text_ts = now_t
             for idx, line in enumerate(self._debug_lines):
+                x = max(8.0, float(self._width) - 190.0)
+                y = 10.0 + idx * 12.0
                 ctx.draw_text(
                     line,
-                    x=8.0,
-                    y=max(0.0, bottom - (12.0 + idx * 11.0)),
+                    x=x,
+                    y=y,
                     font_family="Comic Mono",
                     font_size_px=8.0,
                     color_rgba=(186, 230, 253, 255),
                     z_index=30,
                     cache_key=f"runtime_status_{idx}",
                 )
+                self._draw_origin_marker(ctx, x, y, "", z_index=45)
             for idx, chunk in enumerate(self._debug_err_chunks):
+                x = max(8.0, float(self._width) - 190.0)
+                y = 54.0 + idx * 14.0
                 ctx.draw_text(
                     chunk,
-                    x=8.0,
-                    y=max(0.0, bottom - (106.0 + idx * 14.0)),
+                    x=x,
+                    y=y,
                     font_family="Comic Mono",
                     font_size_px=9.0,
                     color_rgba=(254, 202, 202, 255),
                     z_index=30,
                     cache_key=f"runtime_error_{idx}",
                 )
+                self._draw_origin_marker(ctx, x, y, "", z_index=45)
         ctx.finalize_scene_frame()
+
+    def _draw_origin_marker(self, ctx, x: float, y: float, label: str, *, z_index: int) -> None:
+        x = max(0.0, min(float(self._width), float(x)))
+        y = max(0.0, min(float(self._height), float(y)))
+        ctx.draw_circle(
+            cx=x,
+            cy=y,
+            radius=4.0,
+            fill_rgba=(255, 64, 64, 220),
+            stroke_rgba=(255, 255, 255, 255),
+            stroke_width=1.0,
+            z_index=z_index,
+        )
+        if label:
+            ctx.draw_text(
+                label,
+                x=min(float(self._width - 80), x + 6.0),
+                y=max(0.0, y - 7.0),
+                font_family="Comic Mono",
+                font_size_px=8.0,
+                color_rgba=(255, 255, 255, 230),
+                z_index=z_index + 1,
+                cache_key=f"origin_{label}",
+            )
 
     def _loop_ui(self, ctx) -> None:
         from luvatrix_core import accel

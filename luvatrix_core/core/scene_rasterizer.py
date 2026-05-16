@@ -72,6 +72,10 @@ def _draw_shader_rect(out, node: ShaderRectNode, *, sx: float, sy: float) -> Non
     if node.shader != "full_suite_background":
         _draw_rect(out, node.x * sx, node.y * sy, node.width * sx, node.height * sy, node.color_rgba)
         return
+    np = _numpy()
+    if np is not None:
+        _draw_rainbow_background(out, node)
+        return
     t = int(node.uniforms[0]) if node.uniforms else 0
     rotation = float(node.uniforms[1]) if len(node.uniforms) > 1 else 0.0
     scroll_y = float(node.uniforms[2]) if len(node.uniforms) > 2 else 0.0
@@ -87,6 +91,36 @@ def _draw_shader_rect(out, node: ShaderRectNode, *, sx: float, sy: float) -> Non
         255,
     )
     _draw_rect(out, node.x * sx, node.y * sy, node.width * sx, node.height * sy, color)
+
+
+def _draw_rainbow_background(out, node: ShaderRectNode) -> None:
+    np = _numpy()
+    if np is None:
+        return
+    h, w, _ = out.shape
+    t = float(node.uniforms[0]) if node.uniforms else 0.0
+    rotation = float(node.uniforms[1]) if len(node.uniforms) > 1 else 0.0
+    scroll_y = float(node.uniforms[2]) if len(node.uniforms) > 2 else 0.0
+    yy, xx = np.mgrid[0:h, 0:w]
+    nx = xx.astype(np.float32) / max(1.0, float(w))
+    ny = yy.astype(np.float32) / max(1.0, float(h))
+    phase = t * 0.0025 + rotation * 0.01 + scroll_y * 0.002
+    wave = np.sin((nx * 3.2 + ny * 2.4 + phase) * (2.0 * np.pi)) * 0.055
+    hue = (nx * 0.58 + ny * 0.42 + phase + wave) % 1.0
+    value = np.clip(0.78 + 0.16 * np.sin((nx - ny + phase * 0.7) * (2.0 * np.pi)), 0.35, 0.95)
+    # Vectorized HSV conversion for the CPU scene fallback.
+    i = np.floor(hue * 6.0).astype(np.int32)
+    f = hue * 6.0 - i
+    p = value * (1.0 - 0.82)
+    q = value * (1.0 - f * 0.82)
+    tv = value * (1.0 - (1.0 - f) * 0.82)
+    r = np.choose(i % 6, [value, q, p, p, tv, value])
+    g = np.choose(i % 6, [tv, value, value, q, p, p])
+    b = np.choose(i % 6, [p, p, tv, value, value, q])
+    out[:, :, 0] = np.clip(r * 255.0, 0, 255).astype(np.uint8)
+    out[:, :, 1] = np.clip(g * 255.0, 0, 255).astype(np.uint8)
+    out[:, :, 2] = np.clip(b * 255.0, 0, 255).astype(np.uint8)
+    out[:, :, 3] = 255
 
 
 def _draw_rect(out, x: float, y: float, width: float, height: float, color: tuple[int, int, int, int]) -> None:

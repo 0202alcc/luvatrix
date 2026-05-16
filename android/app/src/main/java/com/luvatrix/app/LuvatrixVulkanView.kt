@@ -4,7 +4,9 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Shader
 import android.os.Build
 import android.os.Looper
 import android.util.AttributeSet
@@ -190,14 +192,17 @@ class LuvatrixVulkanView @JvmOverloads constructor(
                         val t = uniforms?.optDouble(0, 0.0) ?: 0.0
                         val rotation = uniforms?.optDouble(1, 0.0) ?: 0.0
                         val scrollY = uniforms?.optDouble(2, 0.0) ?: 0.0
-                        fillPaint.color = fullSuiteBackgroundColor(t, rotation, scrollY)
+                        fillPaint.shader = fullSuiteBackgroundGradient(canvas, t, rotation, scrollY)
                     } else {
+                        fillPaint.shader = null
                         fillPaint.color = colorFromArray(node.getJSONArray("color"))
                     }
                     fillPaint.style = Paint.Style.FILL
                     drawRectNode(canvas, node, scaleX, scaleY, fillPaint)
+                    fillPaint.shader = null
                 }
                 "rect" -> {
+                    fillPaint.shader = null
                     fillPaint.color = colorFromArray(node.getJSONArray("color"))
                     fillPaint.style = Paint.Style.FILL
                     drawRectNode(canvas, node, scaleX, scaleY, fillPaint)
@@ -333,18 +338,23 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         )
     }
 
-    private fun fullSuiteBackgroundColor(t: Double, rotation: Double, scrollY: Double): Int {
-        val ti = t.toInt()
-        val baseR = (ti * 3 + 35) % 255
-        val baseG = (ti * 2 + 70) % 255
-        val baseB = (ti * 4 + 20) % 255
-        val rotateBoost = (rotation * 2.0).coerceIn(-30.0, 30.0).toInt()
-        val scrollBoost = (scrollY * 0.5).coerceIn(-40.0, 40.0).toInt()
-        return Color.argb(
-            255,
-            (baseR + rotateBoost).coerceIn(0, 255),
-            (baseG + scrollBoost).coerceIn(0, 255),
-            baseB.coerceIn(0, 255),
+    private fun fullSuiteBackgroundGradient(canvas: Canvas, t: Double, rotation: Double, scrollY: Double): Shader {
+        val phase = ((t * 0.0025 + rotation * 0.01 + scrollY * 0.002) % 1.0).toFloat()
+        val colors = intArrayOf(
+            Color.HSVToColor(floatArrayOf(((phase + 0.00f) % 1.0f) * 360.0f, 0.82f, 0.88f)),
+            Color.HSVToColor(floatArrayOf(((phase + 0.18f) % 1.0f) * 360.0f, 0.82f, 0.92f)),
+            Color.HSVToColor(floatArrayOf(((phase + 0.36f) % 1.0f) * 360.0f, 0.82f, 0.82f)),
+            Color.HSVToColor(floatArrayOf(((phase + 0.62f) % 1.0f) * 360.0f, 0.82f, 0.92f)),
+            Color.HSVToColor(floatArrayOf(((phase + 0.82f) % 1.0f) * 360.0f, 0.82f, 0.86f)),
+        )
+        return LinearGradient(
+            0.0f,
+            0.0f,
+            canvas.width.toFloat(),
+            canvas.height.toFloat(),
+            colors,
+            null,
+            Shader.TileMode.MIRROR,
         )
     }
 
