@@ -11,5 +11,7 @@ object NativeVulkan {
 
     external fun setSurface(surface: Surface?)
 
+    external fun setBitmapGlyphTable(tableText: String): Boolean
+
     external fun presentScene(sceneJson: String, revision: Int, width: Int, height: Int): Boolean
 }

@@ -149,6 +149,12 @@ def main() -> None:
         help="For Android render modes, launch a minimal native import probe instead of the app runtime.",
     )
     run.add_argument(
+        "--android-low-latency",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable Android low-latency touch and frame-rate hints for native Android render modes. Default: enabled.",
+    )
+    run.add_argument(
         "--ios-import-probe",
         action="store_true",
         help="For --render ios-device, launch a minimal native import probe instead of the app runtime.",
@@ -203,6 +209,7 @@ def main() -> None:
                 render_mode=args.render_mode,
                 target_fps=_resolve_target_fps(args.fps) if args.fps is not None else None,
                 present_fps=args.present_fps,
+                low_latency_mode=args.android_low_latency,
             )
             return
         if args.render == "ios-device":
@@ -216,6 +223,7 @@ def main() -> None:
                 render_mode=args.render_mode,
                 target_fps=_resolve_target_fps(args.fps) if args.fps is not None else None,
                 present_fps=args.present_fps,
+                low_latency_mode=args.android_low_latency,
             )
             return
         if args.render == "android-emulator":

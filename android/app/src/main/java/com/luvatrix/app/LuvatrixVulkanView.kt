@@ -1,15 +1,21 @@
 package com.luvatrix.app
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.os.Build
+import android.os.Looper
 import android.util.AttributeSet
+import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
+import android.view.WindowManager
 import android.widget.FrameLayout
 import org.json.JSONArray
 import org.json.JSONObject
@@ -34,6 +40,8 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     private var overlayLogicalHeight: Int = 1
     private var overlayNativeBackground: Boolean = false
     private var overlayMode: OverlayMode = OverlayMode.Scene
+    private var lowLatencyMode: Boolean = false
+    private var lowLatencyPresentFps: Int? = null
     private val inputEvents = ConcurrentLinkedQueue<String>()
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -44,6 +52,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     init {
+        loadBitmapGlyphTable()
         surfaceView.holder.addCallback(this)
         addView(surfaceView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(overlayView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -52,13 +61,26 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         requestFocus()
     }
 
+    private fun loadBitmapGlyphTable() {
+        try {
+            val table = context.assets.open("luvatrix_bitmap_font.txt").bufferedReader().use { it.readText() }
+            if (!NativeVulkan.setBitmapGlyphTable(table)) {
+                Log.w("Luvatrix", "Android bitmap glyph table rejected; using built-in glyphs")
+            }
+        } catch (exc: Throwable) {
+            Log.w("Luvatrix", "Android bitmap glyph table unavailable; using built-in glyphs", exc)
+        }
+    }
+
     override fun surfaceCreated(holder: SurfaceHolder) {
         NativeVulkan.setSurface(holder.surface)
+        applyFrameRateHint()
         setBootstrapFrame(Color.rgb(12, 84, 140))
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         NativeVulkan.setSurface(holder.surface)
+        applyFrameRateHint()
         setBootstrapFrame(Color.rgb(22, 98, 160))
     }
 
@@ -88,12 +110,55 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         return if (rate > 0.0f) rate else 60.0f
     }
 
+    fun applyLowLatencyMode(targetFps: Int, presentFps: Int) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            post { applyLowLatencyMode(targetFps, presentFps) }
+            return
+        }
+        lowLatencyMode = true
+        lowLatencyPresentFps = presentFps
+        keepScreenOn = true
+        surfaceView.keepScreenOn = true
+        (context as? Activity)?.window?.let { window ->
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                try {
+                    window.setSustainedPerformanceMode(true)
+                } catch (exc: Throwable) {
+                    Log.w("Luvatrix", "Android sustained performance mode unavailable", exc)
+                }
+            }
+        }
+        applyFrameRateHint()
+        Log.i("Luvatrix", "Android low-latency mode enabled targetFps=$targetFps presentFps=$presentFps")
+    }
+
+    private fun applyFrameRateHint() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return
+        }
+        val presentFps = lowLatencyPresentFps ?: return
+        val surface = surfaceView.holder.surface ?: return
+        if (!surface.isValid) {
+            return
+        }
+        try {
+            surface.setFrameRate(
+                presentFps.coerceAtLeast(1).toFloat(),
+                Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                Surface.CHANGE_FRAME_RATE_ALWAYS,
+            )
+        } catch (exc: Throwable) {
+            Log.w("Luvatrix", "Android frame-rate hint unavailable", exc)
+        }
+    }
+
     fun presentScene(sceneJson: String, revision: Int, logicalWidth: Int, logicalHeight: Int) {
         var nativeBackground = false
         try {
             nativeBackground = NativeVulkan.presentScene(sceneJson, revision, logicalWidth, logicalHeight)
         } catch (exc: Throwable) {
-            android.util.Log.w("Luvatrix", "native Vulkan scene presenter unavailable; using Canvas fallback", exc)
+            Log.w("Luvatrix", "native Vulkan scene presenter unavailable; using Canvas fallback", exc)
         }
         overlayView.post {
             overlayMode = OverlayMode.Scene
@@ -173,6 +238,9 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (lowLatencyMode) {
+            requestUnbufferedDispatch(event)
+        }
         lastInputCount += 1
         enqueueTouch(event)
         return true

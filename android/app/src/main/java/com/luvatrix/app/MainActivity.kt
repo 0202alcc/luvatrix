@@ -8,6 +8,7 @@ import android.view.MotionEvent
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import kotlin.math.roundToInt
 
 class MainActivity : Activity() {
     private lateinit var luvatrixView: LuvatrixVulkanView
@@ -17,6 +18,8 @@ class MainActivity : Activity() {
         luvatrixView = LuvatrixVulkanView(this)
         setContentView(luvatrixView)
         luvatrixView.requestFocus()
+        val presentFps = luvatrixView.displayRefreshRateHz().roundToInt().coerceAtLeast(60)
+        luvatrixView.applyLowLatencyMode(presentFps * 2, presentFps)
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))
         }

@@ -59,6 +59,7 @@ def write_android_launch_config(
     render_mode: str = "auto",
     target_fps: int | None = None,
     present_fps: int | None = None,
+    low_latency_mode: bool = True,
 ) -> Path:
     project = project_dir or android_project_dir()
     dest = project / "app" / "src" / "main" / "assets" / "luvatrix_launch_config.json"
@@ -71,6 +72,7 @@ def write_android_launch_config(
         "render_mode": render_mode,
         "target_fps": target_fps,
         "present_fps": present_fps,
+        "low_latency_mode": bool(low_latency_mode),
     }
     data.update(display)
     dest.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -107,6 +109,7 @@ def run_android_emulator(
     render_mode: str = "auto",
     target_fps: int | None = None,
     present_fps: int | None = None,
+    low_latency_mode: bool = True,
 ) -> None:
     device_id = device_id or _ensure_emulator_running()
     _run_android(
@@ -118,6 +121,7 @@ def run_android_emulator(
         render_mode=render_mode,
         target_fps=target_fps,
         present_fps=present_fps,
+        low_latency_mode=low_latency_mode,
     )
 
 
@@ -131,6 +135,7 @@ def run_android_device(
     render_mode: str = "auto",
     target_fps: int | None = None,
     present_fps: int | None = None,
+    low_latency_mode: bool = True,
 ) -> None:
     _run_android(
         app_dir,
@@ -141,6 +146,7 @@ def run_android_device(
         render_mode=render_mode,
         target_fps=target_fps,
         present_fps=present_fps,
+        low_latency_mode=low_latency_mode,
     )
 
 
@@ -154,6 +160,7 @@ def _run_android(
     render_mode: str,
     target_fps: int | None,
     present_fps: int | None,
+    low_latency_mode: bool,
 ) -> None:
     project = android_project_dir()
     write_android_launch_config(
@@ -163,6 +170,7 @@ def _run_android(
         render_mode=render_mode,
         target_fps=target_fps,
         present_fps=present_fps,
+        low_latency_mode=low_latency_mode,
     )
     sync = project / "scripts" / "sync_python_assets.sh"
     if not sync.exists():

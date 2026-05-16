@@ -131,6 +131,8 @@ def _run_visual_runtime(view):
     matrix_height = max(1, int(round(height * render_scale)))
     target_fps, present_fps = _runtime_frame_rates(view, config)
     render_mode = str(config.get("render_mode") or "auto")
+    if view is not None and _truthy(config.get("low_latency_mode"), default=True):
+        _apply_low_latency_mode(view, target_fps=target_fps, present_fps=present_fps)
     clear_android_input_events()
 
     class _CountingTarget(RenderTarget):
@@ -233,6 +235,32 @@ def _positive_int_or_none(value: object) -> int | None:
     except (TypeError, ValueError):
         return None
     return out if out > 0 else None
+
+
+def _truthy(value: object, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("1", "true", "yes", "on"):
+            return True
+        if normalized in ("0", "false", "no", "off"):
+            return False
+    return default
+
+
+def _apply_low_latency_mode(view, *, target_fps: int, present_fps: int) -> None:
+    method = getattr(view, "applyLowLatencyMode", None) or getattr(view, "apply_low_latency_mode", None)
+    if not callable(method):
+        return
+    try:
+        method(int(target_fps), int(present_fps))
+    except Exception as exc:
+        _log(f"luvatrix Android low-latency mode unavailable: {type(exc).__name__}: {exc}")
 
 
 def _launch_config() -> dict[str, object]:

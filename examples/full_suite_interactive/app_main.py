@@ -35,6 +35,7 @@ class InteractionState:
     left_down: bool = False
     right_down: bool = False
     pressure: float = 0.0
+    touch_major_radius: float = 0.0
     pinch: float = 0.0
     rotation: float = 0.0
     scroll_x: float = 0.0
@@ -205,10 +206,22 @@ def _apply_hdi_events(state: InteractionState, events: list[object], surface_hei
                     state.mouse_y = y
                     state.mouse_in_window = True
                     state.mouse_error = None
-                    state.pressure = float(event.payload.get("force", state.pressure))
+                    state.touch_major_radius = max(
+                        0.0,
+                        float(event.payload.get("major_radius", state.touch_major_radius) or 0.0),
+                    )
+                    state.pressure = _effective_touch_pressure(
+                        force=float(event.payload.get("force", state.pressure) or 0.0),
+                        major_radius=state.touch_major_radius,
+                    )
                 elif phase in ("up", "cancel"):
                     state.active_touches.pop(touch_id, None)
                 state.touch_count = len(state.active_touches)
+                if phase in ("up", "cancel") and state.touch_count == 0:
+                    state.mouse_in_window = False
+                    state.mouse_error = "window not active / pointer out of bounds"
+                    state.pressure = 0.0
+                    state.touch_major_radius = 0.0
             elif event.event_type == "gesture" and event.status == "OK":
                 kind = str(event.payload.get("kind", ""))
                 if kind == "pan":
@@ -239,6 +252,24 @@ def _apply_hdi_events(state: InteractionState, events: list[object], surface_hei
         elif event.event_type == "scroll":
             state.scroll_x = float(event.payload.get("delta_x", state.scroll_x))
             state.scroll_y = float(event.payload.get("delta_y", state.scroll_y))
+
+
+def _effective_touch_pressure(*, force: float, major_radius: float) -> float:
+    """Approximate pressure from Android contact size when true force is flat."""
+    force = max(0.0, min(1.0, float(force)))
+    major_radius = max(0.0, float(major_radius))
+    area_pressure = max(0.0, min(1.0, (major_radius - 4.0) / 34.0))
+    if 0.0 < force < 0.98:
+        return max(force, area_pressure)
+    return area_pressure
+
+
+def _touch_bubble_radius(pressure: float) -> float:
+    return 24.0 + min(64.0, 82.0 * max(0.0, float(pressure)))
+
+
+def _pointer_bubble_radius(state: InteractionState) -> float:
+    return 30.0 + min(68.0, 105.0 * max(0.0, state.pressure) + 42.0 * abs(state.pinch))
 
 
 _COORD_FRAME_ORDER = ("screen_tl", "cartesian_bl", "cartesian_center")
@@ -309,7 +340,7 @@ def _build_scene_svg(width: int, height: int, state: InteractionState) -> str:
             f'<rect x="0" y="0" width="{width}" height="{height}" fill="none" stroke="#ffffff22" stroke-width="1"/>'
             "</svg>"
         )
-    radius = 24.0 + min(50.0, 90.0 * state.pressure + 35.0 * abs(state.pinch))
+    radius = _pointer_bubble_radius(state)
     cx = max(0.0, min(float(width), state.mouse_x))
     cy = max(0.0, min(float(height), state.mouse_y))
     circle_fill = "#ff66aa66" if state.left_down else "#66ddff66"
@@ -527,7 +558,7 @@ class FullSuiteInteractiveApp:
         )
         if self._state.active_touches:
             for idx, (touch_id, (touch_x, touch_y)) in enumerate(sorted(self._state.active_touches.items())):
-                radius = 18.0 + min(50.0, 70.0 * max(0.0, self._state.pressure))
+                radius = _touch_bubble_radius(self._state.pressure)
                 ctx.draw_circle(
                     cx=max(0.0, min(float(self._width), touch_x)),
                     cy=max(0.0, min(float(self._height), touch_y)),
@@ -538,7 +569,7 @@ class FullSuiteInteractiveApp:
                     z_index=10 + idx,
                 )
         elif self._state.mouse_in_window:
-            radius = 24.0 + min(50.0, 90.0 * self._state.pressure + 35.0 * abs(self._state.pinch))
+            radius = _pointer_bubble_radius(self._state)
             ctx.draw_circle(
                 cx=max(0.0, min(float(self._width), self._state.mouse_x)),
                 cy=max(0.0, min(float(self._height), self._state.mouse_y)),

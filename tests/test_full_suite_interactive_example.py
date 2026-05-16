@@ -9,8 +9,11 @@ from examples.full_suite_interactive.app_main import (
     _apply_hdi_events,
     _build_scene_svg,
     _detect_frame_switch,
+    _effective_touch_pressure,
     _mouse_label_text,
     _next_coord_frame,
+    _pointer_bubble_radius,
+    _touch_bubble_radius,
     format_dashboard,
     select_sensors,
 )
@@ -110,6 +113,41 @@ class FullSuiteInteractiveExampleTests(unittest.TestCase):
         self.assertEqual(state.active_touches[1], (10.0, 20.0))
         self.assertEqual(state.gesture_scale, 1.25)
         self.assertTrue(state.mouse_in_window)
+
+    def test_touch_release_hides_cursor_dot(self) -> None:
+        class _Event:
+            def __init__(self, payload) -> None:
+                self.device = "touch"
+                self.event_type = "touch"
+                self.status = "OK"
+                self.payload = payload
+
+        state = InteractionState()
+
+        _apply_hdi_events(
+            state,
+            [
+                _Event({"touch_id": 1, "phase": "down", "x": 10.0, "y": 20.0, "major_radius": 12.0}),
+                _Event({"touch_id": 1, "phase": "up", "x": 10.0, "y": 20.0}),
+            ],
+            surface_height=100,
+        )
+
+        self.assertEqual(state.touch_count, 0)
+        self.assertFalse(state.mouse_in_window)
+        self.assertEqual(state.pressure, 0.0)
+
+    def test_android_contact_area_imitates_pressure(self) -> None:
+        light = _effective_touch_pressure(force=1.0, major_radius=8.0)
+        heavy = _effective_touch_pressure(force=1.0, major_radius=26.0)
+
+        self.assertGreater(heavy, light)
+        self.assertGreater(heavy, 0.5)
+
+    def test_bubble_radius_has_larger_default_and_cap(self) -> None:
+        self.assertEqual(_touch_bubble_radius(0.0), 24.0)
+        self.assertEqual(_touch_bubble_radius(1.0), 88.0)
+        self.assertEqual(_pointer_bubble_radius(InteractionState()), 30.0)
 
 
 if __name__ == "__main__":

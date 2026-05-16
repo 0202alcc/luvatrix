@@ -1,5 +1,6 @@
 {
   "app_dir": "luvatrix_app",
+  "low_latency_mode": true,
   "native_height": 852,
   "native_width": 393,
   "present_fps": null,

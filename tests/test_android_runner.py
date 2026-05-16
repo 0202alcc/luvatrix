@@ -28,8 +28,20 @@ class AndroidRunnerTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertIn('"app_dir": "luvatrix_app"', text)
             self.assertNotIn('"native_width"', text)
+            self.assertIn('"low_latency_mode": true', text)
             self.assertIn('"render_mode": "scene"', text)
             self.assertIn('"render_scale": 0.75', text)
+
+    def test_write_launch_config_can_disable_low_latency_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td)
+            app = project / "example"
+            app.mkdir()
+
+            path = write_android_launch_config(app, project_dir=project, low_latency_mode=False)
+
+            text = path.read_text(encoding="utf-8")
+            self.assertIn('"low_latency_mode": false', text)
 
     def test_write_launch_config_includes_manifest_display_size(self) -> None:
         with tempfile.TemporaryDirectory() as td:

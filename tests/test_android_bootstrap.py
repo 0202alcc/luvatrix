@@ -41,6 +41,31 @@ class AndroidBootstrapTests(unittest.TestCase):
 
         self.assertEqual(boot._runtime_frame_rates(_View(), {}), (180, 90))
 
+    def test_low_latency_mode_applies_to_view(self) -> None:
+        boot = _load_boot_module()
+
+        class _View:
+            calls: list[tuple[int, int]]
+
+            def __init__(self) -> None:
+                self.calls = []
+
+            def applyLowLatencyMode(self, target_fps: int, present_fps: int) -> None:
+                self.calls.append((target_fps, present_fps))
+
+        view = _View()
+
+        boot._apply_low_latency_mode(view, target_fps=240, present_fps=120)
+
+        self.assertEqual(view.calls, [(240, 120)])
+
+    def test_low_latency_truthy_parsing(self) -> None:
+        boot = _load_boot_module()
+
+        self.assertTrue(boot._truthy(None, default=True))
+        self.assertTrue(boot._truthy("on"))
+        self.assertFalse(boot._truthy("off", default=True))
+
 
 if __name__ == "__main__":
     unittest.main()

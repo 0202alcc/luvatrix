@@ -11,6 +11,8 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_android.h>
@@ -52,6 +54,21 @@ struct TextPrimitive {
     Rgba color;
 };
 
+struct BitmapFont {
+    int width = 5;
+    int height = 7;
+    int advance = 6;
+    std::unordered_map<char, std::vector<uint32_t>> glyphs;
+    bool loaded = false;
+};
+
+struct GlyphBitmap {
+    int width = 5;
+    int height = 7;
+    int advance = 6;
+    std::vector<uint32_t> rows;
+};
+
 struct ParsedScene {
     Rgba background;
     std::vector<RectPrimitive> rects;
@@ -88,6 +105,7 @@ struct VulkanState {
 
 std::mutex g_mutex;
 VulkanState g_vk;
+BitmapFont g_bitmap_font;
 
 int count_nodes(const std::string& scene_json) {
     int count = 0;
@@ -668,7 +686,93 @@ void draw_circle_pixels(
     }
 }
 
-std::array<uint8_t, 7> glyph_rows(char raw) {
+std::string trim_copy(const std::string& value) {
+    auto start = value.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return "";
+    auto end = value.find_last_not_of(" \t\r\n");
+    return value.substr(start, end - start + 1);
+}
+
+std::optional<int> parse_int_value(const std::string& value) {
+    char* end = nullptr;
+    long parsed = std::strtol(value.c_str(), &end, 10);
+    if (end == value.c_str()) return std::nullopt;
+    return static_cast<int>(parsed);
+}
+
+std::optional<char> parse_glyph_key(const std::string& raw_key) {
+    std::string key = trim_copy(raw_key);
+    if (key == "space") return ' ';
+    if (key == "colon") return ':';
+    if (key == "period") return '.';
+    if (key == "comma") return ',';
+    if (key == "dash") return '-';
+    if (key == "underscore") return '_';
+    if (key == "equals") return '=';
+    if (key == "pipe") return '|';
+    if (key == "slash") return '/';
+    if (key.rfind("U+", 0) == 0 || key.rfind("u+", 0) == 0) {
+        char* end = nullptr;
+        long code = std::strtol(key.c_str() + 2, &end, 16);
+        if (end == key.c_str() + 2 || code < 0 || code > 127) return std::nullopt;
+        return static_cast<char>(code);
+    }
+    if (key.size() == 1) return key[0];
+    return std::nullopt;
+}
+
+bool parse_bitmap_font_table(const std::string& source, BitmapFont& out) {
+    BitmapFont parsed;
+    size_t pos = 0;
+    while (pos <= source.size()) {
+        size_t next = source.find('\n', pos);
+        std::string line = trim_copy(source.substr(pos, next == std::string::npos ? std::string::npos : next - pos));
+        pos = next == std::string::npos ? source.size() + 1 : next + 1;
+        if (line.empty() || line[0] == '#') continue;
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = trim_copy(line.substr(0, eq));
+        std::string value = trim_copy(line.substr(eq + 1));
+        if (key == "width") {
+            parsed.width = std::max(1, std::min(32, parse_int_value(value).value_or(parsed.width)));
+            continue;
+        }
+        if (key == "height") {
+            parsed.height = std::max(1, std::min(64, parse_int_value(value).value_or(parsed.height)));
+            continue;
+        }
+        if (key == "advance") {
+            parsed.advance = std::max(1, std::min(64, parse_int_value(value).value_or(parsed.advance)));
+            continue;
+        }
+        auto glyph_key = parse_glyph_key(key);
+        if (!glyph_key.has_value()) continue;
+        std::vector<uint32_t> rows;
+        size_t row_pos = 0;
+        while (row_pos <= value.size()) {
+            size_t comma = value.find(',', row_pos);
+            std::string token = trim_copy(value.substr(row_pos, comma == std::string::npos ? std::string::npos : comma - row_pos));
+            row_pos = comma == std::string::npos ? value.size() + 1 : comma + 1;
+            if (token.empty()) continue;
+            char* end = nullptr;
+            unsigned long row = std::strtoul(token.c_str(), &end, 16);
+            if (end == token.c_str()) {
+                rows.clear();
+                break;
+            }
+            rows.push_back(static_cast<uint32_t>(row));
+        }
+        if (static_cast<int>(rows.size()) == parsed.height) {
+            parsed.glyphs[*glyph_key] = rows;
+        }
+    }
+    if (parsed.glyphs.empty()) return false;
+    parsed.loaded = true;
+    out = std::move(parsed);
+    return true;
+}
+
+std::array<uint8_t, 7> builtin_glyph_rows(char raw) {
     char ch = raw >= 'a' && raw <= 'z' ? static_cast<char>(raw - 'a' + 'A') : raw;
     switch (ch) {
         case 'A': return {0x0e,0x11,0x11,0x1f,0x11,0x11,0x11};
@@ -720,6 +824,21 @@ std::array<uint8_t, 7> glyph_rows(char raw) {
     }
 }
 
+GlyphBitmap glyph_bitmap(char raw) {
+    char ch = raw >= 'a' && raw <= 'z' ? static_cast<char>(raw - 'a' + 'A') : raw;
+    if (g_bitmap_font.loaded) {
+        auto found = g_bitmap_font.glyphs.find(ch);
+        if (found == g_bitmap_font.glyphs.end() && raw >= 'a' && raw <= 'z') {
+            found = g_bitmap_font.glyphs.find(raw);
+        }
+        if (found != g_bitmap_font.glyphs.end()) {
+            return GlyphBitmap{g_bitmap_font.width, g_bitmap_font.height, g_bitmap_font.advance, found->second};
+        }
+    }
+    auto builtin = builtin_glyph_rows(raw);
+    return GlyphBitmap{5, 7, 6, std::vector<uint32_t>(builtin.begin(), builtin.end())};
+}
+
 void draw_text_pixels(
     std::vector<uint32_t>& pixels,
     int width,
@@ -730,21 +849,20 @@ void draw_text_pixels(
 ) {
     if (text.text.empty() || text.color.a <= 0) return;
     double scale = std::max(1.0, std::min(scale_x, scale_y));
-    int px = std::max(1, static_cast<int>(std::round(text.size * scale / 7.0)));
     int x_cursor = static_cast<int>(std::round(text.x * scale_x));
     int y_top = static_cast<int>(std::round(text.y * scale_y));
     int line_start = x_cursor;
-    int advance = px * 6;
     for (char ch : text.text) {
+        GlyphBitmap glyph = glyph_bitmap(ch);
+        int px = std::max(1, static_cast<int>(std::round(text.size * scale / static_cast<double>(std::max(1, glyph.height)))));
         if (ch == '\n') {
             x_cursor = line_start;
-            y_top += px * 9;
+            y_top += px * (glyph.height + 2);
             continue;
         }
-        auto rows = glyph_rows(ch);
-        for (int row = 0; row < 7; ++row) {
-            for (int col = 0; col < 5; ++col) {
-                if ((rows[row] & (1 << (4 - col))) == 0) continue;
+        for (int row = 0; row < glyph.height && row < static_cast<int>(glyph.rows.size()); ++row) {
+            for (int col = 0; col < glyph.width; ++col) {
+                if ((glyph.rows[row] & (1u << (glyph.width - 1 - col))) == 0) continue;
                 int x0 = x_cursor + col * px;
                 int y0 = y_top + row * px;
                 for (int yy = 0; yy < px; ++yy) {
@@ -754,7 +872,7 @@ void draw_text_pixels(
                 }
             }
         }
-        x_cursor += advance;
+        x_cursor += px * glyph.advance;
     }
 }
 
@@ -970,6 +1088,32 @@ Java_com_luvatrix_app_NativeVulkan_setSurface(JNIEnv *env, jobject, jobject surf
         ANativeWindow_getWidth(g_vk.window),
         ANativeWindow_getHeight(g_vk.window)
     );
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_luvatrix_app_NativeVulkan_setBitmapGlyphTable(JNIEnv *env, jobject, jstring tableText) {
+    if (tableText == nullptr) return JNI_FALSE;
+    const char* raw = env->GetStringUTFChars(tableText, nullptr);
+    if (raw == nullptr) return JNI_FALSE;
+    std::string table(raw);
+    env->ReleaseStringUTFChars(tableText, raw);
+
+    BitmapFont parsed;
+    bool ok = parse_bitmap_font_table(table, parsed);
+    if (!ok) {
+        LVX_LOGE("luvatrix bitmap glyph table parse failed");
+        return JNI_FALSE;
+    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_bitmap_font = std::move(parsed);
+    LVX_LOGI(
+        "luvatrix bitmap glyph table loaded glyphs=%zu size=%dx%d advance=%d",
+        g_bitmap_font.glyphs.size(),
+        g_bitmap_font.width,
+        g_bitmap_font.height,
+        g_bitmap_font.advance
+    );
+    return JNI_TRUE;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
