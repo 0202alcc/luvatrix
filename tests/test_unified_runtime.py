@@ -230,7 +230,7 @@ class UnifiedRuntimeTests(unittest.TestCase):
                         'protocol_version = "1"',
                         'entrypoint = "app_main:create"',
                         'required_capabilities = ["window.write"]',
-                        'optional_capabilities = ["sensor.camera", "sensor.microphone", "sensor.speaker"]',
+                        'optional_capabilities = ["sensor.camera", "sensor.display", "sensor.microphone", "sensor.speaker"]',
                     ]
                 )
             )
@@ -261,7 +261,9 @@ class UnifiedRuntimeTests(unittest.TestCase):
                 capability_decider=lambda cap: True,
             )
             runtime.run_app(app_dir, max_ticks=1, target_fps=1000)
+            self.assertIn(("camera.permission", True, "unified_runtime"), sensors.set_calls)
             self.assertIn(("camera.device", True, "unified_runtime"), sensors.set_calls)
+            self.assertIn(("display.refresh", True, "unified_runtime"), sensors.set_calls)
             self.assertIn(("microphone.device", True, "unified_runtime"), sensors.set_calls)
             self.assertIn(("speaker.device", True, "unified_runtime"), sensors.set_calls)
 

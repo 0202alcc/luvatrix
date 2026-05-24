@@ -11,8 +11,8 @@ class _Presenter:
     def __init__(self) -> None:
         self.calls = []
 
-    def presentScene(self, payload: str, revision: int, width: int, height: int) -> None:
-        self.calls.append((payload, revision, width, height))
+    def presentScene(self, payload: str, revision: int, width: int, height: int, presentation_mode: str = "") -> None:
+        self.calls.append((payload, revision, width, height, presentation_mode))
 
 
 class AndroidNativeSceneTargetTests(unittest.TestCase):
@@ -38,10 +38,11 @@ class AndroidNativeSceneTargetTests(unittest.TestCase):
         target.present_scene(frame)
 
         self.assertEqual(target.frames_presented, 1)
-        self.assertEqual(presenter.calls[0][1:], (2, 100, 200))
+        self.assertEqual(presenter.calls[0][1:4], (2, 100, 200))
         payload = json.loads(presenter.calls[0][0])
-        self.assertEqual([node["type"] for node in payload], ["clear", "shader_rect", "circle", "text"])
-        self.assertEqual(payload[1]["uniforms"], [1.0, 2.0, 3.0])
+        self.assertEqual([node["type"] for node in payload], ["meta", "clear", "shader_rect", "circle", "text"])
+        self.assertEqual(payload[0], {"type": "meta", "presentation_mode": ""})
+        self.assertEqual(payload[2]["uniforms"], [1.0, 2.0, 3.0])
 
     def test_present_scene_requires_start(self) -> None:
         target = AndroidNativeSceneTarget(_Presenter())

@@ -405,7 +405,7 @@ class AppContext:
         payload = self.runtime_telemetry_provider()
         return payload if isinstance(payload, dict) else {}
 
-    def begin_scene_frame(self, *, adaptive_quality_tier: int = 0) -> None:
+    def begin_scene_frame(self, *, adaptive_quality_tier: int = 0, presentation_mode: str | None = None) -> None:
         self._require_capability("window.write")
         if self.scene_buffer is None:
             raise RuntimeError("scene graph rendering is not enabled for this runtime")
@@ -414,6 +414,7 @@ class AppContext:
         self._scene_nodes = []
         self._scene_started_ns = time.perf_counter_ns()
         self._scene_quality_tier = int(adaptive_quality_tier)
+        self._scene_presentation_mode = presentation_mode
 
     def add_scene_node(self, node: SceneNode) -> None:
         if self._scene_nodes is None:
@@ -528,12 +529,14 @@ class AppContext:
                 telemetry=SceneTelemetry(scene_encode_ms=scene_encode_ms),
                 adaptive_quality_tier=int(self._scene_quality_tier),
                 animation_t=time.perf_counter(),
+                presentation_mode=getattr(self, "_scene_presentation_mode", None),
             )
             return self.scene_buffer.submit(frame)
         finally:
             self._scene_nodes = None
             self._scene_started_ns = 0
             self._scene_quality_tier = 0
+            self._scene_presentation_mode = None
 
     def _require_capability(self, capability: str) -> None:
         if capability not in self.granted_capabilities:
@@ -1136,11 +1139,57 @@ def _sanitize_sensor_sample(sample: SensorSample, granted_capabilities: set[str]
                 out[k] = v
         value = out
     elif sample.sensor_type in {"camera.device", "microphone.device", "speaker.device"} and isinstance(value, dict):
-        value = {
+        sanitized = {
             "available": bool(value.get("available", False)),
             "device_count": int(value.get("device_count", 0)),
             "default_present": bool(value.get("default_present", False)),
         }
+        if sample.sensor_type == "camera.device":
+            for key in (
+                "status",
+                "mode",
+                "permission",
+                "camera_id",
+                "primary_camera_id",
+                "secondary_camera_id",
+                "active_camera_ids",
+                "dual_supported",
+                "dual_active",
+                "inventory",
+                "streams",
+                "native",
+                "raw_capture",
+                "raw_controls",
+                "preview_controls",
+                "preview_quality",
+                "preview_target_mode",
+                "preview_pipeline_mode",
+                "preview_pipeline",
+                "preview_renderer",
+                "preview_gpu_ready",
+                "private_preview",
+                "gpu_preview",
+                "session_targets",
+                "last_error",
+            ):
+                if key in value:
+                    sanitized[key] = value[key]
+        value = sanitized
+    elif sample.sensor_type == "display.refresh" and isinstance(value, dict):
+        sanitized = {}
+        for key in (
+            "supported_modes",
+            "requested_refresh_hz",
+            "selected_mode_id",
+            "actual_refresh_hz",
+            "surface_frame_rate_hz",
+            "honored",
+            "camera_active",
+            "last_error",
+        ):
+            if key in value:
+                sanitized[key] = value[key]
+        value = sanitized
     return SensorSample(
         sample_id=sample.sample_id,
         ts_ns=sample.ts_ns,

@@ -8,7 +8,6 @@ import android.view.MotionEvent
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
-import kotlin.math.roundToInt
 
 class MainActivity : Activity() {
     private lateinit var luvatrixView: LuvatrixVulkanView
@@ -18,26 +17,38 @@ class MainActivity : Activity() {
         luvatrixView = LuvatrixVulkanView(this)
         setContentView(luvatrixView)
         luvatrixView.requestFocus()
-        val presentFps = luvatrixView.displayRefreshRateHz().roundToInt().coerceAtLeast(60)
+        val presentFps = 60
         luvatrixView.applyLowLatencyMode(presentFps * 2, presentFps)
+        Log.i(TAG, "starting Python runtime")
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))
         }
+        Log.i(TAG, "loading luvatrix_android_boot")
         val module = Python.getInstance().getModule("luvatrix_android_boot")
         pythonBridge = PythonBridge(module)
 
         val importProbe = intent.getBooleanExtra("luvatrix_import_probe", false)
         Thread {
             try {
+                Log.i(TAG, "starting Luvatrix visual runtime importProbe=$importProbe")
                 if (importProbe) {
                     module.callAttr("import_probe")
                 } else {
                     module.callAttr("run_app_vulkan", luvatrixView)
                 }
+                Log.i(TAG, "Luvatrix visual runtime returned")
             } catch (exc: Throwable) {
                 Log.e(TAG, "luvatrix python runtime failed", exc)
+                luvatrixView.showRuntimeError("${exc.javaClass.simpleName}: ${exc.message ?: "unknown error"}")
             }
         }.start()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == LuvatrixVulkanView.CAMERA_PERMISSION_REQUEST) {
+            luvatrixView.onCameraPermissionResult(grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED)
+        }
     }
 
     class PythonBridge(private val module: PyObject) {

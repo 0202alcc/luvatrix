@@ -182,8 +182,22 @@ def _run_android(
     if adb is None:
         raise RuntimeError("adb not found on PATH")
     prefix = _adb_prefix(adb, device_id=device_id)
+    force_stop_android_app(package_name=package_name, device_id=device_id)
     subprocess.run(prefix + ["install", "-r", str(apk)], check=True, env=_android_subprocess_env())
+    force_stop_android_app(package_name=package_name, device_id=device_id)
     launch_android_app(package_name=package_name, device_id=device_id, import_probe=import_probe)
+
+
+def force_stop_android_app(
+    *,
+    package_name: str = DEFAULT_ANDROID_PACKAGE,
+    device_id: str | None = None,
+) -> None:
+    adb = shutil.which("adb")
+    if adb is None:
+        raise RuntimeError("adb not found on PATH")
+    prefix = _adb_prefix(adb, device_id=device_id)
+    subprocess.run(prefix + ["shell", "am", "force-stop", package_name], check=True, env=_android_subprocess_env())
 
 
 def _adb_prefix(adb: str, *, device_id: str | None = None) -> list[str]:

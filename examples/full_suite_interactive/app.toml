@@ -17,6 +17,6 @@ optional_capabilities = [
 ]
 
 [display]
-native_width = 393
-native_height = 852
+native_width = 1080
+native_height = 2400
 bar_color_rgba = [0, 0, 0, 255]

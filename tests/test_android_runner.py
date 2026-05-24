@@ -11,6 +11,7 @@ from luvatrix_core.platform.android.runner import (
     _android_subprocess_env,
     _find_emulator_binary,
     build_android_debug_apk,
+    force_stop_android_app,
     write_android_launch_config,
 )
 
@@ -68,6 +69,27 @@ class AndroidRunnerTests(unittest.TestCase):
 
     def test_default_package_name(self) -> None:
         self.assertEqual(DEFAULT_ANDROID_PACKAGE, "com.luvatrix.app")
+
+    def test_force_stop_android_app_uses_adb_shell_am(self) -> None:
+        class _Result:
+            returncode = 0
+            stdout = "List of devices attached\nserial\tdevice\n"
+            stderr = ""
+
+        calls: list[list[str]] = []
+
+        def _run(args, **kwargs):
+            _ = kwargs
+            calls.append(list(args))
+            return _Result()
+
+        with (
+            patch("luvatrix_core.platform.android.runner.shutil.which", return_value="adb"),
+            patch("luvatrix_core.platform.android.runner.subprocess.run", side_effect=_run),
+        ):
+            force_stop_android_app(package_name="com.example.app", device_id="serial")
+
+        self.assertIn(["adb", "-s", "serial", "shell", "am", "force-stop", "com.example.app"], calls)
 
     def test_android_env_drops_conflicting_deprecated_sdk_root(self) -> None:
         with patch.dict(

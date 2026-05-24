@@ -45,7 +45,7 @@ class AndroidNativeSceneTarget:
         started = time.perf_counter_ns()
         payload = json.dumps(_scene_payload(frame), separators=(",", ":"))
         encode_ns = time.perf_counter_ns() - started
-        method(payload, int(frame.revision), int(frame.logical_width), int(frame.logical_height))
+        method(payload, int(frame.revision), int(frame.logical_width), int(frame.logical_height), str(frame.presentation_mode or ""))
         present_ns = time.perf_counter_ns() - started
         self.frames_presented += 1
         self.last_revision = int(frame.revision)
@@ -63,6 +63,7 @@ class AndroidNativeSceneTarget:
 
 def _scene_payload(frame: SceneFrame) -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
+    out.append({"type": "meta", "presentation_mode": frame.presentation_mode or ""})
     for node in frame.nodes:
         if isinstance(node, ClearNode):
             out.append({"type": "clear", "color": list(node.color_rgba)})

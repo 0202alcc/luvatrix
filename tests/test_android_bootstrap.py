@@ -41,6 +41,17 @@ class AndroidBootstrapTests(unittest.TestCase):
 
         self.assertEqual(boot._runtime_frame_rates(_View(), {}), (180, 90))
 
+    def test_camera_app_defaults_to_120_present_even_when_display_reports_60(self) -> None:
+        boot = _load_boot_module()
+
+        self.assertEqual(
+            boot._runtime_frame_rates(
+                None,
+                {"refresh_rate_hz": 60, "source_app_dir": "/tmp/examples/camera"},
+            ),
+            (240, 120),
+        )
+
     def test_low_latency_mode_applies_to_view(self) -> None:
         boot = _load_boot_module()
 

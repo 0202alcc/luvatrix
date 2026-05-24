@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import importlib.util
+import importlib
 import os
 from pathlib import Path
 import sys
@@ -14,6 +16,7 @@ if str(_ROOT) not in sys.path:
 
 _LAST_MARKER = ""
 _FRAME_COUNT = 0
+_ANDROID_VIEW = None
 
 
 def _log(message: str) -> None:
@@ -23,7 +26,7 @@ def _log(message: str) -> None:
 def import_probe() -> str:
     import luvatrix_core  # noqa: F401
     import luvatrix_ui  # noqa: F401
-    import examples.full_suite_interactive.app_main  # noqa: F401
+    _import_configured_app_main()
 
     return _mark("luvatrix import probe ok")
 
@@ -66,7 +69,7 @@ def run_app_vulkan(view=None) -> str:
         import_probe()
         result = _run_visual_runtime(view)
         _log(f"luvatrix visual ticks={result.ticks_run} frames={result.frames_presented}")
-        return _mark("luvatrix full_suite visual ok")
+        return _mark("luvatrix visual ok")
     except Exception as exc:
         _log(f"luvatrix run_app_vulkan failed: {type(exc).__name__}: {exc}")
         raise
@@ -95,12 +98,125 @@ def enqueue_key(key: str, phase: str, scan_code: int = 0) -> None:
 def android_telemetry() -> dict[str, object]:
     from luvatrix_core.platform.android.hdi_source import android_input_telemetry
 
+    camera = {}
+    try:
+        bridge = _ANDROID_VIEW
+        if bridge is not None and hasattr(bridge, "cameraTelemetryJson"):
+            camera = json.loads(str(bridge.cameraTelemetryJson()))
+    except Exception:
+        camera = {}
+
     return {
         "marker": _LAST_MARKER,
         "frames": _FRAME_COUNT,
         "input": android_input_telemetry(),
-        "sensors": ["thermal.temperature", "power.voltage_current", "motion.accelerometer"],
+        "sensors": ["thermal.temperature", "power.voltage_current", "motion.accelerometer", "camera.device"],
+        "camera": camera,
     }
+
+
+def camera_inventory_json() -> str:
+    view = _ANDROID_VIEW
+    if view is None:
+        return "{}"
+    method = getattr(view, "cameraInventoryJson", None) or getattr(view, "camera_inventory_json", None)
+    if not callable(method):
+        return "{}"
+    return str(method())
+
+
+def set_primary_camera(camera_id: str) -> str:
+    view = _ANDROID_VIEW
+    if view is None:
+        return "unavailable"
+    method = getattr(view, "setPrimaryCamera", None) or getattr(view, "set_primary_camera", None)
+    if not callable(method):
+        return "unavailable"
+    method(str(camera_id))
+    return "ok"
+
+
+def set_dual_preview_enabled(enabled: bool) -> str:
+    view = _ANDROID_VIEW
+    if view is None:
+        return "unavailable"
+    method = getattr(view, "setDualPreviewEnabled", None) or getattr(view, "set_dual_preview_enabled", None)
+    if not callable(method):
+        return "unavailable"
+    method(bool(enabled))
+    return "ok"
+
+
+def capture_raw_still() -> str:
+    view = _ANDROID_VIEW
+    if view is None:
+        return "unavailable"
+    method = getattr(view, "captureRawStill", None) or getattr(view, "capture_raw_still", None)
+    if not callable(method):
+        return "unavailable"
+    return str(method())
+
+
+def set_raw_capture_mode(mode: str) -> str:
+    return _call_view_raw_control("setRawCaptureMode", "set_raw_capture_mode", str(mode))
+
+
+def set_preview_manual_mode(mode: str) -> str:
+    return _call_view_raw_control("setPreviewManualMode", "set_preview_manual_mode", str(mode))
+
+
+def adjust_raw_iso(delta_steps: int) -> str:
+    return _call_view_raw_control("adjustRawIso", "adjust_raw_iso", int(delta_steps))
+
+
+def adjust_raw_shutter(delta_steps: int) -> str:
+    return _call_view_raw_control("adjustRawShutter", "adjust_raw_shutter", int(delta_steps))
+
+
+def adjust_raw_focus(delta_steps: int) -> str:
+    return _call_view_raw_control("adjustRawFocus", "adjust_raw_focus", int(delta_steps))
+
+
+def reset_raw_capture_controls() -> str:
+    return _call_view_raw_control("resetRawCaptureControls", "reset_raw_capture_controls")
+
+
+def set_preview_quality_mode(mode: str) -> str:
+    return _call_view_raw_control("setPreviewQualityMode", "set_preview_quality_mode", str(mode))
+
+
+def set_preview_target_mode(mode: str) -> str:
+    return _call_view_raw_control("setPreviewTargetMode", "set_preview_target_mode", str(mode))
+
+
+def set_preview_sharpness_mode(mode: str) -> str:
+    return _call_view_raw_control("setPreviewSharpnessMode", "set_preview_sharpness_mode", str(mode))
+
+
+def set_preview_convolution_layers(layers: int) -> str:
+    return _call_view_raw_control("setPreviewConvolutionLayers", "set_preview_convolution_layers", int(layers))
+
+
+def set_preview_white_balance_mode(mode: str) -> str:
+    return _call_view_raw_control("setPreviewWhiteBalanceMode", "set_preview_white_balance_mode", str(mode))
+
+
+def set_preview_pipeline_mode(mode: str) -> str:
+    return _call_view_raw_control("setPreviewPipelineMode", "set_preview_pipeline_mode", str(mode))
+
+
+def set_refresh_hint_mode(mode: str) -> str:
+    return _call_view_raw_control("setRefreshHintMode", "set_refresh_hint_mode", str(mode))
+
+
+def _call_view_raw_control(camel: str, snake: str, *args) -> str:
+    view = _ANDROID_VIEW
+    if view is None:
+        return "unavailable"
+    method = getattr(view, camel, None) or getattr(view, snake, None)
+    if not callable(method):
+        return "unavailable"
+    return str(method(*args))
 
 
 def full_suite_emulator_acceptance(view=None) -> str:
@@ -112,7 +228,7 @@ def full_suite_emulator_acceptance(view=None) -> str:
 
 
 def _run_visual_runtime(view):
-    global _FRAME_COUNT
+    global _FRAME_COUNT, _ANDROID_VIEW
 
     from luvatrix_core.core.hdi_thread import HDIThread
     from luvatrix_core.core.sensor_manager import SensorManagerThread
@@ -134,6 +250,10 @@ def _run_visual_runtime(view):
     if view is not None and _truthy(config.get("low_latency_mode"), default=True):
         _apply_low_latency_mode(view, target_fps=target_fps, present_fps=present_fps)
     clear_android_input_events()
+    if view is not None:
+        _ANDROID_VIEW = view
+    if view is not None and _should_start_camera_preview(config):
+        _start_camera_preview(view)
 
     class _CountingTarget(RenderTarget):
         def __init__(self) -> None:
@@ -161,15 +281,17 @@ def _run_visual_runtime(view):
             window_geometry_provider=lambda: (0.0, 0.0, float(width), float(height)),
             target_extent_provider=lambda: (float(width), float(height)),
         ),
-        sensor_manager=SensorManagerThread(providers=make_android_sensor_providers()),
+        sensor_manager=SensorManagerThread(providers=make_android_sensor_providers(view)),
         capability_decider=lambda cap: True,
         logical_width_px=float(width),
         logical_height_px=float(height),
         scene_target=scene_target,
         render_mode=render_mode,
     )
+    app_dir = _app_dir()
+    _log(f"luvatrix configured app_dir={app_dir}")
     result = runtime.run_app(
-        _app_dir(),
+        app_dir,
         max_ticks=None if view is not None else 60,
         target_fps=target_fps,
         present_fps=present_fps,
@@ -204,6 +326,8 @@ def _runtime_frame_rates(view, config: dict[str, object]) -> tuple[int, int]:
     refresh_hz = _display_refresh_rate_hz(view, config)
     explicit_target = _positive_int_or_none(config.get("target_fps"))
     explicit_present = _positive_int_or_none(config.get("present_fps"))
+    if _should_start_camera_preview(config):
+        refresh_hz = 60.0
     target_fps = explicit_target or max(1, int(round(refresh_hz * 2.0)))
     present_fps = explicit_present or max(1, int(round(refresh_hz)))
     return target_fps, present_fps
@@ -263,6 +387,24 @@ def _apply_low_latency_mode(view, *, target_fps: int, present_fps: int) -> None:
         _log(f"luvatrix Android low-latency mode unavailable: {type(exc).__name__}: {exc}")
 
 
+def _should_start_camera_preview(config: dict[str, object]) -> bool:
+    source = str(config.get("source_app_dir", "") or "")
+    app_dir = str(config.get("app_dir", "") or "")
+    if "camera" in source.split("/"):
+        return True
+    return app_dir.endswith("camera") or source.endswith("examples/camera")
+
+
+def _start_camera_preview(view) -> None:
+    starter = getattr(view, "startCameraPreview", None) or getattr(view, "start_camera_preview", None)
+    if not callable(starter):
+        return
+    try:
+        starter()
+    except Exception as exc:
+        _log(f"luvatrix Android camera preview unavailable: {type(exc).__name__}: {exc}")
+
+
 def _launch_config() -> dict[str, object]:
     config_path = _ROOT / "luvatrix_launch_config.json"
     try:
@@ -290,7 +432,22 @@ def _paint_view(view, frames: int) -> None:
 
 
 def _app_dir() -> Path:
-    materialized = _materialize_packaged_app()
+    config = _launch_config()
+    configured = (_ROOT / str(config.get("app_dir", "luvatrix_app"))).resolve()
+    if (configured / "app.toml").exists() and (configured / "app_main.py").exists():
+        return configured
+
+    source = str(config.get("source_app_dir", "") or "")
+    if source:
+        packaged = (_ROOT / "examples" / Path(source).name).resolve()
+        if (packaged / "app.toml").exists() and (packaged / "app_main.py").exists():
+            return packaged
+        materialized = _materialize_packaged_app(source)
+        if materialized is not None:
+            return materialized
+        raise RuntimeError(f"configured Android app is missing: app_dir={configured} source={source}")
+
+    materialized = _materialize_packaged_app(source)
     if materialized is not None:
         return materialized
 
@@ -308,38 +465,56 @@ def _app_dir() -> Path:
     if (candidate / "app.toml").exists() and (candidate / "app_main.py").exists():
         return candidate
 
-    config_path = _ROOT / "luvatrix_launch_config.json"
+    return configured
+
+
+def _import_configured_app_main() -> None:
+    app_main = _app_dir() / "app_main.py"
+    module_name = "luvatrix_configured_app_main"
+    spec = importlib.util.spec_from_file_location(module_name, app_main)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"failed to load configured app module from {app_main}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
     try:
-        raw = json.loads(config_path.read_text(encoding="utf-8"))
+        spec.loader.exec_module(module)
     except Exception:
-        raw = {}
-    return (_ROOT / str(raw.get("app_dir", "luvatrix_app"))).resolve()
+        sys.modules.pop(module_name, None)
+        raise
 
 
-def _materialize_packaged_app() -> Path | None:
+def _materialize_packaged_app(source_app_dir: str = "") -> Path | None:
+    package_name = _configured_example_package(source_app_dir)
     try:
-        from examples.full_suite_interactive import _luvatrix_bundle
+        bundle = importlib.import_module(f"{package_name}._luvatrix_bundle")
 
-        app_toml = str(_luvatrix_bundle.APP_TOML)
-        app_main = str(_luvatrix_bundle.APP_MAIN)
-        return _write_materialized_app(app_toml, app_main)
+        app_toml = str(bundle.APP_TOML)
+        app_main = str(bundle.APP_MAIN)
+        return _write_materialized_app(package_name, app_toml, app_main)
     except Exception:
         pass
 
     try:
         from importlib import resources
 
-        package_root = resources.files("examples.full_suite_interactive")
+        package_root = resources.files(package_name)
         app_toml = package_root.joinpath("app.toml").read_text(encoding="utf-8")
         app_main = package_root.joinpath("app_main.py").read_text(encoding="utf-8")
     except Exception:
         return None
 
-    return _write_materialized_app(app_toml, app_main)
+    return _write_materialized_app(package_name, app_toml, app_main)
 
 
-def _write_materialized_app(app_toml: str, app_main: str) -> Path:
-    dest = Path(tempfile.gettempdir()) / "luvatrix_full_suite_interactive"
+def _configured_example_package(source_app_dir: str) -> str:
+    name = Path(source_app_dir).name if source_app_dir else "full_suite_interactive"
+    if not name or name in (".", ".."):
+        name = "full_suite_interactive"
+    return f"examples.{name}"
+
+
+def _write_materialized_app(package_name: str, app_toml: str, app_main: str) -> Path:
+    dest = Path(tempfile.gettempdir()) / f"luvatrix_{package_name.replace('.', '_')}"
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "app.toml").write_text(app_toml, encoding="utf-8")
     (dest / "app_main.py").write_text(app_main, encoding="utf-8")

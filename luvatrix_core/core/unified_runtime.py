@@ -287,13 +287,17 @@ class UnifiedRuntime:
             "sensor.thermal": "thermal.temperature",
             "sensor.power": "power.voltage_current",
             "sensor.motion": "sensor.motion",
-            "sensor.camera": "camera.device",
+            "sensor.camera": ("camera.permission", "camera.device"),
+            "sensor.display": "display.refresh",
             "sensor.microphone": "microphone.device",
             "sensor.speaker": "speaker.device",
         }
-        for cap, sensor_type in mapping.items():
+        for cap, sensor_types in mapping.items():
             if cap in granted_capabilities:
-                sensor_manager.set_sensor_enabled(sensor_type, True, actor="unified_runtime")
+                if isinstance(sensor_types, str):
+                    sensor_types = (sensor_types,)
+                for sensor_type in sensor_types:
+                    sensor_manager.set_sensor_enabled(sensor_type, True, actor="unified_runtime")
 
     def _build_origin_refs_state_setter(self, lifecycle) -> Callable[[], bool] | None:
         if not hasattr(lifecycle, "state"):

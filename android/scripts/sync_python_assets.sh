@@ -30,6 +30,7 @@ copy_tree "$REPO_ROOT/luvatrix_core" "$PY_DST/luvatrix_core"
 copy_tree "$REPO_ROOT/luvatrix_ui" "$PY_DST/luvatrix_ui"
 copy_tree "$REPO_ROOT/luvatrix_plot" "$PY_DST/luvatrix_plot"
 
+rm -rf "$PY_DST/examples"
 mkdir -p "$PY_DST/examples"
 copy_tree "$APP_SRC" "$PY_DST/luvatrix_app"
 copy_tree "$APP_SRC" "$PY_DST/examples/$(basename "$APP_SRC")"

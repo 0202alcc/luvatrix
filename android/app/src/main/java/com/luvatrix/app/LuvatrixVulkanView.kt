@@ -23,6 +23,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.math.abs
 
 class LuvatrixVulkanView @JvmOverloads constructor(
     context: Context,
@@ -42,8 +43,17 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     private var overlayLogicalHeight: Int = 1
     private var overlayNativeBackground: Boolean = false
     private var overlayMode: OverlayMode = OverlayMode.Scene
+    private var bootstrapMessage: String? = null
     private var lowLatencyMode: Boolean = false
     private var lowLatencyPresentFps: Int? = null
+    private var requestedRefreshHz: Float = 0.0f
+    private var surfaceFrameRateHintHz: Float = 0.0f
+    private var selectedDisplayModeId: Int = 0
+    private var selectedDisplayModeHz: Float = 0.0f
+    private var refreshHintMode: String = "60"
+    private var refreshLastError: String = ""
+    private var refreshProbeLogged: Boolean = false
+    private val cameraBridge = CameraBridge(context)
     private val inputEvents = ConcurrentLinkedQueue<String>()
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -87,11 +97,155 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        cameraBridge.stopPreview()
         NativeVulkan.setSurface(null)
+    }
+
+    fun startCameraPreview() {
+        startCameraPreview(null)
+    }
+
+    fun startCameraPreview(cameraId: String?) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            post { startCameraPreview(cameraId) }
+            return
+        }
+        (context as? Activity)?.let { activity ->
+            if (!cameraBridge.requestPermissionIfNeeded(activity, CAMERA_PERMISSION_REQUEST)) {
+                return
+            }
+        }
+        cameraBridge.startPreview(cameraId)
+        applyFrameRateHint()
+    }
+
+    fun startDualCameraPreview(primaryCameraId: String, secondaryCameraId: String) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            post { startDualCameraPreview(primaryCameraId, secondaryCameraId) }
+            return
+        }
+        (context as? Activity)?.let { activity ->
+            if (!cameraBridge.requestPermissionIfNeeded(activity, CAMERA_PERMISSION_REQUEST)) {
+                return
+            }
+        }
+        cameraBridge.startDualPreview(primaryCameraId, secondaryCameraId)
+        applyFrameRateHint()
+    }
+
+    fun stopCameraPreview() {
+        cameraBridge.stopPreview()
+    }
+
+    fun setPrimaryCamera(cameraId: String) {
+        cameraBridge.setPrimaryCamera(cameraId)
+    }
+
+    fun setDualPreviewEnabled(enabled: Boolean) {
+        cameraBridge.setDualPreviewEnabled(enabled)
+    }
+
+    fun setCameraCoverMode(mode: String) {
+        cameraBridge.setCoverMode(mode)
+    }
+
+    fun cameraInventoryJson(): String {
+        return cameraBridge.inventoryJson()
+    }
+
+    fun cameraTelemetryJson(): String {
+        return cameraBridge.telemetryJson()
+    }
+
+    fun cameraProbeAuditJson(): String {
+        return cameraBridge.cameraProbeAuditJson()
+    }
+
+    fun captureRawStill(): String {
+        return cameraBridge.captureRawStill()
+    }
+
+    fun setRawCaptureMode(mode: String): String {
+        return cameraBridge.setRawCaptureMode(mode)
+    }
+
+    fun setPreviewManualMode(mode: String): String {
+        return cameraBridge.setPreviewManualMode(mode)
+    }
+
+    fun adjustRawIso(deltaSteps: Int): String {
+        return cameraBridge.adjustRawIso(deltaSteps)
+    }
+
+    fun adjustRawShutter(deltaSteps: Int): String {
+        return cameraBridge.adjustRawShutter(deltaSteps)
+    }
+
+    fun adjustRawFocus(deltaSteps: Int): String {
+        return cameraBridge.adjustRawFocus(deltaSteps)
+    }
+
+    fun resetRawCaptureControls(): String {
+        return cameraBridge.resetRawCaptureControls()
+    }
+
+    fun setPreviewQualityMode(mode: String): String {
+        return cameraBridge.setPreviewQualityMode(mode)
+    }
+
+    fun setPreviewTargetMode(mode: String): String {
+        return cameraBridge.setPreviewTargetMode(mode)
+    }
+
+    fun setPreviewSharpnessMode(mode: String): String {
+        return if (NativeVulkan.setCameraDownsampleMode(mode)) "ok" else "unsupported sharpness mode: $mode"
+    }
+
+    fun setPreviewConvolutionLayers(layers: Int): String {
+        return if (NativeVulkan.setCameraConvolutionLayers(layers)) "ok" else "unsupported convolution layers: $layers"
+    }
+
+    fun setPreviewWhiteBalanceMode(mode: String): String {
+        return if (NativeVulkan.setCameraColorMode(mode)) "ok" else "unsupported white balance mode: $mode"
+    }
+
+    fun setPreviewPipelineMode(mode: String): String {
+        return cameraBridge.setPreviewPipelineMode(mode)
+    }
+
+    fun setRefreshHintMode(mode: String): String {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            post { setRefreshHintMode(mode) }
+            return "posted"
+        }
+        val normalized = mode.trim().lowercase()
+        val requested = when (normalized) {
+            "default" -> 0.0f
+            "60" -> 60.0f
+            "90" -> 90.0f
+            "120" -> 120.0f
+            "highest" -> highestDisplayRefreshHz()
+            else -> return "unsupported refresh hint mode: $mode"
+        }
+        refreshHintMode = normalized
+        if (requested > 0.0f) {
+            requestPreferredDisplayMode(requested)
+            applyFrameRateHint()
+        } else {
+            clearPreferredDisplayMode()
+        }
+        refreshProbeLogged = false
+        logRefreshProbeOnce()
+        return "ok"
+    }
+
+    fun onCameraPermissionResult(granted: Boolean) {
+        cameraBridge.onPermissionResult(granted)
     }
 
     fun presentRgba(rgba: ByteArray, revision: Int, width: Int, height: Int) {
         overlayView.post {
+            bootstrapMessage = null
             if (frameBitmap == null || frameBitmapWidth != width || frameBitmapHeight != height) {
                 frameBitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
                 frameBitmapWidth = width
@@ -112,6 +266,27 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         return if (rate > 0.0f) rate else 60.0f
     }
 
+    fun displayRefreshTelemetryJson(): String {
+        val actual = displayRefreshRateHz()
+        val requested = requestedRefreshHz.takeIf { it > 0.0f } ?: (lowLatencyPresentFps?.toFloat() ?: actual)
+        val actualMode = currentDisplayMode()
+        return JSONObject()
+            .put("supported_modes", displayModesJson())
+            .put("requested_refresh_hz", requested.toDouble())
+            .put("selected_mode_id", selectedDisplayModeId)
+            .put("selected_mode_hz", selectedDisplayModeHz.toDouble())
+            .put("actual_mode_id", if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) actualMode?.modeId ?: 0 else 0)
+            .put("actual_mode_hz", if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) actualMode?.refreshRate?.toDouble() ?: actual.toDouble() else actual.toDouble())
+            .put("actual_refresh_hz", actual.toDouble())
+            .put("surface_frame_rate_hz", surfaceFrameRateHintHz.toDouble())
+            .put("refresh_hint_mode", refreshHintMode)
+            .put("preferred_display_mode_id", (context as? Activity)?.window?.attributes?.preferredDisplayModeId ?: 0)
+            .put("honored", requested > 0.0f && abs(actual - requested) <= 2.0f)
+            .put("camera_active", cameraBridge.isPreviewActive())
+            .put("last_error", refreshLastError)
+            .toString()
+    }
+
     fun applyLowLatencyMode(targetFps: Int, presentFps: Int) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             post { applyLowLatencyMode(targetFps, presentFps) }
@@ -119,50 +294,165 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         }
         lowLatencyMode = true
         lowLatencyPresentFps = presentFps
+        refreshHintMode = if (presentFps >= 120) "120" else presentFps.toString()
         keepScreenOn = true
         surfaceView.keepScreenOn = true
         (context as? Activity)?.window?.let { window ->
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        }
+        requestPreferredDisplayMode(presentFps.coerceAtLeast(1).toFloat())
+        applyFrameRateHint()
+        Log.i("Luvatrix", "Android low-latency mode enabled targetFps=$targetFps presentFps=$presentFps")
+    }
+
+    private fun requestPreferredDisplayMode(requestedHz: Float) {
+        requestedRefreshHz = requestedHz
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            refreshLastError = "display modes require API 23"
+            return
+        }
+        val activity = context as? Activity ?: return
+        val selected = selectDisplayMode(requestedHz)
+        if (selected == null) {
+            refreshLastError = "no supported display modes"
+            return
+        }
+        try {
+            val attrs = activity.window.attributes
+            attrs.preferredDisplayModeId = selected.modeId
+            activity.window.attributes = attrs
+            selectedDisplayModeId = selected.modeId
+            selectedDisplayModeHz = selected.refreshRate
+            refreshLastError = ""
+            logRefreshProbeOnce()
+        } catch (exc: Throwable) {
+            refreshLastError = exc.message ?: exc.javaClass.simpleName
+            Log.w("LuvatrixRefreshProbe", "preferred display mode unavailable", exc)
+        }
+    }
+
+    private fun clearPreferredDisplayMode() {
+        requestedRefreshHz = 0.0f
+        surfaceFrameRateHintHz = 0.0f
+        selectedDisplayModeId = 0
+        selectedDisplayModeHz = 0.0f
+        val activity = context as? Activity ?: return
+        try {
+            val attrs = activity.window.attributes
+            attrs.preferredDisplayModeId = 0
+            activity.window.attributes = attrs
+            refreshLastError = ""
+        } catch (exc: Throwable) {
+            refreshLastError = exc.message ?: exc.javaClass.simpleName
+            Log.w("LuvatrixRefreshProbe", "preferred display mode reset unavailable", exc)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val surface = surfaceView.holder.surface
+            if (surface?.isValid == true) {
                 try {
-                    window.setSustainedPerformanceMode(true)
+                    surface.setFrameRate(
+                        0.0f,
+                        Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
+                        Surface.CHANGE_FRAME_RATE_ALWAYS,
+                    )
                 } catch (exc: Throwable) {
-                    Log.w("Luvatrix", "Android sustained performance mode unavailable", exc)
+                    refreshLastError = exc.message ?: exc.javaClass.simpleName
+                    Log.w("LuvatrixRefreshProbe", "frame-rate hint reset unavailable", exc)
                 }
             }
         }
-        applyFrameRateHint()
-        Log.i("Luvatrix", "Android low-latency mode enabled targetFps=$targetFps presentFps=$presentFps")
+    }
+
+    private fun selectDisplayMode(requestedHz: Float): android.view.Display.Mode? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
+        val modes = surfaceView.display?.supportedModes?.toList() ?: display?.supportedModes?.toList() ?: emptyList()
+        if (modes.isEmpty()) return null
+        val current = surfaceView.display?.mode ?: display?.mode
+        val sameResolution = if (current != null) {
+            modes.filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
+        } else {
+            emptyList()
+        }
+        val candidates = sameResolution.ifEmpty { modes }
+        return candidates.minWithOrNull(
+            compareBy<android.view.Display.Mode> { if (it.refreshRate >= requestedHz) 0 else 1 }
+                .thenBy { abs(it.refreshRate - requestedHz) }
+                .thenByDescending { it.refreshRate }
+                .thenByDescending { it.physicalWidth.toLong() * it.physicalHeight.toLong() },
+        )
     }
 
     private fun applyFrameRateHint() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             return
         }
-        val presentFps = lowLatencyPresentFps ?: return
+        val presentFps = requestedRefreshHz.takeIf { it > 0.0f } ?: lowLatencyPresentFps?.toFloat() ?: return
         val surface = surfaceView.holder.surface ?: return
         if (!surface.isValid) {
             return
         }
         try {
             surface.setFrameRate(
-                presentFps.coerceAtLeast(1).toFloat(),
+                presentFps.coerceAtLeast(1.0f),
                 Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
                 Surface.CHANGE_FRAME_RATE_ALWAYS,
             )
+            surfaceFrameRateHintHz = presentFps.coerceAtLeast(1.0f)
+            logRefreshProbeOnce()
         } catch (exc: Throwable) {
+            refreshLastError = exc.message ?: exc.javaClass.simpleName
             Log.w("Luvatrix", "Android frame-rate hint unavailable", exc)
         }
     }
 
-    fun presentScene(sceneJson: String, revision: Int, logicalWidth: Int, logicalHeight: Int) {
+    private fun currentDisplayMode(): android.view.Display.Mode? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
+        return surfaceView.display?.mode ?: display?.mode
+    }
+
+    private fun highestDisplayRefreshHz(): Float {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return 120.0f
+        val modes = surfaceView.display?.supportedModes?.toList() ?: display?.supportedModes?.toList() ?: emptyList()
+        return modes.maxOfOrNull { it.refreshRate } ?: 120.0f
+    }
+
+    private fun displayModesJson(): JSONArray {
+        val out = JSONArray()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return out
+        val modes = surfaceView.display?.supportedModes?.toList() ?: display?.supportedModes?.toList() ?: emptyList()
+        for (mode in modes.sortedWith(compareBy<android.view.Display.Mode> { it.refreshRate }.thenBy { it.modeId })) {
+            out.put(
+                JSONObject()
+                    .put("mode_id", mode.modeId)
+                    .put("width", mode.physicalWidth)
+                    .put("height", mode.physicalHeight)
+                    .put("refresh_hz", mode.refreshRate.toDouble()),
+            )
+        }
+        return out
+    }
+
+    private fun logRefreshProbeOnce() {
+        if (refreshProbeLogged) return
+        refreshProbeLogged = true
+        Log.i(
+            "LuvatrixRefreshProbe",
+            "requested=${requestedRefreshHz} actual=${displayRefreshRateHz()} " +
+                "surfaceHint=${surfaceFrameRateHintHz} selectedMode=$selectedDisplayModeId " +
+                "selectedHz=$selectedDisplayModeHz actualMode=${currentDisplayMode()?.modeId ?: 0} " +
+                "hintMode=$refreshHintMode",
+        )
+    }
+
+    fun presentScene(sceneJson: String, revision: Int, logicalWidth: Int, logicalHeight: Int, presentationMode: String = "") {
         var nativeBackground = false
         try {
-            nativeBackground = NativeVulkan.presentScene(sceneJson, revision, logicalWidth, logicalHeight)
+            nativeBackground = NativeVulkan.presentScene(sceneJson, revision, logicalWidth, logicalHeight, presentationMode)
         } catch (exc: Throwable) {
             Log.w("Luvatrix", "native Vulkan scene presenter unavailable; using Canvas fallback", exc)
         }
         overlayView.post {
+            bootstrapMessage = null
             overlayMode = OverlayMode.Scene
             overlaySceneJson = sceneJson
             overlayLogicalWidth = logicalWidth
@@ -175,7 +465,6 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     private fun drawSceneCanvas(canvas: Canvas, sceneJson: String, logicalWidth: Int, logicalHeight: Int, nativeBackground: Boolean) {
-        if (nativeBackground) return
         val nodes = JSONArray(sceneJson)
         val scaleX = canvas.width.toFloat() / logicalWidth.coerceAtLeast(1).toFloat()
         val scaleY = canvas.height.toFloat() / logicalHeight.coerceAtLeast(1).toFloat()
@@ -321,6 +610,16 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         }
     }
 
+    fun showRuntimeError(message: String) {
+        overlayView.post {
+            bootstrapMessage = message.take(320)
+            overlayMode = OverlayMode.Bootstrap
+            overlaySceneJson = null
+            overlayView.setBackgroundColor(Color.rgb(72, 18, 30))
+            overlayView.invalidate()
+        }
+    }
+
     private fun drawRectNode(canvas: android.graphics.Canvas, node: org.json.JSONObject, scaleX: Float, scaleY: Float, paint: Paint) {
         val left = (node.optDouble("x", 0.0) * scaleX).toFloat()
         val top = (node.optDouble("y", 0.0) * scaleY).toFloat()
@@ -364,11 +663,27 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         Scene,
     }
 
+    companion object {
+        const val CAMERA_PERMISSION_REQUEST = 4201
+    }
+
     private inner class SceneOverlayView(context: Context) : View(context) {
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             when (overlayMode) {
-                OverlayMode.Bootstrap -> Unit
+                OverlayMode.Bootstrap -> {
+                    val message = bootstrapMessage ?: return
+                    textPaint.color = Color.WHITE
+                    textPaint.textSize = 30.0f
+                    val margin = 36.0f
+                    canvas.drawText("Luvatrix runtime error", margin, margin + 34.0f, textPaint)
+                    textPaint.textSize = 22.0f
+                    var y = margin + 76.0f
+                    for (line in message.chunked(42).take(7)) {
+                        canvas.drawText(line, margin, y, textPaint)
+                        y += 30.0f
+                    }
+                }
                 OverlayMode.Bitmap -> frameBitmap?.let { canvas.drawBitmap(it, null, canvas.clipBounds, null) }
                 OverlayMode.Scene -> {
                     val scene = overlaySceneJson ?: return

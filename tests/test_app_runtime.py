@@ -553,6 +553,172 @@ class AppRuntimeTests(unittest.TestCase):
             {"available": True, "device_count": 2, "default_present": True},
         )
 
+    def test_app_context_camera_sensor_preserves_android_inventory(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        class _AndroidCameraSensor:
+            def read_sensor(self, sensor_type: str) -> SensorSample:
+                return SensorSample(
+                    sample_id=1,
+                    ts_ns=1,
+                    sensor_type=sensor_type,
+                    status="OK",
+                    value={
+                        "camera_id": "0",
+                        "primary_camera_id": "0",
+                        "active_camera_ids": ["0"],
+                        "dual_supported": False,
+                        "inventory": {
+                            "probe_summary": {
+                                "public_108mp_verdict": "no_complete",
+                                "probe_status": "complete",
+                            },
+                            "cameras": [
+                                {
+                                    "camera_id": "0",
+                                    "facing": "back",
+                                    "resolution_probe": {
+                                        "public_108mp_candidate": False,
+                                    },
+                                },
+                            ]
+                        },
+                        "raw_capture": {
+                            "status": "saved",
+                            "raw_supported": True,
+                            "width": 4000,
+                            "height": 3000,
+                            "last_dng_path": "/data/user/0/com.luvatrix.app/files/raw/camera_raw_1.dng",
+                        },
+                        "raw_controls": {
+                            "mode": "manual",
+                            "requested_iso": 800,
+                        },
+                        "preview_controls": {
+                            "mode": "manual",
+                            "requested_iso": 800,
+                            "actual_iso": 790,
+                        },
+                        "preview_quality": "max",
+                        "preview_target_mode": "raw",
+                        "preview_pipeline_mode": "rawish",
+                        "preview_pipeline": {
+                            "mode": "rawish",
+                            "manual_preview": True,
+                        },
+                        "preview_renderer": "cpu_yuv",
+                        "preview_gpu_ready": False,
+                        "private_preview": {
+                            "status": "fallback",
+                            "width": 1920,
+                            "height": 1080,
+                        },
+                        "gpu_preview": {
+                            "status": "fallback",
+                            "imports": 1,
+                            "draws": 0,
+                            "failures": 0,
+                        },
+                        "session_targets": ["private_preview", "yuv_cache", "raw_sensor"],
+                        "raw_name": "internal",
+                    },
+                    unit="metadata",
+                )
+
+        ctx = AppContext(
+            matrix=WindowMatrix(1, 1),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_AndroidCameraSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write", "sensor.camera"},
+            sensor_read_min_interval_s=0.0,
+        )
+
+        sample = ctx.read_sensor("camera.device")
+
+        assert isinstance(sample.value, dict)
+        self.assertEqual(sample.value["camera_id"], "0")
+        self.assertEqual(sample.value["active_camera_ids"], ["0"])
+        self.assertEqual(
+            sample.value["raw_capture"],
+            {
+                "status": "saved",
+                "raw_supported": True,
+                "width": 4000,
+                "height": 3000,
+                "last_dng_path": "/data/user/0/com.luvatrix.app/files/raw/camera_raw_1.dng",
+            },
+        )
+        self.assertEqual(sample.value["raw_controls"], {"mode": "manual", "requested_iso": 800})
+        self.assertEqual(sample.value["preview_controls"], {"mode": "manual", "requested_iso": 800, "actual_iso": 790})
+        self.assertEqual(sample.value["preview_quality"], "max")
+        self.assertEqual(sample.value["preview_target_mode"], "raw")
+        self.assertEqual(sample.value["preview_pipeline_mode"], "rawish")
+        self.assertEqual(sample.value["preview_pipeline"], {"mode": "rawish", "manual_preview": True})
+        self.assertEqual(sample.value["preview_renderer"], "cpu_yuv")
+        self.assertFalse(sample.value["preview_gpu_ready"])
+        self.assertEqual(sample.value["private_preview"], {"status": "fallback", "width": 1920, "height": 1080})
+        self.assertEqual(sample.value["gpu_preview"], {"status": "fallback", "imports": 1, "draws": 0, "failures": 0})
+        self.assertEqual(sample.value["session_targets"], ["private_preview", "yuv_cache", "raw_sensor"])
+        self.assertEqual(
+            sample.value["inventory"],
+            {
+                "probe_summary": {
+                    "public_108mp_verdict": "no_complete",
+                    "probe_status": "complete",
+                },
+                "cameras": [
+                    {
+                        "camera_id": "0",
+                        "facing": "back",
+                        "resolution_probe": {
+                            "public_108mp_candidate": False,
+                        },
+                    }
+                ],
+            },
+        )
+        self.assertNotIn("raw_name", sample.value)
+
+    def test_app_context_display_refresh_sensor_preserves_android_telemetry(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        class _AndroidDisplaySensor:
+            def read_sensor(self, sensor_type: str) -> SensorSample:
+                return SensorSample(
+                    sample_id=1,
+                    ts_ns=1,
+                    sensor_type=sensor_type,
+                    status="OK",
+                    value={
+                        "supported_modes": [{"refresh_hz": 60.0}, {"refresh_hz": 120.0}],
+                        "requested_refresh_hz": 120.0,
+                        "selected_mode_id": 7,
+                        "actual_refresh_hz": 60.0,
+                        "surface_frame_rate_hz": 120.0,
+                        "honored": False,
+                        "camera_active": True,
+                        "last_error": "",
+                        "raw_name": "internal",
+                    },
+                    unit="metadata",
+                )
+
+        ctx = AppContext(
+            matrix=WindowMatrix(1, 1),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_AndroidDisplaySensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write", "sensor.display"},
+            sensor_read_min_interval_s=0.0,
+        )
+
+        sample = ctx.read_sensor("display.refresh")
+
+        assert isinstance(sample.value, dict)
+        self.assertEqual(sample.value["requested_refresh_hz"], 120.0)
+        self.assertEqual(sample.value["selected_mode_id"], 7)
+        self.assertFalse(sample.value["honored"])
+        self.assertNotIn("raw_name", sample.value)
+
     def test_manifest_protocol_mismatch_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
