@@ -189,6 +189,7 @@ class SceneFrame:
     telemetry: SceneTelemetry = field(default_factory=SceneTelemetry)
     adaptive_quality_tier: int = 0
     animation_t: float = 0.0
+    presentation_mode: str | None = None   # "crop_fit" | "preserve_aspect" | "stretch" | None
 
     def __post_init__(self) -> None:
         for label, value in (
@@ -201,6 +202,7 @@ class SceneFrame:
         ):
             if int(value) < (0 if label in ("revision", "ts_ns") else 1):
                 raise ValueError(f"{label} is out of range: {value}")
+        object.__setattr__(self, "nodes", tuple(sorted(self.nodes, key=lambda node: getattr(node, "z_index", 0))))
         object.__setattr__(self, "nodes", tuple(sorted(self.nodes, key=lambda node: getattr(node, "z_index", 0))))
 
 
@@ -239,6 +241,7 @@ class SceneGraphBuffer:
                 telemetry=frame.telemetry,
                 adaptive_quality_tier=frame.adaptive_quality_tier,
                 animation_t=frame.animation_t,
+                presentation_mode=frame.presentation_mode,
             )
             self._frame = frame
             event = SceneBlitEvent(

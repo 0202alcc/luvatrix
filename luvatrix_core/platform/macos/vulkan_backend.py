@@ -1096,13 +1096,15 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
         dst_w, dst_h = self._swapchain_extent
         if src_w <= 0 or src_h <= 0 or dst_w <= 0 or dst_h <= 0:
             return
-        dst_x0, dst_y0, dst_x1, dst_y1 = compute_blit_rect(
+        src_offsets, dst_offsets = compute_blit_rect(
             src_w=src_w,
             src_h=src_h,
             dst_w=dst_w,
             dst_h=dst_h,
             presentation_mode=self.presentation_mode,
         )
+        src_x0, src_y0, src_x1, src_y1 = src_offsets
+        dst_x0, dst_y0, dst_x1, dst_y1 = dst_offsets
         blit = vk.VkImageBlit(
             srcSubresource=vk.VkImageSubresourceLayers(
                 aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
@@ -1110,7 +1112,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
                 baseArrayLayer=0,
                 layerCount=1,
             ),
-            srcOffsets=((0, 0, 0), (src_w, src_h, 1)),
+            srcOffsets=((src_x0, src_y0, 0), (src_x1, src_y1, 1)),
             dstSubresource=vk.VkImageSubresourceLayers(
                 aspectMask=getattr(vk, "VK_IMAGE_ASPECT_COLOR_BIT", 0x1),
                 mipLevel=0,

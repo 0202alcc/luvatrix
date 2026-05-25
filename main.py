@@ -84,10 +84,22 @@ def _detect_screen_size() -> tuple[int, int] | None:
         return None
 
 
+def _is_free_threaded_runtime() -> bool:
+    checker = getattr(sys, "_is_gil_enabled", None)
+    if callable(checker):
+        try:
+            return not bool(checker())
+        except Exception:
+            pass
+    return sysconfig.get_config_var("Py_GIL_DISABLED") == 1
+
+
 def _warn_if_not_free_threaded():
-    if sysconfig.get_config_var("Py_GIL_DISABLED") != 1:
-        print("WARNING: This build of Python is not free-threaded (GIL is enabled).")
-        print("Performance and concurrency will be significantly degraded.")
+    if not _is_free_threaded_runtime():
+        LOGGER.warning(
+            "This build of Python is not free-threaded (GIL is enabled). "
+            "Performance and concurrency will be significantly degraded."
+        )
 
 
 def main() -> None:
@@ -114,7 +126,20 @@ def main() -> None:
         default=None,
         help="Optional presentation FPS cap. Default: present every app-loop tick.",
     )
-    run.add_argument("--render", choices=["headless", "macos", "macos-metal", "ios-simulator", "ios-device", "web"], default="headless")
+    run.add_argument(
+        "--render",
+        choices=[
+            "headless",
+            "macos",
+            "macos-metal",
+            "ios-simulator",
+            "ios-device",
+            "android-emulator",
+            "android-device",
+            "web",
+        ],
+        default="headless",
+    )
     run.add_argument(
         "--render-scale",
         type=float,
@@ -139,6 +164,19 @@ def main() -> None:
     run.add_argument("--simulator", default="iPhone 16", help="Simulator device name for --render ios-simulator.")
     run.add_argument("--device", default=None, help="Physical device name for --render ios-device (default: first connected device).")
     run.add_argument("--team-id", default=None, help="Apple Development Team ID for --render ios-device (or set DEVELOPMENT_TEAM env var).")
+    run.add_argument("--android-device-id", default=None, help="ADB serial for --render android-device or android-emulator.")
+    run.add_argument("--android-package", default="com.luvatrix.app", help="Android package name for native Android render modes.")
+    run.add_argument(
+        "--android-import-probe",
+        action="store_true",
+        help="For Android render modes, launch a minimal native import probe instead of the app runtime.",
+    )
+    run.add_argument(
+        "--android-low-latency",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable Android low-latency touch and frame-rate hints for native Android render modes. Default: enabled.",
+    )
     run.add_argument(
         "--ios-import-probe",
         action="store_true",
@@ -194,6 +232,7 @@ def main() -> None:
                 render_mode=args.render_mode,
                 target_fps=_resolve_target_fps(args.fps) if args.fps is not None else None,
                 present_fps=args.present_fps,
+                low_latency_mode=args.android_low_latency,
             )
             return
         if args.render == "ios-device":
@@ -203,6 +242,33 @@ def main() -> None:
                 device_name=args.device,
                 team_id=args.team_id,
                 import_probe=args.ios_import_probe,
+                render_scale=_resolve_render_scale(args.render_scale),
+                render_mode=args.render_mode,
+                target_fps=_resolve_target_fps(args.fps) if args.fps is not None else None,
+                present_fps=args.present_fps,
+                low_latency_mode=args.android_low_latency,
+            )
+            return
+        if args.render == "android-emulator":
+            from luvatrix_core.platform.android.runner import run_android_emulator
+            run_android_emulator(
+                args.app_dir.resolve(),
+                device_id=args.android_device_id,
+                package_name=args.android_package,
+                import_probe=args.android_import_probe,
+                render_scale=_resolve_render_scale(args.render_scale),
+                render_mode=args.render_mode,
+                target_fps=_resolve_target_fps(args.fps) if args.fps is not None else None,
+                present_fps=args.present_fps,
+            )
+            return
+        if args.render == "android-device":
+            from luvatrix_core.platform.android.runner import run_android_device
+            run_android_device(
+                args.app_dir.resolve(),
+                device_id=args.android_device_id,
+                package_name=args.android_package,
+                import_probe=args.android_import_probe,
                 render_scale=_resolve_render_scale(args.render_scale),
                 render_mode=args.render_mode,
                 target_fps=_resolve_target_fps(args.fps) if args.fps is not None else None,

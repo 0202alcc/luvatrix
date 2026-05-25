@@ -89,15 +89,29 @@ def compute_blit_rect(
     dst_h: int,
     presentation_mode: PresentationMode | str = PresentationMode.STRETCH,
     preserve_aspect_ratio: bool | None = None,
-) -> tuple[int, int, int, int]:
+) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]]:
+    """Returns (src_offsets, dst_offsets), each as (x0, y0, x1, y1).
+
+    srcOffsets selects the source sub-rectangle to blit.
+    dstOffsets selects the destination rectangle on the surface.
+    """
     if src_w <= 0 or src_h <= 0 or dst_w <= 0 or dst_h <= 0:
-        return (0, 0, 0, 0)
+        return ((0, 0, src_w, src_h), (0, 0, dst_w, dst_h))
     if preserve_aspect_ratio is not None:
         mode = PresentationMode.PRESERVE_ASPECT if preserve_aspect_ratio else PresentationMode.STRETCH
     else:
         mode = normalize_presentation_mode(presentation_mode)
     if mode == PresentationMode.STRETCH:
-        return (0, 0, dst_w, dst_h)
+        return ((0, 0, src_w, src_h), (0, 0, dst_w, dst_h))
+    if mode == PresentationMode.CROP_FIT:
+        # Scale to cover using max(); output rect is the entire swapchain surface.
+        # The actual source-crop is applied by the caller via srcOffsets.
+        final_idx = max(float(dst_w) / float(src_w), float(dst_h) / float(src_h))
+        finalized_w = max(1, int(round(src_w * final_idx)))
+        finalized_h = max(1, int(round(src_h * final_idx)))
+        src_x = (finalized_w - dst_w) // 2
+        src_y = (finalized_h - dst_h) // 2
+        return ((src_x, src_y, src_x + dst_w, src_y + dst_h), (0, 0, dst_w, dst_h))
     scale = min(float(dst_w) / float(src_w), float(dst_h) / float(src_h))
     if mode == PresentationMode.PIXEL_PRESERVE and scale >= 1.0:
         blit_w = max(1, int(src_w * max(1, int(scale))))
@@ -107,7 +121,7 @@ def compute_blit_rect(
         blit_h = max(1, int(round(src_h * scale)))
     x0 = (dst_w - blit_w) // 2
     y0 = (dst_h - blit_h) // 2
-    return (x0, y0, x0 + blit_w, y0 + blit_h)
+    return ((0, 0, src_w, src_h), (x0, y0, x0 + blit_w, y0 + blit_h))
 
 
 def _parse_fixed_scale(levels: tuple[float, ...], env_var: str) -> float | None:

@@ -14,6 +14,9 @@ class MainCliTests(unittest.TestCase):
     def test_headless_defaults_to_stretch(self) -> None:
         self.assertEqual(_resolve_presentation_mode("headless", None), PresentationMode.STRETCH)
 
+    def test_android_defaults_to_stretch(self) -> None:
+        self.assertEqual(_resolve_presentation_mode("android-emulator", None), PresentationMode.STRETCH)
+
     def test_explicit_presentation_mode_is_respected(self) -> None:
         self.assertEqual(
             _resolve_presentation_mode("macos", "preserve_aspect"),

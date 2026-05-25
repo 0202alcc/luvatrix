@@ -12,9 +12,11 @@ from luvatrix.app import (
     CoordinateFrames,
     InputState,
     MissingOptionalDependencyError,
+    PLATFORM_ANDROID,
     PLATFORM_IOS,
     PLATFORM_MACOS,
     apply_hdi_events,
+    SUPPORTED_APP_PLATFORMS,
     check_app_install,
     load_app_manifest,
     validate_app_install,
@@ -80,6 +82,28 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
 
             self.assertEqual(manifest.platform_support, [PLATFORM_MACOS, PLATFORM_IOS])
 
+    def test_public_manifest_loader_supports_android_platform_declaration(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_app(root, [PLATFORM_ANDROID])
+
+            manifest = load_app_manifest(root, host_os="android", host_arch="arm64")
+
+            self.assertEqual(manifest.platform_support, [PLATFORM_ANDROID])
+            self.assertIn(PLATFORM_ANDROID, SUPPORTED_APP_PLATFORMS)
+
+    def test_android_validation_has_no_host_optional_extra_requirements_yet(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_app(root, [PLATFORM_ANDROID])
+
+            validation = check_app_install(root, render="android-emulator", host_arch="arm64")
+
+            self.assertTrue(validation.ok)
+            self.assertEqual(validation.target_platform, PLATFORM_ANDROID)
+            self.assertEqual(validation.required_extras, ("android",))
+            self.assertEqual(validation.missing_modules, ())
+
     def test_headless_validation_has_no_optional_extra_requirements(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -132,7 +156,8 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
             "import main\n"
             "blocked = [name for name in sys.modules "
             "if name.startswith('luvatrix_core.platform.macos') "
-            "or name.startswith('luvatrix_core.platform.web')]\n"
+            "or name.startswith('luvatrix_core.platform.web') "
+            "or name.startswith('luvatrix_core.platform.android')]\n"
             "if blocked:\n"
             "    raise SystemExit('\\n'.join(blocked))\n"
         )
