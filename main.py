@@ -213,13 +213,42 @@ def main() -> None:
     run.add_argument("--energy-critical-streak", type=int, default=30)
     run.add_argument("--audit-sqlite", type=Path, default=None, help="Path to write performance audit events.")
 
+    build_web = subparsers.add_parser("build-web", help="Build a static browser-side web app")
+    build_web.add_argument("app_dir", type=Path, help="Path to the app directory (containing app.toml)")
+    build_web.add_argument("--out", type=Path, required=True, help="Output directory for static web files")
+
+    serve_web = subparsers.add_parser("serve-web", help="Build and serve a browser-side web app")
+    serve_web.add_argument("app_dir", type=Path, help="Path to the app directory (containing app.toml)")
+    serve_web.add_argument("--host", default="127.0.0.1", help="Host interface to bind. Default: 127.0.0.1.")
+    serve_web.add_argument("--port", type=int, default=8765, help="HTTP port to bind. Default: 8765.")
+
     args = parser.parse_args()
+
+    if args.command == "build-web":
+        from luvatrix_core.platform.web.build import build_web_app
+
+        result = build_web_app(args.app_dir, args.out)
+        print(f"[luvatrix] Built browser-side web app: {result.out_dir}")
+        return
+
+    if args.command == "serve-web":
+        from luvatrix_core.platform.web.server import serve_web_app
+
+        serve_web_app(args.app_dir, host=args.host, port=args.port)
+        return
 
     if args.command == "run-app":
         try:
             validate_app_install(args.app_dir, render=args.render)
         except MissingOptionalDependencyError as exc:
             raise SystemExit(str(exc)) from exc
+
+        if args.render == "web":
+            from luvatrix_core.platform.web.server import serve_web_app
+
+            print("[luvatrix] `run-app --render web` now delegates to `serve-web`.")
+            serve_web_app(args.app_dir, host="127.0.0.1", port=8765)
+            return
 
         _warn_if_not_free_threaded()
 
@@ -316,40 +345,6 @@ def main() -> None:
             if args.render == "headless":
                 target: RenderTarget = _HeadlessTarget()
                 hdi = HDIThread(source=_NoopHDISource())
-            elif args.render == "web":
-                from luvatrix_core.platform.web.websocket_target import (
-                    WebSessionServer,
-                    _SingleClientTarget,
-                )
-
-                def _web_session(target: _SingleClientTarget) -> None:
-                    _hdi = HDIThread(source=_NoopHDISource())
-                    _matrix = WindowMatrix(height=matrix_height, width=matrix_width)
-                    _energy = _build_energy_safety(args, sensors, audit_logger)
-                    _runtime = UnifiedRuntime(
-                        matrix=_matrix,
-                        target=target,
-                        hdi=_hdi,
-                        sensor_manager=sensors,
-                        capability_decider=lambda cap: True,
-                        capability_audit_logger=audit_logger,
-                        energy_safety=_energy,
-                        logical_width_px=float(logical_width),
-                        logical_height_px=float(logical_height),
-                    )
-                    _runtime.run_app(
-                        args.app_dir,
-                        max_ticks=args.ticks,
-                        target_fps=_resolve_target_fps(args.fps),
-                        present_fps=args.present_fps,
-                    )
-
-                server = WebSessionServer(
-                    session_factory=_web_session, host="0.0.0.0", port=8765,
-                )
-                print("[luvatrix] Web server running - open http://localhost:8765")
-                server.run()
-                return
             elif args.render == "macos-metal":
                 from luvatrix_core.platform.macos.metal_presenter import MacOSMetalPresenter
                 from luvatrix_core.targets.metal_target import MetalTarget

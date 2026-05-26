@@ -94,6 +94,15 @@ class AppDebugPolicy:
 
 
 @dataclass(frozen=True)
+class AppWebConfig:
+    pyodide_packages: list[str] = field(default_factory=list)
+    assets: list[str] = field(default_factory=list)
+    api_base_url: str = "/api"
+    title: str | None = None
+    icon: str | None = None
+
+
+@dataclass(frozen=True)
 class AppManifest:
     app_id: str
     protocol_version: str
@@ -116,6 +125,7 @@ class AppManifest:
     display_default_coordinate_frame: str = PRESET_SCREEN_TL
     render_preferred: str = "auto"
     render_fallbacks: list[str] = field(default_factory=lambda: ["scene", "ui", "matrix"])
+    web: AppWebConfig = field(default_factory=AppWebConfig)
 
 
 @dataclass(frozen=True)
@@ -740,6 +750,7 @@ class AppRuntime:
         ) or PRESET_SCREEN_TL
         render_raw = raw.get("render", {})
         render_preferred, render_fallbacks = _coerce_render_config(render_raw)
+        web_config = _coerce_web_config(raw.get("web", None), display_title=display_title, display_icon=display_icon)
         manifest = AppManifest(
             app_id=app_id,
             protocol_version=protocol_version,
@@ -762,6 +773,7 @@ class AppRuntime:
             display_default_coordinate_frame=display_default_coordinate_frame,
             render_preferred=render_preferred,
             render_fallbacks=render_fallbacks,
+            web=web_config,
         )
         self._validate_manifest(manifest)
         return manifest
@@ -989,6 +1001,9 @@ class AppRuntime:
             raise ValueError("render.fallbacks must contain at least one render mode")
         for idx, mode in enumerate(manifest.render_fallbacks):
             _validate_render_mode(mode, f"render.fallbacks[{idx}]", allow_auto=False)
+        for idx, asset in enumerate(manifest.web.assets):
+            if Path(asset).is_absolute() or ".." in Path(asset).parts:
+                raise ValueError(f"web.assets[{idx}] must be a relative path inside the app directory")
 
     def _audit_capability(self, action: str, capability: str) -> None:
         if self._capability_audit_logger is None:
@@ -1053,6 +1068,25 @@ def _coerce_render_config(value: object) -> tuple[str, list[str]]:
     raw_fallbacks = value.get("fallbacks", ["scene", "ui", "matrix"])
     fallbacks = _coerce_string_list(raw_fallbacks, "render.fallbacks")
     return (preferred, fallbacks)
+
+
+def _coerce_web_config(value: object, *, display_title: str | None, display_icon: str | None) -> AppWebConfig:
+    if value is None:
+        return AppWebConfig(title=display_title, icon=display_icon)
+    if not isinstance(value, dict):
+        raise ValueError("web must be a table/object")
+    packages = _coerce_string_list(value.get("pyodide_packages", []), "web.pyodide_packages")
+    assets = _coerce_string_list(value.get("assets", []), "web.assets")
+    api_base_url = _coerce_optional_str(value.get("api_base_url"), "web.api_base_url") or "/api"
+    title = _coerce_optional_str(value.get("title"), "web.title") or display_title
+    icon = _coerce_optional_str(value.get("icon"), "web.icon") or display_icon
+    return AppWebConfig(
+        pyodide_packages=packages,
+        assets=assets,
+        api_base_url=api_base_url,
+        title=title,
+        icon=icon,
+    )
 
 
 def _validate_render_mode(value: str, field_name: str, *, allow_auto: bool) -> None:

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import unittest
 from unittest.mock import patch
+import sys
+import types
 
 from luvatrix_core.platform.frame_pipeline import PresentationMode
-from main import _is_free_threaded_runtime, _resolve_presentation_mode, _warn_if_not_free_threaded
+from main import _is_free_threaded_runtime, _resolve_presentation_mode, _warn_if_not_free_threaded, main
 
 
 class MainCliTests(unittest.TestCase):
@@ -41,6 +43,21 @@ class MainCliTests(unittest.TestCase):
             patch("main.LOGGER.warning") as warning,
         ):
             _warn_if_not_free_threaded()
+        warning.assert_not_called()
+
+    def test_run_app_web_delegates_to_static_server(self) -> None:
+        calls = []
+        fake_server = types.ModuleType("luvatrix_core.platform.web.server")
+        fake_server.serve_web_app = lambda app_dir, host, port: calls.append((str(app_dir), host, port))
+        with (
+            patch.object(sys, "argv", ["luvatrix", "run-app", "examples/full_suite_interactive", "--render", "web"]),
+            patch.dict(sys.modules, {"luvatrix_core.platform.web.server": fake_server}),
+            patch("main.validate_app_install"),
+            patch("main._warn_if_not_free_threaded") as warning,
+        ):
+            main()
+
+        self.assertEqual(calls, [("examples/full_suite_interactive", "127.0.0.1", 8765)])
         warning.assert_not_called()
 
 

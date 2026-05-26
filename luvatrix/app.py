@@ -16,6 +16,7 @@ from luvatrix_core.core.app_runtime import (
     AppRuntime,
     AppUIRenderer,
     AppVariant,
+    AppWebConfig,
     ResolvedAppVariant,
 )
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
@@ -71,9 +72,7 @@ RENDER_EXTRA_MODULES: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
     "android-device": (
         ("android", ()),
     ),
-    "web": (
-        ("web", ("websockets",)),
-    ),
+    "web": (),
 }
 
 COORD_SCREEN_TL = "screen_tl"
@@ -170,10 +169,17 @@ def apply_hdi_events(state: InputState, events: list[object]) -> InputState:
                     state.mouse_y = y
                     state.mouse_in_window = True
                     state.mouse_error = None
-                    state.pressure = float(payload.get("force", state.pressure))
+                    state.pressure = _effective_touch_pressure(
+                        force=float(payload.get("force", state.pressure) or 0.0),
+                        major_radius=float(payload.get("major_radius", 0.0) or 0.0),
+                    )
                 elif phase in ("up", "cancel"):
                     state.active_touches.pop(touch_id, None)
                 state.touch_count = len(state.active_touches)
+                if phase in ("up", "cancel") and state.touch_count == 0:
+                    state.mouse_in_window = False
+                    state.mouse_error = "window not active / pointer out of bounds"
+                    state.pressure = 0.0
             elif event_type == "gesture" and status == "OK":
                 kind = str(payload.get("kind", ""))
                 if kind == "pan":
@@ -205,6 +211,15 @@ def apply_hdi_events(state: InputState, events: list[object]) -> InputState:
             state.scroll_x = float(payload.get("delta_x", state.scroll_x))
             state.scroll_y = float(payload.get("delta_y", state.scroll_y))
     return state
+
+
+def _effective_touch_pressure(*, force: float, major_radius: float) -> float:
+    force = max(0.0, min(1.0, float(force)))
+    major_radius = max(0.0, float(major_radius))
+    area_pressure = max(0.0, min(1.0, (major_radius - 4.0) / 34.0))
+    if 0.0 < force < 0.98:
+        return max(force, area_pressure)
+    return area_pressure
 
 
 class CoordinateFrames:

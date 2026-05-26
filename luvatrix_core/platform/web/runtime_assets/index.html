@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Luvatrix</title>
+    <style>
+      html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: #020617;
+        color: #e2e8f0;
+        overflow: hidden;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #stage {
+        display: block;
+        width: auto;
+        height: auto;
+        max-width: 100vw;
+        max-height: 100vh;
+        outline: none;
+        touch-action: none;
+      }
+      #status {
+        position: fixed;
+        left: 10px;
+        top: 8px;
+        font-size: 12px;
+        opacity: 0.8;
+        pointer-events: none;
+      }
+      #status[data-ready="true"] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="stage" tabindex="0"></canvas>
+    <div id="status">Loading Luvatrix...</div>
+    <script type="module" src="./runtime/luvatrix-web.js"></script>
+  </body>
+</html>

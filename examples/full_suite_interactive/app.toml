@@ -1,7 +1,7 @@
 app_id = "examples.full_suite_interactive"
 protocol_version = "3"
 entrypoint = "app_main:create"
-platform_support = ["macos", "ios", "android"]
+platform_support = ["macos", "ios", "android", "web"]
 required_capabilities = ["window.write"]
 optional_capabilities = [
   "hdi.keyboard",
@@ -28,3 +28,8 @@ coordinate_frames = ["screen_tl", "cartesian_bl", "cartesian_center"]
 [render]
 preferred = "auto"
 fallbacks = ["scene", "ui", "matrix"]
+
+[web]
+pyodide_packages = []
+assets = []
+api_base_url = "/api"

@@ -28,7 +28,6 @@ vulkan = [
   "vulkan>=1.3.275.1",
 ]
 web = [
-  "websockets>=13.0",
 ]
 dev = [
   "matplotlib>=3.10.8",
@@ -42,6 +41,14 @@ py-modules = ["main"]
 
 [tool.setuptools.packages.find]
 include = ["luvatrix*", "luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
+
+[tool.setuptools.package-data]
+"luvatrix_core.platform.web" = [
+  "runtime_assets/index.html",
+  "runtime_assets/runtime/*.js",
+  "runtime_assets/runtime/package.json",
+  "python_shim/luvatrix/*.py",
+]
 
 [tool.uv.sources]
 coinbasetraderbot = { path = "../CoinbaseTraderBot", editable = true }

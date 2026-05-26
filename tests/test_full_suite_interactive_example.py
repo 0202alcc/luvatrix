@@ -6,7 +6,13 @@ from luvatrix_core.core.sensor_manager import SensorSample
 from luvatrix.app import InputState, apply_hdi_events
 
 from examples.full_suite_interactive.app_main import (
+    InteractionState,
+    _apply_hdi_events,
+    _debug_env_default_on,
+    _effective_touch_pressure,
     _mouse_label_text,
+    _pointer_bubble_radius,
+    _touch_bubble_radius,
     format_dashboard,
     select_sensors,
 )
