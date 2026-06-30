@@ -1,0 +1,13 @@
+{
+  "name": "Xiaomi Vibrant",
+  "version": 1,
+  "shadow_lift": 0.35,
+  "highlight_rolloff": 0.7,
+  "global_saturation": 1.28,
+  "local_contrast": 1.18,
+  "sharpening": 1.15,
+  "skin_smoothing": 0.15,
+  "sky_saturation": 1.28,
+  "foliage_saturation": 1.25,
+  "white_balance_bias": "warm"
+}

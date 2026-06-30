@@ -506,7 +506,11 @@ class IOSMetalSceneBackend:
             _sp("luvatrix_sp_encode_end")
             return
 
-        scale = min(context.width / frame.logical_width, context.height / frame.logical_height)
+        pm = getattr(frame, "presentation_mode", None)
+        if pm == "crop_fit":
+            scale = max(context.width / frame.logical_width, context.height / frame.logical_height)
+        else:
+            scale = min(context.width / frame.logical_width, context.height / frame.logical_height)
         vp_w = frame.logical_width * scale
         vp_h = frame.logical_height * scale
         vp_x = (context.width - vp_w) / 2.0

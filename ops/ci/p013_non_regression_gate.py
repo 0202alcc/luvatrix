@@ -58,8 +58,14 @@ def command_pack() -> list[GateCommand]:
     ]
 
 
+def gateflow_ledger_available(root: Path = Path(".")) -> bool:
+    gateflow_dir = root / ".gateflow"
+    return (gateflow_dir / "config.json").is_file() and (gateflow_dir / "milestones.json").is_file()
+
+
 def run_gate_pack(*, execute: bool) -> dict[str, object]:
     checks: list[dict[str, object]] = []
+    ledger_available = gateflow_ledger_available()
     for item in command_pack():
         check = {
             "name": item.name,
@@ -69,7 +75,7 @@ def run_gate_pack(*, execute: bool) -> dict[str, object]:
             "stdout": "",
             "stderr": "",
         }
-        if execute:
+        if execute and ledger_available:
             proc = subprocess.run(
                 item.command,
                 text=True,
@@ -80,6 +86,8 @@ def run_gate_pack(*, execute: bool) -> dict[str, object]:
             check["stdout"] = proc.stdout
             check["stderr"] = proc.stderr
             check["status"] = "PASS" if proc.returncode == 0 else "FAIL"
+        elif execute:
+            check["stdout"] = "skipped: gateflow ledger files are not present\n"
         checks.append(check)
 
     passed = all(c["status"] in {"PASS", "SKIPPED"} for c in checks)

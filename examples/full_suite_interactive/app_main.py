@@ -5,7 +5,10 @@ import os
 import sys
 import time
 
-from luvatrix.app import App, InputState
+from luvatrix.app import App, InputState, apply_hdi_events
+
+
+InteractionState = InputState
 
 
 _COORD_FRAME_ORDER = ("screen_tl", "cartesian_bl", "cartesian_center")
@@ -132,6 +135,35 @@ def select_sensors(requested: list[str], available_sensors: list[str]) -> list[s
         if sensor not in selected:
             selected.append(sensor)
     return selected
+
+
+def _apply_hdi_events(state: InputState, events: list[object], surface_height: int = 0) -> InputState:
+    _ = surface_height
+    return apply_hdi_events(state, events)
+
+
+def _effective_touch_pressure(*, force: float, major_radius: float) -> float:
+    force = max(0.0, min(1.0, float(force)))
+    major_radius = max(0.0, float(major_radius))
+    area_pressure = max(0.0, min(1.0, (major_radius - 4.0) / 34.0))
+    if 0.0 < force < 0.98:
+        return max(force, area_pressure)
+    return area_pressure
+
+
+def _touch_bubble_radius(pressure: float) -> float:
+    return 24.0 + min(64.0, 82.0 * max(0.0, float(pressure)))
+
+
+def _pointer_bubble_radius(state: InputState) -> float:
+    return 30.0 + min(68.0, 105.0 * max(0.0, state.pressure) + 42.0 * abs(state.pinch))
+
+
+def _debug_env_default_on(name: str) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return True
+    return value.strip().lower() not in ("0", "false", "no", "off")
 
 
 def _mouse_label_text(display_frame: str, display_x: float, display_y: float) -> str:

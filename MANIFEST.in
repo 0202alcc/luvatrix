@@ -1,0 +1,12 @@
+include README.md
+include LICENSE
+recursive-include luvatrix_core/platform/web/runtime_assets *
+recursive-include luvatrix_core/platform/web/python_shim *
+recursive-include luvatrix_core/templates/native *
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude .uv-cache *
+recursive-exclude .uv-tools *
+recursive-exclude build *
+recursive-exclude dist *
+recursive-exclude tests *

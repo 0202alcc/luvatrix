@@ -65,9 +65,9 @@ except ImportError:
     ThemeTokens = None
     validate_theme_tokens = None
 try:
-    from .table import TableColumn, TableComponent, TableState
+    from .table import TableColumn, TableComponent, TableRenderStyle, TableState
 except ImportError:
-    TableColumn = TableComponent = TableState = None
+    TableColumn = TableComponent = TableRenderStyle = TableState = None
 from .text.component import TextComponent
 from .text.renderer import (
     FontSpec,
@@ -147,6 +147,7 @@ __all__ = [
     "TextAppearance",
     "TableColumn",
     "TableComponent",
+    "TableRenderStyle",
     "TableState",
     "TextComponent",
     "TextLayoutMetrics",

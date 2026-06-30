@@ -1,0 +1,16 @@
+app_id = "examples.camera"
+protocol_version = "1"
+entrypoint = "app_main:create"
+platform_support = ["android"]
+required_capabilities = ["window.write"]
+optional_capabilities = [
+  "hdi.touch",
+  "hdi.keyboard",
+  "sensor.camera",
+  "sensor.display",
+]
+
+[display]
+native_width = 393
+native_height = 852
+bar_color_rgba = [0, 0, 0, 255]

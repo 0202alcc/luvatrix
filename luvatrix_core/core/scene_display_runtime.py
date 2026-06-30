@@ -71,6 +71,8 @@ class SceneDisplayTelemetry:
     last_txt_ms_x10: int = 0
     last_ovl_ms_x10: int = 0
     last_cmt_ms_x10: int = 0
+    geometry_cache_hits: int = 0
+    stream_buffer_writes: int = 0
 
 
 class _RollingRate:
@@ -180,6 +182,8 @@ class SceneDisplayRuntime:
             last_txt_ms_x10=int(target_telemetry.get("last_txt_ms_x10", 0)),
             last_ovl_ms_x10=int(target_telemetry.get("last_ovl_ms_x10", 0)),
             last_cmt_ms_x10=int(target_telemetry.get("last_cmt_ms_x10", 0)),
+            geometry_cache_hits=int(target_telemetry.get("geometry_cache_hits", 0)),
+            stream_buffer_writes=int(target_telemetry.get("stream_buffer_writes", 0)),
         )
 
     def run_once(
