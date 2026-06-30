@@ -10,11 +10,13 @@ import unittest
 from luvatrix.app import (
     App,
     CoordinateFrames,
+    InputManager,
     InputState,
     MissingOptionalDependencyError,
     PLATFORM_ANDROID,
     PLATFORM_IOS,
     PLATFORM_MACOS,
+    ScrollbarController,
     apply_hdi_events,
     SUPPORTED_APP_PLATFORMS,
     check_app_install,
@@ -56,6 +58,95 @@ def _write_app(root: Path, platform_support: list[str] | None = None) -> None:
 
 
 class LuvatrixPublicAppApiTests(unittest.TestCase):
+    def test_vertical_scrollbar_supports_track_click_drag_and_release_capture(self) -> None:
+        controller = ScrollbarController("vertical", min_thumb_extent=20.0)
+        state = InputState(mouse_x=95.0, mouse_y=100.0, left_clicked=True, left_down=True)
+
+        clicked = controller.update(
+            state,
+            x=90.0,
+            y=0.0,
+            width=12.0,
+            height=200.0,
+            content_extent=1000.0,
+            viewport_extent=200.0,
+            offset=0.0,
+        )
+        state.left_clicked = False
+        state.mouse_x = 20.0  # Pointer capture keeps the drag alive outside the track.
+        state.mouse_y = 180.0
+        dragged = controller.update(
+            state,
+            x=90.0,
+            y=0.0,
+            width=12.0,
+            height=200.0,
+            content_extent=1000.0,
+            viewport_extent=200.0,
+            offset=clicked.offset,
+        )
+        state.left_down = False
+        released = controller.update(
+            state,
+            x=90.0,
+            y=0.0,
+            width=12.0,
+            height=200.0,
+            content_extent=1000.0,
+            viewport_extent=200.0,
+            offset=dragged.offset,
+        )
+
+        self.assertTrue(clicked.consumed)
+        self.assertTrue(clicked.dragging)
+        self.assertGreater(clicked.offset, 0.0)
+        self.assertTrue(dragged.consumed)
+        self.assertGreater(dragged.offset, clicked.offset)
+        self.assertTrue(released.consumed)
+        self.assertFalse(released.dragging)
+
+    def test_horizontal_scrollbar_preserves_thumb_anchor(self) -> None:
+        controller = ScrollbarController("horizontal", min_thumb_extent=20.0)
+        state = InputState(mouse_x=25.0, mouse_y=5.0, left_clicked=True, left_down=True)
+        started = controller.update(
+            state,
+            x=0.0,
+            y=0.0,
+            width=200.0,
+            height=12.0,
+            content_extent=1000.0,
+            viewport_extent=200.0,
+            offset=100.0,
+        )
+
+        self.assertTrue(started.dragging)
+        self.assertAlmostEqual(started.offset, 100.0)
+
+    def test_app_render_on_invalidation_skips_clean_ticks(self) -> None:
+        class CountingApp(App):
+            def __init__(self) -> None:
+                self.updates = 0
+                self.renders = 0
+                self._continuous_render = False
+                self._render_requested = True
+
+            def update(self, dt: float) -> None:
+                _ = dt
+                self.updates += 1
+
+            def render(self) -> None:
+                self.renders += 1
+
+        app = CountingApp()
+
+        app.loop(None, 0.01)  # type: ignore[arg-type]
+        app.loop(None, 0.01)  # type: ignore[arg-type]
+        app.invalidate()
+        app.loop(None, 0.01)  # type: ignore[arg-type]
+
+        self.assertEqual(app.updates, 3)
+        self.assertEqual(app.renders, 2)
+
     def test_v3_manifest_parses_render_and_display_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -245,6 +336,92 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         self.assertTrue(state.mouse_in_window)
         self.assertEqual(state.pointer, (12.0, 34.0))
         self.assertEqual(state.scroll_y, -2.0)
+
+    def test_input_state_preserves_fast_clicks_inside_one_snapshot(self) -> None:
+        class _Event:
+            def __init__(self, device, event_type, payload, status="OK") -> None:
+                self.device = device
+                self.event_type = event_type
+                self.status = status
+                self.payload = payload
+
+        state = InputState()
+        apply_hdi_events(
+            state,
+            [
+                _Event("mouse", "click", {"x": 12.0, "y": 34.0, "button": 0, "phase": "down"}),
+                _Event("mouse", "click", {"x": 12.0, "y": 34.0, "button": 0, "phase": "up"}),
+                _Event("mouse", "pointer_move", {"x": 12.0, "y": 34.0, "buttons_mask": 0}),
+            ],
+        )
+
+        self.assertTrue(state.left_clicked)
+        self.assertFalse(state.left_down)
+        self.assertEqual(state.pointer, (12.0, 34.0))
+
+    def test_input_state_updates_button_hold_from_pointer_mask(self) -> None:
+        class _Event:
+            def __init__(self, device, event_type, payload, status="OK") -> None:
+                self.device = device
+                self.event_type = event_type
+                self.status = status
+                self.payload = payload
+
+        state = InputState()
+        apply_hdi_events(state, [_Event("mouse", "pointer_move", {"buttons_mask": 1})])
+        self.assertTrue(state.left_down)
+
+        apply_hdi_events(state, [_Event("mouse", "pointer_move", {"buttons_mask": 0})])
+        self.assertFalse(state.left_down)
+
+    def test_input_state_accumulates_same_frame_scroll_events(self) -> None:
+        class _Event:
+            def __init__(self, device, event_type, payload, status="OK") -> None:
+                self.device = device
+                self.event_type = event_type
+                self.status = status
+                self.payload = payload
+
+        state = InputState()
+        apply_hdi_events(
+            state,
+            [
+                _Event("trackpad", "scroll", {"x": 10.0, "y": 20.0, "delta_y": 1.5}),
+                _Event("trackpad", "scroll", {"x": 11.0, "y": 21.0, "delta_y": 2.5}),
+            ],
+        )
+
+        self.assertTrue(state.mouse_in_window)
+        self.assertEqual(state.pointer, (11.0, 21.0))
+        self.assertEqual(state.scroll_y, 4.0)
+
+    def test_input_manager_resets_transient_deltas_between_snapshots(self) -> None:
+        class _Event:
+            def __init__(self, device, event_type, payload, status="OK") -> None:
+                self.device = device
+                self.event_type = event_type
+                self.status = status
+                self.payload = payload
+
+        class _Ctx:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def poll_hdi_events(self, max_events=256, frame=None):
+                self.calls += 1
+                if self.calls == 1:
+                    return [_Event("trackpad", "scroll", {"delta_x": 1.0, "delta_y": -2.0})]
+                return []
+
+        manager = InputManager(_Ctx())
+
+        first = manager.snapshot()
+        self.assertEqual(first.scroll_x, 1.0)
+        self.assertEqual(first.scroll_y, -2.0)
+
+        second = manager.snapshot()
+        self.assertEqual(second.scroll_x, 0.0)
+        self.assertEqual(second.scroll_y, 0.0)
 
     def test_coordinate_switch_helper_maps_default_keys(self) -> None:
         class _Ctx:

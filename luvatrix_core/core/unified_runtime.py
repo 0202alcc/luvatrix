@@ -119,6 +119,9 @@ class UnifiedRuntime:
             "app_loop_fps": self._app_loop_rate.rate,
             "app_loop_ticks": int(self._app_loop_ticks),
             "app_active": int(self._is_active()),
+            "scene_deduplicated_submissions": (
+                int(self._scene_buffer.deduplicated_submissions) if self._scene_buffer is not None else 0
+            ),
         }
         if self._scene_display_runtime is not None:
             scene = self._scene_display_runtime.telemetry()
@@ -142,6 +145,8 @@ class UnifiedRuntime:
                     "last_txt_ms_x10": scene.last_txt_ms_x10,
                     "last_ovl_ms_x10": scene.last_ovl_ms_x10,
                     "last_cmt_ms_x10": scene.last_cmt_ms_x10,
+                    "geometry_cache_hits": scene.geometry_cache_hits,
+                    "stream_buffer_writes": scene.stream_buffer_writes,
                 }
             )
         return payload
@@ -176,11 +181,6 @@ class UnifiedRuntime:
         else:
             lifecycle = self._app_runtime.load_lifecycle(resolved.module_dir, resolved.entrypoint)
         runtime_state_setter = self._build_origin_refs_state_setter(lifecycle)
-        self._configure_target_debug_menu(
-            manifest.app_id,
-            debug_policy_profile,
-            runtime_origin_refs_state_setter=runtime_state_setter,
-        )
         self._enable_granted_sensors(ctx.sensor_manager, granted)
 
         ticks_run = 0
@@ -193,6 +193,12 @@ class UnifiedRuntime:
             active_targets.append(self._scene_target)
         if self._render_mode == "matrix" or (self._render_mode == "auto" and self._scene_target is None):
             active_targets.append(self._target)
+        self._configure_target_debug_menu(
+            manifest.app_id,
+            debug_policy_profile,
+            runtime_origin_refs_state_setter=runtime_state_setter,
+            targets=active_targets,
+        )
         for active_target in active_targets:
             active_target.start()
         started = True
@@ -202,7 +208,7 @@ class UnifiedRuntime:
         if self._scene_display_runtime is not None and self._scene_target in active_targets:
             self._scene_display_runtime.start_present_loop(
                 present_fps=present_fps or target_fps,
-                repeat_latest=True,
+                repeat_latest=False,
             )
             scene_present_loop_started = True
         ctx.hdi.start()
@@ -325,20 +331,22 @@ class UnifiedRuntime:
         profile: dict[str, object],
         *,
         runtime_origin_refs_state_setter: Callable[[], bool] | None = None,
+        targets: list[object] | None = None,
     ) -> None:
-        configure = getattr(self._target, "configure_debug_menu", None)
-        if configure is None or not callable(configure):
-            return
-        try:
-            configure(
-                app_id=app_id,
-                profile=profile,
-                artifact_dir="artifacts/debug_menu/runtime",
-                runtime_origin_refs_state_setter=runtime_origin_refs_state_setter,
-            )
-        except TypeError:
-            configure(
-                app_id=app_id,
-                profile=profile,
-                artifact_dir="artifacts/debug_menu/runtime",
-            )
+        for target in (targets or [self._target]):
+            configure = getattr(target, "configure_debug_menu", None)
+            if configure is None or not callable(configure):
+                continue
+            try:
+                configure(
+                    app_id=app_id,
+                    profile=profile,
+                    artifact_dir="artifacts/debug_menu/runtime",
+                    runtime_origin_refs_state_setter=runtime_origin_refs_state_setter,
+                )
+            except TypeError:
+                configure(
+                    app_id=app_id,
+                    profile=profile,
+                    artifact_dir="artifacts/debug_menu/runtime",
+                )

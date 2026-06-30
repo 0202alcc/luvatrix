@@ -9,6 +9,126 @@ from luvatrix_ui.component_schema import BoundingBox
 
 
 class TableComponentTests(unittest.TestCase):
+    def test_render_frame_draws_table_primitives(self) -> None:
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        class FakeFrame:
+            def rect(self, **kwargs: object) -> None:
+                calls.append(("rect", kwargs))
+
+            def text(self, text: str, **kwargs: object) -> None:
+                calls.append(("text", {"text": text, **kwargs}))
+
+        table = TableComponent(
+            component_id="prices",
+            columns=(
+                TableColumn(column_id="product", label="Product", key="product", sortable=False),
+                TableColumn(column_id="price", label="Price", key="price", sortable=False),
+            ),
+            rows=(
+                {"product": "BTC-USD", "price": "50000"},
+                {"product": "ETH-USD", "price": "2500"},
+            ),
+            bounds=BoundingBox(x=10.0, y=20.0, width=200.0, height=120.0, frame="screen_tl"),
+            page_size=10,
+            virtual_window=5,
+        )
+
+        table.render_frame(FakeFrame(), column_widths={"product": 120.0, "price": 80.0})
+
+        rect_calls = [payload for kind, payload in calls if kind == "rect"]
+        text_calls = [payload for kind, payload in calls if kind == "text"]
+        self.assertGreaterEqual(len(rect_calls), 4)
+        self.assertEqual(text_calls[0]["text"], "Product")
+        self.assertEqual(text_calls[1]["text"], "Price")
+        self.assertIn("BTC-USD", [call["text"] for call in text_calls])
+
+    def test_render_frame_content_fits_by_default(self) -> None:
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        class FakeFrame:
+            def rect(self, **kwargs: object) -> None:
+                calls.append(("rect", kwargs))
+
+            def text(self, text: str, **kwargs: object) -> None:
+                calls.append(("text", {"text": text, **kwargs}))
+
+        long_value = "2026-06-13 14:53:51 UTC"
+        table = TableComponent(
+            component_id="fit",
+            columns=(
+                TableColumn(column_id="status", label="Status", key="status", sortable=False),
+                TableColumn(column_id="timestamp", label="Timestamp", key="timestamp", sortable=False),
+            ),
+            rows=({"status": "Live", "timestamp": long_value},),
+            bounds=BoundingBox(x=0.0, y=0.0, width=80.0, height=40.0, frame="screen_tl"),
+            page_size=10,
+            virtual_window=5,
+        )
+
+        table.render_frame(FakeFrame())
+
+        rect_calls = [payload for kind, payload in calls if kind == "rect"]
+        text_values = [str(payload["text"]) for kind, payload in calls if kind == "text"]
+        self.assertGreater(float(rect_calls[0]["width"]), 80.0)
+        self.assertIn(long_value, text_values)
+        self.assertNotIn("2026-06-13 14:53:5...", text_values)
+
+    def test_render_frame_content_fit_does_not_fill_available_bounds(self) -> None:
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        class FakeFrame:
+            def rect(self, **kwargs: object) -> None:
+                calls.append(("rect", kwargs))
+
+            def text(self, text: str, **kwargs: object) -> None:
+                calls.append(("text", {"text": text, **kwargs}))
+
+        table = TableComponent(
+            component_id="shrink",
+            columns=(
+                TableColumn(column_id="state", label="State", key="state", sortable=False),
+                TableColumn(column_id="price", label="Price", key="price", sortable=False),
+            ),
+            rows=({"state": "Live", "price": "-"},),
+            bounds=BoundingBox(x=0.0, y=0.0, width=800.0, height=200.0, frame="screen_tl"),
+            page_size=10,
+            virtual_window=5,
+        )
+
+        table.render_frame(FakeFrame())
+
+        rect_calls = [payload for kind, payload in calls if kind == "rect"]
+        self.assertLess(float(rect_calls[0]["width"]), 200.0)
+
+    def test_render_frame_content_fits_multiline_row_height_by_default(self) -> None:
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        class FakeFrame:
+            def rect(self, **kwargs: object) -> None:
+                calls.append(("rect", kwargs))
+
+            def text(self, text: str, **kwargs: object) -> None:
+                calls.append(("text", {"text": text, **kwargs}))
+
+        table = TableComponent(
+            component_id="multiline",
+            columns=(TableColumn(column_id="note", label="Note", key="note", sortable=False),),
+            rows=({"note": "first\nsecond\nthird"},),
+            bounds=BoundingBox(x=0.0, y=0.0, width=120.0, height=40.0, frame="screen_tl"),
+            page_size=10,
+            virtual_window=5,
+        )
+
+        table.render_frame(FakeFrame())
+
+        rect_calls = [payload for kind, payload in calls if kind == "rect"]
+        text_values = [str(payload["text"]) for kind, payload in calls if kind == "text"]
+        self.assertGreater(float(rect_calls[0]["height"]), 76.0)
+        self.assertIn("first", text_values)
+        self.assertIn("second", text_values)
+        self.assertIn("third", text_values)
+
     def test_sorting_and_render_are_deterministic(self) -> None:
         table = TableComponent(
             component_id="orders",

@@ -95,6 +95,8 @@ class InputState:
     gesture_rotation: float = 0.0
     left_down: bool = False
     right_down: bool = False
+    left_clicked: bool = False
+    right_clicked: bool = False
     pressure: float = 0.0
     pinch: float = 0.0
     rotation: float = 0.0
@@ -110,9 +112,10 @@ class InputState:
 
 
 class InputManager:
-    def __init__(self, ctx: AppContext) -> None:
+    def __init__(self, ctx: AppContext, on_activity: Callable[[], None] | None = None) -> None:
         self._ctx = ctx
         self._state = InputState()
+        self._on_activity = on_activity
 
     @property
     def state(self) -> InputState:
@@ -123,8 +126,142 @@ class InputManager:
 
     def snapshot(self, max_events: int = 256, frame: str | None = None) -> InputState:
         events = self.raw_events(max_events=max_events, frame=frame)
+        if events and self._on_activity is not None:
+            self._on_activity()
+        reset_transient_input(self._state)
         apply_hdi_events(self._state, events)
         return self._state
+
+
+@dataclass(frozen=True)
+class ScrollbarMetrics:
+    thumb_start: float
+    thumb_extent: float
+    travel_extent: float
+    max_offset: float
+
+
+@dataclass(frozen=True)
+class ScrollbarUpdate:
+    offset: float
+    consumed: bool
+    dragging: bool
+
+
+class ScrollbarController:
+    """Pointer interaction state for a horizontal or vertical scrollbar."""
+
+    def __init__(self, orientation: str = "vertical", *, min_thumb_extent: float = 24.0) -> None:
+        if orientation not in {"horizontal", "vertical"}:
+            raise ValueError("orientation must be 'horizontal' or 'vertical'")
+        self.orientation = orientation
+        self.min_thumb_extent = max(1.0, float(min_thumb_extent))
+        self._dragging = False
+        self._drag_anchor = 0.0
+
+    @property
+    def dragging(self) -> bool:
+        return self._dragging
+
+    def metrics(
+        self,
+        *,
+        track_extent: float,
+        content_extent: float,
+        viewport_extent: float,
+        offset: float,
+    ) -> ScrollbarMetrics:
+        track_extent = max(0.0, float(track_extent))
+        content_extent = max(0.0, float(content_extent))
+        viewport_extent = max(0.0, float(viewport_extent))
+        max_offset = max(0.0, content_extent - viewport_extent)
+        if track_extent <= 0.0 or content_extent <= 0.0 or max_offset <= 0.0:
+            return ScrollbarMetrics(0.0, track_extent, 0.0, max_offset)
+        ratio = min(1.0, viewport_extent / content_extent)
+        thumb_extent = min(track_extent, max(self.min_thumb_extent, track_extent * ratio))
+        travel = max(0.0, track_extent - thumb_extent)
+        clamped_offset = min(max(0.0, float(offset)), max_offset)
+        thumb_start = travel * (clamped_offset / max_offset) if travel > 0.0 else 0.0
+        return ScrollbarMetrics(thumb_start, thumb_extent, travel, max_offset)
+
+    def update(
+        self,
+        state: InputState,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        content_extent: float,
+        viewport_extent: float,
+        offset: float,
+    ) -> ScrollbarUpdate:
+        track_start = float(y if self.orientation == "vertical" else x)
+        track_extent = float(height if self.orientation == "vertical" else width)
+        pointer_axis = float(state.mouse_y if self.orientation == "vertical" else state.mouse_x)
+        pointer_cross = float(state.mouse_x if self.orientation == "vertical" else state.mouse_y)
+        cross_start = float(x if self.orientation == "vertical" else y)
+        cross_extent = float(width if self.orientation == "vertical" else height)
+        metrics = self.metrics(
+            track_extent=track_extent,
+            content_extent=content_extent,
+            viewport_extent=viewport_extent,
+            offset=offset,
+        )
+        clamped = min(max(0.0, float(offset)), metrics.max_offset)
+        clicked = bool(state.left_clicked)
+        down = bool(state.left_down)
+        in_cross = cross_start <= pointer_cross <= cross_start + max(0.0, cross_extent)
+        local_axis = pointer_axis - track_start
+        in_track = in_cross and 0.0 <= local_axis <= track_extent
+        consumed = False
+
+        if clicked and in_track and metrics.max_offset > 0.0:
+            thumb_end = metrics.thumb_start + metrics.thumb_extent
+            if metrics.thumb_start <= local_axis <= thumb_end:
+                self._drag_anchor = local_axis - metrics.thumb_start
+            else:
+                self._drag_anchor = metrics.thumb_extent * 0.5
+            self._dragging = True
+            consumed = True
+
+        if self._dragging and down:
+            consumed = True
+            thumb_start = min(
+                max(0.0, local_axis - self._drag_anchor),
+                metrics.travel_extent,
+            )
+            clamped = (
+                metrics.max_offset * thumb_start / metrics.travel_extent
+                if metrics.travel_extent > 0.0
+                else 0.0
+            )
+        elif self._dragging and not down:
+            consumed = True
+            self._dragging = False
+            self._drag_anchor = 0.0
+
+        return ScrollbarUpdate(offset=clamped, consumed=consumed, dragging=self._dragging)
+
+
+def reset_transient_input(state: InputState) -> None:
+    state.pinch = 0.0
+    state.rotation = 0.0
+    state.scroll_x = 0.0
+    state.scroll_y = 0.0
+    state.left_clicked = False
+    state.right_clicked = False
+    state.key_last = ""
+    state.key_state = ""
+
+
+def _apply_pointer_payload(state: InputState, payload: dict) -> None:
+    if "x" not in payload and "y" not in payload:
+        return
+    state.mouse_x = float(payload.get("x", state.mouse_x))
+    state.mouse_y = float(payload.get("y", state.mouse_y))
+    state.mouse_in_window = True
+    state.mouse_error = None
 
 
 def apply_hdi_events(state: InputState, events: list[object]) -> InputState:
@@ -193,14 +330,25 @@ def apply_hdi_events(state: InputState, events: list[object]) -> InputState:
                     state.rotation = state.gesture_rotation
         if device not in ("mouse", "trackpad") or not isinstance(payload, dict):
             continue
+        _apply_pointer_payload(state, payload)
         if event_type == "click":
             button = int(payload.get("button", -1))
             phase = str(payload.get("phase", ""))
             is_down = phase == "down"
             if button == 0:
                 state.left_down = is_down
+                if is_down:
+                    state.left_clicked = True
             elif button == 1:
                 state.right_down = is_down
+                if is_down:
+                    state.right_clicked = True
+        elif event_type == "pointer_move":
+            buttons_mask = payload.get("buttons_mask")
+            if buttons_mask is not None:
+                mask = int(buttons_mask)
+                state.left_down = bool(mask & 1)
+                state.right_down = bool(mask & 2)
         elif event_type == "pressure":
             state.pressure = float(payload.get("pressure", state.pressure))
         elif event_type == "pinch":
@@ -208,8 +356,8 @@ def apply_hdi_events(state: InputState, events: list[object]) -> InputState:
         elif event_type == "rotate":
             state.rotation = float(payload.get("rotation", state.rotation))
         elif event_type == "scroll":
-            state.scroll_x = float(payload.get("delta_x", state.scroll_x))
-            state.scroll_y = float(payload.get("delta_y", state.scroll_y))
+            state.scroll_x += float(payload.get("delta_x", 0.0) or 0.0)
+            state.scroll_y += float(payload.get("delta_y", 0.0) or 0.0)
     return state
 
 
@@ -329,12 +477,21 @@ def _rgba(value: tuple[int, int, int, int] | str) -> tuple[int, int, int, int]:
 
 
 class SceneFrame(AbstractContextManager["SceneFrame"]):
-    def __init__(self, ctx: AppContext, clear: tuple[int, int, int, int] | str = (0, 0, 0, 255)) -> None:
+    def __init__(
+        self,
+        ctx: AppContext,
+        clear: tuple[int, int, int, int] | str = (0, 0, 0, 255),
+        *,
+        content_offset: tuple[float, float] = (0.0, 0.0),
+        retained: bool = False,
+    ) -> None:
         self._ctx = ctx
         self._clear = _rgba(clear)
+        self._content_offset = (float(content_offset[0]), float(content_offset[1]))
+        self._retained = bool(retained)
 
     def __enter__(self) -> "SceneFrame":
-        self._ctx.begin_scene_frame()
+        self._ctx.begin_scene_frame(content_offset=self._content_offset, retained=self._retained)
         self._ctx.clear_scene(self._clear)
         return self
 
@@ -357,6 +514,27 @@ class SceneFrame(AbstractContextManager["SceneFrame"]):
     def rect(self, *, x: float, y: float, width: float, height: float, color: tuple[int, int, int, int] | str, z_index: int = 0) -> None:
         self._ctx.draw_rect(x=x, y=y, width=width, height=height, color_rgba=_rgba(color), z_index=z_index)
 
+    def rounded_rect(
+        self,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        radius: float,
+        color: tuple[int, int, int, int] | str,
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.draw_rounded_rect(
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+            radius=radius,
+            color_rgba=_rgba(color),
+            z_index=z_index,
+        )
+
     def circle(self, *, cx: float, cy: float, radius: float, fill: tuple[int, int, int, int] | str, stroke: tuple[int, int, int, int] | str = (0, 0, 0, 0), stroke_width: float = 0.0, z_index: int = 0) -> None:
         self._ctx.draw_circle(
             cx=cx,
@@ -368,8 +546,312 @@ class SceneFrame(AbstractContextManager["SceneFrame"]):
             z_index=z_index,
         )
 
-    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None) -> None:
-        self._ctx.draw_text(text, x=x, y=y, font_size_px=font_size_px, color_rgba=_rgba(color), z_index=z_index, cache_key=cache_key)
+    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0) -> None:
+        self._ctx.draw_text(text, x=x, y=y, font_size_px=font_size_px, color_rgba=_rgba(color), z_index=z_index, cache_key=cache_key, rotation_deg=rotation_deg)
+
+    def camera3d(
+        self,
+        *,
+        position: tuple[float, float, float] = (0.0, 0.0, 5.0),
+        target: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        up: tuple[float, float, float] = (0.0, 1.0, 0.0),
+        fov_deg: float = 60.0,
+        near: float = 0.1,
+        far: float = 100.0,
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.set_camera3d(
+            position=position,
+            target=target,
+            up=up,
+            fov_deg=fov_deg,
+            near=near,
+            far=far,
+            z_index=z_index,
+        )
+
+    def cube3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        size: float = 1.0,
+        rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        color: tuple[int, int, int, int] | str = (80, 180, 255, 255),
+        edge: tuple[int, int, int, int] | str = (255, 255, 255, 255),
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.draw_cube3d(
+            center=center,
+            size=size,
+            rotation=rotation,
+            color_rgba=_rgba(color),
+            edge_rgba=_rgba(edge),
+            z_index=z_index,
+        )
+
+    def cuboid3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        size: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        color: tuple[int, int, int, int] | str = (80, 180, 255, 255),
+        edge: tuple[int, int, int, int] | str = (255, 255, 255, 255),
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.draw_cuboid3d(
+            center=center,
+            size=size,
+            rotation=rotation,
+            color_rgba=_rgba(color),
+            edge_rgba=_rgba(edge),
+            z_index=z_index,
+        )
+
+    def rounded_cuboid3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        size: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        radius: float = 0.25,
+        color: tuple[int, int, int, int] | str = (80, 180, 255, 255),
+        edge: tuple[int, int, int, int] | str = (255, 255, 255, 255),
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.draw_rounded_cuboid3d(
+            center=center,
+            size=size,
+            rotation=rotation,
+            radius=radius,
+            color_rgba=_rgba(color),
+            edge_rgba=_rgba(edge),
+            z_index=z_index,
+        )
+
+    def sphere3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        radius: float = 1.0,
+        color: tuple[int, int, int, int] | str = (246, 208, 146, 255),
+        edge: tuple[int, int, int, int] | str = (0, 0, 0, 0),
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.draw_sphere3d(
+            center=center,
+            radius=radius,
+            color_rgba=_rgba(color),
+            edge_rgba=_rgba(edge),
+            z_index=z_index,
+        )
+
+    def model3d(
+        self,
+        *,
+        asset: str,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        scale: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        color: tuple[int, int, int, int] | str = (198, 145, 255, 255),
+        edge: tuple[int, int, int, int] | str = (0, 0, 0, 0),
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.draw_model3d(
+            asset=asset,
+            center=center,
+            scale=scale,
+            rotation=rotation,
+            color_rgba=_rgba(color),
+            edge_rgba=_rgba(edge),
+            z_index=z_index,
+        )
+
+    def image3d(
+        self,
+        *,
+        asset: str,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        size: tuple[float, float] = (1.0, 1.0),
+        rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        opacity: float = 1.0,
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.draw_image3d(
+            asset=asset,
+            center=center,
+            size=size,
+            rotation=rotation,
+            opacity=opacity,
+            z_index=z_index,
+        )
+
+    def dot_grid3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        extent: float = 8.0,
+        spacing: float = 0.5,
+        point_size: float = 2.0,
+        color: tuple[int, int, int, int] | str = (120, 170, 220, 120),
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.draw_dot_grid3d(
+            center=center,
+            extent=extent,
+            spacing=spacing,
+            point_size=point_size,
+            color_rgba=_rgba(color),
+            z_index=z_index,
+        )
+
+    def line3d(
+        self,
+        *,
+        start: tuple[float, float, float],
+        end: tuple[float, float, float],
+        color: tuple[int, int, int, int] | str = (255, 255, 255, 255),
+        width: float = 1.0,
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.draw_line3d(start=start, end=end, color_rgba=_rgba(color), width=width, z_index=z_index)
+
+    def dot_plane3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        width: float = 8.0,
+        depth: float = 8.0,
+        spacing: float = 0.5,
+        point_size: float = 2.0,
+        color: tuple[int, int, int, int] | str = (140, 190, 225, 170),
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.draw_dot_plane3d(
+            center=center,
+            width=width,
+            depth=depth,
+            spacing=spacing,
+            point_size=point_size,
+            color_rgba=_rgba(color),
+            z_index=z_index,
+        )
+
+    def ground_plane3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, -20.0),
+        width: float = 40.0,
+        depth: float = 40.0,
+        color: tuple[int, int, int, int] | str = (26, 46, 34, 255),
+        z_index: int = -20,
+    ) -> None:
+        self._ctx.draw_ground_plane3d(center=center, width=width, depth=depth, color_rgba=_rgba(color), z_index=z_index)
+
+    def infinite_ground3d(
+        self,
+        *,
+        y: float = 0.0,
+        z_max: float = 0.0,
+        render_distance: float = 120.0,
+        color: tuple[int, int, int, int] | str = (26, 46, 34, 255),
+        z_index: int = -20,
+    ) -> None:
+        self._ctx.draw_infinite_ground3d(
+            y=y,
+            z_max=z_max,
+            render_distance=render_distance,
+            color_rgba=_rgba(color),
+            z_index=z_index,
+        )
+
+    def infinite_dot_plane3d(
+        self,
+        *,
+        y: float = 0.0,
+        z_max: float = 0.0,
+        spacing: float = 0.5,
+        point_size: float = 2.0,
+        render_distance: float = 80.0,
+        color: tuple[int, int, int, int] | str = (140, 190, 225, 170),
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.draw_infinite_dot_plane3d(
+            y=y,
+            z_max=z_max,
+            spacing=spacing,
+            point_size=point_size,
+            render_distance=render_distance,
+            color_rgba=_rgba(color),
+            z_index=z_index,
+        )
+
+    def infinite_grid3d(
+        self,
+        *,
+        y: float = 0.0,
+        minor_spacing: float = 1.0,
+        major_spacing: float = 5.0,
+        render_distance: float = 180.0,
+        minor: tuple[int, int, int, int] | str = (204, 212, 218, 95),
+        major: tuple[int, int, int, int] | str = (58, 118, 190, 145),
+        minor_width: float = 1.0,
+        major_width: float = 1.35,
+        z_index: int = -10,
+    ) -> None:
+        self._ctx.draw_infinite_grid3d(
+            y=y,
+            minor_spacing=minor_spacing,
+            major_spacing=major_spacing,
+            render_distance=render_distance,
+            minor_rgba=_rgba(minor),
+            major_rgba=_rgba(major),
+            minor_width=minor_width,
+            major_width=major_width,
+            z_index=z_index,
+        )
+
+    def horizon3d(
+        self,
+        *,
+        sky: tuple[int, int, int, int] | str = (228, 238, 246, 255),
+        ground: tuple[int, int, int, int] | str = (236, 232, 220, 255),
+        horizon: tuple[int, int, int, int] | str = (150, 160, 168, 255),
+        sky_horizon: tuple[int, int, int, int] | str | None = None,
+        horizon_width: float = 0.012,
+        z_index: int = -100,
+    ) -> None:
+        self._ctx.draw_horizon3d(
+            sky_rgba=_rgba(sky),
+            ground_rgba=_rgba(ground),
+            horizon_rgba=_rgba(horizon),
+            sky_horizon_rgba=None if sky_horizon is None else _rgba(sky_horizon),
+            horizon_width=horizon_width,
+            z_index=z_index,
+        )
+
+    def text3d(
+        self,
+        text: str,
+        *,
+        position: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        height: float = 0.4,
+        depth: float = 0.12,
+        color: tuple[int, int, int, int] | str = (235, 246, 255, 255),
+        side: tuple[int, int, int, int] | str = (48, 76, 98, 255),
+        font_family: str = "Inter",
+        z_index: int = 0,
+    ) -> None:
+        self._ctx.draw_text3d(
+            text,
+            position=position,
+            height=height,
+            depth=depth,
+            color_rgba=_rgba(color),
+            side_rgba=_rgba(side),
+            font_family=font_family,
+            z_index=z_index,
+        )
 
 
 class UIFrame(AbstractContextManager["UIFrame"]):
@@ -420,7 +902,8 @@ class UIFrame(AbstractContextManager["UIFrame"]):
         )
         self._ctx.mount_component(SVGComponent(component_id=f"circle_{z_index}_{cx}_{cy}", svg_markup=markup, position=CoordinatePoint(cx - size / 2.0, cy - size / 2.0, "screen_tl"), width=size, height=size))
 
-    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None) -> None:
+    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0) -> None:
+        _ = rotation_deg
         from luvatrix_ui.component_schema import CoordinatePoint
         from luvatrix_ui.text.component import TextComponent
         from luvatrix_ui.text.renderer import TextAppearance, TextSizeSpec
@@ -522,7 +1005,8 @@ class MatrixFrame(AbstractContextManager["MatrixFrame"]):
                 elif stroke_width > 0 and d2 <= r2:
                     self._fill_rect(xx, yy, xx + 1, yy + 1, stroke_rgba)
 
-    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None) -> None:
+    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0) -> None:
+        _ = rotation_deg
         _ = z_index, cache_key
         assert self._frame is not None
         scale = max(1, int(round(font_size_px / 7.0)))
@@ -568,7 +1052,9 @@ class App:
 
     def init(self, ctx: AppContext) -> None:
         self.ctx = ctx
-        self.input = InputManager(ctx)
+        self._continuous_render = True
+        self._render_requested = True
+        self.input = InputManager(ctx, on_activity=self.invalidate)
         self.display = Display(ctx)
         self.coordinates = CoordinateFrames(ctx)
         self.sensors = Sensors(ctx)
@@ -577,20 +1063,42 @@ class App:
     def loop(self, ctx: AppContext, dt: float) -> None:
         _ = ctx
         self.update(dt)
-        self.render()
+        if self._continuous_render or self._render_requested:
+            self._render_requested = False
+            self.render()
+
+    def invalidate(self) -> None:
+        """Request a render on the next app-loop tick."""
+        self._render_requested = True
+
+    def set_continuous_render(self, enabled: bool) -> None:
+        """Choose continuous animation or render-on-invalidation scheduling."""
+        self._continuous_render = bool(enabled)
+        if enabled:
+            self.invalidate()
+
+    def set_scene_content_offset(self, x: float, y: float) -> None:
+        """Move the retained scene without rebuilding its nodes."""
+        self.ctx.set_scene_content_offset(float(x), float(y))
 
     def stop(self, ctx: AppContext) -> None:
         _ = ctx
         self.teardown()
 
-    def frame(self, clear: tuple[int, int, int, int] | str = (0, 0, 0, 255)) -> AbstractContextManager[Any]:
+    def frame(
+        self,
+        clear: tuple[int, int, int, int] | str = (0, 0, 0, 255),
+        *,
+        content_offset: tuple[float, float] = (0.0, 0.0),
+        retained: bool = False,
+    ) -> AbstractContextManager[Any]:
         manifest = getattr(self.ctx, "app_manifest", None)
         preferred = getattr(manifest, "render_preferred", "auto")
         fallbacks = list(getattr(manifest, "render_fallbacks", ["scene", "ui", "matrix"]))
         modes = fallbacks if preferred == "auto" else [preferred, *[m for m in fallbacks if m != preferred]]
         for mode in modes:
             if mode == "scene" and self.ctx.supports_scene_graph:
-                return SceneFrame(self.ctx, clear=clear)
+                return SceneFrame(self.ctx, clear=clear, content_offset=content_offset, retained=retained)
             if mode == "ui":
                 try:
                     return UIFrame(self.ctx, clear=clear)
@@ -600,8 +1108,14 @@ class App:
                 return MatrixFrame(self.ctx, clear=clear)
         return MatrixFrame(self.ctx, clear=clear)
 
-    def scene_frame(self, clear: tuple[int, int, int, int] | str = (0, 0, 0, 255)) -> SceneFrame:
-        return SceneFrame(self.ctx, clear=clear)
+    def scene_frame(
+        self,
+        clear: tuple[int, int, int, int] | str = (0, 0, 0, 255),
+        *,
+        content_offset: tuple[float, float] = (0.0, 0.0),
+        retained: bool = False,
+    ) -> SceneFrame:
+        return SceneFrame(self.ctx, clear=clear, content_offset=content_offset, retained=retained)
 
     def matrix_frame(self, clear: tuple[int, int, int, int] | str = (0, 0, 0, 255)) -> MatrixFrame:
         return MatrixFrame(self.ctx, clear=clear)

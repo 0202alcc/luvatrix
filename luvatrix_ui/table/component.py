@@ -4,13 +4,40 @@ import csv
 from dataclasses import dataclass, field
 import math
 from pathlib import Path
-from typing import Literal, Mapping, Sequence
+from typing import Callable, Literal, Mapping, Protocol, Sequence
 
 from luvatrix_ui.component_schema import BoundingBox, ComponentBase
 
 
 SortDirection = Literal["asc", "desc"]
 FocusRegion = Literal["header", "body"]
+
+
+class TableFrame(Protocol):
+    def rect(
+        self,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        color: tuple[int, int, int, int] | str,
+        z_index: int = 0,
+    ) -> None:
+        ...
+
+    def text(
+        self,
+        text: str,
+        *,
+        x: float,
+        y: float,
+        font_size_px: float = 14.0,
+        color: tuple[int, int, int, int] | str = (255, 255, 255, 255),
+        z_index: int = 0,
+        cache_key: str | None = None,
+    ) -> None:
+        ...
 
 
 @dataclass(frozen=True)
@@ -40,6 +67,30 @@ class TableState:
     focus_region: FocusRegion
     focus_col: int
     focus_row: int
+
+
+@dataclass(frozen=True)
+class TableRenderStyle:
+    background_color: str = "#0b1220ff"
+    header_background_color: str = "#111827ff"
+    odd_row_background_color: str = "#0f172aff"
+    grid_color: str = "#1f2937ff"
+    header_text_color: str = "#93c5fdff"
+    body_text_color: str = "#e5e7ebff"
+    padding_x: float = 12.0
+    padding_y: float = 10.0
+    header_height: float = 34.0
+    row_height: float = 42.0
+    header_font_size_px: float = 12.0
+    body_font_size_px: float = 12.0
+    min_text_chars: int = 4
+    approx_char_width_px: float = 7.0
+    line_height_multiplier: float = 1.25
+    fit_content_width: bool = True
+    fit_content_height: bool = True
+
+
+CellColorResolver = Callable[[TableColumn, Mapping[str, object], str], str | None]
 
 
 @dataclass
@@ -272,12 +323,103 @@ class TableComponent(ComponentBase):
         lines.append(border)
         return "\n".join(lines)
 
+    def render_frame(
+        self,
+        frame: TableFrame,
+        *,
+        style: TableRenderStyle | None = None,
+        column_widths: Mapping[str, float] | Sequence[float] | None = None,
+        cell_color: CellColorResolver | None = None,
+        z_index: int = 0,
+    ) -> None:
+        style = style or TableRenderStyle()
+        bounds = self.visual_bounds()
+        rows = self.visible_rows()
+        column_width_values = self._resolve_column_widths(column_widths, rows, style)
+        table_width = sum(column_width_values) if style.fit_content_width else bounds.width
+        header_h = self._header_height(style)
+        row_heights = self._row_heights(rows, style)
+        table_height = header_h + sum(row_heights)
+        if not style.fit_content_height and bounds.height > 0:
+            table_height = min(bounds.height, table_height)
+
+        frame.rect(x=bounds.x, y=bounds.y, width=table_width, height=table_height, color=style.background_color, z_index=z_index)
+        frame.rect(
+            x=bounds.x,
+            y=bounds.y,
+            width=table_width,
+            height=min(header_h, table_height),
+            color=style.header_background_color,
+            z_index=z_index + 1,
+        )
+
+        cursor_x = bounds.x
+        for column_index, column in enumerate(self.columns):
+            col_width = column_width_values[column_index]
+            header_lines = self._render_lines(self._visual_header_label(column), col_width, style, column_widths is None)
+            header_text_h = len(header_lines) * self._line_height(style.header_font_size_px, style)
+            header_y = bounds.y + max(style.padding_y, (header_h - header_text_h) / 2.0)
+            self._draw_text_lines(
+                frame,
+                header_lines,
+                x=cursor_x + style.padding_x,
+                y=header_y,
+                font_size_px=style.header_font_size_px,
+                color=style.header_text_color,
+                z_index=z_index + 2,
+                cache_key_prefix=f"{self.component_id}_header_{column.column_id}",
+                style=style,
+            )
+            cursor_x += col_width
+            if column_index < len(self.columns) - 1:
+                frame.rect(x=cursor_x, y=bounds.y, width=1.0, height=table_height, color=style.grid_color, z_index=z_index + 3)
+
+        row_y = bounds.y + header_h
+        for row_index, row in enumerate(rows):
+            if row_y >= bounds.y + table_height:
+                break
+            row_h = min(row_heights[row_index], bounds.y + table_height - row_y)
+            if row_index % 2 == 1:
+                frame.rect(x=bounds.x, y=row_y, width=table_width, height=row_h, color=style.odd_row_background_color, z_index=z_index + 1)
+            frame.rect(x=bounds.x, y=row_y, width=table_width, height=1.0, color=style.grid_color, z_index=z_index + 3)
+            cursor_x = bounds.x
+            for column_index, column in enumerate(self.columns):
+                col_width = column_width_values[column_index]
+                raw_text = self._cell_text(row.get(column.key))
+                lines = self._render_lines(raw_text, col_width, style, column_widths is None)
+                color = cell_color(column, row, raw_text) if cell_color is not None else None
+                cell_text_h = len(lines) * self._line_height(style.body_font_size_px, style)
+                cell_y = row_y + max(style.padding_y, (row_h - cell_text_h) / 2.0)
+                self._draw_text_lines(
+                    frame,
+                    lines,
+                    x=cursor_x + style.padding_x,
+                    y=cell_y,
+                    font_size_px=style.body_font_size_px,
+                    color=color or style.body_text_color,
+                    z_index=z_index + 2,
+                    cache_key_prefix=f"{self.component_id}_cell_{row_index}_{column.column_id}",
+                    style=style,
+                )
+                cursor_x += col_width
+            row_y += row_h
+
+    def rendered_height(self, *, style: TableRenderStyle | None = None) -> float:
+        style = style or TableRenderStyle()
+        return self._header_height(style) + sum(self._row_heights(self.visible_rows(), style))
+
     def _header_label(self, idx: int, column: TableColumn) -> str:
         sort_indicator = ""
         if self.sort_column_id == column.column_id:
             sort_indicator = "^" if self.sort_direction == "asc" else "v"
         focus_prefix = ">" if self.focus_region == "header" and self.focus_col == idx else " "
         return f"{focus_prefix}{column.label}{sort_indicator}"
+
+    def _visual_header_label(self, column: TableColumn) -> str:
+        sort_indicator = ""
+        if self.sort_column_id == column.column_id:
+            sort_indicator = " ^" if self.sort_direction == "asc" else " v"
+        return f"{column.label}{sort_indicator}"
 
     def _column_by_id(self, column_id: str) -> TableColumn | None:
         for column in self.columns:
@@ -375,6 +517,117 @@ class TableComponent(ComponentBase):
                     return str(int(round(value)))
                 return f"{value:.4f}".rstrip("0").rstrip(".")
         return str(value)
+
+    def _resolve_column_widths(
+        self,
+        column_widths: Mapping[str, float] | Sequence[float] | None,
+        rows: Sequence[Mapping[str, object]],
+        style: TableRenderStyle,
+    ) -> tuple[float, ...]:
+        width = max(1.0, self.bounds.width)
+        if column_widths is None:
+            return self._content_column_widths(rows, style)
+        if isinstance(column_widths, Mapping):
+            raw = [float(column_widths.get(column.column_id, 0.0)) for column in self.columns]
+        else:
+            raw = [float(value) for value in column_widths]
+            if len(raw) != len(self.columns):
+                raise ValueError("column_widths sequence length must match table columns")
+        missing_indexes = [index for index, value in enumerate(raw) if value <= 0.0]
+        used = sum(value for value in raw if value > 0.0)
+        remaining = max(0.0, width - used)
+        fill = remaining / len(missing_indexes) if missing_indexes else 0.0
+        for index in missing_indexes:
+            raw[index] = fill
+        total = sum(raw)
+        if total <= 0.0:
+            even = width / len(self.columns)
+            return tuple(even for _ in self.columns)
+        if abs(total - width) > 1e-6:
+            scale = width / total
+            raw = [value * scale for value in raw]
+        return tuple(raw)
+
+    def _content_column_widths(self, rows: Sequence[Mapping[str, object]], style: TableRenderStyle) -> tuple[float, ...]:
+        widths: list[float] = []
+        for column in self.columns:
+            max_chars = max(style.min_text_chars, self._max_line_length(self._visual_header_label(column)))
+            for row in rows:
+                max_chars = max(max_chars, self._max_line_length(self._cell_text(row.get(column.key))))
+            widths.append(max_chars * max(1.0, style.approx_char_width_px) + style.padding_x * 2.0)
+        return tuple(widths)
+
+    def _header_height(self, style: TableRenderStyle) -> float:
+        if not style.fit_content_height:
+            return style.header_height
+        max_lines = max((len(self._text_lines(self._visual_header_label(column))) for column in self.columns), default=1)
+        return max(style.header_height, max_lines * self._line_height(style.header_font_size_px, style) + style.padding_y * 2.0)
+
+    def _row_heights(self, rows: Sequence[Mapping[str, object]], style: TableRenderStyle) -> list[float]:
+        if not rows:
+            return [style.row_height]
+        heights: list[float] = []
+        for row in rows:
+            if style.fit_content_height:
+                max_lines = max((len(self._text_lines(self._cell_text(row.get(column.key)))) for column in self.columns), default=1)
+                heights.append(max(style.row_height, max_lines * self._line_height(style.body_font_size_px, style) + style.padding_y * 2.0))
+            else:
+                heights.append(style.row_height)
+        return heights
+
+    def _render_lines(self, text: str, width: float, style: TableRenderStyle, content_fit: bool) -> list[str]:
+        lines = self._text_lines(text)
+        if content_fit:
+            return lines
+        usable_width = max(0.0, width - style.padding_x * 2.0)
+        max_chars = max(style.min_text_chars, int(usable_width / max(1.0, style.approx_char_width_px)))
+        return [self._clip_line_to_chars(line, max_chars) for line in lines]
+
+    def _draw_text_lines(
+        self,
+        frame: TableFrame,
+        lines: Sequence[str],
+        *,
+        x: float,
+        y: float,
+        font_size_px: float,
+        color: tuple[int, int, int, int] | str,
+        z_index: int,
+        cache_key_prefix: str,
+        style: TableRenderStyle,
+    ) -> None:
+        line_height = self._line_height(font_size_px, style)
+        for line_index, line in enumerate(lines):
+            frame.text(
+                line,
+                x=x,
+                y=y + line_index * line_height,
+                font_size_px=font_size_px,
+                color=color,
+                z_index=z_index,
+                cache_key=f"{cache_key_prefix}_{line_index}_{line}",
+            )
+
+    @staticmethod
+    def _text_lines(text: str) -> list[str]:
+        lines = str(text).splitlines()
+        return lines or [""]
+
+    @classmethod
+    def _max_line_length(cls, text: str) -> int:
+        return max((len(line) for line in cls._text_lines(text)), default=0)
+
+    @staticmethod
+    def _clip_line_to_chars(text: str, max_chars: int) -> str:
+        if len(text) <= max_chars:
+            return text
+        if max_chars <= 1:
+            return text[:max_chars]
+        return text[: max_chars - 1] + "..."
+
+    @staticmethod
+    def _line_height(font_size_px: float, style: TableRenderStyle) -> float:
+        return max(1.0, font_size_px * style.line_height_multiplier)
 
 
 def _sort_key(value: object) -> tuple[int, float, str]:

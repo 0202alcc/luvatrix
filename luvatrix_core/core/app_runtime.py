@@ -25,9 +25,24 @@ from .coordinates import PRESET_CARTESIAN_BL, PRESET_CARTESIAN_CENTER, PRESET_SC
 from .frame_rate_controller import FrameRateController
 from .protocol_governance import CURRENT_PROTOCOL_VERSION, check_protocol_compatibility
 from .scene_graph import (
+    Camera3DNode,
     CircleNode,
     ClearNode,
+    Cube3DNode,
+    Cuboid3DNode,
+    DotGrid3DNode,
+    DotPlane3DNode,
+    GroundPlane3DNode,
+    Horizon3DNode,
+    InfiniteDotPlane3DNode,
+    InfiniteGrid3DNode,
+    InfiniteGround3DNode,
+    Image3DNode,
+    Line3DNode,
+    Model3DNode,
     RectNode,
+    RoundedCuboid3DNode,
+    RoundedRectNode,
     SceneBlitEvent,
     SceneFrame,
     SceneGraphBuffer,
@@ -35,6 +50,8 @@ from .scene_graph import (
     ShaderKind,
     ShaderRectNode,
     SceneTelemetry,
+    Sphere3DNode,
+    Text3DNode,
     TextNode,
 )
 from .sensor_manager import SensorManagerThread, SensorSample
@@ -169,6 +186,8 @@ class AppContext:
     _scene_nodes: list[SceneNode] | None = field(default=None, init=False, repr=False)
     _scene_started_ns: int = field(default=0, init=False, repr=False)
     _scene_quality_tier: int = field(default=0, init=False, repr=False)
+    _scene_content_offset: tuple[float, float] = field(default=(0.0, 0.0), init=False, repr=False)
+    _scene_retained: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.logical_width_px is None:
@@ -426,7 +445,14 @@ class AppContext:
         payload = self.runtime_telemetry_provider()
         return payload if isinstance(payload, dict) else {}
 
-    def begin_scene_frame(self, *, adaptive_quality_tier: int = 0, presentation_mode: str | None = None) -> None:
+    def begin_scene_frame(
+        self,
+        *,
+        adaptive_quality_tier: int = 0,
+        presentation_mode: str | None = None,
+        content_offset: tuple[float, float] = (0.0, 0.0),
+        retained: bool = False,
+    ) -> None:
         self._require_capability("window.write")
         if self.scene_buffer is None:
             raise RuntimeError("scene graph rendering is not enabled for this runtime")
@@ -436,6 +462,8 @@ class AppContext:
         self._scene_started_ns = time.perf_counter_ns()
         self._scene_quality_tier = int(adaptive_quality_tier)
         self._scene_presentation_mode = presentation_mode
+        self._scene_content_offset = (float(content_offset[0]), float(content_offset[1]))
+        self._scene_retained = bool(retained)
 
     def add_scene_node(self, node: SceneNode) -> None:
         if self._scene_nodes is None:
@@ -444,6 +472,11 @@ class AppContext:
 
     def clear_scene(self, color_rgba: tuple[int, int, int, int]) -> None:
         self.add_scene_node(ClearNode(color_rgba=color_rgba))
+
+    def set_scene_content_offset(self, x: float, y: float) -> SceneBlitEvent | None:
+        if self.scene_buffer is None:
+            raise RuntimeError("scene graph rendering is not enabled for this runtime")
+        return self.scene_buffer.submit_content_offset(float(x), float(y))
 
     def draw_shader_rect(
         self,
@@ -482,6 +515,21 @@ class AppContext:
     ) -> None:
         self.add_scene_node(RectNode(x=x, y=y, width=width, height=height, color_rgba=color_rgba, z_index=z_index))
 
+    def draw_rounded_rect(
+        self,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        radius: float,
+        color_rgba: tuple[int, int, int, int],
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            RoundedRectNode(x=x, y=y, width=width, height=height, radius=radius, color_rgba=color_rgba, z_index=z_index)
+        )
+
     def draw_circle(
         self,
         *,
@@ -515,6 +563,7 @@ class AppContext:
         font_size_px: float = 14.0,
         color_rgba: tuple[int, int, int, int] = (255, 255, 255, 255),
         max_width_px: float | None = None,
+        rotation_deg: float = 0.0,
         z_index: int = 0,
         cache_key: str | None = None,
     ) -> None:
@@ -527,8 +576,337 @@ class AppContext:
                 font_size_px=font_size_px,
                 color_rgba=color_rgba,
                 max_width_px=max_width_px,
+                rotation_deg=rotation_deg,
                 z_index=z_index,
                 cache_key=cache_key,
+            )
+        )
+
+    def set_camera3d(
+        self,
+        *,
+        position: tuple[float, float, float] = (0.0, 0.0, 5.0),
+        target: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        up: tuple[float, float, float] = (0.0, 1.0, 0.0),
+        fov_deg: float = 60.0,
+        near: float = 0.1,
+        far: float = 100.0,
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            Camera3DNode(
+                position=position,
+                target=target,
+                up=up,
+                fov_deg=fov_deg,
+                near=near,
+                far=far,
+                z_index=z_index,
+            )
+        )
+
+    def draw_cube3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        size: float = 1.0,
+        rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        color_rgba: tuple[int, int, int, int] = (80, 180, 255, 255),
+        edge_rgba: tuple[int, int, int, int] = (255, 255, 255, 255),
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            Cube3DNode(
+                center=center,
+                size=size,
+                rotation=rotation,
+                color_rgba=color_rgba,
+                edge_rgba=edge_rgba,
+                z_index=z_index,
+            )
+        )
+
+    def draw_cuboid3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        size: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        color_rgba: tuple[int, int, int, int] = (80, 180, 255, 255),
+        edge_rgba: tuple[int, int, int, int] = (255, 255, 255, 255),
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            Cuboid3DNode(
+                center=center,
+                size=size,
+                rotation=rotation,
+                color_rgba=color_rgba,
+                edge_rgba=edge_rgba,
+                z_index=z_index,
+            )
+        )
+
+    def draw_rounded_cuboid3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        size: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        radius: float = 0.25,
+        color_rgba: tuple[int, int, int, int] = (80, 180, 255, 255),
+        edge_rgba: tuple[int, int, int, int] = (255, 255, 255, 255),
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            RoundedCuboid3DNode(
+                center=center,
+                size=size,
+                rotation=rotation,
+                radius=radius,
+                color_rgba=color_rgba,
+                edge_rgba=edge_rgba,
+                z_index=z_index,
+            )
+        )
+
+    def draw_sphere3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        radius: float = 1.0,
+        color_rgba: tuple[int, int, int, int] = (246, 208, 146, 255),
+        edge_rgba: tuple[int, int, int, int] = (0, 0, 0, 0),
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            Sphere3DNode(
+                center=center,
+                radius=radius,
+                color_rgba=color_rgba,
+                edge_rgba=edge_rgba,
+                z_index=z_index,
+            )
+        )
+
+    def draw_model3d(
+        self,
+        *,
+        asset: str,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        scale: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        color_rgba: tuple[int, int, int, int] = (198, 145, 255, 255),
+        edge_rgba: tuple[int, int, int, int] = (0, 0, 0, 0),
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            Model3DNode(
+                asset=asset,
+                center=center,
+                scale=scale,
+                rotation=rotation,
+                color_rgba=color_rgba,
+                edge_rgba=edge_rgba,
+                z_index=z_index,
+            )
+        )
+
+    def draw_image3d(
+        self,
+        *,
+        asset: str,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        size: tuple[float, float] = (1.0, 1.0),
+        rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        opacity: float = 1.0,
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            Image3DNode(
+                asset=asset,
+                center=center,
+                size=size,
+                rotation=rotation,
+                opacity=opacity,
+                z_index=z_index,
+            )
+        )
+
+    def draw_dot_grid3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        extent: float = 8.0,
+        spacing: float = 0.5,
+        point_size: float = 2.0,
+        color_rgba: tuple[int, int, int, int] = (120, 170, 220, 120),
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            DotGrid3DNode(
+                center=center,
+                extent=extent,
+                spacing=spacing,
+                point_size=point_size,
+                color_rgba=color_rgba,
+                z_index=z_index,
+            )
+        )
+
+    def draw_line3d(
+        self,
+        *,
+        start: tuple[float, float, float],
+        end: tuple[float, float, float],
+        color_rgba: tuple[int, int, int, int] = (255, 255, 255, 255),
+        width: float = 1.0,
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(Line3DNode(start=start, end=end, color_rgba=color_rgba, width=width, z_index=z_index))
+
+    def draw_dot_plane3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        width: float = 8.0,
+        depth: float = 8.0,
+        spacing: float = 0.5,
+        point_size: float = 2.0,
+        color_rgba: tuple[int, int, int, int] = (140, 190, 225, 170),
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            DotPlane3DNode(
+                center=center,
+                width=width,
+                depth=depth,
+                spacing=spacing,
+                point_size=point_size,
+                color_rgba=color_rgba,
+                z_index=z_index,
+            )
+        )
+
+    def draw_ground_plane3d(
+        self,
+        *,
+        center: tuple[float, float, float] = (0.0, 0.0, -20.0),
+        width: float = 40.0,
+        depth: float = 40.0,
+        color_rgba: tuple[int, int, int, int] = (26, 46, 34, 255),
+        z_index: int = -20,
+    ) -> None:
+        self.add_scene_node(
+            GroundPlane3DNode(center=center, width=width, depth=depth, color_rgba=color_rgba, z_index=z_index)
+        )
+
+    def draw_infinite_ground3d(
+        self,
+        *,
+        y: float = 0.0,
+        z_max: float = 0.0,
+        render_distance: float = 120.0,
+        color_rgba: tuple[int, int, int, int] = (26, 46, 34, 255),
+        z_index: int = -20,
+    ) -> None:
+        self.add_scene_node(
+            InfiniteGround3DNode(y=y, z_max=z_max, render_distance=render_distance, color_rgba=color_rgba, z_index=z_index)
+        )
+
+    def draw_infinite_dot_plane3d(
+        self,
+        *,
+        y: float = 0.0,
+        z_max: float = 0.0,
+        spacing: float = 0.5,
+        point_size: float = 2.0,
+        render_distance: float = 80.0,
+        color_rgba: tuple[int, int, int, int] = (140, 190, 225, 170),
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            InfiniteDotPlane3DNode(
+                y=y,
+                z_max=z_max,
+                spacing=spacing,
+                point_size=point_size,
+                render_distance=render_distance,
+                color_rgba=color_rgba,
+                z_index=z_index,
+            )
+        )
+
+    def draw_infinite_grid3d(
+        self,
+        *,
+        y: float = 0.0,
+        minor_spacing: float = 1.0,
+        major_spacing: float = 5.0,
+        render_distance: float = 180.0,
+        minor_rgba: tuple[int, int, int, int] = (204, 212, 218, 95),
+        major_rgba: tuple[int, int, int, int] = (58, 118, 190, 145),
+        minor_width: float = 1.0,
+        major_width: float = 1.35,
+        z_index: int = -10,
+    ) -> None:
+        self.add_scene_node(
+            InfiniteGrid3DNode(
+                y=y,
+                minor_spacing=minor_spacing,
+                major_spacing=major_spacing,
+                render_distance=render_distance,
+                minor_rgba=minor_rgba,
+                major_rgba=major_rgba,
+                minor_width=minor_width,
+                major_width=major_width,
+                z_index=z_index,
+            )
+        )
+
+    def draw_horizon3d(
+        self,
+        *,
+        sky_rgba: tuple[int, int, int, int] = (228, 238, 246, 255),
+        ground_rgba: tuple[int, int, int, int] = (236, 232, 220, 255),
+        horizon_rgba: tuple[int, int, int, int] = (150, 160, 168, 255),
+        sky_horizon_rgba: tuple[int, int, int, int] | None = None,
+        horizon_width: float = 0.012,
+        z_index: int = -100,
+    ) -> None:
+        self.add_scene_node(
+            Horizon3DNode(
+                sky_rgba=sky_rgba,
+                ground_rgba=ground_rgba,
+                horizon_rgba=horizon_rgba,
+                sky_horizon_rgba=sky_horizon_rgba,
+                horizon_width=horizon_width,
+                z_index=z_index,
+            )
+        )
+
+    def draw_text3d(
+        self,
+        text: str,
+        *,
+        position: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        height: float = 0.4,
+        depth: float = 0.12,
+        color_rgba: tuple[int, int, int, int] = (235, 246, 255, 255),
+        side_rgba: tuple[int, int, int, int] = (48, 76, 98, 255),
+        font_family: str = "Inter",
+        z_index: int = 0,
+    ) -> None:
+        self.add_scene_node(
+            Text3DNode(
+                text=text,
+                position=position,
+                height=height,
+                depth=depth,
+                color_rgba=color_rgba,
+                side_rgba=side_rgba,
+                font_family=font_family,
+                z_index=z_index,
             )
         )
 
@@ -551,8 +929,11 @@ class AppContext:
                 adaptive_quality_tier=int(self._scene_quality_tier),
                 animation_t=time.perf_counter(),
                 presentation_mode=getattr(self, "_scene_presentation_mode", None),
+                content_offset_x=float(self._scene_content_offset[0]),
+                content_offset_y=float(self._scene_content_offset[1]),
+                retained=bool(self._scene_retained),
             )
-            return self.scene_buffer.submit(frame)
+            return self.scene_buffer.submit_if_changed(frame)
         finally:
             self._scene_nodes = None
             self._scene_started_ns = 0
