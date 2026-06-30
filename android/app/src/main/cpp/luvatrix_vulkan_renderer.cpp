@@ -12,14 +12,23 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
+#include <cctype>
+#include <fstream>
 #include <initializer_list>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_android.h>
 
@@ -279,7 +288,7 @@ struct CameraPushConstants {
     float edge_preserve = 0.0f;
     float detail_boost = 0.0f;
     float filter_mode = 0.0f;
-    float reserved0 = 0.0f;
+    float color_contrast = 1.0f;
     float reserved1 = 0.0f;
     float red_gain = 1.0f;
     float green_gain = 1.0f;
@@ -2593,6 +2602,7 @@ CameraPushConstants camera_push_constants(const ImportedCameraPreview& camera, c
     constants.edge_preserve = g_edge_preserve;
     constants.detail_boost = g_downsample_strength;
     constants.filter_mode = g_downsample_mode;
+    constants.color_contrast = g_color_contrast;
     constants.red_gain = g_red_gain;
     constants.green_gain = g_green_gain;
     constants.blue_gain = g_blue_gain;
@@ -3059,6 +3069,2779 @@ bool render_clear(VulkanState& vk, Rgba color) {
     return pr == VK_SUCCESS || pr == VK_SUBOPTIMAL_KHR;
 }
 
+struct BurstPlaneInfo {
+    int row_stride = 0;
+    int pixel_stride = 1;
+    int byte_count = 0;
+};
+
+struct BurstFrameInfo {
+    int index = 0;
+    std::string frame_path;
+    std::string metadata_path;
+};
+
+struct BurstMetadata {
+    int width = 0;
+    int height = 0;
+    std::array<BurstPlaneInfo, 3> planes;
+};
+
+std::string read_text_file(const std::string& path) {
+    std::ifstream input(path);
+    if (!input) return "";
+    std::ostringstream ss;
+    ss << input.rdbuf();
+    return ss.str();
+}
+
+std::vector<uint8_t> read_binary_file(const std::string& path) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) return {};
+    input.seekg(0, std::ios::end);
+    const auto size = input.tellg();
+    if (size <= 0) return {};
+    input.seekg(0, std::ios::beg);
+    std::vector<uint8_t> bytes(static_cast<size_t>(size));
+    input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
+    return bytes;
+}
+
+bool write_binary_file(const std::string& path, const std::vector<uint8_t>& bytes) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) return false;
+    out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    return static_cast<bool>(out);
+}
+
+std::string json_escape(const std::string& value) {
+    std::string out;
+    out.reserve(value.size());
+    for (char ch : value) {
+        if (ch == '\\' || ch == '"') out.push_back('\\');
+        if (ch == '\n') {
+            out += "\\n";
+        } else {
+            out.push_back(ch);
+        }
+    }
+    return out;
+}
+
+std::string processor_error_json(const std::string& message) {
+    return "{\"status\":\"error\",\"mode\":\"sharpest_native\",\"error\":\"" + json_escape(message) + "\"}";
+}
+
+std::string jstring_to_string(JNIEnv* env, jstring value) {
+    if (value == nullptr) return "";
+    const char* raw = env->GetStringUTFChars(value, nullptr);
+    if (raw == nullptr) return "";
+    std::string out(raw);
+    env->ReleaseStringUTFChars(value, raw);
+    return out;
+}
+
+std::string json_array_for_key(const std::string& json, const std::string& key) {
+    const auto key_pos = json.find("\"" + key + "\"");
+    if (key_pos == std::string::npos) return "";
+    const auto open = json.find('[', key_pos);
+    if (open == std::string::npos) return "";
+    int depth = 0;
+    bool in_string = false;
+    bool escaped = false;
+    for (auto i = open; i < json.size(); ++i) {
+        const char ch = json[i];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else if (ch == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (ch == '"') {
+            in_string = true;
+        } else if (ch == '[') {
+            depth += 1;
+        } else if (ch == ']') {
+            depth -= 1;
+            if (depth == 0) return json.substr(open, i - open + 1);
+        }
+    }
+    return "";
+}
+
+std::vector<std::string> top_level_objects(const std::string& array_json) {
+    std::vector<std::string> out;
+    int depth = 0;
+    bool in_string = false;
+    bool escaped = false;
+    std::string::size_type start = std::string::npos;
+    for (std::string::size_type i = 0; i < array_json.size(); ++i) {
+        const char ch = array_json[i];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else if (ch == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (ch == '"') {
+            in_string = true;
+        } else if (ch == '{') {
+            if (depth == 0) start = i;
+            depth += 1;
+        } else if (ch == '}') {
+            depth -= 1;
+            if (depth == 0 && start != std::string::npos) {
+                out.push_back(array_json.substr(start, i - start + 1));
+                start = std::string::npos;
+            }
+        }
+    }
+    return out;
+}
+
+std::vector<BurstFrameInfo> parse_burst_frames(const std::string& manifest) {
+    std::vector<BurstFrameInfo> frames;
+    for (const auto& item : top_level_objects(json_array_for_key(manifest, "frames"))) {
+        BurstFrameInfo frame;
+        frame.index = static_cast<int>(parse_number_key(item, "index", static_cast<double>(frames.size())));
+        frame.frame_path = parse_string_key(item, "frame_path");
+        frame.metadata_path = parse_string_key(item, "metadata_path");
+        if (!frame.frame_path.empty() && !frame.metadata_path.empty()) {
+            frames.push_back(frame);
+        }
+    }
+    return frames;
+}
+
+BurstMetadata parse_burst_metadata(const std::string& metadata_json) {
+    BurstMetadata metadata;
+    metadata.width = static_cast<int>(parse_number_key(metadata_json, "width", 0.0));
+    metadata.height = static_cast<int>(parse_number_key(metadata_json, "height", 0.0));
+    const auto plane_objects = top_level_objects(json_array_for_key(metadata_json, "planes"));
+    for (size_t i = 0; i < plane_objects.size() && i < metadata.planes.size(); ++i) {
+        metadata.planes[i].row_stride = static_cast<int>(parse_number_key(plane_objects[i], "row_stride", 0.0));
+        metadata.planes[i].pixel_stride = static_cast<int>(parse_number_key(plane_objects[i], "pixel_stride", 1.0));
+        metadata.planes[i].byte_count = static_cast<int>(parse_number_key(plane_objects[i], "byte_count", 0.0));
+    }
+    return metadata;
+}
+
+uint8_t sample_burst_plane(
+    const std::vector<uint8_t>& bytes,
+    int offset,
+    const BurstPlaneInfo& plane,
+    int row,
+    int col,
+    uint8_t fallback
+) {
+    const int idx = offset + row * plane.row_stride + col * plane.pixel_stride;
+    if (idx < 0 || static_cast<size_t>(idx) >= bytes.size()) return fallback;
+    return bytes[static_cast<size_t>(idx)];
+}
+
+double score_yuv_luma_sharpness(const std::vector<uint8_t>& bytes, const BurstMetadata& metadata) {
+    const auto& y = metadata.planes[0];
+    if (metadata.width <= 1 || metadata.height <= 1 || y.byte_count <= 0 || bytes.empty()) return 0.0;
+    const int step_x = std::max(1, metadata.width / 64);
+    const int step_y = std::max(1, metadata.height / 64);
+    long long total = 0;
+    long long count = 0;
+    for (int row = 0; row < metadata.height; row += step_y) {
+        const int down_row = std::min(metadata.height - 1, row + step_y);
+        for (int col = 0; col < metadata.width - step_x; col += step_x) {
+            const uint8_t center = sample_burst_plane(bytes, 0, y, row, col, 16);
+            const uint8_t right = sample_burst_plane(bytes, 0, y, row, col + step_x, center);
+            const uint8_t down = sample_burst_plane(bytes, 0, y, down_row, col, center);
+            total += std::abs(static_cast<int>(center) - static_cast<int>(right));
+            total += std::abs(static_cast<int>(center) - static_cast<int>(down));
+            count += 2;
+        }
+    }
+    return count > 0 ? static_cast<double>(total) / static_cast<double>(count) : 0.0;
+}
+
+std::vector<uint8_t> convert_yuv_to_rgba(const std::vector<uint8_t>& bytes, const BurstMetadata& metadata) {
+    std::vector<uint8_t> rgba(static_cast<size_t>(metadata.width) * static_cast<size_t>(metadata.height) * 4u);
+    const int y_offset = 0;
+    const int u_offset = metadata.planes[0].byte_count;
+    const int v_offset = metadata.planes[0].byte_count + metadata.planes[1].byte_count;
+    for (int row = 0; row < metadata.height; ++row) {
+        for (int col = 0; col < metadata.width; ++col) {
+            const int y_value = sample_burst_plane(bytes, y_offset, metadata.planes[0], row, col, 16);
+            const int chroma_row = row / 2;
+            const int chroma_col = col / 2;
+            const int u_value = static_cast<int>(sample_burst_plane(bytes, u_offset, metadata.planes[1], chroma_row, chroma_col, 128)) - 128;
+            const int v_value = static_cast<int>(sample_burst_plane(bytes, v_offset, metadata.planes[2], chroma_row, chroma_col, 128)) - 128;
+            const int r = std::max(0, std::min(255, static_cast<int>(std::round(y_value + 1.402 * v_value))));
+            const int g = std::max(0, std::min(255, static_cast<int>(std::round(y_value - 0.344136 * u_value - 0.714136 * v_value))));
+            const int b = std::max(0, std::min(255, static_cast<int>(std::round(y_value + 1.772 * u_value))));
+            const size_t out = (static_cast<size_t>(row) * static_cast<size_t>(metadata.width) + static_cast<size_t>(col)) * 4u;
+            rgba[out + 0] = static_cast<uint8_t>(r);
+            rgba[out + 1] = static_cast<uint8_t>(g);
+            rgba[out + 2] = static_cast<uint8_t>(b);
+            rgba[out + 3] = 255;
+        }
+    }
+    return rgba;
+}
+
+template <typename RowFn>
+void parallel_for_rows(int row_count, RowFn&& row_fn) {
+    if (row_count <= 0) return;
+    const unsigned hardware_threads = std::max(1u, std::thread::hardware_concurrency());
+    const unsigned worker_count = std::min<unsigned>(
+        std::min<unsigned>(hardware_threads, 8u),
+        static_cast<unsigned>(std::max(1, row_count / 32))
+    );
+    if (worker_count <= 1) {
+        for (int row = 0; row < row_count; ++row) row_fn(row);
+        return;
+    }
+    std::vector<std::thread> workers;
+    workers.reserve(worker_count);
+    for (unsigned worker = 0; worker < worker_count; ++worker) {
+        const int begin = static_cast<int>((static_cast<int64_t>(worker) * row_count) / worker_count);
+        const int end = static_cast<int>((static_cast<int64_t>(worker + 1) * row_count) / worker_count);
+        workers.emplace_back([begin, end, &row_fn]() {
+            for (int row = begin; row < end; ++row) row_fn(row);
+        });
+    }
+    for (auto& worker : workers) worker.join();
+}
+
+std::vector<uint8_t> downscale_rgba_nearest(
+    const std::vector<uint8_t>& rgba,
+    int width,
+    int height,
+    int out_width,
+    int out_height
+) {
+    std::vector<uint8_t> out(static_cast<size_t>(out_width) * static_cast<size_t>(out_height) * 4u);
+    parallel_for_rows(out_height, [&](int y) {
+        const int src_y = std::min(height - 1, static_cast<int>((static_cast<int64_t>(y) * height) / std::max(1, out_height)));
+        for (int x = 0; x < out_width; ++x) {
+            const int src_x = std::min(width - 1, static_cast<int>((static_cast<int64_t>(x) * width) / std::max(1, out_width)));
+            const size_t src = (static_cast<size_t>(src_y) * static_cast<size_t>(width) + static_cast<size_t>(src_x)) * 4u;
+            const size_t dst = (static_cast<size_t>(y) * static_cast<size_t>(out_width) + static_cast<size_t>(x)) * 4u;
+            out[dst + 0] = rgba[src + 0];
+            out[dst + 1] = rgba[src + 1];
+            out[dst + 2] = rgba[src + 2];
+            out[dst + 3] = rgba[src + 3];
+        }
+    });
+    return out;
+}
+
+std::vector<uint8_t> downscale_rgba_bilinear(
+    const std::vector<uint8_t>& rgba,
+    int width,
+    int height,
+    int out_width,
+    int out_height
+) {
+    std::vector<uint8_t> out(static_cast<size_t>(out_width) * static_cast<size_t>(out_height) * 4u);
+    if (width <= 0 || height <= 0 || out_width <= 0 || out_height <= 0 || rgba.empty()) return out;
+    struct ScaleSample {
+        int a = 0;
+        int b = 0;
+        int weight = 0;
+    };
+    constexpr int kScale = 256;
+    std::vector<ScaleSample> x_samples(static_cast<size_t>(out_width));
+    std::vector<ScaleSample> y_samples(static_cast<size_t>(out_height));
+    for (int x = 0; x < out_width; ++x) {
+        const int fixed = out_width > 1 ? (x * (width - 1) * kScale) / std::max(1, out_width - 1) : 0;
+        const int x0 = std::max(0, std::min(width - 1, fixed / kScale));
+        x_samples[static_cast<size_t>(x)] = {x0, std::min(width - 1, x0 + 1), fixed & (kScale - 1)};
+    }
+    for (int y = 0; y < out_height; ++y) {
+        const int fixed = out_height > 1 ? (y * (height - 1) * kScale) / std::max(1, out_height - 1) : 0;
+        const int y0 = std::max(0, std::min(height - 1, fixed / kScale));
+        y_samples[static_cast<size_t>(y)] = {y0, std::min(height - 1, y0 + 1), fixed & (kScale - 1)};
+    }
+    parallel_for_rows(out_height, [&](int y) {
+        const ScaleSample sy = y_samples[static_cast<size_t>(y)];
+        for (int x = 0; x < out_width; ++x) {
+            const ScaleSample sx = x_samples[static_cast<size_t>(x)];
+            const size_t p00 = (static_cast<size_t>(sy.a) * static_cast<size_t>(width) + static_cast<size_t>(sx.a)) * 4u;
+            const size_t p10 = (static_cast<size_t>(sy.a) * static_cast<size_t>(width) + static_cast<size_t>(sx.b)) * 4u;
+            const size_t p01 = (static_cast<size_t>(sy.b) * static_cast<size_t>(width) + static_cast<size_t>(sx.a)) * 4u;
+            const size_t p11 = (static_cast<size_t>(sy.b) * static_cast<size_t>(width) + static_cast<size_t>(sx.b)) * 4u;
+            const size_t dst = (static_cast<size_t>(y) * static_cast<size_t>(out_width) + static_cast<size_t>(x)) * 4u;
+            for (size_t ch = 0; ch < 4u; ++ch) {
+                const int top = static_cast<int>(rgba[p00 + ch]) * (kScale - sx.weight) + static_cast<int>(rgba[p10 + ch]) * sx.weight;
+                const int bottom = static_cast<int>(rgba[p01 + ch]) * (kScale - sx.weight) + static_cast<int>(rgba[p11 + ch]) * sx.weight;
+                const int value = (top * (kScale - sy.weight) + bottom * sy.weight + (kScale * kScale / 2)) / (kScale * kScale);
+                out[dst + ch] = static_cast<uint8_t>(std::max(0, std::min(255, value)));
+            }
+        }
+    });
+    return out;
+}
+
+std::string process_yuv_burst_native(
+    const std::string& manifest_path,
+    const std::string& output_rgba_path,
+    const std::string& preview_rgba_path,
+    int preview_max_edge
+) {
+    const std::string manifest = read_text_file(manifest_path);
+    if (manifest.empty()) return processor_error_json("missing burst manifest");
+    if (parse_string_key(manifest, "format") != "YUV_420_888") {
+        return processor_error_json("unsupported RAW burst processing");
+    }
+    const auto frames = parse_burst_frames(manifest);
+    if (frames.empty()) return processor_error_json("burst manifest has no frames");
+    double best_score = -1.0;
+    int best_index = -1;
+    BurstFrameInfo best_frame;
+    BurstMetadata best_metadata;
+    std::vector<uint8_t> best_bytes;
+    int rejected = 0;
+    for (const auto& frame : frames) {
+        const std::string metadata_json = read_text_file(frame.metadata_path);
+        const BurstMetadata metadata = parse_burst_metadata(metadata_json);
+        const auto bytes = read_binary_file(frame.frame_path);
+        if (metadata.width <= 0 || metadata.height <= 0 || bytes.empty()) {
+            rejected += 1;
+            continue;
+        }
+        const double score = score_yuv_luma_sharpness(bytes, metadata);
+        if (score > best_score) {
+            best_score = score;
+            best_index = frame.index;
+            best_frame = frame;
+            best_metadata = metadata;
+            best_bytes = bytes;
+        }
+    }
+    if (best_index < 0) return processor_error_json("burst manifest has no processable YUV frames");
+    const auto rgba = convert_yuv_to_rgba(best_bytes, best_metadata);
+    if (!write_binary_file(output_rgba_path, rgba)) {
+        return processor_error_json("could not write full RGBA output");
+    }
+    int preview_width = 0;
+    int preview_height = 0;
+    if (preview_max_edge > 0 && !preview_rgba_path.empty()) {
+        const int max_edge = std::max(1, preview_max_edge);
+        const double scale = std::min(
+            1.0,
+            static_cast<double>(max_edge) / static_cast<double>(std::max(best_metadata.width, best_metadata.height))
+        );
+        preview_width = std::max(1, static_cast<int>(std::round(best_metadata.width * scale)));
+        preview_height = std::max(1, static_cast<int>(std::round(best_metadata.height * scale)));
+        const auto preview = downscale_rgba_nearest(rgba, best_metadata.width, best_metadata.height, preview_width, preview_height);
+        if (!write_binary_file(preview_rgba_path, preview)) {
+            return processor_error_json("could not write preview RGBA output");
+        }
+    }
+    const int used = static_cast<int>(frames.size()) - rejected;
+    std::ostringstream out;
+    out << "{\"status\":\"ok\",\"mode\":\"sharpest_native\","
+        << "\"reference_frame\":" << best_index << ","
+        << "\"used_frames\":" << used << ","
+        << "\"rejected_frames\":" << rejected << ","
+        << "\"width\":" << best_metadata.width << ","
+        << "\"height\":" << best_metadata.height << ","
+        << "\"preview_width\":" << preview_width << ","
+        << "\"preview_height\":" << preview_height << ","
+        << "\"score\":" << best_score << ","
+        << "\"selected_frame_path\":\"" << json_escape(best_frame.frame_path) << "\"}";
+    return out.str();
+}
+
+std::vector<double> parse_number_array_key(const std::string& json, const std::string& key) {
+    std::vector<double> out;
+    const auto key_pos = json.find("\"" + key + "\"");
+    if (key_pos == std::string::npos) return out;
+    const auto open = json.find('[', key_pos);
+    const auto close = open == std::string::npos ? std::string::npos : json.find(']', open);
+    if (open == std::string::npos || close == std::string::npos || close <= open) return out;
+    std::string::size_type pos = open + 1;
+    while (pos < close) {
+        auto value = number_after(json, pos);
+        if (!value.has_value()) break;
+        out.push_back(value.value());
+        const auto comma = json.find(',', pos);
+        if (comma == std::string::npos || comma >= close) break;
+        pos = comma + 1;
+    }
+    return out;
+}
+
+struct RawFrameData {
+    int index = 0;
+    int width = 0;
+    int height = 0;
+    int row_stride = 0;
+    int pixel_stride = 2;
+    int white_level = 65535;
+    std::string cfa = "UNKNOWN";
+    std::array<double, 4> black = {0.0, 0.0, 0.0, 0.0};
+    std::array<double, 4> gains = {1.0, 1.0, 1.0, 1.0};
+    std::array<double, 9> transform = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+    bool gains_usable = false;
+    bool transform_usable = false;
+    bool lens_shading_usable = false;
+    int lens_shading_cols = 0;
+    int lens_shading_rows = 0;
+    std::vector<float> lens_shading_values;
+    std::string raw16_path;
+    double sharpness_score = -1.0;
+    int sensor_sensitivity_iso = 0;
+    int64_t sensor_exposure_time_ns = 0;
+    int64_t sensor_frame_duration_ns = 0;
+    std::vector<uint8_t> bytes;
+    std::shared_ptr<struct MappedRawFile> mapped_bytes;
+};
+
+struct MappedRawFile {
+    int fd = -1;
+    void* data = nullptr;
+    size_t size = 0;
+
+    MappedRawFile() = default;
+    MappedRawFile(const MappedRawFile&) = delete;
+    MappedRawFile& operator=(const MappedRawFile&) = delete;
+
+    ~MappedRawFile() {
+        if (data != nullptr && size > 0) {
+            munmap(data, size);
+        }
+        if (fd >= 0) {
+            close(fd);
+        }
+    }
+};
+
+enum class RawCfaPattern {
+    Rggb,
+    Grbg,
+    Gbrg,
+    Bggr,
+    Unknown,
+};
+
+struct ReducedBayerFrame {
+    int width = 0;
+    int height = 0;
+    RawCfaPattern pattern = RawCfaPattern::Unknown;
+    std::array<double, 4> gains = {1.0, 1.0, 1.0, 1.0};
+    std::array<double, 9> transform = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+    bool gains_usable = false;
+    bool transform_usable = false;
+    bool lens_shading_usable = false;
+    std::vector<float> values;
+};
+
+struct IntSpan {
+    int begin = 0;
+    int end = 0;
+};
+
+struct RawNormalizeTable {
+    std::array<float, 4> black = {0.0f, 0.0f, 0.0f, 0.0f};
+    std::array<float, 4> scale = {1.0f, 1.0f, 1.0f, 1.0f};
+};
+
+struct AlignmentOffset {
+    int index = 0;
+    int dx = 0;
+    int dy = 0;
+    double score = 0.0;
+    bool accepted = true;
+};
+
+struct TileAlignmentOffset {
+    int frame_index = 0;
+    int tile_x = 0;
+    int tile_y = 0;
+    int dx = 0;
+    int dy = 0;
+    double score = 0.0;
+    bool accepted = true;
+};
+
+struct TileAlignmentSmoothingResult {
+    int changed_offsets = 0;
+};
+
+struct SampledTileOffset {
+    int dx = 0;
+    int dy = 0;
+    bool accepted = false;
+};
+
+struct RawMergeTiming {
+    double reduce_ms = 0.0;
+    double align_ms = 0.0;
+    double merge_ms = 0.0;
+};
+
+struct RawMotionMergeTelemetry {
+    int64_t rejected_samples = 0;
+    int64_t raw_rejected_samples = 0;
+    int64_t total_samples = 0;
+};
+
+struct RenderStyleProfile {
+    const char* name = "Neutral";
+    float saturation = 1.0f;
+    float contrast = 1.0f;
+    float red_bias = 1.0f;
+    float blue_bias = 1.0f;
+    float target_p95 = 0.85f;
+    float highlight_rolloff = 0.35f;
+    float shadow_lift = 0.0f;
+    float exposure_bias = 1.0f;
+    float local_contrast = 0.0f;
+    float sharpening = 0.0f;
+    float chroma_denoise = 0.0f;
+};
+
+struct RawToneMapTelemetry {
+    double exposure = 1.0;
+    double p50 = 0.0;
+    double p95 = 0.0;
+    double p99 = 0.0;
+    double highlight_rolloff = 0.35;
+    double shadow_lift = 0.0;
+};
+
+struct RawArtifactTelemetry {
+    int64_t inspected_pixels = 0;
+    int64_t purple_pixels_before = 0;
+    int64_t purple_pixels_after = 0;
+    int64_t purple_suppressed_pixels = 0;
+};
+
+struct RawNeutralCastTelemetry {
+    int64_t neutral_samples = 0;
+    double red_gain = 1.0;
+    double green_gain = 1.0;
+    double blue_gain = 1.0;
+    bool applied = false;
+};
+
+struct RawRenderResult {
+    std::vector<uint8_t> rgba;
+    RawToneMapTelemetry tone;
+    RawArtifactTelemetry artifacts;
+    RawNeutralCastTelemetry neutral_cast;
+};
+
+double raw_shadow_purple_ratio_after(const RawArtifactTelemetry& artifacts) {
+    return artifacts.inspected_pixels > 0
+        ? static_cast<double>(artifacts.purple_pixels_after) / static_cast<double>(artifacts.inspected_pixels)
+        : 0.0;
+}
+
+std::string raw_quality_verdict_for_artifacts(const RawArtifactTelemetry& artifacts) {
+    const double ratio = raw_shadow_purple_ratio_after(artifacts);
+    if (ratio >= 0.05) return "artifact_fail";
+    if (ratio >= 0.025) return "artifact_warn";
+    return "ok";
+}
+
+double elapsed_ms(std::chrono::steady_clock::time_point start, std::chrono::steady_clock::time_point end) {
+    return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+std::string raw_processor_error_json(const std::string& message) {
+    return "{\"status\":\"error\",\"mode\":\"raw_single_frame\",\"error\":\"" + json_escape(message) + "\"}";
+}
+
+std::shared_ptr<MappedRawFile> map_raw_file(const std::string& path) {
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0) return nullptr;
+    struct stat st {};
+    if (fstat(fd, &st) != 0 || st.st_size <= 0) {
+        close(fd);
+        return nullptr;
+    }
+    void* data = mmap(nullptr, static_cast<size_t>(st.st_size), PROT_READ, MAP_PRIVATE, fd, 0);
+    if (data == MAP_FAILED) {
+        close(fd);
+        return nullptr;
+    }
+    auto mapped = std::make_shared<MappedRawFile>();
+    mapped->fd = fd;
+    mapped->data = data;
+    mapped->size = static_cast<size_t>(st.st_size);
+    return mapped;
+}
+
+void load_raw_frame_bytes(RawFrameData& frame, bool prefer_mmap) {
+    frame.bytes.clear();
+    frame.mapped_bytes.reset();
+    if (frame.raw16_path.empty()) return;
+    if (prefer_mmap) {
+        frame.mapped_bytes = map_raw_file(frame.raw16_path);
+        if (frame.mapped_bytes != nullptr) return;
+    }
+    frame.bytes = read_binary_file(frame.raw16_path);
+}
+
+const uint8_t* raw_frame_byte_data(const RawFrameData& frame) {
+    if (frame.mapped_bytes != nullptr && frame.mapped_bytes->data != nullptr) {
+        return static_cast<const uint8_t*>(frame.mapped_bytes->data);
+    }
+    return frame.bytes.empty() ? nullptr : frame.bytes.data();
+}
+
+size_t raw_frame_byte_size(const RawFrameData& frame) {
+    if (frame.mapped_bytes != nullptr && frame.mapped_bytes->data != nullptr) {
+        return frame.mapped_bytes->size;
+    }
+    return frame.bytes.size();
+}
+
+bool raw_frame_has_bytes(const RawFrameData& frame) {
+    return raw_frame_byte_data(frame) != nullptr && raw_frame_byte_size(frame) > 0;
+}
+
+const char* raw_frame_load_mode(const RawFrameData& frame) {
+    return frame.mapped_bytes != nullptr ? "mmap" : "read";
+}
+
+bool raw_color_gains_usable(const std::array<double, 4>& gains) {
+    for (double value : gains) {
+        if (!std::isfinite(value) || value <= 0.0 || value > 16.0) return false;
+    }
+    return true;
+}
+
+bool raw_color_transform_usable(const std::array<double, 9>& transform) {
+    double total_abs = 0.0;
+    for (double value : transform) {
+        if (!std::isfinite(value) || std::abs(value) > 8.0) return false;
+        total_abs += std::abs(value);
+    }
+    return total_abs > 0.001;
+}
+
+std::array<double, 4> normalize_raw_color_gains(const std::array<double, 4>& gains, bool usable) {
+    if (!usable) return {1.0, 1.0, 1.0, 1.0};
+    const double green = std::max(0.001, (gains[1] + gains[2]) * 0.5);
+    return {
+        std::max(0.55, std::min(2.60, gains[0] / green)),
+        1.0,
+        1.0,
+        std::max(0.55, std::min(2.60, gains[3] / green)),
+    };
+}
+
+std::array<double, 9> normalize_raw_color_transform(const std::array<double, 9>& transform, bool usable) {
+    if (!usable) return {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+    std::array<double, 9> out = transform;
+    for (int row = 0; row < 3; ++row) {
+        const size_t base = static_cast<size_t>(row) * 3u;
+        const double row_sum = out[base + 0] + out[base + 1] + out[base + 2];
+        if (std::abs(row_sum) > 0.001 && std::isfinite(row_sum)) {
+            out[base + 0] /= row_sum;
+            out[base + 1] /= row_sum;
+            out[base + 2] /= row_sum;
+        }
+    }
+    return out;
+}
+
+RawFrameData parse_raw_frame_data(const BurstFrameInfo& frame, bool load_bytes = true) {
+    RawFrameData out;
+    out.index = frame.index;
+    const std::string metadata_json = read_text_file(frame.metadata_path);
+    out.raw16_path = parse_string_key(metadata_json, "raw16_path");
+    out.width = static_cast<int>(parse_number_key(metadata_json, "width", 0.0));
+    out.height = static_cast<int>(parse_number_key(metadata_json, "height", 0.0));
+    out.row_stride = static_cast<int>(parse_number_key(metadata_json, "row_stride", 0.0));
+    out.pixel_stride = static_cast<int>(parse_number_key(metadata_json, "pixel_stride", 2.0));
+    out.white_level = static_cast<int>(parse_number_key(metadata_json, "white_level", 65535.0));
+    out.sharpness_score = parse_number_key(metadata_json, "raw_sharpness_score", -1.0);
+    out.sensor_sensitivity_iso = static_cast<int>(parse_number_key(metadata_json, "sensor_sensitivity_iso", 0.0));
+    out.sensor_exposure_time_ns = static_cast<int64_t>(parse_number_key(metadata_json, "sensor_exposure_time_ns", 0.0));
+    out.sensor_frame_duration_ns = static_cast<int64_t>(parse_number_key(metadata_json, "sensor_frame_duration_ns", 0.0));
+    out.cfa = parse_string_key(metadata_json, "color_filter_arrangement");
+    const auto black = parse_number_array_key(metadata_json, "black_level_pattern");
+    for (size_t i = 0; i < black.size() && i < out.black.size(); ++i) out.black[i] = black[i];
+    const auto gains = parse_number_array_key(metadata_json, "color_correction_gains");
+    for (size_t i = 0; i < gains.size() && i < out.gains.size(); ++i) out.gains[i] = gains[i];
+    out.gains_usable = gains.size() >= out.gains.size() && raw_color_gains_usable(out.gains);
+    out.gains = normalize_raw_color_gains(out.gains, out.gains_usable);
+    const auto transform = parse_number_array_key(metadata_json, "color_correction_transform");
+    for (size_t i = 0; i < transform.size() && i < out.transform.size(); ++i) out.transform[i] = transform[i];
+    out.transform_usable = transform.size() >= out.transform.size() && raw_color_transform_usable(out.transform);
+    out.transform = normalize_raw_color_transform(out.transform, out.transform_usable);
+    out.lens_shading_cols = static_cast<int>(parse_number_key(metadata_json, "columns", 0.0));
+    out.lens_shading_rows = static_cast<int>(parse_number_key(metadata_json, "rows", 0.0));
+    const auto lens_values = parse_number_array_key(metadata_json, "values");
+    if (out.lens_shading_cols > 1 && out.lens_shading_rows > 1
+        && lens_values.size() >= static_cast<size_t>(out.lens_shading_cols) * static_cast<size_t>(out.lens_shading_rows) * 4u) {
+        out.lens_shading_values.reserve(lens_values.size());
+        for (double value : lens_values) {
+            out.lens_shading_values.push_back(static_cast<float>(std::max(0.25, std::min(8.0, value))));
+        }
+        out.lens_shading_usable = true;
+    }
+    if (load_bytes) {
+        load_raw_frame_bytes(out, false);
+    }
+    if (out.row_stride <= 0) out.row_stride = out.width * std::max(1, out.pixel_stride);
+    return out;
+}
+
+char raw_color_at(const std::string& cfa, int row, int col) {
+    const bool even_row = (row & 1) == 0;
+    const bool even_col = (col & 1) == 0;
+    if (cfa == "RGGB") return even_row ? (even_col ? 'R' : 'G') : (even_col ? 'G' : 'B');
+    if (cfa == "GRBG") return even_row ? (even_col ? 'G' : 'R') : (even_col ? 'B' : 'G');
+    if (cfa == "GBRG") return even_row ? (even_col ? 'G' : 'B') : (even_col ? 'R' : 'G');
+    if (cfa == "BGGR") return even_row ? (even_col ? 'B' : 'G') : (even_col ? 'G' : 'R');
+    return '?';
+}
+
+RawCfaPattern parse_raw_cfa_pattern(const std::string& cfa) {
+    if (cfa == "RGGB") return RawCfaPattern::Rggb;
+    if (cfa == "GRBG") return RawCfaPattern::Grbg;
+    if (cfa == "GBRG") return RawCfaPattern::Gbrg;
+    if (cfa == "BGGR") return RawCfaPattern::Bggr;
+    return RawCfaPattern::Unknown;
+}
+
+char raw_color_at_pattern(RawCfaPattern pattern, int row, int col) {
+    const bool even_row = (row & 1) == 0;
+    const bool even_col = (col & 1) == 0;
+    switch (pattern) {
+        case RawCfaPattern::Rggb:
+            return even_row ? (even_col ? 'R' : 'G') : (even_col ? 'G' : 'B');
+        case RawCfaPattern::Grbg:
+            return even_row ? (even_col ? 'G' : 'R') : (even_col ? 'B' : 'G');
+        case RawCfaPattern::Gbrg:
+            return even_row ? (even_col ? 'G' : 'B') : (even_col ? 'R' : 'G');
+        case RawCfaPattern::Bggr:
+            return even_row ? (even_col ? 'B' : 'G') : (even_col ? 'G' : 'R');
+        default:
+            return '?';
+    }
+}
+
+uint16_t raw16_value_at(const RawFrameData& frame, int row, int col) {
+    const int idx = row * frame.row_stride + col * frame.pixel_stride;
+    const uint8_t* bytes = raw_frame_byte_data(frame);
+    if (bytes == nullptr || idx < 0 || static_cast<size_t>(idx + 1) >= raw_frame_byte_size(frame)) return 0;
+    return static_cast<uint16_t>(bytes[static_cast<size_t>(idx)] | (bytes[static_cast<size_t>(idx + 1)] << 8));
+}
+
+inline uint16_t raw16_value_at_unchecked(const RawFrameData& frame, int row, int col) {
+    const size_t idx = static_cast<size_t>(row * frame.row_stride + col * frame.pixel_stride);
+    const uint8_t* bytes = raw_frame_byte_data(frame);
+    return static_cast<uint16_t>(bytes[idx] | (bytes[idx + 1] << 8));
+}
+
+double normalized_raw_at(const RawFrameData& frame, int row, int col) {
+    row = std::max(0, std::min(frame.height - 1, row));
+    col = std::max(0, std::min(frame.width - 1, col));
+    const int black_index = ((row & 1) * 2) + (col & 1);
+    const double black = frame.black[static_cast<size_t>(black_index)];
+    const double white = std::max(black + 1.0, static_cast<double>(frame.white_level));
+    const double value = static_cast<double>(raw16_value_at(frame, row, col));
+    return std::max(0.0, std::min(1.0, (value - black) / (white - black)));
+}
+
+double raw_channel_average(const RawFrameData& frame, int row, int col, char wanted) {
+    double total = 0.0;
+    int count = 0;
+    for (int dy = -2; dy <= 2; ++dy) {
+        for (int dx = -2; dx <= 2; ++dx) {
+            const int yy = std::max(0, std::min(frame.height - 1, row + dy));
+            const int xx = std::max(0, std::min(frame.width - 1, col + dx));
+            if (raw_color_at(frame.cfa, yy, xx) == wanted) {
+                total += normalized_raw_at(frame, yy, xx);
+                count += 1;
+            }
+        }
+    }
+    return count > 0 ? total / static_cast<double>(count) : normalized_raw_at(frame, row, col);
+}
+
+inline double normalized_raw_at_clamped(const RawFrameData& frame, int row, int col) {
+    row = row < 0 ? 0 : (row >= frame.height ? frame.height - 1 : row);
+    col = col < 0 ? 0 : (col >= frame.width ? frame.width - 1 : col);
+    const int black_index = ((row & 1) << 1) | (col & 1);
+    const double black = frame.black[static_cast<size_t>(black_index)];
+    const double white = std::max(black + 1.0, static_cast<double>(frame.white_level));
+    const double value = static_cast<double>(raw16_value_at(frame, row, col));
+    const double normalized = (value - black) / (white - black);
+    return normalized < 0.0 ? 0.0 : (normalized > 1.0 ? 1.0 : normalized);
+}
+
+inline double normalized_raw_at_unchecked(const RawFrameData& frame, int row, int col) {
+    const int black_index = ((row & 1) << 1) | (col & 1);
+    const double black = frame.black[static_cast<size_t>(black_index)];
+    const double white = std::max(black + 1.0, static_cast<double>(frame.white_level));
+    const double normalized = (static_cast<double>(raw16_value_at_unchecked(frame, row, col)) - black) / (white - black);
+    return normalized < 0.0 ? 0.0 : (normalized > 1.0 ? 1.0 : normalized);
+}
+
+RawNormalizeTable raw_normalize_table(const RawFrameData& frame) {
+    RawNormalizeTable table;
+    for (size_t i = 0; i < table.black.size(); ++i) {
+        const float black = static_cast<float>(frame.black[i]);
+        const float white = std::max(black + 1.0f, static_cast<float>(frame.white_level));
+        table.black[i] = black;
+        table.scale[i] = 1.0f / (white - black);
+    }
+    return table;
+}
+
+inline int raw_lens_shading_channel_index(const RawFrameData& frame, int row, int col) {
+    const char color = raw_color_at(frame.cfa, row, col);
+    if (color == 'R') return 0;
+    if (color == 'B') return 3;
+    return (row & 1) == 0 ? 1 : 2;
+}
+
+inline float raw_lens_shading_gain_at(const RawFrameData& frame, int row, int col) {
+    if (!frame.lens_shading_usable || frame.lens_shading_cols <= 1 || frame.lens_shading_rows <= 1) return 1.0f;
+    const int channel = raw_lens_shading_channel_index(frame, row, col);
+    const double gx = (static_cast<double>(col) / static_cast<double>(std::max(1, frame.width - 1)))
+        * static_cast<double>(frame.lens_shading_cols - 1);
+    const double gy = (static_cast<double>(row) / static_cast<double>(std::max(1, frame.height - 1)))
+        * static_cast<double>(frame.lens_shading_rows - 1);
+    const int x0 = std::max(0, std::min(frame.lens_shading_cols - 1, static_cast<int>(std::floor(gx))));
+    const int y0 = std::max(0, std::min(frame.lens_shading_rows - 1, static_cast<int>(std::floor(gy))));
+    const int x1 = std::max(0, std::min(frame.lens_shading_cols - 1, x0 + 1));
+    const int y1 = std::max(0, std::min(frame.lens_shading_rows - 1, y0 + 1));
+    const float wx = static_cast<float>(std::max(0.0, std::min(1.0, gx - static_cast<double>(x0))));
+    const float wy = static_cast<float>(std::max(0.0, std::min(1.0, gy - static_cast<double>(y0))));
+    auto at = [&](int x, int y) {
+        const size_t idx = ((static_cast<size_t>(y) * static_cast<size_t>(frame.lens_shading_cols) + static_cast<size_t>(x)) * 4u)
+            + static_cast<size_t>(channel);
+        if (idx >= frame.lens_shading_values.size()) return 1.0f;
+        return frame.lens_shading_values[idx];
+    };
+    const float top = at(x0, y0) * (1.0f - wx) + at(x1, y0) * wx;
+    const float bottom = at(x0, y1) * (1.0f - wx) + at(x1, y1) * wx;
+    const float gain = top * (1.0f - wy) + bottom * wy;
+    return std::max(0.25f, std::min(4.0f, gain));
+}
+
+inline float normalized_raw_at_unchecked_fast(
+    const RawFrameData& frame,
+    const RawNormalizeTable& table,
+    int row,
+    int col
+) {
+    const int black_index = ((row & 1) << 1) | (col & 1);
+    const float normalized = (static_cast<float>(raw16_value_at_unchecked(frame, row, col)) - table.black[static_cast<size_t>(black_index)])
+        * table.scale[static_cast<size_t>(black_index)];
+    const float shaded = normalized * raw_lens_shading_gain_at(frame, row, col);
+    return shaded < 0.0f ? 0.0f : (shaded > 1.0f ? 1.0f : shaded);
+}
+
+inline double raw_channel_average_fast(
+    const RawFrameData& frame,
+    RawCfaPattern pattern,
+    int row,
+    int col,
+    char wanted
+) {
+    double total = 0.0;
+    int count = 0;
+    for (int dy = -1; dy <= 1; ++dy) {
+        const int yy = row + dy;
+        for (int dx = -1; dx <= 1; ++dx) {
+            const int xx = col + dx;
+            if (raw_color_at_pattern(pattern, yy, xx) == wanted) {
+                total += normalized_raw_at_clamped(frame, yy, xx);
+                count += 1;
+            }
+        }
+    }
+    return count > 0 ? total / static_cast<double>(count) : normalized_raw_at_clamped(frame, row, col);
+}
+
+inline double raw_green_proxy_fast(const RawFrameData& frame, RawCfaPattern pattern, int row, int col) {
+    if (raw_color_at_pattern(pattern, row, col) == 'G') {
+        return normalized_raw_at_clamped(frame, row, col);
+    }
+    double total = 0.0;
+    int count = 0;
+    if (raw_color_at_pattern(pattern, row, col - 1) == 'G') {
+        total += normalized_raw_at_clamped(frame, row, col - 1);
+        count += 1;
+    }
+    if (raw_color_at_pattern(pattern, row, col + 1) == 'G') {
+        total += normalized_raw_at_clamped(frame, row, col + 1);
+        count += 1;
+    }
+    if (raw_color_at_pattern(pattern, row - 1, col) == 'G') {
+        total += normalized_raw_at_clamped(frame, row - 1, col);
+        count += 1;
+    }
+    if (raw_color_at_pattern(pattern, row + 1, col) == 'G') {
+        total += normalized_raw_at_clamped(frame, row + 1, col);
+        count += 1;
+    }
+    return count > 0 ? total / static_cast<double>(count) : normalized_raw_at_clamped(frame, row, col);
+}
+
+inline float reduced_bayer_value_at_clamped(const ReducedBayerFrame& frame, int row, int col) {
+    row = row < 0 ? 0 : (row >= frame.height ? frame.height - 1 : row);
+    col = col < 0 ? 0 : (col >= frame.width ? frame.width - 1 : col);
+    return frame.values[static_cast<size_t>(row) * static_cast<size_t>(frame.width) + static_cast<size_t>(col)];
+}
+
+inline float reduced_bayer_value_at_unchecked(const ReducedBayerFrame& frame, int row, int col) {
+    return frame.values[static_cast<size_t>(row) * static_cast<size_t>(frame.width) + static_cast<size_t>(col)];
+}
+
+inline double reduced_channel_average_fast(
+    const ReducedBayerFrame& frame,
+    int row,
+    int col,
+    char wanted
+) {
+    double total = 0.0;
+    int count = 0;
+    for (int dy = -1; dy <= 1; ++dy) {
+        const int yy = row + dy;
+        for (int dx = -1; dx <= 1; ++dx) {
+            const int xx = col + dx;
+            if (raw_color_at_pattern(frame.pattern, yy, xx) == wanted) {
+                total += reduced_bayer_value_at_clamped(frame, yy, xx);
+                count += 1;
+            }
+        }
+    }
+    return count > 0 ? total / static_cast<double>(count) : reduced_bayer_value_at_clamped(frame, row, col);
+}
+
+double score_raw_green_sharpness(const RawFrameData& frame) {
+    if (frame.width <= 1 || frame.height <= 1 || !raw_frame_has_bytes(frame)) return -1.0;
+    const RawCfaPattern pattern = parse_raw_cfa_pattern(frame.cfa);
+    const int step_x = std::max(1, frame.width / 64);
+    const int step_y = std::max(1, frame.height / 64);
+    double total = 0.0;
+    int count = 0;
+    for (int row = 0; row < frame.height - step_y; row += step_y) {
+        for (int col = 0; col < frame.width - step_x; col += step_x) {
+            const double center = raw_green_proxy_fast(frame, pattern, row, col);
+            total += std::abs(center - raw_green_proxy_fast(frame, pattern, row, col + step_x));
+            total += std::abs(center - raw_green_proxy_fast(frame, pattern, row + step_y, col));
+            count += 2;
+        }
+    }
+    return count > 0 ? total / static_cast<double>(count) : 0.0;
+}
+
+double raw_exposure_product(const RawFrameData& frame) {
+    if (frame.sensor_sensitivity_iso <= 0 || frame.sensor_exposure_time_ns <= 0) return 0.0;
+    return static_cast<double>(frame.sensor_sensitivity_iso) * static_cast<double>(frame.sensor_exposure_time_ns);
+}
+
+bool raw_exposure_compatible(const RawFrameData& reference, const RawFrameData& candidate) {
+    const double reference_ev = raw_exposure_product(reference);
+    const double candidate_ev = raw_exposure_product(candidate);
+    if (reference_ev <= 0.0 || candidate_ev <= 0.0) return true;
+    const double ratio = candidate_ev / reference_ev;
+    return ratio >= 0.92 && ratio <= 1.08;
+}
+
+bool raw_sharpness_compatible(double best_score, const RawFrameData& candidate) {
+    if (best_score <= 0.0 || candidate.sharpness_score < 0.0) return true;
+    return candidate.sharpness_score >= best_score * 0.55;
+}
+
+ReducedBayerFrame downsample_raw_bayer_area(const RawFrameData& frame, int out_width, int out_height) {
+    ReducedBayerFrame out;
+    out.width = out_width;
+    out.height = out_height;
+    out.pattern = parse_raw_cfa_pattern(frame.cfa);
+    out.gains = frame.gains;
+    out.transform = frame.transform;
+    out.gains_usable = frame.gains_usable;
+    out.transform_usable = frame.transform_usable;
+    out.lens_shading_usable = frame.lens_shading_usable;
+    out.values.resize(static_cast<size_t>(out_width) * static_cast<size_t>(out_height));
+    const RawNormalizeTable normalize = raw_normalize_table(frame);
+    std::vector<IntSpan> row_spans(static_cast<size_t>(out_height));
+    std::vector<IntSpan> col_spans(static_cast<size_t>(out_width));
+    for (int row = 0; row < out_height; ++row) {
+        int y0 = static_cast<int>((static_cast<int64_t>(row) * frame.height) / std::max(1, out_height));
+        int y1 = static_cast<int>((static_cast<int64_t>(row + 1) * frame.height) / std::max(1, out_height));
+        row_spans[static_cast<size_t>(row)] = {
+            std::max(0, std::min(frame.height - 1, y0)),
+            0,
+        };
+        row_spans[static_cast<size_t>(row)].end =
+            std::max(row_spans[static_cast<size_t>(row)].begin + 1, std::min(frame.height, y1));
+    }
+    for (int col = 0; col < out_width; ++col) {
+        int x0 = static_cast<int>((static_cast<int64_t>(col) * frame.width) / std::max(1, out_width));
+        int x1 = static_cast<int>((static_cast<int64_t>(col + 1) * frame.width) / std::max(1, out_width));
+        col_spans[static_cast<size_t>(col)] = {
+            std::max(0, std::min(frame.width - 1, x0)),
+            0,
+        };
+        col_spans[static_cast<size_t>(col)].end =
+            std::max(col_spans[static_cast<size_t>(col)].begin + 1, std::min(frame.width, x1));
+    }
+    parallel_for_rows(out_height, [&](int row) {
+        const IntSpan y = row_spans[static_cast<size_t>(row)];
+        for (int col = 0; col < out_width; ++col) {
+            const IntSpan x = col_spans[static_cast<size_t>(col)];
+            // Match the output Bayer site parity directly. This avoids a per-source-pixel
+            // CFA branch in the hottest RAW reduction loop.
+            int yy0 = y.begin;
+            if (((yy0 ^ row) & 1) != 0) yy0 += 1;
+            int xx0 = x.begin;
+            if (((xx0 ^ col) & 1) != 0) xx0 += 1;
+            float total = 0.0f;
+            int count = 0;
+            for (int yy = yy0; yy < y.end; yy += 2) {
+                for (int xx = xx0; xx < x.end; xx += 2) {
+                    total += normalized_raw_at_unchecked_fast(frame, normalize, yy, xx);
+                    count += 1;
+                }
+            }
+            if (count == 0) {
+                const int center_y = std::min(frame.height - 1, (y.begin + y.end) / 2);
+                const int center_x = std::min(frame.width - 1, (x.begin + x.end) / 2);
+                total = normalized_raw_at_clamped(frame, center_y, center_x);
+                count = 1;
+            }
+            out.values[static_cast<size_t>(row) * static_cast<size_t>(out_width) + static_cast<size_t>(col)] =
+                total / static_cast<float>(count);
+        }
+    });
+    return out;
+}
+
+ReducedBayerFrame average_reduced_bayer_frames(
+    const std::vector<RawFrameData>& frames,
+    int out_width,
+    int out_height,
+    RawMergeTiming* timing = nullptr
+) {
+    const auto reduce_start = std::chrono::steady_clock::now();
+    ReducedBayerFrame out;
+    if (frames.empty()) return out;
+    out.width = out_width;
+    out.height = out_height;
+    out.pattern = parse_raw_cfa_pattern(frames.front().cfa);
+    out.gains = frames.front().gains;
+    out.transform = frames.front().transform;
+    out.gains_usable = frames.front().gains_usable;
+    out.transform_usable = frames.front().transform_usable;
+    out.lens_shading_usable = frames.front().lens_shading_usable;
+    out.values.assign(static_cast<size_t>(out_width) * static_cast<size_t>(out_height), 0.0f);
+    for (const auto& frame : frames) {
+        const auto reduced = downsample_raw_bayer_area(frame, out_width, out_height);
+        for (size_t i = 0; i < out.values.size() && i < reduced.values.size(); ++i) {
+            out.values[i] += reduced.values[i];
+        }
+    }
+    const auto reduce_done = std::chrono::steady_clock::now();
+    const auto merge_start = reduce_done;
+    const float scale = 1.0f / static_cast<float>(std::max<size_t>(1, frames.size()));
+    parallel_for_rows(out_height, [&](int row) {
+        const size_t start = static_cast<size_t>(row) * static_cast<size_t>(out_width);
+        for (int col = 0; col < out_width; ++col) {
+            out.values[start + static_cast<size_t>(col)] *= scale;
+        }
+    });
+    const auto merge_done = std::chrono::steady_clock::now();
+    if (timing != nullptr) {
+        timing->reduce_ms += elapsed_ms(reduce_start, reduce_done);
+        timing->merge_ms += elapsed_ms(merge_start, merge_done);
+    }
+    return out;
+}
+
+double reduced_alignment_score(const ReducedBayerFrame& reference, const ReducedBayerFrame& candidate, int dx, int dy) {
+    // green_alignment_proxy: Bayer-value proxy on the already reduced RAW plane.
+    const int step_x = std::max(8, reference.width / 96);
+    const int step_y = std::max(8, reference.height / 96);
+    double total = 0.0;
+    int count = 0;
+    for (int row = step_y; row < reference.height - step_y; row += step_y) {
+        const int cy = row + dy;
+        if (cy < 0 || cy >= candidate.height) continue;
+        for (int col = step_x; col < reference.width - step_x; col += step_x) {
+            const int cx = col + dx;
+            if (cx < 0 || cx >= candidate.width) continue;
+            const float a = reduced_bayer_value_at_unchecked(reference, row, col);
+            const float b = reduced_bayer_value_at_unchecked(candidate, cy, cx);
+            total += std::abs(static_cast<double>(a) - static_cast<double>(b));
+            count += 1;
+        }
+    }
+    return count > 0 ? total / static_cast<double>(count) : std::numeric_limits<double>::infinity();
+}
+
+AlignmentOffset find_reduced_alignment_offset(const ReducedBayerFrame& reference, const ReducedBayerFrame& candidate, int index) {
+    AlignmentOffset best;
+    best.index = index;
+    best.score = std::numeric_limits<double>::infinity();
+    constexpr int kSearchRadius = 10;
+    constexpr int kSearchStep = 2;
+    for (int dy = -kSearchRadius; dy <= kSearchRadius; dy += kSearchStep) {
+        for (int dx = -kSearchRadius; dx <= kSearchRadius; dx += kSearchStep) {
+            const double score = reduced_alignment_score(reference, candidate, dx, dy);
+            if (score < best.score) {
+                best.dx = dx;
+                best.dy = dy;
+                best.score = score;
+            }
+        }
+    }
+    best.accepted = std::isfinite(best.score) && best.score < 0.08;
+    return best;
+}
+
+double reduced_tile_alignment_score(
+    const ReducedBayerFrame& reference,
+    const ReducedBayerFrame& candidate,
+    int x0,
+    int y0,
+    int x1,
+    int y1,
+    int dx,
+    int dy
+) {
+    const int tile_width = std::max(1, x1 - x0);
+    const int tile_height = std::max(1, y1 - y0);
+    const int step_x = std::max(4, tile_width / 12);
+    const int step_y = std::max(4, tile_height / 12);
+    double total = 0.0;
+    int count = 0;
+    for (int row = y0 + step_y / 2; row < y1; row += step_y) {
+        const int cy = row + dy;
+        if (cy < 0 || cy >= candidate.height) continue;
+        for (int col = x0 + step_x / 2; col < x1; col += step_x) {
+            const int cx = col + dx;
+            if (cx < 0 || cx >= candidate.width) continue;
+            const float a = reduced_bayer_value_at_unchecked(reference, row, col);
+            const float b = reduced_bayer_value_at_unchecked(candidate, cy, cx);
+            total += std::abs(static_cast<double>(a) - static_cast<double>(b));
+            count += 1;
+        }
+    }
+    return count > 0 ? total / static_cast<double>(count) : std::numeric_limits<double>::infinity();
+}
+
+TileAlignmentOffset find_reduced_tile_alignment_offset(
+    const ReducedBayerFrame& reference,
+    const ReducedBayerFrame& candidate,
+    int frame_index,
+    int tile_x,
+    int tile_y,
+    int tile_cols,
+    int tile_rows,
+    const AlignmentOffset& global_offset
+) {
+    const int x0 = std::max(0, (tile_x * reference.width) / std::max(1, tile_cols));
+    const int y0 = std::max(0, (tile_y * reference.height) / std::max(1, tile_rows));
+    const int x1 = std::min(reference.width, ((tile_x + 1) * reference.width) / std::max(1, tile_cols));
+    const int y1 = std::min(reference.height, ((tile_y + 1) * reference.height) / std::max(1, tile_rows));
+    TileAlignmentOffset best;
+    best.frame_index = frame_index;
+    best.tile_x = tile_x;
+    best.tile_y = tile_y;
+    best.dx = global_offset.dx;
+    best.dy = global_offset.dy;
+    best.score = reduced_tile_alignment_score(reference, candidate, x0, y0, x1, y1, best.dx, best.dy);
+    constexpr int kTileSearchRadius = 6;
+    constexpr int kTileSearchStep = 2;
+    for (int dy = global_offset.dy - kTileSearchRadius; dy <= global_offset.dy + kTileSearchRadius; dy += kTileSearchStep) {
+        for (int dx = global_offset.dx - kTileSearchRadius; dx <= global_offset.dx + kTileSearchRadius; dx += kTileSearchStep) {
+            const double score = reduced_tile_alignment_score(reference, candidate, x0, y0, x1, y1, dx, dy);
+            if (score < best.score) {
+                best.dx = dx;
+                best.dy = dy;
+                best.score = score;
+            }
+        }
+    }
+    best.accepted = global_offset.accepted && std::isfinite(best.score) && best.score < 0.035;
+    return best;
+}
+
+TileAlignmentSmoothingResult smooth_tile_alignment_offsets_median_3x3(
+    std::vector<TileAlignmentOffset>& offsets,
+    size_t frame_count,
+    int tile_cols,
+    int tile_rows
+) {
+    TileAlignmentSmoothingResult result;
+    if (frame_count <= 1 || tile_cols <= 0 || tile_rows <= 0) return result;
+    const auto before = offsets;
+    auto tile_index = [tile_cols, tile_rows](size_t frame, int tile_x, int tile_y) {
+        return (frame * static_cast<size_t>(tile_rows) + static_cast<size_t>(tile_y))
+            * static_cast<size_t>(tile_cols) + static_cast<size_t>(tile_x);
+    };
+    for (size_t frame = 1; frame < frame_count; ++frame) {
+        for (int tile_y = 0; tile_y < tile_rows; ++tile_y) {
+            for (int tile_x = 0; tile_x < tile_cols; ++tile_x) {
+                const size_t idx = tile_index(frame, tile_x, tile_y);
+                if (idx >= before.size() || !before[idx].accepted) continue;
+                std::vector<int> neighbor_dx;
+                std::vector<int> neighbor_dy;
+                neighbor_dx.reserve(9);
+                neighbor_dy.reserve(9);
+                for (int oy = -1; oy <= 1; ++oy) {
+                    const int yy = tile_y + oy;
+                    if (yy < 0 || yy >= tile_rows) continue;
+                    for (int ox = -1; ox <= 1; ++ox) {
+                        const int xx = tile_x + ox;
+                        if (xx < 0 || xx >= tile_cols) continue;
+                        const size_t nidx = tile_index(frame, xx, yy);
+                        if (nidx >= before.size() || !before[nidx].accepted) continue;
+                        neighbor_dx.push_back(before[nidx].dx);
+                        neighbor_dy.push_back(before[nidx].dy);
+                    }
+                }
+                if (neighbor_dx.size() < 5 || neighbor_dy.size() < 5) continue;
+                std::sort(neighbor_dx.begin(), neighbor_dx.end());
+                std::sort(neighbor_dy.begin(), neighbor_dy.end());
+                const int median_dx = neighbor_dx[neighbor_dx.size() / 2u];
+                const int median_dy = neighbor_dy[neighbor_dy.size() / 2u];
+                if (std::abs(before[idx].dx - median_dx) >= 4 || std::abs(before[idx].dy - median_dy) >= 4) {
+                    offsets[idx].dx = median_dx;
+                    offsets[idx].dy = median_dy;
+                    result.changed_offsets += 1;
+                }
+            }
+        }
+    }
+    return result;
+}
+
+inline SampledTileOffset sample_tile_alignment_offset_bilinear(
+    const std::vector<TileAlignmentOffset>& offsets,
+    size_t frame,
+    int col,
+    int row,
+    int width,
+    int height,
+    int tile_cols,
+    int tile_rows
+) {
+    SampledTileOffset sampled;
+    if (tile_cols <= 0 || tile_rows <= 0 || width <= 0 || height <= 0) return sampled;
+    auto tile_index = [tile_cols, tile_rows](size_t frame_index, int tile_x, int tile_y) {
+        return (frame_index * static_cast<size_t>(tile_rows) + static_cast<size_t>(tile_y))
+            * static_cast<size_t>(tile_cols) + static_cast<size_t>(tile_x);
+    };
+    const double gx = ((static_cast<double>(col) + 0.5) * static_cast<double>(tile_cols) / static_cast<double>(width)) - 0.5;
+    const double gy = ((static_cast<double>(row) + 0.5) * static_cast<double>(tile_rows) / static_cast<double>(height)) - 0.5;
+    const int x0 = std::max(0, std::min(tile_cols - 1, static_cast<int>(std::floor(gx))));
+    const int y0 = std::max(0, std::min(tile_rows - 1, static_cast<int>(std::floor(gy))));
+    const int x1 = std::max(0, std::min(tile_cols - 1, x0 + 1));
+    const int y1 = std::max(0, std::min(tile_rows - 1, y0 + 1));
+    const double wx = std::max(0.0, std::min(1.0, gx - static_cast<double>(x0)));
+    const double wy = std::max(0.0, std::min(1.0, gy - static_cast<double>(y0)));
+    const std::array<std::pair<int, int>, 4> corners = {{{x0, y0}, {x1, y0}, {x0, y1}, {x1, y1}}};
+    const std::array<double, 4> weights = {{
+        (1.0 - wx) * (1.0 - wy),
+        wx * (1.0 - wy),
+        (1.0 - wx) * wy,
+        wx * wy,
+    }};
+    double total_weight = 0.0;
+    double dx = 0.0;
+    double dy = 0.0;
+    for (size_t i = 0; i < corners.size(); ++i) {
+        const size_t idx = tile_index(frame, corners[i].first, corners[i].second);
+        if (idx >= offsets.size() || !offsets[idx].accepted) continue;
+        total_weight += weights[i];
+        dx += static_cast<double>(offsets[idx].dx) * weights[i];
+        dy += static_cast<double>(offsets[idx].dy) * weights[i];
+    }
+    if (total_weight <= 0.0) return sampled;
+    sampled.dx = static_cast<int>(std::round(dx / total_weight));
+    sampled.dy = static_cast<int>(std::round(dy / total_weight));
+    sampled.accepted = true;
+    return sampled;
+}
+
+std::vector<SampledTileOffset> build_tile_alignment_offset_field(
+    const std::vector<TileAlignmentOffset>& offsets,
+    size_t frame,
+    int width,
+    int height,
+    int tile_cols,
+    int tile_rows
+) {
+    std::vector<SampledTileOffset> field(static_cast<size_t>(width) * static_cast<size_t>(height));
+    parallel_for_rows(height, [&](int row) {
+        const size_t base = static_cast<size_t>(row) * static_cast<size_t>(width);
+        for (int col = 0; col < width; ++col) {
+            field[base + static_cast<size_t>(col)] = sample_tile_alignment_offset_bilinear(
+                offsets,
+                frame,
+                col,
+                row,
+                width,
+                height,
+                tile_cols,
+                tile_rows
+            );
+        }
+    });
+    return field;
+}
+
+ReducedBayerFrame average_reduced_bayer_frames_global_aligned(
+    const std::vector<RawFrameData>& frames,
+    int out_width,
+    int out_height,
+    std::vector<AlignmentOffset>& offsets,
+    int& alignment_failures,
+    RawMergeTiming* timing = nullptr
+) {
+    const auto reduce_start = std::chrono::steady_clock::now();
+    ReducedBayerFrame out;
+    if (frames.empty()) return out;
+    std::vector<ReducedBayerFrame> reduced_frames;
+    reduced_frames.reserve(frames.size());
+    for (const auto& frame : frames) {
+        reduced_frames.push_back(downsample_raw_bayer_area(frame, out_width, out_height));
+    }
+    out = reduced_frames.front();
+    std::fill(out.values.begin(), out.values.end(), 0.0f);
+    offsets.clear();
+    offsets.push_back({frames.front().index, 0, 0, 0.0, true});
+    std::vector<AlignmentOffset> local_offsets(reduced_frames.size());
+    local_offsets[0] = offsets.front();
+    const auto reduce_done = std::chrono::steady_clock::now();
+    const auto align_start = reduce_done;
+    for (size_t i = 1; i < reduced_frames.size(); ++i) {
+        local_offsets[i] = find_reduced_alignment_offset(reduced_frames.front(), reduced_frames[i], frames[i].index);
+        if (!local_offsets[i].accepted) alignment_failures += 1;
+    }
+    const auto align_done = std::chrono::steady_clock::now();
+    const auto merge_start = align_done;
+    for (int row = 0; row < out_height; ++row) {
+        for (int col = 0; col < out_width; ++col) {
+            float total = reduced_bayer_value_at_unchecked(reduced_frames.front(), row, col);
+            int count = 1;
+            for (size_t i = 1; i < reduced_frames.size(); ++i) {
+                const auto& offset = local_offsets[i];
+                if (!offset.accepted) continue;
+                const int yy = row + offset.dy;
+                const int xx = col + offset.dx;
+                if (yy < 0 || yy >= out_height || xx < 0 || xx >= out_width) continue;
+                total += reduced_bayer_value_at_unchecked(reduced_frames[i], yy, xx);
+                count += 1;
+            }
+            out.values[static_cast<size_t>(row) * static_cast<size_t>(out_width) + static_cast<size_t>(col)] =
+                total / static_cast<float>(count);
+        }
+    }
+    const auto merge_done = std::chrono::steady_clock::now();
+    offsets = local_offsets;
+    if (timing != nullptr) {
+        timing->reduce_ms += elapsed_ms(reduce_start, reduce_done);
+        timing->align_ms += elapsed_ms(align_start, align_done);
+        timing->merge_ms += elapsed_ms(merge_start, merge_done);
+    }
+    return out;
+}
+
+ReducedBayerFrame average_reduced_bayer_frames_motion_aware(
+    const std::vector<RawFrameData>& frames,
+    int out_width,
+    int out_height,
+    std::vector<AlignmentOffset>& offsets,
+    int& alignment_failures,
+    RawMotionMergeTelemetry& motion,
+    RawMergeTiming* timing = nullptr
+) {
+    const auto reduce_start = std::chrono::steady_clock::now();
+    ReducedBayerFrame out;
+    if (frames.empty()) return out;
+    std::vector<ReducedBayerFrame> reduced_frames;
+    reduced_frames.reserve(frames.size());
+    for (const auto& frame : frames) {
+        reduced_frames.push_back(downsample_raw_bayer_area(frame, out_width, out_height));
+    }
+    out = reduced_frames.front();
+    std::fill(out.values.begin(), out.values.end(), 0.0f);
+    offsets.clear();
+    offsets.push_back({frames.front().index, 0, 0, 0.0, true});
+    std::vector<AlignmentOffset> local_offsets(reduced_frames.size());
+    local_offsets[0] = offsets.front();
+    const auto reduce_done = std::chrono::steady_clock::now();
+    const auto align_start = reduce_done;
+    for (size_t i = 1; i < reduced_frames.size(); ++i) {
+        local_offsets[i] = find_reduced_alignment_offset(reduced_frames.front(), reduced_frames[i], frames[i].index);
+        if (!local_offsets[i].accepted) alignment_failures += 1;
+    }
+    const auto align_done = std::chrono::steady_clock::now();
+    const auto merge_start = align_done;
+    constexpr float kBaseMotionThreshold = 0.018f;
+    constexpr float kRelativeMotionThreshold = 0.12f;
+    std::vector<uint16_t> counts(static_cast<size_t>(out_width) * static_cast<size_t>(out_height), 1);
+    parallel_for_rows(out_height, [&](int row) {
+        const size_t base = static_cast<size_t>(row) * static_cast<size_t>(out_width);
+        for (int col = 0; col < out_width; ++col) {
+            out.values[base + static_cast<size_t>(col)] =
+                reduced_bayer_value_at_unchecked(reduced_frames.front(), row, col);
+        }
+    });
+    motion.rejected_samples = 0;
+    motion.raw_rejected_samples = 0;
+    motion.total_samples = 0;
+    std::vector<int64_t> raw_rejected_by_row(static_cast<size_t>(out_height), 0);
+    std::vector<int64_t> rejected_by_row(static_cast<size_t>(out_height), 0);
+    std::vector<int64_t> total_by_row(static_cast<size_t>(out_height), 0);
+    std::vector<uint8_t> raw_mask(static_cast<size_t>(out_width) * static_cast<size_t>(out_height), 0);
+    std::vector<uint8_t> stable_mask(static_cast<size_t>(out_width) * static_cast<size_t>(out_height), 0);
+    for (size_t i = 1; i < reduced_frames.size(); ++i) {
+        const auto& offset = local_offsets[i];
+        if (!offset.accepted) continue;
+        std::fill(raw_mask.begin(), raw_mask.end(), 0);
+        std::fill(stable_mask.begin(), stable_mask.end(), 0);
+        parallel_for_rows(out_height, [&](int row) {
+            int64_t row_total = 0;
+            int64_t row_raw_rejected = 0;
+            const size_t base = static_cast<size_t>(row) * static_cast<size_t>(out_width);
+            for (int col = 0; col < out_width; ++col) {
+                const int yy = row + offset.dy;
+                const int xx = col + offset.dx;
+                if (yy < 0 || yy >= out_height || xx < 0 || xx >= out_width) continue;
+                const float reference = reduced_bayer_value_at_unchecked(reduced_frames.front(), row, col);
+                const float candidate = reduced_bayer_value_at_unchecked(reduced_frames[i], yy, xx);
+                const float threshold = kBaseMotionThreshold + kRelativeMotionThreshold * std::max(reference, candidate);
+                row_total += 1;
+                if (std::abs(candidate - reference) > threshold) {
+                    raw_mask[base + static_cast<size_t>(col)] = 1;
+                    row_raw_rejected += 1;
+                }
+            }
+            total_by_row[static_cast<size_t>(row)] += row_total;
+            raw_rejected_by_row[static_cast<size_t>(row)] += row_raw_rejected;
+        });
+        parallel_for_rows(out_height, [&](int row) {
+            int64_t row_rejected = 0;
+            for (int col = 0; col < out_width; ++col) {
+                int neighborhood_rejections = 0;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    const int yy = row + dy;
+                    if (yy < 0 || yy >= out_height) continue;
+                    const size_t ybase = static_cast<size_t>(yy) * static_cast<size_t>(out_width);
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const int xx = col + dx;
+                        if (xx < 0 || xx >= out_width) continue;
+                        neighborhood_rejections += raw_mask[ybase + static_cast<size_t>(xx)] != 0 ? 1 : 0;
+                    }
+                }
+                if (neighborhood_rejections >= 3) {
+                    stable_mask[static_cast<size_t>(row) * static_cast<size_t>(out_width) + static_cast<size_t>(col)] = 1;
+                    row_rejected += 1;
+                }
+            }
+            rejected_by_row[static_cast<size_t>(row)] += row_rejected;
+        });
+        parallel_for_rows(out_height, [&](int row) {
+            const size_t base = static_cast<size_t>(row) * static_cast<size_t>(out_width);
+            for (int col = 0; col < out_width; ++col) {
+                const size_t idx = base + static_cast<size_t>(col);
+                if (stable_mask[idx] != 0) continue;
+                const int yy = row + offset.dy;
+                const int xx = col + offset.dx;
+                if (yy < 0 || yy >= out_height || xx < 0 || xx >= out_width) continue;
+                out.values[idx] += reduced_bayer_value_at_unchecked(reduced_frames[i], yy, xx);
+                counts[idx] += 1;
+            }
+        });
+    }
+    parallel_for_rows(out_height, [&](int row) {
+        const size_t base = static_cast<size_t>(row) * static_cast<size_t>(out_width);
+        for (int col = 0; col < out_width; ++col) {
+            const size_t idx = base + static_cast<size_t>(col);
+            out.values[idx] /= static_cast<float>(std::max<uint16_t>(1, counts[idx]));
+        }
+    });
+    const auto merge_done = std::chrono::steady_clock::now();
+    offsets = local_offsets;
+    for (size_t row = 0; row < rejected_by_row.size(); ++row) {
+        motion.rejected_samples += rejected_by_row[row];
+        motion.raw_rejected_samples += raw_rejected_by_row[row];
+        motion.total_samples += total_by_row[row];
+    }
+    if (timing != nullptr) {
+        timing->reduce_ms += elapsed_ms(reduce_start, reduce_done);
+        timing->align_ms += elapsed_ms(align_start, align_done);
+        timing->merge_ms += elapsed_ms(merge_start, merge_done);
+    }
+    return out;
+}
+
+ReducedBayerFrame average_reduced_bayer_frames_tile_motion_aware(
+    const std::vector<RawFrameData>& frames,
+    int out_width,
+    int out_height,
+    std::vector<AlignmentOffset>& offsets,
+    std::vector<TileAlignmentOffset>& tile_offsets,
+    int& tile_alignment_smoothed_count,
+    int& alignment_failures,
+    RawMotionMergeTelemetry& motion,
+    RawMergeTiming* timing = nullptr
+) {
+    const auto reduce_start = std::chrono::steady_clock::now();
+    ReducedBayerFrame out;
+    if (frames.empty()) return out;
+    constexpr int kTileCols = 12;
+    constexpr int kTileRows = 9;
+    std::vector<ReducedBayerFrame> reduced_frames;
+    reduced_frames.reserve(frames.size());
+    for (const auto& frame : frames) {
+        reduced_frames.push_back(downsample_raw_bayer_area(frame, out_width, out_height));
+    }
+    out = reduced_frames.front();
+    offsets.clear();
+    offsets.push_back({frames.front().index, 0, 0, 0.0, true});
+    tile_offsets.clear();
+    std::vector<AlignmentOffset> local_offsets(reduced_frames.size());
+    local_offsets[0] = offsets.front();
+    std::vector<TileAlignmentOffset> local_tile_offsets(reduced_frames.size() * kTileCols * kTileRows);
+    std::vector<TileAlignmentOffset> tile_telemetry_offsets;
+    tile_telemetry_offsets.reserve((reduced_frames.size() > 1 ? reduced_frames.size() - 1 : 0) * kTileCols * kTileRows);
+    const auto reduce_done = std::chrono::steady_clock::now();
+    const auto align_start = reduce_done;
+    for (size_t i = 1; i < reduced_frames.size(); ++i) {
+        local_offsets[i] = find_reduced_alignment_offset(reduced_frames.front(), reduced_frames[i], frames[i].index);
+        if (!local_offsets[i].accepted) alignment_failures += 1;
+        for (int ty = 0; ty < kTileRows; ++ty) {
+            for (int tx = 0; tx < kTileCols; ++tx) {
+                const size_t idx = (i * kTileRows + static_cast<size_t>(ty)) * kTileCols + static_cast<size_t>(tx);
+                local_tile_offsets[idx] = find_reduced_tile_alignment_offset(
+                    reduced_frames.front(),
+                    reduced_frames[i],
+                    frames[i].index,
+                    tx,
+                    ty,
+                    kTileCols,
+                    kTileRows,
+                    local_offsets[i]
+                );
+                tile_telemetry_offsets.push_back(local_tile_offsets[idx]);
+                if (!local_tile_offsets[idx].accepted) {
+                    alignment_failures += 1;
+                }
+            }
+        }
+    }
+    const TileAlignmentSmoothingResult smoothing = smooth_tile_alignment_offsets_median_3x3(
+        local_tile_offsets,
+        reduced_frames.size(),
+        kTileCols,
+        kTileRows
+    );
+    tile_alignment_smoothed_count += smoothing.changed_offsets;
+    tile_telemetry_offsets.clear();
+    tile_telemetry_offsets.reserve((reduced_frames.size() > 1 ? reduced_frames.size() - 1 : 0) * kTileCols * kTileRows);
+    for (size_t i = 1; i < reduced_frames.size(); ++i) {
+        for (int ty = 0; ty < kTileRows; ++ty) {
+            for (int tx = 0; tx < kTileCols; ++tx) {
+                const size_t idx = (i * kTileRows + static_cast<size_t>(ty)) * kTileCols + static_cast<size_t>(tx);
+                tile_telemetry_offsets.push_back(local_tile_offsets[idx]);
+            }
+        }
+    }
+    const auto align_done = std::chrono::steady_clock::now();
+    const auto merge_start = align_done;
+    constexpr float kBaseMotionThreshold = 0.018f;
+    constexpr float kRelativeMotionThreshold = 0.12f;
+    std::vector<uint16_t> counts(static_cast<size_t>(out_width) * static_cast<size_t>(out_height), 1);
+    parallel_for_rows(out_height, [&](int row) {
+        const size_t base = static_cast<size_t>(row) * static_cast<size_t>(out_width);
+        for (int col = 0; col < out_width; ++col) {
+            out.values[base + static_cast<size_t>(col)] =
+                reduced_bayer_value_at_unchecked(reduced_frames.front(), row, col);
+        }
+    });
+    motion.rejected_samples = 0;
+    motion.raw_rejected_samples = 0;
+    motion.total_samples = 0;
+    std::vector<int64_t> raw_rejected_by_row(static_cast<size_t>(out_height), 0);
+    std::vector<int64_t> rejected_by_row(static_cast<size_t>(out_height), 0);
+    std::vector<int64_t> total_by_row(static_cast<size_t>(out_height), 0);
+    std::vector<uint8_t> raw_mask(static_cast<size_t>(out_width) * static_cast<size_t>(out_height), 0);
+    std::vector<uint8_t> stable_mask(static_cast<size_t>(out_width) * static_cast<size_t>(out_height), 0);
+    for (size_t i = 1; i < reduced_frames.size(); ++i) {
+        if (!local_offsets[i].accepted) continue;
+        const std::vector<SampledTileOffset> offset_field = build_tile_alignment_offset_field(
+            local_tile_offsets,
+            i,
+            out_width,
+            out_height,
+            kTileCols,
+            kTileRows
+        );
+        std::fill(raw_mask.begin(), raw_mask.end(), 0);
+        std::fill(stable_mask.begin(), stable_mask.end(), 0);
+        parallel_for_rows(out_height, [&](int row) {
+            int64_t row_total = 0;
+            int64_t row_raw_rejected = 0;
+            const size_t base = static_cast<size_t>(row) * static_cast<size_t>(out_width);
+            for (int col = 0; col < out_width; ++col) {
+                const SampledTileOffset& tile = offset_field[base + static_cast<size_t>(col)];
+                if (!tile.accepted) continue;
+                const int yy = row + tile.dy;
+                const int xx = col + tile.dx;
+                if (yy < 0 || yy >= out_height || xx < 0 || xx >= out_width) continue;
+                const float reference = reduced_bayer_value_at_unchecked(reduced_frames.front(), row, col);
+                const float candidate = reduced_bayer_value_at_unchecked(reduced_frames[i], yy, xx);
+                const float threshold = kBaseMotionThreshold + kRelativeMotionThreshold * std::max(reference, candidate);
+                row_total += 1;
+                if (std::abs(candidate - reference) > threshold) {
+                    raw_mask[base + static_cast<size_t>(col)] = 1;
+                    row_raw_rejected += 1;
+                }
+            }
+            total_by_row[static_cast<size_t>(row)] += row_total;
+            raw_rejected_by_row[static_cast<size_t>(row)] += row_raw_rejected;
+        });
+        parallel_for_rows(out_height, [&](int row) {
+            int64_t row_rejected = 0;
+            for (int col = 0; col < out_width; ++col) {
+                int neighborhood_rejections = 0;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    const int yy = row + dy;
+                    if (yy < 0 || yy >= out_height) continue;
+                    const size_t ybase = static_cast<size_t>(yy) * static_cast<size_t>(out_width);
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const int xx = col + dx;
+                        if (xx < 0 || xx >= out_width) continue;
+                        neighborhood_rejections += raw_mask[ybase + static_cast<size_t>(xx)] != 0 ? 1 : 0;
+                    }
+                }
+                if (neighborhood_rejections >= 3) {
+                    stable_mask[static_cast<size_t>(row) * static_cast<size_t>(out_width) + static_cast<size_t>(col)] = 1;
+                    row_rejected += 1;
+                }
+            }
+            rejected_by_row[static_cast<size_t>(row)] += row_rejected;
+        });
+        parallel_for_rows(out_height, [&](int row) {
+            const size_t base = static_cast<size_t>(row) * static_cast<size_t>(out_width);
+            for (int col = 0; col < out_width; ++col) {
+                const size_t idx = base + static_cast<size_t>(col);
+                if (stable_mask[idx] != 0) continue;
+                const SampledTileOffset& tile = offset_field[idx];
+                if (!tile.accepted) continue;
+                const int yy = row + tile.dy;
+                const int xx = col + tile.dx;
+                if (yy < 0 || yy >= out_height || xx < 0 || xx >= out_width) continue;
+                out.values[idx] += reduced_bayer_value_at_unchecked(reduced_frames[i], yy, xx);
+                counts[idx] += 1;
+            }
+        });
+    }
+    parallel_for_rows(out_height, [&](int row) {
+        const size_t base = static_cast<size_t>(row) * static_cast<size_t>(out_width);
+        for (int col = 0; col < out_width; ++col) {
+            const size_t idx = base + static_cast<size_t>(col);
+            out.values[idx] /= static_cast<float>(std::max<uint16_t>(1, counts[idx]));
+        }
+    });
+    const auto merge_done = std::chrono::steady_clock::now();
+    offsets = local_offsets;
+    tile_offsets = tile_telemetry_offsets;
+    for (size_t row = 0; row < rejected_by_row.size(); ++row) {
+        motion.rejected_samples += rejected_by_row[row];
+        motion.raw_rejected_samples += raw_rejected_by_row[row];
+        motion.total_samples += total_by_row[row];
+    }
+    if (timing != nullptr) {
+        timing->reduce_ms += elapsed_ms(reduce_start, reduce_done);
+        timing->align_ms += elapsed_ms(align_start, align_done);
+        timing->merge_ms += elapsed_ms(merge_start, merge_done);
+    }
+    return out;
+}
+
+std::string alignment_offsets_json(const std::vector<AlignmentOffset>& offsets) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t i = 0; i < offsets.size(); ++i) {
+        if (i > 0) out << ",";
+        out << "{\"index\":" << offsets[i].index
+            << ",\"dx\":" << offsets[i].dx
+            << ",\"dy\":" << offsets[i].dy
+            << ",\"score\":" << offsets[i].score
+            << ",\"accepted\":" << (offsets[i].accepted ? "true" : "false")
+            << "}";
+    }
+    out << "]";
+    return out.str();
+}
+
+std::string tile_alignment_offsets_json(const std::vector<TileAlignmentOffset>& offsets) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t i = 0; i < offsets.size(); ++i) {
+        if (i > 0) out << ",";
+        out << "{\"frame_index\":" << offsets[i].frame_index
+            << ",\"tile_x\":" << offsets[i].tile_x
+            << ",\"tile_y\":" << offsets[i].tile_y
+            << ",\"dx\":" << offsets[i].dx
+            << ",\"dy\":" << offsets[i].dy
+            << ",\"score\":" << offsets[i].score
+            << ",\"accepted\":" << (offsets[i].accepted ? "true" : "false")
+            << "}";
+    }
+    out << "]";
+    return out.str();
+}
+
+std::vector<float> demosaic_raw_bilinear_fast(const RawFrameData& frame, int out_width, int out_height) {
+    const RawCfaPattern pattern = parse_raw_cfa_pattern(frame.cfa);
+    std::vector<int> source_rows(static_cast<size_t>(out_height));
+    std::vector<int> source_cols(static_cast<size_t>(out_width));
+    for (int row = 0; row < out_height; ++row) {
+        source_rows[static_cast<size_t>(row)] = std::min(
+            frame.height - 1,
+            static_cast<int>((static_cast<int64_t>(row) * frame.height) / std::max(1, out_height))
+        );
+    }
+    for (int col = 0; col < out_width; ++col) {
+        source_cols[static_cast<size_t>(col)] = std::min(
+            frame.width - 1,
+            static_cast<int>((static_cast<int64_t>(col) * frame.width) / std::max(1, out_width))
+        );
+    }
+    const double red_gain = frame.gains[0];
+    const double green_gain = (frame.gains[1] + frame.gains[2]) * 0.5;
+    const double blue_gain = frame.gains[3];
+    const auto transform = frame.transform;
+    std::vector<float> rgb(static_cast<size_t>(out_width) * static_cast<size_t>(out_height) * 3u);
+    for (int row = 0; row < out_height; ++row) {
+        const int src_row = source_rows[static_cast<size_t>(row)];
+        for (int col = 0; col < out_width; ++col) {
+            const int src_col = source_cols[static_cast<size_t>(col)];
+            const double r = raw_channel_average_fast(frame, pattern, src_row, src_col, 'R') * red_gain;
+            const double g = raw_channel_average_fast(frame, pattern, src_row, src_col, 'G') * green_gain;
+            const double b = raw_channel_average_fast(frame, pattern, src_row, src_col, 'B') * blue_gain;
+            const double tr = transform[0] * r + transform[1] * g + transform[2] * b;
+            const double tg = transform[3] * r + transform[4] * g + transform[5] * b;
+            const double tb = transform[6] * r + transform[7] * g + transform[8] * b;
+            const size_t out = (static_cast<size_t>(row) * static_cast<size_t>(out_width) + static_cast<size_t>(col)) * 3u;
+            rgb[out + 0] = static_cast<float>(std::max(0.0, tr));
+            rgb[out + 1] = static_cast<float>(std::max(0.0, tg));
+            rgb[out + 2] = static_cast<float>(std::max(0.0, tb));
+        }
+    }
+    return rgb;
+}
+
+std::vector<float> demosaic_reduced_bayer_fast(const ReducedBayerFrame& frame) {
+    const double red_gain = frame.gains[0];
+    const double green_gain = (frame.gains[1] + frame.gains[2]) * 0.5;
+    const double blue_gain = frame.gains[3];
+    const auto transform = frame.transform;
+    std::vector<float> rgb(static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height) * 3u);
+    for (int row = 0; row < frame.height; ++row) {
+        for (int col = 0; col < frame.width; ++col) {
+            const double r = reduced_channel_average_fast(frame, row, col, 'R') * red_gain;
+            const double g = reduced_channel_average_fast(frame, row, col, 'G') * green_gain;
+            const double b = reduced_channel_average_fast(frame, row, col, 'B') * blue_gain;
+            const double tr = transform[0] * r + transform[1] * g + transform[2] * b;
+            const double tg = transform[3] * r + transform[4] * g + transform[5] * b;
+            const double tb = transform[6] * r + transform[7] * g + transform[8] * b;
+            const size_t out = (static_cast<size_t>(row) * static_cast<size_t>(frame.width) + static_cast<size_t>(col)) * 3u;
+            rgb[out + 0] = static_cast<float>(std::max(0.0, tr));
+            rgb[out + 1] = static_cast<float>(std::max(0.0, tg));
+            rgb[out + 2] = static_cast<float>(std::max(0.0, tb));
+        }
+    }
+    return rgb;
+}
+
+inline float avg2f(float a, float b) {
+    return (a + b) * 0.5f;
+}
+
+inline float avg4f(float a, float b, float c, float d) {
+    return (a + b + c + d) * 0.25f;
+}
+
+inline std::array<float, 3> reduced_bayer_rgb_at_direct(const ReducedBayerFrame& frame, int row, int col) {
+    const float red_gain = static_cast<float>(frame.gains[0]);
+    const float green_gain = static_cast<float>((frame.gains[1] + frame.gains[2]) * 0.5);
+    const float blue_gain = static_cast<float>(frame.gains[3]);
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+    const float center = reduced_bayer_value_at_clamped(frame, row, col);
+    const char color = raw_color_at_pattern(frame.pattern, row, col);
+    if (color == 'R') {
+        r = center;
+        g = avg4f(
+            reduced_bayer_value_at_clamped(frame, row - 1, col),
+            reduced_bayer_value_at_clamped(frame, row + 1, col),
+            reduced_bayer_value_at_clamped(frame, row, col - 1),
+            reduced_bayer_value_at_clamped(frame, row, col + 1)
+        );
+        b = avg4f(
+            reduced_bayer_value_at_clamped(frame, row - 1, col - 1),
+            reduced_bayer_value_at_clamped(frame, row - 1, col + 1),
+            reduced_bayer_value_at_clamped(frame, row + 1, col - 1),
+            reduced_bayer_value_at_clamped(frame, row + 1, col + 1)
+        );
+    } else if (color == 'B') {
+        b = center;
+        g = avg4f(
+            reduced_bayer_value_at_clamped(frame, row - 1, col),
+            reduced_bayer_value_at_clamped(frame, row + 1, col),
+            reduced_bayer_value_at_clamped(frame, row, col - 1),
+            reduced_bayer_value_at_clamped(frame, row, col + 1)
+        );
+        r = avg4f(
+            reduced_bayer_value_at_clamped(frame, row - 1, col - 1),
+            reduced_bayer_value_at_clamped(frame, row - 1, col + 1),
+            reduced_bayer_value_at_clamped(frame, row + 1, col - 1),
+            reduced_bayer_value_at_clamped(frame, row + 1, col + 1)
+        );
+    } else if (color == 'G') {
+        g = center;
+        const bool red_horizontal = raw_color_at_pattern(frame.pattern, row, col - 1) == 'R'
+            || raw_color_at_pattern(frame.pattern, row, col + 1) == 'R';
+        if (red_horizontal) {
+            r = avg2f(
+                reduced_bayer_value_at_clamped(frame, row, col - 1),
+                reduced_bayer_value_at_clamped(frame, row, col + 1)
+            );
+            b = avg2f(
+                reduced_bayer_value_at_clamped(frame, row - 1, col),
+                reduced_bayer_value_at_clamped(frame, row + 1, col)
+            );
+        } else {
+            r = avg2f(
+                reduced_bayer_value_at_clamped(frame, row - 1, col),
+                reduced_bayer_value_at_clamped(frame, row + 1, col)
+            );
+            b = avg2f(
+                reduced_bayer_value_at_clamped(frame, row, col - 1),
+                reduced_bayer_value_at_clamped(frame, row, col + 1)
+            );
+        }
+    } else {
+        r = reduced_channel_average_fast(frame, row, col, 'R');
+        g = reduced_channel_average_fast(frame, row, col, 'G');
+        b = reduced_channel_average_fast(frame, row, col, 'B');
+    }
+    r *= red_gain;
+    g *= green_gain;
+    b *= blue_gain;
+    return {
+        std::max(0.0f, static_cast<float>(frame.transform[0]) * r + static_cast<float>(frame.transform[1]) * g + static_cast<float>(frame.transform[2]) * b),
+        std::max(0.0f, static_cast<float>(frame.transform[3]) * r + static_cast<float>(frame.transform[4]) * g + static_cast<float>(frame.transform[5]) * b),
+        std::max(0.0f, static_cast<float>(frame.transform[6]) * r + static_cast<float>(frame.transform[7]) * g + static_cast<float>(frame.transform[8]) * b),
+    };
+}
+
+inline std::array<float, 3> reduced_bayer_rgb_at_direct_interior(const ReducedBayerFrame& frame, int row, int col) {
+    const float red_gain = static_cast<float>(frame.gains[0]);
+    const float green_gain = static_cast<float>((frame.gains[1] + frame.gains[2]) * 0.5);
+    const float blue_gain = static_cast<float>(frame.gains[3]);
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+    const float center = reduced_bayer_value_at_unchecked(frame, row, col);
+    const char color = raw_color_at_pattern(frame.pattern, row, col);
+    if (color == 'R') {
+        r = center;
+        g = avg4f(
+            reduced_bayer_value_at_unchecked(frame, row - 1, col),
+            reduced_bayer_value_at_unchecked(frame, row + 1, col),
+            reduced_bayer_value_at_unchecked(frame, row, col - 1),
+            reduced_bayer_value_at_unchecked(frame, row, col + 1)
+        );
+        b = avg4f(
+            reduced_bayer_value_at_unchecked(frame, row - 1, col - 1),
+            reduced_bayer_value_at_unchecked(frame, row - 1, col + 1),
+            reduced_bayer_value_at_unchecked(frame, row + 1, col - 1),
+            reduced_bayer_value_at_unchecked(frame, row + 1, col + 1)
+        );
+    } else if (color == 'B') {
+        b = center;
+        g = avg4f(
+            reduced_bayer_value_at_unchecked(frame, row - 1, col),
+            reduced_bayer_value_at_unchecked(frame, row + 1, col),
+            reduced_bayer_value_at_unchecked(frame, row, col - 1),
+            reduced_bayer_value_at_unchecked(frame, row, col + 1)
+        );
+        r = avg4f(
+            reduced_bayer_value_at_unchecked(frame, row - 1, col - 1),
+            reduced_bayer_value_at_unchecked(frame, row - 1, col + 1),
+            reduced_bayer_value_at_unchecked(frame, row + 1, col - 1),
+            reduced_bayer_value_at_unchecked(frame, row + 1, col + 1)
+        );
+    } else {
+        g = center;
+        const bool red_horizontal = raw_color_at_pattern(frame.pattern, row, col - 1) == 'R'
+            || raw_color_at_pattern(frame.pattern, row, col + 1) == 'R';
+        if (red_horizontal) {
+            r = avg2f(
+                reduced_bayer_value_at_unchecked(frame, row, col - 1),
+                reduced_bayer_value_at_unchecked(frame, row, col + 1)
+            );
+            b = avg2f(
+                reduced_bayer_value_at_unchecked(frame, row - 1, col),
+                reduced_bayer_value_at_unchecked(frame, row + 1, col)
+            );
+        } else {
+            r = avg2f(
+                reduced_bayer_value_at_unchecked(frame, row - 1, col),
+                reduced_bayer_value_at_unchecked(frame, row + 1, col)
+            );
+            b = avg2f(
+                reduced_bayer_value_at_unchecked(frame, row, col - 1),
+                reduced_bayer_value_at_unchecked(frame, row, col + 1)
+            );
+        }
+    }
+    r *= red_gain;
+    g *= green_gain;
+    b *= blue_gain;
+    return {
+        std::max(0.0f, static_cast<float>(frame.transform[0]) * r + static_cast<float>(frame.transform[1]) * g + static_cast<float>(frame.transform[2]) * b),
+        std::max(0.0f, static_cast<float>(frame.transform[3]) * r + static_cast<float>(frame.transform[4]) * g + static_cast<float>(frame.transform[5]) * b),
+        std::max(0.0f, static_cast<float>(frame.transform[6]) * r + static_cast<float>(frame.transform[7]) * g + static_cast<float>(frame.transform[8]) * b),
+    };
+}
+
+inline float clamp01f(float value) {
+    return value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
+}
+
+inline std::array<float, 3> reduced_bayer_rgb_at_malvar_approx_interior(const ReducedBayerFrame& frame, int row, int col) {
+    // edge_aware_green: conservative Malvar-style correction for green at red/blue sites.
+    const char color = raw_color_at_pattern(frame.pattern, row, col);
+    if (color != 'R' && color != 'B') return reduced_bayer_rgb_at_direct_interior(frame, row, col);
+    const float center = reduced_bayer_value_at_unchecked(frame, row, col);
+    const float cross = avg4f(
+        reduced_bayer_value_at_unchecked(frame, row - 1, col),
+        reduced_bayer_value_at_unchecked(frame, row + 1, col),
+        reduced_bayer_value_at_unchecked(frame, row, col - 1),
+        reduced_bayer_value_at_unchecked(frame, row, col + 1)
+    );
+    const float diagonal = avg4f(
+        reduced_bayer_value_at_unchecked(frame, row - 1, col - 1),
+        reduced_bayer_value_at_unchecked(frame, row - 1, col + 1),
+        reduced_bayer_value_at_unchecked(frame, row + 1, col - 1),
+        reduced_bayer_value_at_unchecked(frame, row + 1, col + 1)
+    );
+    const float corrected_green = clamp01f(cross + (center - diagonal) * 0.125f);
+    const float green_gain = static_cast<float>((frame.gains[1] + frame.gains[2]) * 0.5);
+    const float red_gain = static_cast<float>(frame.gains[0]);
+    const float blue_gain = static_cast<float>(frame.gains[3]);
+    float r = color == 'R' ? center * red_gain : diagonal * red_gain;
+    float g = corrected_green * green_gain;
+    float b = color == 'B' ? center * blue_gain : diagonal * blue_gain;
+    if (color == 'R') {
+        b = avg4f(
+            reduced_bayer_value_at_unchecked(frame, row - 1, col - 1),
+            reduced_bayer_value_at_unchecked(frame, row - 1, col + 1),
+            reduced_bayer_value_at_unchecked(frame, row + 1, col - 1),
+            reduced_bayer_value_at_unchecked(frame, row + 1, col + 1)
+        ) * blue_gain;
+    } else {
+        r = avg4f(
+            reduced_bayer_value_at_unchecked(frame, row - 1, col - 1),
+            reduced_bayer_value_at_unchecked(frame, row - 1, col + 1),
+            reduced_bayer_value_at_unchecked(frame, row + 1, col - 1),
+            reduced_bayer_value_at_unchecked(frame, row + 1, col + 1)
+        ) * red_gain;
+    }
+    return {
+        std::max(0.0f, static_cast<float>(frame.transform[0]) * r + static_cast<float>(frame.transform[1]) * g + static_cast<float>(frame.transform[2]) * b),
+        std::max(0.0f, static_cast<float>(frame.transform[3]) * r + static_cast<float>(frame.transform[4]) * g + static_cast<float>(frame.transform[5]) * b),
+        std::max(0.0f, static_cast<float>(frame.transform[6]) * r + static_cast<float>(frame.transform[7]) * g + static_cast<float>(frame.transform[8]) * b),
+    };
+}
+
+inline uint8_t raw_display_byte(double value, double exposure, double highlight_rolloff, double shadow_lift) {
+    value = std::max(0.0, value * exposure);
+    value = value / (1.0 + value * highlight_rolloff);
+    if (shadow_lift > 0.0) {
+        const double shadow_weight = std::max(0.0, std::min(1.0, (0.55 - value) / 0.55));
+        value += shadow_lift * shadow_weight * value * (1.0 - value) * 0.85;
+    }
+    value = std::pow(std::max(0.0, std::min(1.0, value)), 1.0 / 2.2);
+    return static_cast<uint8_t>(std::round(value * 255.0));
+}
+
+std::vector<uint8_t> build_raw_display_lut(double exposure, double highlight_rolloff, double shadow_lift) {
+    constexpr int kLutSize = 4096;
+    constexpr double kMaxInput = 8.0;
+    std::vector<uint8_t> lut(static_cast<size_t>(kLutSize));
+    for (int i = 0; i < kLutSize; ++i) {
+        const double normalized = static_cast<double>(i) / static_cast<double>(kLutSize - 1);
+        const double value = normalized * kMaxInput;
+        lut[static_cast<size_t>(i)] = raw_display_byte(value, exposure, highlight_rolloff, shadow_lift);
+    }
+    return lut;
+}
+
+inline uint8_t raw_display_byte_lut(const std::vector<uint8_t>& lut, float value) {
+    constexpr float kMaxInput = 8.0f;
+    if (value <= 0.0f) return lut.front();
+    if (value >= kMaxInput) return lut.back();
+    const float scaled = (value / kMaxInput) * static_cast<float>(lut.size() - 1);
+    return lut[static_cast<size_t>(scaled + 0.5f)];
+}
+
+RenderStyleProfile style_profile_for_name(const std::string& style) {
+    if (style == "Google") return {"Google", 1.06f, 1.08f, 1.0f, 1.0f, 0.86f, 0.30f, 0.035f, 1.02f, 0.06f, 0.18f, 0.18f};
+    if (style == "Apple") return {"Apple", 1.02f, 0.98f, 1.03f, 0.98f, 0.82f, 0.25f, 0.025f, 0.98f, 0.02f, 0.08f, 0.15f};
+    if (style == "Samsung") return {"Samsung", 1.18f, 1.14f, 1.02f, 1.02f, 0.88f, 0.38f, 0.05f, 1.04f, 0.10f, 0.22f, 0.10f};
+    if (style == "Xiaomi") return {"Xiaomi", 1.24f, 1.18f, 1.04f, 1.0f, 0.90f, 0.42f, 0.06f, 1.05f, 0.12f, 0.25f, 0.08f};
+    return {"Neutral", 1.0f, 1.0f, 1.0f, 1.0f, 0.85f, 0.35f, 0.025f, 1.0f, 0.03f, 0.10f, 0.14f};
+}
+
+inline uint8_t style_channel(float value) {
+    return static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, value)) + 0.5f);
+}
+
+inline void apply_render_style_rgb(const RenderStyleProfile& profile, uint8_t& r, uint8_t& g, uint8_t& b) {
+    if (profile.saturation == 1.0f && profile.contrast == 1.0f && profile.red_bias == 1.0f && profile.blue_bias == 1.0f) return;
+    const float rf = static_cast<float>(r) * profile.red_bias;
+    const float gf = static_cast<float>(g);
+    const float bf = static_cast<float>(b) * profile.blue_bias;
+    const float luma = 0.2126f * rf + 0.7152f * gf + 0.0722f * bf;
+    float sr = luma + (rf - luma) * profile.saturation;
+    float sg = luma + (gf - luma) * profile.saturation;
+    float sb = luma + (bf - luma) * profile.saturation;
+    sr = 128.0f + (sr - 128.0f) * profile.contrast;
+    sg = 128.0f + (sg - 128.0f) * profile.contrast;
+    sb = 128.0f + (sb - 128.0f) * profile.contrast;
+    r = style_channel(sr);
+    g = style_channel(sg);
+    b = style_channel(sb);
+}
+
+inline void apply_highlight_color_guard_rgb(uint8_t& r, uint8_t& g, uint8_t& b) {
+    const float rf = static_cast<float>(r);
+    const float gf = static_cast<float>(g);
+    const float bf = static_cast<float>(b);
+    const float max_channel = std::max({rf, gf, bf});
+    if (max_channel < 224.0f) return;
+    const float luma = 0.2126f * rf + 0.7152f * gf + 0.0722f * bf;
+    const float blend = std::max(0.0f, std::min(0.45f, (max_channel - 224.0f) / 31.0f * 0.45f));
+    r = style_channel(rf * (1.0f - blend) + luma * blend);
+    g = style_channel(gf * (1.0f - blend) + luma * blend);
+    b = style_channel(bf * (1.0f - blend) + luma * blend);
+}
+
+inline float raw_luma_byte(const std::vector<uint8_t>& rgba, size_t pixel) {
+    const size_t base = pixel * 4u;
+    return 0.2126f * static_cast<float>(rgba[base + 0])
+        + 0.7152f * static_cast<float>(rgba[base + 1])
+        + 0.0722f * static_cast<float>(rgba[base + 2]);
+}
+
+inline bool is_shadow_purple_artifact_pixel(const std::vector<uint8_t>& rgba, size_t pixel) {
+    const size_t base = pixel * 4u;
+    const float r = static_cast<float>(rgba[base + 0]);
+    const float g = static_cast<float>(rgba[base + 1]);
+    const float b = static_cast<float>(rgba[base + 2]);
+    const float luma = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+    if (luma > 170.0f) return false;
+    const float chroma_span = std::max({r, g, b}) - std::min({r, g, b});
+    if (chroma_span < 18.0f) return false;
+    return b > g * 1.18f && r > g * 1.08f;
+}
+
+RawArtifactTelemetry apply_raw_shadow_purple_guard(
+    std::vector<uint8_t>& rgba,
+    int width,
+    int height
+) {
+    RawArtifactTelemetry telemetry;
+    if (width < 3 || height < 3) return telemetry;
+    const std::vector<uint8_t> source = rgba;
+    std::vector<int64_t> inspected_by_row(static_cast<size_t>(height), 0);
+    std::vector<int64_t> purple_before_by_row(static_cast<size_t>(height), 0);
+    std::vector<int64_t> purple_after_by_row(static_cast<size_t>(height), 0);
+    std::vector<int64_t> suppressed_by_row(static_cast<size_t>(height), 0);
+    parallel_for_rows(height - 2, [&](int worker_row) {
+        const int row = worker_row + 1;
+        int64_t inspected = 0;
+        int64_t purple_before = 0;
+        int64_t purple_after = 0;
+        int64_t suppressed = 0;
+        for (int col = 1; col < width - 1; ++col) {
+            const size_t pixel = static_cast<size_t>(row) * static_cast<size_t>(width) + static_cast<size_t>(col);
+            inspected += 1;
+            if (!is_shadow_purple_artifact_pixel(source, pixel)) {
+                if (is_shadow_purple_artifact_pixel(rgba, pixel)) purple_after += 1;
+                continue;
+            }
+            purple_before += 1;
+            const size_t base = pixel * 4u;
+            const float luma = raw_luma_byte(source, pixel);
+            const float shadow_weight = std::max(0.0f, std::min(1.0f, (170.0f - luma) / 170.0f));
+            const float blend = 0.45f * shadow_weight;
+            for (int channel = 0; channel < 3; ++channel) {
+                const float center = static_cast<float>(source[base + static_cast<size_t>(channel)]);
+                rgba[base + static_cast<size_t>(channel)] = style_channel(center * (1.0f - blend) + luma * blend);
+            }
+            if (is_shadow_purple_artifact_pixel(rgba, pixel)) {
+                purple_after += 1;
+            } else {
+                suppressed += 1;
+            }
+        }
+        inspected_by_row[static_cast<size_t>(row)] = inspected;
+        purple_before_by_row[static_cast<size_t>(row)] = purple_before;
+        purple_after_by_row[static_cast<size_t>(row)] = purple_after;
+        suppressed_by_row[static_cast<size_t>(row)] = suppressed;
+    });
+    for (size_t row = 0; row < inspected_by_row.size(); ++row) {
+        telemetry.inspected_pixels += inspected_by_row[row];
+        telemetry.purple_pixels_before += purple_before_by_row[row];
+        telemetry.purple_pixels_after += purple_after_by_row[row];
+        telemetry.purple_suppressed_pixels += suppressed_by_row[row];
+    }
+    return telemetry;
+}
+
+void apply_raw_radial_chroma_shading_guard(
+    std::vector<uint8_t>& rgba,
+    int width,
+    int height
+) {
+    if (width <= 1 || height <= 1) return;
+    const float cx = (static_cast<float>(width) - 1.0f) * 0.5f;
+    const float cy = (static_cast<float>(height) - 1.0f) * 0.5f;
+    const float max_radius = std::sqrt(cx * cx + cy * cy);
+    if (max_radius <= 0.0f) return;
+    parallel_for_rows(height, [&](int row) {
+        const float dy = static_cast<float>(row) - cy;
+        for (int col = 0; col < width; ++col) {
+            const float dx = static_cast<float>(col) - cx;
+            const float radius = std::sqrt(dx * dx + dy * dy) / max_radius;
+            const float edge_weight = std::max(0.0f, std::min(1.0f, (radius - 0.58f) / 0.42f));
+            if (edge_weight <= 0.0f) continue;
+            const size_t pixel = static_cast<size_t>(row) * static_cast<size_t>(width) + static_cast<size_t>(col);
+            const size_t base = pixel * 4u;
+            const float luma = raw_luma_byte(rgba, pixel);
+            const float blend = 0.18f * edge_weight;
+            for (int channel = 0; channel < 3; ++channel) {
+                const float center = static_cast<float>(rgba[base + static_cast<size_t>(channel)]);
+                rgba[base + static_cast<size_t>(channel)] = style_channel(center * (1.0f - blend) + luma * blend);
+            }
+        }
+    });
+}
+
+void apply_raw_chroma_guard(
+    std::vector<uint8_t>& rgba,
+    int width,
+    int height,
+    const RenderStyleProfile& profile
+) {
+    if (width < 3 || height < 3 || profile.chroma_denoise <= 0.0f) return;
+    const std::vector<uint8_t> source = rgba;
+    parallel_for_rows(height - 2, [&](int worker_row) {
+        const int row = worker_row + 1;
+        for (int col = 1; col < width - 1; ++col) {
+            const size_t pixel = static_cast<size_t>(row) * static_cast<size_t>(width) + static_cast<size_t>(col);
+            const size_t base = pixel * 4u;
+            const float luma = raw_luma_byte(source, pixel);
+            float neighbor_rgb[3] = {0.0f, 0.0f, 0.0f};
+            int neighbor_count = 0;
+            for (int dy = -1; dy <= 1; ++dy) {
+                const int yy = row + dy;
+                const size_t ybase = static_cast<size_t>(yy) * static_cast<size_t>(width);
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx == 0 && dy == 0) continue;
+                    const int xx = col + dx;
+                    const size_t nbase = (ybase + static_cast<size_t>(xx)) * 4u;
+                    neighbor_rgb[0] += static_cast<float>(source[nbase + 0]);
+                    neighbor_rgb[1] += static_cast<float>(source[nbase + 1]);
+                    neighbor_rgb[2] += static_cast<float>(source[nbase + 2]);
+                    neighbor_count += 1;
+                }
+            }
+            if (neighbor_count <= 0) continue;
+            const float inv = 1.0f / static_cast<float>(neighbor_count);
+            neighbor_rgb[0] *= inv;
+            neighbor_rgb[1] *= inv;
+            neighbor_rgb[2] *= inv;
+            const float neighbor_luma = 0.2126f * neighbor_rgb[0] + 0.7152f * neighbor_rgb[1] + 0.0722f * neighbor_rgb[2];
+            const float shadow_weight = std::max(0.0f, std::min(1.0f, (180.0f - luma) / 180.0f));
+            const float blend = profile.chroma_denoise * shadow_weight;
+            if (blend <= 0.0f) continue;
+            for (int channel = 0; channel < 3; ++channel) {
+                const float center = static_cast<float>(source[base + static_cast<size_t>(channel)]);
+                const float center_chroma = center - luma;
+                const float neighbor_chroma = neighbor_rgb[channel] - neighbor_luma;
+                rgba[base + static_cast<size_t>(channel)] = style_channel(
+                    luma + center_chroma * (1.0f - blend) + neighbor_chroma * blend
+                );
+            }
+        }
+    });
+}
+
+RawNeutralCastTelemetry apply_raw_neutral_cast_guard(
+    std::vector<uint8_t>& rgba,
+    int width,
+    int height
+) {
+    RawNeutralCastTelemetry telemetry;
+    if (width <= 0 || height <= 0 || rgba.empty()) return telemetry;
+    const int pixel_count = width * height;
+    const int step = std::max(1, pixel_count / 8192);
+    double r_sum = 0.0;
+    double g_sum = 0.0;
+    double b_sum = 0.0;
+    int64_t samples = 0;
+    for (int idx = 0; idx < pixel_count; idx += step) {
+        const size_t base = static_cast<size_t>(idx) * 4u;
+        const float r = static_cast<float>(rgba[base + 0]);
+        const float g = static_cast<float>(rgba[base + 1]);
+        const float b = static_cast<float>(rgba[base + 2]);
+        const float max_channel = std::max({r, g, b});
+        const float min_channel = std::min({r, g, b});
+        const float luma = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+        if (luma < 42.0f || luma > 220.0f) continue;
+        if ((max_channel - min_channel) > std::max(10.0f, luma * 0.10f)) continue;
+        r_sum += r;
+        g_sum += g;
+        b_sum += b;
+        samples += 1;
+    }
+    telemetry.neutral_samples = samples;
+    if (samples < 96) return telemetry;
+    const double r_avg = r_sum / static_cast<double>(samples);
+    const double g_avg = g_sum / static_cast<double>(samples);
+    const double b_avg = b_sum / static_cast<double>(samples);
+    const double gray = (r_avg + g_avg + b_avg) / 3.0;
+    if (gray <= 1.0) return telemetry;
+    telemetry.red_gain = std::max(0.94, std::min(1.06, gray / std::max(1.0, r_avg)));
+    telemetry.green_gain = std::max(0.94, std::min(1.06, gray / std::max(1.0, g_avg)));
+    telemetry.blue_gain = std::max(0.94, std::min(1.06, gray / std::max(1.0, b_avg)));
+    const double max_delta = std::max({
+        std::abs(telemetry.red_gain - 1.0),
+        std::abs(telemetry.green_gain - 1.0),
+        std::abs(telemetry.blue_gain - 1.0),
+    });
+    if (max_delta < 0.012) return telemetry;
+    telemetry.applied = true;
+    parallel_for_rows(height, [&](int row) {
+        const size_t row_base = static_cast<size_t>(row) * static_cast<size_t>(width);
+        for (int col = 0; col < width; ++col) {
+            const size_t base = (row_base + static_cast<size_t>(col)) * 4u;
+            rgba[base + 0] = style_channel(static_cast<float>(rgba[base + 0]) * static_cast<float>(telemetry.red_gain));
+            rgba[base + 1] = style_channel(static_cast<float>(rgba[base + 1]) * static_cast<float>(telemetry.green_gain));
+            rgba[base + 2] = style_channel(static_cast<float>(rgba[base + 2]) * static_cast<float>(telemetry.blue_gain));
+        }
+    });
+    return telemetry;
+}
+
+void apply_raw_photo_finishing(
+    std::vector<uint8_t>& rgba,
+    int width,
+    int height,
+    const RenderStyleProfile& profile
+) {
+    if (width < 3 || height < 3 || (profile.local_contrast <= 0.0f && profile.sharpening <= 0.0f)) return;
+    const std::vector<uint8_t> source = rgba;
+    parallel_for_rows(height - 2, [&](int worker_row) {
+        const int row = worker_row + 1;
+        for (int col = 1; col < width - 1; ++col) {
+            const size_t pixel = static_cast<size_t>(row) * static_cast<size_t>(width) + static_cast<size_t>(col);
+            const size_t left = pixel - 1u;
+            const size_t right = pixel + 1u;
+            const size_t up = pixel - static_cast<size_t>(width);
+            const size_t down = pixel + static_cast<size_t>(width);
+            const float center_luma = raw_luma_byte(source, pixel);
+            const float neighbor_luma = (
+                raw_luma_byte(source, left) +
+                raw_luma_byte(source, right) +
+                raw_luma_byte(source, up) +
+                raw_luma_byte(source, down)
+            ) * 0.25f;
+            const float luma_detail = (center_luma - neighbor_luma) * profile.local_contrast;
+            const size_t base = pixel * 4u;
+            const size_t left_base = left * 4u;
+            const size_t right_base = right * 4u;
+            const size_t up_base = up * 4u;
+            const size_t down_base = down * 4u;
+            for (int channel = 0; channel < 3; ++channel) {
+                const float center = static_cast<float>(source[base + static_cast<size_t>(channel)]);
+                const float neighbor = (
+                    static_cast<float>(source[left_base + static_cast<size_t>(channel)]) +
+                    static_cast<float>(source[right_base + static_cast<size_t>(channel)]) +
+                    static_cast<float>(source[up_base + static_cast<size_t>(channel)]) +
+                    static_cast<float>(source[down_base + static_cast<size_t>(channel)])
+                ) * 0.25f;
+                rgba[base + static_cast<size_t>(channel)] = style_channel(
+                    center + (center - neighbor) * profile.sharpening + luma_detail
+                );
+            }
+        }
+    });
+}
+
+RawRenderResult render_reduced_bayer_to_rgba_fused(
+    const ReducedBayerFrame& frame,
+    const std::string& demosaic_mode,
+    const RenderStyleProfile& style_profile,
+    const std::string& lens_shading_mode
+) {
+    const bool use_malvar = demosaic_mode == "malvar_approx";
+    std::vector<double> luminance;
+    luminance.reserve(std::min<size_t>(static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height), 4096u));
+    const int pixel_count = frame.width * frame.height;
+    const int step = std::max(1, pixel_count / 4096);
+    for (int idx = 0; idx < pixel_count; idx += step) {
+        const int row = idx / frame.width;
+        const int col = idx - row * frame.width;
+        const auto rgb = (row > 0 && row < frame.height - 1 && col > 0 && col < frame.width - 1)
+            ? (use_malvar ? reduced_bayer_rgb_at_malvar_approx_interior(frame, row, col) : reduced_bayer_rgb_at_direct_interior(frame, row, col))
+            : reduced_bayer_rgb_at_direct(frame, row, col);
+        luminance.push_back(0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]);
+    }
+    std::sort(luminance.begin(), luminance.end());
+    const double p50 = luminance.empty() ? 0.0 : luminance[static_cast<size_t>(std::min<int>(luminance.size() - 1, static_cast<int>(luminance.size() * 0.50)))];
+    const double p95 = luminance.empty() ? 1.0 : luminance[static_cast<size_t>(std::min<int>(luminance.size() - 1, static_cast<int>(luminance.size() * 0.95)))];
+    const double p99 = luminance.empty() ? 1.0 : luminance[static_cast<size_t>(std::min<int>(luminance.size() - 1, static_cast<int>(luminance.size() * 0.99)))];
+    const double p95_exposure = p95 > 0.0001
+        ? (static_cast<double>(style_profile.target_p95) / p95) * static_cast<double>(style_profile.exposure_bias)
+        : 1.0;
+    const double p99_exposure_limit = p99 > 0.0001 ? 0.98 / p99 : p95_exposure;
+    const double exposure = std::min(p95_exposure, p99_exposure_limit);
+    const double adaptive_shadow_lift = p50 < 0.08 ? std::min(0.04, (0.08 - p50) * 0.55) : 0.0;
+    const double shadow_lift = std::min(0.10, static_cast<double>(style_profile.shadow_lift) + adaptive_shadow_lift);
+    const auto display_lut = build_raw_display_lut(exposure, style_profile.highlight_rolloff, shadow_lift);
+    std::vector<uint8_t> rgba(static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height) * 4u);
+    parallel_for_rows(frame.height, [&](int row) {
+        for (int col = 0; col < frame.width; ++col) {
+            const auto rgb = (row > 0 && row < frame.height - 1 && col > 0 && col < frame.width - 1)
+                ? (use_malvar ? reduced_bayer_rgb_at_malvar_approx_interior(frame, row, col) : reduced_bayer_rgb_at_direct_interior(frame, row, col))
+                : reduced_bayer_rgb_at_direct(frame, row, col);
+            const size_t out = (static_cast<size_t>(row) * static_cast<size_t>(frame.width) + static_cast<size_t>(col)) * 4u;
+            uint8_t r = raw_display_byte_lut(display_lut, rgb[0]);
+            uint8_t g = raw_display_byte_lut(display_lut, rgb[1]);
+            uint8_t b = raw_display_byte_lut(display_lut, rgb[2]);
+            apply_render_style_rgb(style_profile, r, g, b);
+            apply_highlight_color_guard_rgb(r, g, b);
+            rgba[out + 0] = r;
+            rgba[out + 1] = g;
+            rgba[out + 2] = b;
+            rgba[out + 3] = 255;
+        }
+    });
+    if (!frame.lens_shading_usable && lens_shading_mode != "off") {
+        apply_raw_radial_chroma_shading_guard(rgba, frame.width, frame.height);
+    }
+    apply_raw_chroma_guard(rgba, frame.width, frame.height, style_profile);
+    RawNeutralCastTelemetry neutral_cast = apply_raw_neutral_cast_guard(rgba, frame.width, frame.height);
+    const RawArtifactTelemetry artifacts = apply_raw_shadow_purple_guard(rgba, frame.width, frame.height);
+    apply_raw_photo_finishing(rgba, frame.width, frame.height, style_profile);
+    return {
+        std::move(rgba),
+        {
+            exposure,
+            p50,
+            p95,
+            p99,
+            static_cast<double>(style_profile.highlight_rolloff),
+            shadow_lift
+        },
+        artifacts,
+        neutral_cast
+    };
+}
+
+std::vector<uint8_t> render_linear_rgb_to_rgba(const std::vector<float>& rgb, int width, int height) {
+    std::vector<double> luminance;
+    luminance.reserve(std::min<size_t>(rgb.size() / 3u, 4096u));
+    const int step = std::max(1, (width * height) / 4096);
+    for (int idx = 0; idx < width * height; idx += step) {
+        const size_t base = static_cast<size_t>(idx) * 3u;
+        luminance.push_back(0.2126 * rgb[base] + 0.7152 * rgb[base + 1] + 0.0722 * rgb[base + 2]);
+    }
+    std::sort(luminance.begin(), luminance.end());
+    const double p95 = luminance.empty() ? 1.0 : luminance[static_cast<size_t>(std::min<int>(luminance.size() - 1, static_cast<int>(luminance.size() * 0.95)))];
+    const double exposure = p95 > 0.0001 ? 0.85 / p95 : 1.0;
+    std::vector<uint8_t> rgba(static_cast<size_t>(width) * static_cast<size_t>(height) * 4u);
+    for (int idx = 0; idx < width * height; ++idx) {
+        const size_t in = static_cast<size_t>(idx) * 3u;
+        const size_t out = static_cast<size_t>(idx) * 4u;
+        for (int ch = 0; ch < 3; ++ch) {
+            double value = std::max(0.0, static_cast<double>(rgb[in + ch]) * exposure);
+            value = value / (1.0 + value * 0.35);
+            value = std::pow(std::max(0.0, std::min(1.0, value)), 1.0 / 2.2);
+            rgba[out + static_cast<size_t>(ch)] = static_cast<uint8_t>(std::round(value * 255.0));
+        }
+        rgba[out + 3] = 255;
+    }
+    return rgba;
+}
+
+std::string process_raw_burst_native(
+    const std::string& manifest_path,
+    const std::string& output_rgba_path,
+    const std::string& preview_rgba_path,
+    int preview_max_edge,
+    const std::string& quality_mode,
+    const std::string& demosaic_mode,
+    const std::string& merge_mode,
+    const std::string& render_style,
+    const std::string& lens_shading_mode
+) {
+    // RAW merge modes: single, no-alignment average, global alignment, and
+    // reference-protected motion-aware average.
+    const auto total_start = std::chrono::steady_clock::now();
+    const std::string manifest = read_text_file(manifest_path);
+    if (manifest.empty()) return raw_processor_error_json("missing burst manifest");
+    if (parse_string_key(manifest, "format") != "RAW_SENSOR") {
+        return raw_processor_error_json("unsupported non-RAW burst processing");
+    }
+    const auto frames = parse_burst_frames(manifest);
+    if (frames.empty()) return raw_processor_error_json("burst manifest has no frames");
+    const auto parse_done = std::chrono::steady_clock::now();
+    double best_score = -1.0;
+    RawFrameData best;
+    std::vector<RawFrameData> candidates;
+    int rejected = 0;
+    for (const auto& frame : frames) {
+        RawFrameData candidate = parse_raw_frame_data(frame, false);
+        if (lens_shading_mode == "off" || lens_shading_mode == "radial") {
+            candidate.lens_shading_usable = false;
+            candidate.lens_shading_values.clear();
+        }
+        if (candidate.raw16_path.empty() || candidate.width <= 0 || candidate.height <= 0) {
+            rejected += 1;
+            continue;
+        }
+        if (raw_color_at(candidate.cfa, 0, 0) == '?') {
+            rejected += 1;
+            continue;
+        }
+        double score = candidate.sharpness_score;
+        if (score < 0.0) {
+            load_raw_frame_bytes(candidate, false);
+            if (!raw_frame_has_bytes(candidate)) {
+                rejected += 1;
+                continue;
+            }
+            score = score_raw_green_sharpness(candidate);
+            candidate.bytes.clear();
+            candidate.mapped_bytes.reset();
+        }
+        candidate.sharpness_score = score;
+        candidates.push_back(candidate);
+        if (score > best_score) {
+            best_score = score;
+            best = std::move(candidate);
+        }
+    }
+    const auto score_done = std::chrono::steady_clock::now();
+    if (best_score < 0.0) return raw_processor_error_json("unsupported color_filter_arrangement or raw16 missing");
+    if (!raw_frame_has_bytes(best)) {
+        load_raw_frame_bytes(best, true);
+    }
+    if (!raw_frame_has_bytes(best)) return raw_processor_error_json("selected raw16 file is missing or empty");
+    const auto load_selected_done = std::chrono::steady_clock::now();
+    const std::string raw_quality_mode =
+        quality_mode == "balanced_2400" ? "balanced_2400" :
+        (quality_mode == "full_res" ? "full_res" : "fast_1600");
+    const std::string raw_demosaic_mode = demosaic_mode == "malvar_approx" ? "malvar_approx" : "bilinear_fast";
+    const RenderStyleProfile style_profile = style_profile_for_name(render_style);
+    const std::string raw_lens_shading_mode_request =
+        lens_shading_mode == "off" ? "off" :
+        (lens_shading_mode == "radial" ? "radial" : "auto");
+    const std::string raw_merge_mode =
+        merge_mode == "raw_average_tile_motion_aware" ? "raw_average_tile_motion_aware" :
+        (merge_mode == "raw_average_motion_aware" ? "raw_average_motion_aware" :
+        (merge_mode == "raw_average_global_aligned" ? "raw_average_global_aligned" :
+        (merge_mode == "raw_average_no_alignment" ? "raw_average_no_alignment" : "raw_single_frame")));
+    const int render_max_edge =
+        raw_quality_mode == "balanced_2400" ? 2400 :
+        (raw_quality_mode == "full_res" ? std::max(best.width, best.height) : 1600);
+    const double render_scale = std::min(1.0, static_cast<double>(render_max_edge) / static_cast<double>(std::max(best.width, best.height)));
+    const int render_width = std::max(1, static_cast<int>(std::round(best.width * render_scale)));
+    const int render_height = std::max(1, static_cast<int>(std::round(best.height * render_scale)));
+    int merge_count = 1;
+    int merge_rejected = 0;
+    int incompatible_rejected = 0;
+    int sharpness_rejected = 0;
+    int exposure_rejected = 0;
+    int alignment_failures = 0;
+    int tile_alignment_smoothed_count = 0;
+    bool exposure_consistent = true;
+    std::vector<AlignmentOffset> alignment_offsets;
+    std::vector<TileAlignmentOffset> tile_alignment_offsets;
+    RawMotionMergeTelemetry motion_telemetry;
+    ReducedBayerFrame reduced_bayer;
+    RawMergeTiming merge_timing;
+    const auto merge_load_start = std::chrono::steady_clock::now();
+    double merge_load_ms = 0.0;
+    if (raw_merge_mode == "raw_average_no_alignment"
+        || raw_merge_mode == "raw_average_global_aligned"
+        || raw_merge_mode == "raw_average_motion_aware"
+        || raw_merge_mode == "raw_average_tile_motion_aware") {
+        std::vector<RawFrameData> merge_frames;
+        merge_frames.push_back(best);
+        for (auto& candidate : candidates) {
+            if (candidate.index == best.index) {
+                continue;
+            }
+            if (candidate.raw16_path.empty()
+                || candidate.width != best.width
+                || candidate.height != best.height
+                || candidate.cfa != best.cfa) {
+                merge_rejected += 1;
+                incompatible_rejected += 1;
+                continue;
+            }
+            if (!raw_sharpness_compatible(best_score, candidate)) {
+                merge_rejected += 1;
+                sharpness_rejected += 1;
+                continue;
+            }
+            if (!raw_exposure_compatible(best, candidate)) {
+                merge_rejected += 1;
+                exposure_rejected += 1;
+                exposure_consistent = false;
+                continue;
+            }
+            if (!raw_frame_has_bytes(candidate)) {
+                load_raw_frame_bytes(candidate, true);
+            }
+            if (!raw_frame_has_bytes(candidate)) {
+                merge_rejected += 1;
+                continue;
+            }
+            merge_frames.push_back(std::move(candidate));
+        }
+        if (merge_frames.empty()) {
+            merge_frames.push_back(best);
+            exposure_consistent = false;
+        }
+        merge_count = static_cast<int>(merge_frames.size());
+        const auto merge_load_done = std::chrono::steady_clock::now();
+        merge_load_ms = elapsed_ms(merge_load_start, merge_load_done);
+        if (raw_merge_mode == "raw_average_tile_motion_aware") {
+            reduced_bayer = average_reduced_bayer_frames_tile_motion_aware(
+                merge_frames,
+                render_width,
+                render_height,
+                alignment_offsets,
+                tile_alignment_offsets,
+                tile_alignment_smoothed_count,
+                alignment_failures,
+                motion_telemetry,
+                &merge_timing
+            );
+        } else if (raw_merge_mode == "raw_average_motion_aware") {
+            reduced_bayer = average_reduced_bayer_frames_motion_aware(
+                merge_frames,
+                render_width,
+                render_height,
+                alignment_offsets,
+                alignment_failures,
+                motion_telemetry,
+                &merge_timing
+            );
+        } else if (raw_merge_mode == "raw_average_global_aligned") {
+            reduced_bayer = average_reduced_bayer_frames_global_aligned(
+                merge_frames,
+                render_width,
+                render_height,
+                alignment_offsets,
+                alignment_failures,
+                &merge_timing
+            );
+        } else {
+            reduced_bayer = average_reduced_bayer_frames(merge_frames, render_width, render_height, &merge_timing);
+        }
+    } else {
+        const auto merge_load_done = std::chrono::steady_clock::now();
+        merge_load_ms = elapsed_ms(merge_load_start, merge_load_done);
+        const auto reduce_start = std::chrono::steady_clock::now();
+        reduced_bayer = downsample_raw_bayer_area(best, render_width, render_height);
+        merge_timing.reduce_ms = elapsed_ms(reduce_start, std::chrono::steady_clock::now());
+    }
+    const auto downsample_done = std::chrono::steady_clock::now();
+    auto render_result = render_reduced_bayer_to_rgba_fused(
+        reduced_bayer,
+        raw_demosaic_mode,
+        style_profile,
+        raw_lens_shading_mode_request
+    );
+    std::string selected_merge_mode = raw_merge_mode;
+    std::string raw_quality_fallback = "none";
+    double requested_raw_shadow_purple_ratio_after = raw_shadow_purple_ratio_after(render_result.artifacts);
+    const double requested_motion_rejected_ratio = motion_telemetry.total_samples > 0
+        ? static_cast<double>(motion_telemetry.rejected_samples) / static_cast<double>(motion_telemetry.total_samples)
+        : 0.0;
+    const bool artifact_guard_fallback_needed = requested_raw_shadow_purple_ratio_after >= 0.05;
+    const bool motion_guard_fallback_needed = requested_motion_rejected_ratio >= 0.18;
+    if (raw_merge_mode != "raw_single_frame" && (artifact_guard_fallback_needed || motion_guard_fallback_needed)) {
+        const auto fallback_reduce_start = std::chrono::steady_clock::now();
+        ReducedBayerFrame fallback_bayer = downsample_raw_bayer_area(best, render_width, render_height);
+        const double fallback_reduce_ms = elapsed_ms(fallback_reduce_start, std::chrono::steady_clock::now());
+        RawRenderResult fallback_result = render_reduced_bayer_to_rgba_fused(
+            fallback_bayer,
+            raw_demosaic_mode,
+            style_profile,
+            raw_lens_shading_mode_request
+        );
+        const double fallback_ratio = raw_shadow_purple_ratio_after(fallback_result.artifacts);
+        const bool fallback_improves_artifacts = fallback_ratio < requested_raw_shadow_purple_ratio_after;
+        const bool fallback_keeps_artifacts_safe = fallback_ratio <= std::max(0.025, requested_raw_shadow_purple_ratio_after + 0.005);
+        if ((artifact_guard_fallback_needed && fallback_improves_artifacts)
+            || (motion_guard_fallback_needed && fallback_keeps_artifacts_safe)) {
+            render_result = std::move(fallback_result);
+            reduced_bayer = std::move(fallback_bayer);
+            selected_merge_mode = "raw_single_frame";
+            raw_quality_fallback = artifact_guard_fallback_needed ? "artifact_guard_single_frame" : "motion_guard_single_frame";
+            merge_timing.reduce_ms += fallback_reduce_ms;
+            merge_count = 1;
+        }
+    }
+    const auto& rgba = render_result.rgba;
+    const auto render_done = std::chrono::steady_clock::now();
+    if (!write_binary_file(output_rgba_path, rgba)) {
+        return raw_processor_error_json("could not write full RAW RGBA output");
+    }
+    int preview_width = 0;
+    int preview_height = 0;
+    if (preview_max_edge > 0 && !preview_rgba_path.empty()) {
+        const int max_edge = std::max(1, preview_max_edge);
+        const double scale = std::min(1.0, static_cast<double>(max_edge) / static_cast<double>(std::max(render_width, render_height)));
+        preview_width = std::max(1, static_cast<int>(std::round(render_width * scale)));
+        preview_height = std::max(1, static_cast<int>(std::round(render_height * scale)));
+        const auto preview = downscale_rgba_bilinear(rgba, render_width, render_height, preview_width, preview_height);
+        if (!write_binary_file(preview_rgba_path, preview)) {
+            return raw_processor_error_json("could not write preview RAW RGBA output");
+        }
+    }
+    const auto preview_done = std::chrono::steady_clock::now();
+    const auto write_done = std::chrono::steady_clock::now();
+    std::ostringstream out;
+    out << "{\"status\":\"ok\",\"mode\":\"" << selected_merge_mode << "\","
+        << "\"raw_reference_frame\":" << best.index << ","
+        << "\"reference_frame\":" << best.index << ","
+        << "\"used_frames\":" << merge_count << ","
+        << "\"rejected_frames\":" << (rejected + merge_rejected + alignment_failures) << ","
+        << "\"width\":" << render_width << ","
+        << "\"height\":" << render_height << ","
+        << "\"raw_width\":" << best.width << ","
+        << "\"raw_height\":" << best.height << ","
+        << "\"preview_width\":" << preview_width << ","
+        << "\"preview_height\":" << preview_height << ","
+        << "\"score\":" << best_score << ","
+        << "\"source_format\":\"RAW_SENSOR\","
+        << "\"raw_quality_mode\":\"" << raw_quality_mode << "\","
+        << "\"raw_demosaic_mode\":\"" << raw_demosaic_mode << "\","
+        << "\"raw_requested_merge_mode\":\"" << raw_merge_mode << "\","
+        << "\"raw_merge_mode\":\"" << selected_merge_mode << "\","
+        << "\"raw_quality_verdict\":\"" << raw_quality_verdict_for_artifacts(render_result.artifacts) << "\","
+        << "\"raw_quality_fallback\":\"" << raw_quality_fallback << "\","
+        << "\"raw_requested_shadow_purple_ratio_after\":" << requested_raw_shadow_purple_ratio_after << ","
+        << "\"raw_requested_motion_rejected_ratio\":" << requested_motion_rejected_ratio << ","
+        << "\"style_profile\":\"" << style_profile.name << "\","
+        << "\"render_layer\":\"global_style_v1\","
+        << "\"tone_map_exposure\":" << render_result.tone.exposure << ","
+        << "\"tone_map_p50\":" << render_result.tone.p50 << ","
+        << "\"tone_map_p95\":" << render_result.tone.p95 << ","
+        << "\"tone_map_p99\":" << render_result.tone.p99 << ","
+        << "\"tone_map_highlight_rolloff\":" << render_result.tone.highlight_rolloff << ","
+        << "\"tone_map_shadow_lift\":" << render_result.tone.shadow_lift << ","
+        << "\"merge_count\":" << merge_count << ","
+        << "\"merge_rejected\":" << merge_rejected << ","
+        << "\"incompatible_rejected\":" << incompatible_rejected << ","
+        << "\"sharpness_rejected\":" << sharpness_rejected << ","
+        << "\"exposure_rejected\":" << exposure_rejected << ","
+        << "\"exposure_consistent\":" << (exposure_consistent ? "true" : "false") << ","
+        << "\"alignment_offsets\":" << alignment_offsets_json(alignment_offsets) << ","
+        << "\"alignment_failures\":" << alignment_failures << ","
+        << "\"tile_alignment_grid\":\"12x9\","
+        << "\"tile_alignment_acceptance\":\"conservative_score_0.035\","
+        << "\"tile_alignment_smoothing\":\"median_3x3\","
+        << "\"tile_alignment_sampling\":\"bilinear_offset_field\","
+        << "\"tile_alignment_field_cached\":true,"
+        << "\"tile_alignment_smoothed_count\":" << tile_alignment_smoothed_count << ","
+        << "\"tile_alignment_offsets\":" << tile_alignment_offsets_json(tile_alignment_offsets) << ","
+        << "\"motion_mask_mode\":\"spatial_3x3_min3\","
+        << "\"motion_raw_rejected_samples\":" << motion_telemetry.raw_rejected_samples << ","
+        << "\"motion_rejected_samples\":" << motion_telemetry.rejected_samples << ","
+        << "\"motion_total_samples\":" << motion_telemetry.total_samples << ","
+        << "\"motion_rejected_ratio\":" << (motion_telemetry.total_samples > 0
+            ? static_cast<double>(motion_telemetry.rejected_samples) / static_cast<double>(motion_telemetry.total_samples)
+            : 0.0) << ","
+        << "\"render_max_edge\":" << render_max_edge << ","
+        << "\"raw_downsample\":\"bayer_area\","
+        << "\"raw_demosaic\":\"" << (raw_demosaic_mode == "malvar_approx" ? "malvar_approx" : "reduced_bayer_direct_bilinear") << "\","
+        << "\"raw_render\":\"fused_rgba_interior_fast_photo_finish\","
+        << "\"raw_photo_finishing\":{\"local_contrast\":" << style_profile.local_contrast
+        << ",\"sharpening\":" << style_profile.sharpening
+        << ",\"chroma_denoise\":" << style_profile.chroma_denoise << "},"
+        << "\"raw_neutral_cast_guard\":\"gray_world_neutral_v1\","
+        << "\"raw_neutral_cast_samples\":" << render_result.neutral_cast.neutral_samples << ","
+        << "\"raw_neutral_cast_applied\":" << (render_result.neutral_cast.applied ? "true" : "false") << ","
+        << "\"raw_neutral_cast_gains\":[" << render_result.neutral_cast.red_gain
+        << "," << render_result.neutral_cast.green_gain
+        << "," << render_result.neutral_cast.blue_gain << "],"
+        << "\"raw_artifact_guard\":\"shadow_purple_v1\","
+        << "\"raw_shadow_purple_pixels_before\":" << render_result.artifacts.purple_pixels_before << ","
+        << "\"raw_shadow_purple_pixels_after\":" << render_result.artifacts.purple_pixels_after << ","
+        << "\"raw_shadow_purple_suppressed_pixels\":" << render_result.artifacts.purple_suppressed_pixels << ","
+        << "\"raw_shadow_purple_ratio_before\":" << (render_result.artifacts.inspected_pixels > 0
+            ? static_cast<double>(render_result.artifacts.purple_pixels_before) / static_cast<double>(render_result.artifacts.inspected_pixels)
+            : 0.0) << ","
+        << "\"raw_shadow_purple_ratio_after\":" << (render_result.artifacts.inspected_pixels > 0
+            ? static_cast<double>(render_result.artifacts.purple_pixels_after) / static_cast<double>(render_result.artifacts.inspected_pixels)
+            : 0.0) << ","
+        << "\"raw_color_gains_usable\":" << (reduced_bayer.gains_usable ? "true" : "false") << ","
+        << "\"raw_color_transform_usable\":" << (reduced_bayer.transform_usable ? "true" : "false") << ","
+        << "\"raw_color_matrix_mode\":\"" << (reduced_bayer.transform_usable ? "normalized_camera_transform" : "identity_fallback") << "\","
+        << "\"raw_color_gain_mode\":\"green_normalized_clamped_0.55_2.60\","
+        << "\"raw_lens_shading_request\":\"" << raw_lens_shading_mode_request << "\","
+        << "\"raw_lens_shading_mode\":\"" << (reduced_bayer.lens_shading_usable
+            ? "sensor_lens_shading_map"
+            : (raw_lens_shading_mode_request == "off" ? "off" : "radial_chroma_guard_v1")) << "\","
+        << "\"raw_lens_shading_map_used\":" << (reduced_bayer.lens_shading_usable ? "true" : "false") << ","
+        << "\"raw_load_mode\":\"" << raw_frame_load_mode(best) << "\","
+        << "\"preview_scale_mode\":\"bilinear\","
+        << "\"native_timing_ms\":{"
+        << "\"manifest_parse\":" << elapsed_ms(total_start, parse_done) << ","
+        << "\"frame_score\":" << elapsed_ms(parse_done, score_done) << ","
+        << "\"selected_load\":" << elapsed_ms(score_done, load_selected_done) << ","
+        << "\"merge_load\":" << merge_load_ms << ","
+        << "\"raw_reduce\":" << merge_timing.reduce_ms << ","
+        << "\"alignment\":" << merge_timing.align_ms << ","
+        << "\"merge\":" << merge_timing.merge_ms << ","
+        << "\"render\":" << elapsed_ms(downsample_done, render_done) << ","
+        << "\"preview\":" << elapsed_ms(render_done, preview_done) << ","
+        << "\"write\":" << elapsed_ms(preview_done, write_done) << ","
+        << "\"total\":" << elapsed_ms(total_start, write_done)
+        << "},"
+        << "\"render_mode\":\"" << selected_merge_mode << "\"}";
+    return out.str();
+}
+
 }  // namespace
 
 extern "C" JNIEXPORT jint JNICALL
@@ -3071,6 +5854,52 @@ Java_com_luvatrix_app_NativeVulkan_probeVulkan(JNIEnv *, jobject) {
     }
     LVX_LOGI("luvatrix vulkan probe ok extensions=%u", extension_count);
     return static_cast<jint>(extension_count);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_luvatrix_app_NativeCameraProcessor_processYuvBurst(
+    JNIEnv* env,
+    jobject,
+    jstring manifestPath,
+    jstring outputRgbaPath,
+    jstring previewRgbaPath,
+    jint previewMaxEdge
+) {
+    const std::string result = process_yuv_burst_native(
+        jstring_to_string(env, manifestPath),
+        jstring_to_string(env, outputRgbaPath),
+        jstring_to_string(env, previewRgbaPath),
+        static_cast<int>(previewMaxEdge)
+    );
+    return env->NewStringUTF(result.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_luvatrix_app_NativeCameraProcessor_processRawBurst(
+    JNIEnv* env,
+    jobject,
+    jstring manifestPath,
+    jstring outputRgbaPath,
+    jstring previewRgbaPath,
+    jint previewMaxEdge,
+    jstring qualityMode,
+    jstring demosaicMode,
+    jstring mergeMode,
+    jstring renderStyle,
+    jstring lensShadingMode
+) {
+    const std::string result = process_raw_burst_native(
+        jstring_to_string(env, manifestPath),
+        jstring_to_string(env, outputRgbaPath),
+        jstring_to_string(env, previewRgbaPath),
+        static_cast<int>(previewMaxEdge),
+        jstring_to_string(env, qualityMode),
+        jstring_to_string(env, demosaicMode),
+        jstring_to_string(env, mergeMode),
+        jstring_to_string(env, renderStyle),
+        jstring_to_string(env, lensShadingMode)
+    );
+    return env->NewStringUTF(result.c_str());
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -3328,6 +6157,13 @@ Java_com_luvatrix_app_NativeVulkan_setCameraColorMode(JNIEnv *env, jobject, jstr
         g_blue_gain = 0.94f;
         g_color_brightness = 0.0f;
         g_color_contrast = 1.0f;
+    } else if (value == "natural_plus") {
+        g_color_mode = "natural_plus";
+        g_red_gain = 1.04f;
+        g_green_gain = 1.0f;
+        g_blue_gain = 0.97f;
+        g_color_brightness = 0.015f;
+        g_color_contrast = 1.04f;
     } else if (value == "warm") {
         g_color_mode = "warm";
         g_red_gain = 1.12f;
