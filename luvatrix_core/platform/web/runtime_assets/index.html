@@ -19,12 +19,23 @@
         align-items: center;
         justify-content: center;
       }
-      #stage {
+      #stage-wrap {
+        position: relative;
+        width: 100dvw;
+        height: 100dvh;
+      }
+      #stage, #stage3d {
         display: block;
-        width: auto;
-        height: auto;
-        max-width: 100vw;
-        max-height: 100vh;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      #stage3d {
+        z-index: 0;
+      }
+      #stage {
+        z-index: 1;
         outline: none;
         touch-action: none;
       }
@@ -33,17 +44,25 @@
         left: 10px;
         top: 8px;
         font-size: 12px;
-        opacity: 0.8;
+        display: none;
+        opacity: 0.9;
         pointer-events: none;
       }
-      #status[data-ready="true"] {
-        display: none;
+      #status[data-error="true"] {
+        background: rgba(10, 16, 28, 0.9);
+        color: #ffd24c;
+        display: block;
+        max-width: calc(100vw - 20px);
+        padding: 10px 12px;
       }
     </style>
   </head>
   <body>
-    <canvas id="stage" tabindex="0"></canvas>
-    <div id="status">Loading Luvatrix...</div>
-    <script type="module" src="./runtime/luvatrix-web.js"></script>
+    <div id="stage-wrap">
+      <canvas id="stage3d" aria-hidden="true"></canvas>
+      <canvas id="stage" tabindex="0"></canvas>
+    </div>
+    <div id="status"></div>
+    <script type="module" src="./runtime/luvatrix-web.js?v=dev-camera-20260526"></script>
   </body>
 </html>

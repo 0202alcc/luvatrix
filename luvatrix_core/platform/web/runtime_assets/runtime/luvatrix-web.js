@@ -1,20 +1,28 @@
-import { createInputAdapter } from "./input.js";
-import { createRenderer } from "./renderers.js";
+import { createInputAdapter } from "./input.js?v=procedural-floor-20260603";
+import { createRenderer } from "./renderers.js?v=procedural-floor-20260603";
+import "./spotify-bridge.js?v=spotify-island-20260526";
 
 const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js";
 
 async function main() {
   const canvas = document.getElementById("stage");
+  const canvas3d = document.getElementById("stage3d");
   const status = document.getElementById("status");
-  const manifest = await fetch("./app_manifest.json").then((r) => r.json());
+  const cacheKey = Date.now().toString(36);
+  const manifest = await fetch(cacheBust("./app_manifest.json", cacheKey), { cache: "no-store" }).then((r) => r.json());
   document.title = manifest.web?.title || manifest.display?.title || manifest.app_id || "Luvatrix";
-  const width = manifest.display?.native_width || 1080;
-  const height = manifest.display?.native_height || 2400;
+  const viewport = displayViewportSize();
+  const width = viewport.width || manifest.display?.native_width || 1080;
+  const height = viewport.height || manifest.display?.native_height || 2400;
   canvas.width = width;
   canvas.height = height;
+  if (canvas3d) {
+    canvas3d.width = width;
+    canvas3d.height = height;
+  }
 
   const input = createInputAdapter(canvas);
-  const renderer = await createRenderer(canvas, status);
+  const renderer = await createRenderer(canvas, status, { webglCanvas: canvas3d });
   const pyodide = await loadPyodideRuntime(manifest, status);
 
   const entrypoint = manifest.entrypoint;
@@ -51,6 +59,14 @@ _luvatrix_app.init_browser(
   requestAnimationFrame(tick);
 }
 
+function displayViewportSize() {
+  const source = globalThis.visualViewport || globalThis;
+  return {
+    width: Math.max(1, Math.round(Number(source.innerWidth || source.width || 0))),
+    height: Math.max(1, Math.round(Number(source.innerHeight || source.height || 0))),
+  };
+}
+
 async function loadPyodideRuntime(manifest, status) {
   status && (status.textContent = "Loading Pyodide...");
   await import(PYODIDE_URL);
@@ -61,24 +77,30 @@ async function loadPyodideRuntime(manifest, status) {
   }
   await pyodide.FS.mkdirTree("/home/pyodide/py");
   await pyodide.FS.mkdirTree("/home/pyodide/app");
-  await copyTree(pyodide, "./py_manifest.json", "/home/pyodide/py");
-  await copyAppFiles(pyodide, manifest);
+  const cacheKey = Date.now().toString(36);
+  await copyTree(pyodide, "./py_manifest.json", "/home/pyodide/py", cacheKey);
+  await copyAppFiles(pyodide, manifest, cacheKey);
   status && (status.textContent = "Starting app...");
   return pyodide;
 }
 
-async function copyTree(pyodide, manifestUrl, destRoot) {
-  const files = await fetch(manifestUrl).then((r) => r.json());
+async function copyTree(pyodide, manifestUrl, destRoot, cacheKey) {
+  const files = await fetch(cacheBust(manifestUrl, cacheKey), { cache: "no-store" }).then((r) => r.json());
   for (const file of files) {
-    const data = await fetch(file.url).then((r) => r.arrayBuffer());
+    const data = await fetch(cacheBust(file.url, cacheKey), { cache: "no-store" }).then((r) => r.arrayBuffer());
     const target = `${destRoot}/${file.path}`;
     ensureDir(pyodide, target.split("/").slice(0, -1).join("/"));
     pyodide.FS.writeFile(target, new Uint8Array(data));
   }
 }
 
-async function copyAppFiles(pyodide) {
-  await copyTree(pyodide, "./app_files.json", "/home/pyodide/app");
+async function copyAppFiles(pyodide, manifest, cacheKey) {
+  await copyTree(pyodide, "./app_files.json", "/home/pyodide/app", cacheKey);
+}
+
+function cacheBust(url, key) {
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}v=${encodeURIComponent(key)}`;
 }
 
 function ensureDir(pyodide, dir) {
@@ -109,5 +131,6 @@ main().catch((error) => {
   const status = document.getElementById("status");
   if (status) {
     status.textContent = `Luvatrix web runtime error: ${error.message || error}`;
+    status.dataset.error = "true";
   }
 });

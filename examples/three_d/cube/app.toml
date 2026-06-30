@@ -1,0 +1,22 @@
+app_id = "luvatrix_three_d_cube"
+protocol_version = "3"
+entrypoint = "app_main:create"
+platform_support = ["web"]
+required_capabilities = ["window.write"]
+optional_capabilities = ["hdi.keyboard", "hdi.mouse", "hdi.touch"]
+
+[display]
+native_width = 960
+native_height = 640
+bar_color_rgba = [0, 0, 0, 255]
+default_coordinate_frame = "screen_tl"
+title = "Luvatrix 3D Cube"
+
+[render]
+preferred = "scene"
+fallbacks = ["scene", "ui", "matrix"]
+
+[web]
+pyodide_packages = []
+assets = []
+api_base_url = "/api"
