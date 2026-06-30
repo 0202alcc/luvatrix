@@ -31,6 +31,14 @@ class CameraModeStatus:
 
 
 @dataclass(frozen=True)
+class CameraCapabilitySummary:
+    hardware_level: str
+    supports_raw: bool
+    supports_private_preview: bool
+    max_burst: int
+
+
+@dataclass(frozen=True)
 class TouchButton:
     action: str
     label: str
@@ -80,6 +88,8 @@ def format_camera_status_lines(samples: Iterable[SensorSample]) -> list[str]:
         if matrix_line:
             sensor_lines.append(matrix_line)
         sensor_lines.extend(_raw_capture_lines(camera.get("raw_capture")))
+        sensor_lines.extend(_burst_capture_lines(camera.get("burst_capture")))
+        sensor_lines.extend(_processing_lines(camera.get("processing")))
         display = _display_payload(by_type.get("display.refresh"))
         sensor_lines.extend(_display_refresh_lines(display, camera))
         sensor_lines.extend(_preview_diagnostic_lines(camera))
@@ -188,6 +198,182 @@ def _raw_capture_lines(raw_capture: object) -> list[str]:
     error = raw_capture.get("last_error")
     if isinstance(error, str) and error:
         lines.append(f"RAW error: {error[:80]}")
+    diagnostics = raw_capture.get("diagnostics")
+    if isinstance(diagnostics, dict):
+        size = "yes" if diagnostics.get("raw_size_available") else "no"
+        reader = "yes" if diagnostics.get("raw_reader_active") else "no"
+        session = "yes" if diagnostics.get("raw_in_active_session") else "no"
+        targets = diagnostics.get("active_targets")
+        target_text = ",".join(str(item) for item in targets) if isinstance(targets, list) else ""
+        lines.append(f"raw diag: size={size} reader={reader} session={session} targets={target_text}")
+    return lines
+
+
+def _burst_capture_lines(burst_capture: object) -> list[str]:
+    if not isinstance(burst_capture, dict):
+        return []
+    status = str(burst_capture.get("status", "-"))
+    requested = _nonnegative_int(burst_capture.get("requested_frames"))
+    captured = _nonnegative_int(burst_capture.get("captured_frames"))
+    line = f"burst: {status} {captured}/{requested}"
+    burst_id = burst_capture.get("last_burst_id")
+    if isinstance(burst_id, str) and burst_id:
+        line += f" id={burst_id}"
+    manifest = burst_capture.get("manifest_path")
+    if isinstance(manifest, str) and manifest:
+        line += f" manifest={manifest.rsplit('/', 1)[-1]}"
+    error = burst_capture.get("last_error")
+    if isinstance(error, str) and error:
+        line += f" error={error[:80]}"
+    return [line]
+
+
+def _processing_lines(processing: object) -> list[str]:
+    if not isinstance(processing, dict):
+        return []
+    status = str(processing.get("status", "-"))
+    stage = processing.get("stage")
+    stage_text = f"{stage} " if isinstance(stage, str) and stage else ""
+    lines = [f"processing: {stage_text}{status}"]
+    raw_quality = processing.get("raw_quality_mode")
+    if isinstance(raw_quality, str) and raw_quality:
+        lines.append(f"raw quality: {raw_quality}")
+    demosaic = processing.get("raw_demosaic_mode")
+    if isinstance(demosaic, str) and demosaic:
+        lines.append(f"demosaic: {demosaic}")
+    merge = processing.get("raw_merge_mode")
+    if isinstance(merge, str) and merge:
+        lines.append(f"merge: {merge}")
+    requested_merge = processing.get("raw_requested_merge_mode")
+    quality_verdict = processing.get("raw_quality_verdict")
+    quality_fallback = processing.get("raw_quality_fallback")
+    requested_purple_after = _finite_float(processing.get("raw_requested_shadow_purple_ratio_after"))
+    if isinstance(quality_verdict, str) and quality_verdict:
+        quality_bits = [quality_verdict]
+        if (
+            isinstance(quality_fallback, str)
+            and quality_fallback
+            and quality_fallback != "none"
+        ):
+            quality_bits.append(f"fallback={quality_fallback}")
+        if isinstance(requested_merge, str) and requested_merge and requested_merge != merge:
+            quality_bits.append(f"requested={requested_merge}")
+        if requested_purple_after is not None:
+            quality_bits.append(f"requested_purple={requested_purple_after * 100.0:.2f}%")
+        lines.append(f"quality verdict: {' '.join(quality_bits)}")
+    style = processing.get("style_profile")
+    if isinstance(style, str) and style:
+        lines.append(f"style: {style}")
+    comparison_count = processing.get("comparison_count")
+    comparison_labels = processing.get("comparison_labels")
+    if isinstance(comparison_count, int) and comparison_count > 0:
+        label_text = comparison_labels if isinstance(comparison_labels, str) and comparison_labels else "-"
+        lines.append(f"comparison: {comparison_count} variants {label_text}")
+    tone_exposure = _finite_float(processing.get("tone_map_exposure"))
+    tone_p95 = _finite_float(processing.get("tone_map_p95"))
+    tone_rolloff = _finite_float(processing.get("tone_map_highlight_rolloff"))
+    tone_shadow = _finite_float(processing.get("tone_map_shadow_lift"))
+    if tone_exposure is not None and tone_p95 is not None and tone_rolloff is not None:
+        tone_line = f"tone: exp={tone_exposure:.2f} p95={tone_p95:.3f} roll={tone_rolloff:.2f}"
+        if tone_shadow is not None:
+            tone_line += f" shadow={tone_shadow:.2f}"
+        lines.append(tone_line)
+    tone_p50 = _finite_float(processing.get("tone_map_p50"))
+    tone_p99 = _finite_float(processing.get("tone_map_p99"))
+    if tone_p50 is not None and tone_p99 is not None:
+        lines.append(f"tone range: p50={tone_p50:.3f} p99={tone_p99:.3f}")
+    color_mode = processing.get("raw_color_matrix_mode")
+    gains_usable = processing.get("raw_color_gains_usable")
+    transform_usable = processing.get("raw_color_transform_usable")
+    if isinstance(color_mode, str) and color_mode:
+        lines.append(
+            f"color: {color_mode} "
+            f"gains={_yes_no(gains_usable)} matrix={_yes_no(transform_usable)}"
+        )
+    gain_mode = processing.get("raw_color_gain_mode")
+    lens_mode = processing.get("raw_lens_shading_mode")
+    lens_map_used = processing.get("raw_lens_shading_map_used")
+    if isinstance(gain_mode, str) and gain_mode:
+        lens_text = lens_mode if isinstance(lens_mode, str) and lens_mode else "-"
+        lines.append(f"color guard: {gain_mode} lens={lens_text} map={_yes_no(lens_map_used)}")
+    artifact_guard = processing.get("raw_artifact_guard")
+    purple_before = _finite_float(processing.get("raw_shadow_purple_ratio_before"))
+    purple_after = _finite_float(processing.get("raw_shadow_purple_ratio_after"))
+    purple_suppressed = processing.get("raw_shadow_purple_suppressed_pixels")
+    if isinstance(artifact_guard, str) and artifact_guard:
+        if purple_before is not None and purple_after is not None:
+            lines.append(
+                f"artifact: {artifact_guard} purple={purple_before * 100.0:.2f}%->{purple_after * 100.0:.2f}%"
+            )
+        if isinstance(purple_suppressed, int) and purple_suppressed > 0:
+            lines.append(f"artifact suppressed: {_nonnegative_int(purple_suppressed)} px")
+    merge_count = processing.get("merge_count")
+    merge_rejected = processing.get("merge_rejected")
+    sharpness_rejected = processing.get("sharpness_rejected")
+    exposure_rejected = processing.get("exposure_rejected")
+    alignment_failures = processing.get("alignment_failures")
+    motion_rejected = processing.get("motion_rejected_samples")
+    motion_total = processing.get("motion_total_samples")
+    exposure_consistent = processing.get("exposure_consistent")
+    merge_bits: list[str] = []
+    if isinstance(merge_count, int):
+        merge_bits.append(f"count={_nonnegative_int(merge_count)}")
+    if isinstance(merge_rejected, int):
+        merge_bits.append(f"reject={_nonnegative_int(merge_rejected)}")
+    if isinstance(sharpness_rejected, int):
+        merge_bits.append(f"blur={_nonnegative_int(sharpness_rejected)}")
+    if isinstance(exposure_rejected, int):
+        merge_bits.append(f"exposure={_nonnegative_int(exposure_rejected)}")
+    if isinstance(alignment_failures, int):
+        merge_bits.append(f"align_fail={_nonnegative_int(alignment_failures)}")
+    if isinstance(motion_rejected, int) and isinstance(motion_total, int) and motion_total > 0:
+        motion_pct = max(0.0, min(100.0, (float(motion_rejected) / float(motion_total)) * 100.0))
+        merge_bits.append(f"motion={motion_pct:.1f}%")
+    if isinstance(exposure_consistent, bool):
+        merge_bits.append(f"locked={_yes_no(exposure_consistent)}")
+    if merge_bits:
+        lines.append("merge diag: " + " ".join(merge_bits))
+    native_timing = processing.get("native_timing_ms")
+    if isinstance(native_timing, dict):
+        timing_order = (
+            ("frame_score", "score"),
+            ("selected_load", "load"),
+            ("merge_load", "mload"),
+            ("raw_reduce", "reduce"),
+            ("alignment", "align"),
+            ("merge", "merge"),
+            ("render", "render"),
+            ("preview", "prev"),
+            ("write", "write"),
+            ("total", "total"),
+        )
+        timing_bits: list[str] = []
+        for key, label in timing_order:
+            value = _finite_float(native_timing.get(key))
+            if value is not None:
+                timing_bits.append(f"{label}={value:.0f}ms")
+        if timing_bits:
+            lines.append("native ms: " + " ".join(timing_bits))
+    output = processing.get("last_output_path")
+    if isinstance(output, str) and output:
+        lines.append(f"output: {output.rsplit('/', 1)[-1]}")
+    preview = processing.get("last_preview_path")
+    if isinstance(preview, str) and preview:
+        lines.append(f"processed preview: {preview.rsplit('/', 1)[-1]}")
+    gallery = processing.get("last_gallery_uri")
+    if isinstance(gallery, str) and gallery:
+        lines.append(f"gallery: {gallery.rsplit('/', 1)[-1]}")
+    reference = processing.get("reference_frame")
+    used = processing.get("used_frames")
+    rejected = processing.get("rejected_frames")
+    if reference is not None and used is not None and rejected is not None:
+        lines.append(
+            f"reference: frame {_nonnegative_int(reference)} "
+            f"used={_nonnegative_int(used)} rejected={_nonnegative_int(rejected)}"
+        )
+    error = processing.get("last_error")
+    if isinstance(error, str) and error:
+        lines.append(f"processing error: {error[:80]}")
     return lines
 
 
@@ -260,11 +446,23 @@ def _independent_variable_lines(camera: dict[str, object], display: dict[str, ob
     red_gain = _format_floatish(gpu.get("red_gain"), digits=2)
     green_gain = _format_floatish(gpu.get("green_gain"), digits=2)
     blue_gain = _format_floatish(gpu.get("blue_gain"), digits=2)
+    brightness = _format_floatish(gpu.get("color_brightness"), digits=3)
+    contrast = _format_floatish(gpu.get("color_contrast"), digits=2)
     if red_gain and green_gain and blue_gain:
         wb_bits.append(f"rgb={red_gain}/{green_gain}/{blue_gain}")
+    if brightness:
+        wb_bits.append(f"b={brightness}")
+    if contrast:
+        wb_bits.append(f"c={contrast}")
     if wb_bits:
         lines.append("wb=" + " ".join(wb_bits))
     lines.extend(_manual_control_lines(controls))
+    burst_summary = _burst_capture_summary(camera.get("burst_capture"))
+    if burst_summary:
+        lines.append(burst_summary)
+    processing_summary = _processing_summary(camera.get("processing"))
+    if processing_summary:
+        lines.append(processing_summary)
     return lines
 
 
@@ -356,6 +554,33 @@ def _raw_capture_summary(raw_capture: object) -> str:
     if isinstance(error, str) and error:
         return f"raw: {status} {error[:42]}"
     return f"raw: {status}"
+
+
+def _burst_capture_summary(burst_capture: object) -> str:
+    if not isinstance(burst_capture, dict):
+        return ""
+    status = str(burst_capture.get("status", "-"))
+    requested = _nonnegative_int(burst_capture.get("requested_frames"))
+    captured = _nonnegative_int(burst_capture.get("captured_frames"))
+    return f"burst: {status} {captured}/{requested}"
+
+
+def _processing_summary(processing: object) -> str:
+    if not isinstance(processing, dict):
+        return ""
+    status = str(processing.get("status", "-"))
+    stage = processing.get("stage")
+    stage_text = f"{stage} " if isinstance(stage, str) and stage else ""
+    output = processing.get("last_output_path")
+    if isinstance(output, str) and output:
+        return f"processing: {stage_text}{status} {output.rsplit('/', 1)[-1]}"
+    gallery = processing.get("last_gallery_uri")
+    if isinstance(gallery, str) and gallery:
+        return f"processing: {stage_text}{status} gallery={gallery.rsplit('/', 1)[-1]}"
+    error = processing.get("last_error")
+    if isinstance(error, str) and error:
+        return f"processing: {stage_text}{status} {error[:42]}"
+    return f"processing: {stage_text}{status}"
 
 
 def _preview_state_summary(camera: dict[str, object], display: dict[str, object]) -> str:
@@ -494,6 +719,9 @@ def _preview_perf_detail_lines(camera: dict[str, object]) -> list[str]:
 
 def _preview_diagnostic_lines(camera: dict[str, object]) -> list[str]:
     lines: list[str] = []
+    capability = _camera_capability_line(camera)
+    if capability:
+        lines.append(capability)
     preview = _preview_renderer_line(camera)
     if preview:
         lines.append(preview)
@@ -682,6 +910,129 @@ def _preview_diagnostic_lines(camera: dict[str, object]) -> list[str]:
         if isinstance(intermediate_error, str) and intermediate_error:
             lines.append(f"intermediate error: {intermediate_error[:80]}")
     return lines
+
+
+def _camera_capability_line(camera: dict[str, object]) -> str:
+    if not _has_capability_data(camera):
+        return ""
+    summary = camera_capability_summary(camera)
+    return (
+        f"cap: {summary.hardware_level} "
+        f"raw={_yes_no(summary.supports_raw)} "
+        f"private={_yes_no(summary.supports_private_preview)} "
+        f"burst={summary.max_burst}"
+    )
+
+
+def camera_capability_summary(camera: dict[str, object]) -> CameraCapabilitySummary:
+    capabilities = camera.get("capabilities") if isinstance(camera.get("capabilities"), dict) else {}
+    profile = camera.get("active_capability_profile") if isinstance(camera.get("active_capability_profile"), dict) else {}
+    level = _first_present(
+        camera,
+        "camera.capabilities.hardware_level",
+        capabilities,
+        "hardware_level",
+        profile,
+        "hardware_level",
+    )
+    raw = _first_present(
+        camera,
+        "camera.capabilities.raw",
+        capabilities,
+        "raw",
+        profile,
+        "supports_raw",
+    )
+    private_preview = _first_present(
+        camera,
+        "camera.capabilities.private_preview",
+        capabilities,
+        "private_preview",
+        profile,
+        "supports_private_preview",
+    )
+    burst = _first_present(
+        camera,
+        "camera.capabilities.max_burst",
+        capabilities,
+        "max_burst",
+        profile,
+        "max_burst_targets",
+    )
+    return CameraCapabilitySummary(
+        hardware_level=level if isinstance(level, str) and level else "UNKNOWN",
+        supports_raw=_boolish(raw),
+        supports_private_preview=_boolish(private_preview),
+        max_burst=_nonnegative_int(burst),
+    )
+
+
+def _has_capability_data(camera: dict[str, object]) -> bool:
+    if any(key.startswith("camera.capabilities.") for key in camera):
+        return True
+    if isinstance(camera.get("capabilities"), dict):
+        return True
+    return isinstance(camera.get("active_capability_profile"), dict)
+
+
+def _first_present(
+    primary: dict[str, object],
+    primary_key: str,
+    secondary: dict[str, object],
+    secondary_key: str,
+    tertiary: dict[str, object],
+    tertiary_key: str,
+) -> object:
+    if primary_key in primary:
+        return primary[primary_key]
+    if secondary_key in secondary:
+        return secondary[secondary_key]
+    if tertiary_key in tertiary:
+        return tertiary[tertiary_key]
+    return None
+
+
+def _yes_no(value: object) -> str:
+    return "yes" if _boolish(value) else "no"
+
+
+def _boolish(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return False
+
+
+def _nonnegative_int(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return max(value, 0)
+    if isinstance(value, float) and value.is_integer():
+        return max(int(value), 0)
+    if isinstance(value, str):
+        try:
+            return max(int(value), 0)
+        except ValueError:
+            return 0
+    return 0
+
+
+def _finite_float(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and math.isfinite(float(value)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            parsed = float(value)
+        except ValueError:
+            return None
+        return parsed if math.isfinite(parsed) else None
+    return None
 
 
 def _format_shutter(value: object) -> str:
@@ -1021,13 +1372,19 @@ class CameraLabApp:
         self._preview_target_mode = "raw"
         self._preview_sharpness_mode = "natural"
         self._preview_convolution_layers = 0
-        self._preview_white_balance_mode = "auto"
+        self._preview_white_balance_mode = "natural_plus"
         self._preview_pipeline_mode = "hq"
         self._refresh_hint_mode = "60"
+        self._burst_frame_count = 5
+        self._raw_quality_mode = "balanced_2400"
+        self._raw_demosaic_mode = "malvar_approx"
+        self._raw_merge_mode = "raw_average_motion_aware"
+        self._raw_render_style = "Google"
 
     def init(self, ctx) -> None:
         snap = ctx.read_matrix_snapshot()
         self._height, self._width, _ = snap.shape
+        self._apply_preview_defaults()
 
     def loop(self, ctx, dt: float) -> None:
         _ = dt
@@ -1082,6 +1439,26 @@ class CameraLabApp:
                     self._toggle_dual_preview()
                 elif button.action == "capture_raw":
                     self._capture_raw_still()
+                elif button.action == "capture_yuv_burst":
+                    self._capture_yuv_burst()
+                elif button.action == "capture_raw_burst":
+                    self._capture_raw_burst()
+                elif button.action == "capture_raw_comparison":
+                    self._capture_raw_comparison()
+                elif button.action == "cycle_burst_depth":
+                    self._cycle_burst_depth()
+                elif button.action == "cycle_raw_quality":
+                    self._cycle_raw_quality()
+                elif button.action == "cycle_raw_demosaic":
+                    self._cycle_raw_demosaic()
+                elif button.action == "cycle_raw_merge":
+                    self._cycle_raw_merge()
+                elif button.action == "cycle_raw_style":
+                    self._cycle_raw_style()
+                elif button.action == "process_last_burst":
+                    self._process_last_burst()
+                elif button.action == "process_last_raw_burst":
+                    self._process_last_raw_burst()
                 elif button.action == "cycle_preview_quality":
                     self._cycle_preview_quality()
                 elif button.action == "cycle_preview_target":
@@ -1128,6 +1505,30 @@ class CameraLabApp:
             return
         if key in ("r", "keycode_r"):
             self._capture_raw_still()
+            return
+        if key in ("b", "keycode_b"):
+            self._capture_yuv_burst()
+            return
+        if key in ("x", "keycode_x"):
+            self._capture_raw_burst()
+            return
+        if key in ("z", "keycode_z"):
+            self._capture_raw_comparison()
+            return
+        if key in ("n", "keycode_n"):
+            self._cycle_burst_depth()
+            return
+        if key in ("y", "keycode_y"):
+            self._cycle_raw_quality()
+            return
+        if key in ("u", "keycode_u"):
+            self._cycle_raw_demosaic()
+            return
+        if key in ("g", "keycode_g"):
+            self._cycle_raw_merge()
+            return
+        if key in ("j", "keycode_j"):
+            self._cycle_raw_style()
             return
         if key in ("q", "keycode_q"):
             self._cycle_preview_quality()
@@ -1194,6 +1595,18 @@ class CameraLabApp:
         self._last_action_status = f"switching primary to camera {next_id}"
         _android_set_primary_camera(next_id)
 
+    def _apply_preview_defaults(self) -> None:
+        _android_set_preview_quality_mode(self._preview_quality_mode)
+        _android_set_preview_target_mode(self._preview_target_mode)
+        _android_set_preview_sharpness_mode(self._preview_sharpness_mode)
+        _android_set_preview_convolution_layers(self._preview_convolution_layers)
+        _android_set_preview_white_balance_mode(self._preview_white_balance_mode)
+        _android_set_preview_pipeline_mode(self._preview_pipeline_mode)
+        _android_set_raw_quality_mode(self._raw_quality_mode)
+        _android_set_raw_demosaic_mode(self._raw_demosaic_mode)
+        _android_set_raw_merge_mode(self._raw_merge_mode)
+        _android_set_raw_render_style(self._raw_render_style)
+
     def _toggle_dual_preview(self) -> None:
         payload = self._latest_camera_payload()
         currently_enabled = bool(payload.get("dual_active"))
@@ -1211,6 +1624,86 @@ class CameraLabApp:
             return
         self._last_action_status = "capturing RAW still"
         _android_capture_raw_still()
+
+    def _capture_yuv_burst(self) -> None:
+        self._last_action_status = f"capturing and processing burst x{self._burst_frame_count}"
+        _android_capture_yuv_burst(self._burst_frame_count)
+
+    def _process_last_burst(self) -> None:
+        self._last_action_status = "processing last YUV burst"
+        _android_process_last_yuv_burst()
+
+    def _process_last_raw_burst(self) -> None:
+        self._last_action_status = "processing last RAW burst"
+        _android_process_last_raw_burst()
+
+    def _capture_raw_burst(self) -> None:
+        self._last_action_status = f"capturing and processing RAW burst x{self._burst_frame_count}"
+        _android_capture_raw_burst(self._burst_frame_count)
+
+    def _capture_raw_comparison(self) -> None:
+        self._last_action_status = f"capturing RAW comparison x{self._burst_frame_count}"
+        _android_capture_raw_comparison_burst(self._burst_frame_count)
+
+    def _cycle_burst_depth(self) -> None:
+        order = (3, 5, 10, 12)
+        current = self._burst_frame_count
+        try:
+            next_count = order[(order.index(current) + 1) % len(order)]
+        except ValueError:
+            next_count = 10
+        self._burst_frame_count = next_count
+        self._last_action_status = f"burst depth {next_count}"
+
+    def _cycle_raw_quality(self) -> None:
+        order = ("fast_1600", "balanced_2400", "full_res")
+        current = self._raw_quality_mode
+        try:
+            next_mode = order[(order.index(current) + 1) % len(order)]
+        except ValueError:
+            next_mode = "fast_1600"
+        self._raw_quality_mode = next_mode
+        self._last_action_status = f"raw quality {next_mode}"
+        _android_set_raw_quality_mode(next_mode)
+
+    def _cycle_raw_demosaic(self) -> None:
+        order = ("bilinear_fast", "malvar_approx")
+        current = self._raw_demosaic_mode
+        try:
+            next_mode = order[(order.index(current) + 1) % len(order)]
+        except ValueError:
+            next_mode = "bilinear_fast"
+        self._raw_demosaic_mode = next_mode
+        self._last_action_status = f"demosaic {next_mode}"
+        _android_set_raw_demosaic_mode(next_mode)
+
+    def _cycle_raw_merge(self) -> None:
+        order = (
+            "raw_single_frame",
+            "raw_average_no_alignment",
+            "raw_average_global_aligned",
+            "raw_average_motion_aware",
+            "raw_average_tile_motion_aware",
+        )
+        current = self._raw_merge_mode
+        try:
+            next_mode = order[(order.index(current) + 1) % len(order)]
+        except ValueError:
+            next_mode = "raw_single_frame"
+        self._raw_merge_mode = next_mode
+        self._last_action_status = f"merge {next_mode}"
+        _android_set_raw_merge_mode(next_mode)
+
+    def _cycle_raw_style(self) -> None:
+        order = ("Neutral", "Google", "Apple", "Samsung", "Xiaomi")
+        current = self._raw_render_style
+        try:
+            next_style = order[(order.index(current) + 1) % len(order)]
+        except ValueError:
+            next_style = "Neutral"
+        self._raw_render_style = next_style
+        self._last_action_status = f"style {next_style}"
+        _android_set_raw_render_style(next_style)
 
     def _cycle_preview_quality(self) -> None:
         order = ("max", "balanced", "fast")
@@ -1252,12 +1745,12 @@ class CameraLabApp:
         _android_set_preview_convolution_layers(next_layers)
 
     def _cycle_preview_white_balance(self) -> None:
-        order = ("auto", "neutral", "warm", "cool", "desk")
+        order = ("natural_plus", "auto", "neutral", "warm", "cool", "desk")
         current = self._preview_white_balance_mode
         try:
             next_mode = order[(order.index(current) + 1) % len(order)]
         except ValueError:
-            next_mode = "auto"
+            next_mode = "natural_plus"
         self._preview_white_balance_mode = next_mode
         self._last_action_status = f"white balance {next_mode}"
         _android_set_preview_white_balance_mode(next_mode)
@@ -1443,7 +1936,23 @@ class CameraLabApp:
             (("cycle_preview_quality", "qual"), ("cycle_preview_target", "target"), ("cycle_preview_convolution_layers", "layer"), ("cycle_preview_pipeline", "pipe")),
             (("toggle_raw_mode", "mode"), ("cycle_preview_white_balance", "WB"), ("iso_down", "ISO-"), ("iso_up", "ISO+")),
             (("shutter_down", "S-"), ("shutter_up", "S+"), ("focus_down", "F-"), ("focus_up", "F+")),
+            (("capture_yuv_burst", "burst"), ("capture_raw_burst", "raw burst"), ("cycle_burst_depth", "depth"), ("cycle_raw_quality", "raw q")),
+            (("cycle_raw_demosaic", "demo"), ("cycle_raw_merge", "merge"), ("cycle_raw_style", "style"), ("capture_raw_comparison", "compare")),
         ]
+        payload = self._latest_camera_payload()
+        processing = payload.get("processing") if isinstance(payload.get("processing"), dict) else {}
+        burst = payload.get("burst_capture") if isinstance(payload.get("burst_capture"), dict) else {}
+        if (
+            processing.get("status") == "error"
+            or (
+                burst.get("status") == "saved"
+                and not (isinstance(processing.get("last_output_path"), str) and processing.get("last_output_path"))
+            )
+        ):
+            if processing.get("source_format") == "RAW_SENSOR":
+                rows[-1] = (("capture_yuv_burst", "burst"), ("capture_raw_burst", "raw burst"), ("process_last_raw_burst", "process raw"))
+            else:
+                rows[-1] = (("capture_yuv_burst", "burst"), ("cycle_burst_depth", "depth"), ("process_last_burst", "process"))
         usable = max(1.0, width - margin * 2.0 - gap * (cols - 1))
         button_w = usable / cols
         button_h = max(42.0, min(58.0, height * 0.062))
@@ -1540,6 +2049,60 @@ def _android_capture_raw_still() -> None:
         return
 
 
+def _android_capture_yuv_burst(frame_count: int) -> None:
+    try:
+        import luvatrix_android_boot
+
+        luvatrix_android_boot.capture_yuv_burst(int(frame_count))
+    except Exception:
+        return
+
+
+def _android_capture_raw_burst(frame_count: int) -> None:
+    try:
+        import luvatrix_android_boot
+
+        luvatrix_android_boot.capture_raw_burst(int(frame_count))
+    except Exception:
+        return
+
+
+def _android_capture_raw_comparison_burst(frame_count: int) -> None:
+    try:
+        import luvatrix_android_boot
+
+        luvatrix_android_boot.capture_raw_comparison_burst(int(frame_count))
+    except Exception:
+        return
+
+
+def _android_process_last_yuv_burst() -> None:
+    try:
+        import luvatrix_android_boot
+
+        luvatrix_android_boot.process_last_yuv_burst()
+    except Exception:
+        return
+
+
+def _android_process_last_raw_burst() -> None:
+    try:
+        import luvatrix_android_boot
+
+        luvatrix_android_boot.process_last_raw_burst()
+    except Exception:
+        return
+
+
+def _android_process_last_raw_comparison() -> None:
+    try:
+        import luvatrix_android_boot
+
+        luvatrix_android_boot.process_last_raw_comparison()
+    except Exception:
+        return
+
+
 def _android_set_raw_capture_mode(mode: str) -> None:
     try:
         import luvatrix_android_boot
@@ -1600,6 +2163,42 @@ def _android_set_preview_quality_mode(mode: str) -> None:
         import luvatrix_android_boot
 
         luvatrix_android_boot.set_preview_quality_mode(str(mode))
+    except Exception:
+        return
+
+
+def _android_set_raw_quality_mode(mode: str) -> None:
+    try:
+        import luvatrix_android_boot
+
+        luvatrix_android_boot.set_raw_quality_mode(str(mode))
+    except Exception:
+        return
+
+
+def _android_set_raw_demosaic_mode(mode: str) -> None:
+    try:
+        import luvatrix_android_boot
+
+        luvatrix_android_boot.set_raw_demosaic_mode(str(mode))
+    except Exception:
+        return
+
+
+def _android_set_raw_merge_mode(mode: str) -> None:
+    try:
+        import luvatrix_android_boot
+
+        luvatrix_android_boot.set_raw_merge_mode(str(mode))
+    except Exception:
+        return
+
+
+def _android_set_raw_render_style(style: str) -> None:
+    try:
+        import luvatrix_android_boot
+
+        luvatrix_android_boot.set_raw_render_style(str(style))
     except Exception:
         return
 

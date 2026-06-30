@@ -194,6 +194,106 @@ class MacOSHDISourceTests(unittest.TestCase):
         # window-local y (top-left): _to_top_left_y(70 - 20, 100) = _to_top_left_y(50, 100) = 49
         self.assertAlmostEqual(float(payload["y"]), 49.0)
 
+    def test_poll_iohid_suppresses_stationary_pointer_move(self) -> None:
+        class _Bounds:
+            class size:
+                height = 100.0
+
+        class _View:
+            def bounds(self):
+                return _Bounds()
+
+        class _Frame:
+            class origin:
+                x = 0.0
+                y = 0.0
+
+        class _Window:
+            def contentView(self):
+                return _View()
+
+            def frame(self):
+                return _Frame()
+
+        class _FakeIOHID:
+            def drain_events(self):
+                return []
+
+            def current_screen_xy(self):
+                return (12.0, 34.0)
+
+            def current_buttons_mask(self):
+                return 0
+
+        source = object.__new__(MacOSWindowHDISource)
+        source._window_handle = types.SimpleNamespace(window=_Window())
+        source._next_id = 1
+        source._queued_events = deque()
+        source._monitor = None
+        source._last_mouse_buttons_mask = 0
+        source._last_pointer_payload = None
+        source._iohid = _FakeIOHID()
+        source._last_window_active_local = True
+
+        first = source.poll(window_active=True, ts_ns=1)
+        second = source.poll(window_active=True, ts_ns=2)
+
+        self.assertEqual([event.event_type for event in first], ["pointer_move"])
+        self.assertEqual(second, [])
+
+    def test_queue_event_coalesces_scroll_burst_before_hdi_thread(self) -> None:
+        from luvatrix_core.core.hdi_thread import HDIEvent
+
+        source = object.__new__(MacOSWindowHDISource)
+        source._queued_events = deque()
+        source._next_id = 1
+
+        source._queue_event(
+            HDIEvent(
+                event_id=1,
+                ts_ns=1,
+                window_id="w",
+                device="trackpad",
+                event_type="scroll",
+                status="OK",
+                payload={
+                    "x": 10.0,
+                    "y": 20.0,
+                    "delta_x": 1.0,
+                    "delta_y": 2.0,
+                    "phase": "changed",
+                    "momentum_phase": "none",
+                },
+            )
+        )
+        source._queue_event(
+            HDIEvent(
+                event_id=2,
+                ts_ns=2,
+                window_id="w",
+                device="trackpad",
+                event_type="scroll",
+                status="OK",
+                payload={
+                    "x": 12.0,
+                    "y": 22.0,
+                    "delta_x": 3.0,
+                    "delta_y": 4.0,
+                    "phase": "changed",
+                    "momentum_phase": "none",
+                },
+            )
+        )
+
+        self.assertEqual(len(source._queued_events), 1)
+        payload = source._queued_events[0].payload
+        assert isinstance(payload, dict)
+        self.assertEqual(payload["x"], 12.0)
+        self.assertEqual(payload["y"], 22.0)
+        self.assertAlmostEqual(float(payload["delta_x"]), 4.0)
+        self.assertAlmostEqual(float(payload["delta_y"]), 6.0)
+        self.assertEqual(payload["coalesced_count"], 2)
+
     def test_poll_iohid_flushes_on_activation(self) -> None:
         """Events accumulated while inactive are discarded on window re-activation."""
         from luvatrix_core.core.hdi_thread import HDIEvent

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import importlib
 import json
 import os
 import os as _os
@@ -13,6 +14,8 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+
+from luvatrix_core.scaffold import resolve_native_project_dir
 
 LOGGER = logging.getLogger(__name__)
 
@@ -662,18 +665,29 @@ def run_loop(app_dir: str) -> None:
 def _run_ios_simulator(
     app_dir: Path,
     simulator_name: str,
+    native_project_dir: Path | None = None,
     render_scale: float = 1.0,
     render_mode: str = "auto",
     target_fps: int | None = None,
     present_fps: int | None = None,
+    low_latency_mode: bool = True,
 ) -> None:
     import shutil
+    _ = low_latency_mode
 
-    repo_root = Path(__file__).parent.parent.parent.parent.resolve()
-    ios_dir = repo_root / "ios"
+    ios_dir = _resolve_ios_project(app_dir, native_project_dir)
     derived_data_dir = ios_dir / ".build"
     packages_dir = _ios_packages_dir(ios_dir, "simulator")
     _ensure_ios_numpy_available(ios_dir, "simulator")
+    _sync_luvatrix_packages(packages_dir)
+    _write_ios_launch_config(
+        packages_dir,
+        render_scale=render_scale,
+        render_mode=render_mode,
+        target_fps=target_fps,
+        present_fps=present_fps,
+        import_probe=False,
+    )
 
     # Sync app dir into PyPackages under a fixed name so AppDelegate can find it.
     app_dest = packages_dir / "luvatrix_app"
@@ -683,7 +697,7 @@ def _run_ios_simulator(
     print(f"[ios] synced {app_dir} → {app_dest}")
 
     # Copy app icon into the asset catalog if one exists at assets/icon.png.
-    icon_src = repo_root / "assets" / "icon.png"
+    icon_src = app_dir / "assets" / "icon.png"
     icon_dst = ios_dir / "Luvatrix" / "Assets.xcassets" / "AppIcon.appiconset" / "icon.png"
     if icon_src.exists():
         shutil.copy2(icon_src, icon_dst)
@@ -796,10 +810,16 @@ def _build_ios_device_app(
 
 def _sync_local_packages(repo_root: Path, packages_dir: Path) -> None:
     """Sync public and internal luvatrix packages into the iOS PyPackages dir."""
-    import shutil
+    _ = repo_root
+    _sync_luvatrix_packages(packages_dir)
+
+
+def _sync_luvatrix_packages(packages_dir: Path) -> None:
+    """Sync installed luvatrix packages into the iOS PyPackages dir."""
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc")
     for pkg in ("luvatrix", "luvatrix_core", "luvatrix_ui"):
-        src = repo_root / pkg
+        mod = importlib.import_module(pkg)
+        src = Path(mod.__file__).resolve().parent
         dst = packages_dir / pkg
         if not src.is_dir():
             continue
@@ -807,6 +827,45 @@ def _sync_local_packages(repo_root: Path, packages_dir: Path) -> None:
             shutil.rmtree(dst)
         shutil.copytree(src, dst, ignore=ignore)
         print(f"[ios] synced {src} → {dst}")
+
+
+def _resolve_ios_project(app_dir: Path, explicit: Path | None = None) -> Path:
+    project = resolve_native_project_dir(app_dir, "ios", explicit)
+    if project is not None:
+        return project
+    raise RuntimeError(
+        "iOS native project not found. Run "
+        "`luvatrix init-native APP_DIR --target ios --out APP_DIR/ios` "
+        "and then pass `--native-project APP_DIR/ios`, or create the default "
+        "`APP_DIR/.luvatrix/ios` scaffold."
+    )
+
+
+def _write_ios_launch_config(
+    packages_dir: Path,
+    *,
+    render_scale: float,
+    render_mode: str,
+    target_fps: int | None,
+    present_fps: int | None,
+    import_probe: bool,
+) -> None:
+    launch_config = {
+        "LUVATRIX_IOS_RENDER_SCALE": f"{render_scale:.6g}",
+        "LUVATRIX_RENDER_MODE": render_mode,
+        "LUVATRIX_IOS_TARGET_FPS": str(target_fps or (60 if render_mode == "matrix" else 120)),
+        "LUVATRIX_IOS_PRESENT_FPS": str(present_fps or target_fps or (60 if render_mode == "matrix" else 120)),
+    }
+    if import_probe:
+        launch_config["LUVATRIX_IMPORT_PROBE"] = "1"
+    if os.environ.get("LUVATRIX_IOS_ENABLE_HDI") == "1":
+        launch_config["LUVATRIX_IOS_ENABLE_HDI"] = "1"
+    if os.environ.get("LUVATRIX_FSI_DEBUG"):
+        launch_config["LUVATRIX_FSI_DEBUG"] = os.environ["LUVATRIX_FSI_DEBUG"]
+    (packages_dir / "luvatrix_ios_launch_config.json").write_text(
+        json.dumps(launch_config, sort_keys=True),
+        encoding="utf-8",
+    )
 
 
 def _ios_packages_dir(ios_dir: Path, target: str) -> Path:
@@ -1294,16 +1353,18 @@ def _run_ios_device(
     app_dir: Path,
     device_name: str | None,
     team_id: str | None,
+    native_project_dir: Path | None = None,
     import_probe: bool = False,
     render_scale: float = 1.0,
     render_mode: str = "auto",
     target_fps: int | None = None,
     present_fps: int | None = None,
+    low_latency_mode: bool = True,
 ) -> None:
     import shutil
+    _ = low_latency_mode
 
-    repo_root = Path(__file__).parent.parent.parent.parent.resolve()
-    ios_dir = repo_root / "ios"
+    ios_dir = _resolve_ios_project(app_dir, native_project_dir)
     packages_dir = _ios_packages_dir(ios_dir, "device")
     _ensure_ios_numpy_available(ios_dir, "device")
 
@@ -1318,24 +1379,15 @@ def _run_ios_device(
     shutil.copytree(app_dir, app_dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     print(f"[ios] synced {app_dir} → {app_dest}")
 
-    launch_config = {
-        "LUVATRIX_IOS_RENDER_SCALE": f"{render_scale:.6g}",
-        "LUVATRIX_RENDER_MODE": render_mode,
-        "LUVATRIX_IOS_TARGET_FPS": str(target_fps or (60 if render_mode == "matrix" else 120)),
-        "LUVATRIX_IOS_PRESENT_FPS": str(present_fps or target_fps or (60 if render_mode == "matrix" else 120)),
-    }
-    if import_probe:
-        launch_config["LUVATRIX_IMPORT_PROBE"] = "1"
-    if os.environ.get("LUVATRIX_IOS_ENABLE_HDI") == "1":
-        launch_config["LUVATRIX_IOS_ENABLE_HDI"] = "1"
-    if os.environ.get("LUVATRIX_FSI_DEBUG"):
-        launch_config["LUVATRIX_FSI_DEBUG"] = os.environ["LUVATRIX_FSI_DEBUG"]
-    (packages_dir / "luvatrix_ios_launch_config.json").write_text(
-        json.dumps(launch_config, sort_keys=True),
-        encoding="utf-8",
+    _write_ios_launch_config(
+        packages_dir,
+        render_scale=render_scale,
+        render_mode=render_mode,
+        target_fps=target_fps,
+        present_fps=present_fps,
+        import_probe=import_probe,
     )
-
-    _sync_local_packages(repo_root, packages_dir)
+    _sync_luvatrix_packages(packages_dir)
 
     # Build into repo-local DerivedData so stale global Xcode builds cannot
     # mismatch PythonSupport.xcframework and the bundled native wheels.
@@ -1695,4 +1747,3 @@ def _find_simulator_udid(devices_json: dict, name: str) -> str | None:
             elif available_udid is None:
                 available_udid = device["udid"]
     return booted_udid or available_udid
-

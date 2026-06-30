@@ -4,6 +4,23 @@ export const OPCODES = Object.freeze({
   RECT: 3,
   CIRCLE: 4,
   TEXT: 5,
+  CAMERA_3D: 6,
+  CUBE_3D: 7,
+  DOT_GRID_3D: 8,
+  LINE_3D: 9,
+  HORIZON_3D: 10,
+  TEXT_3D: 11,
+  GROUND_PLANE_3D: 12,
+  DOT_PLANE_3D: 13,
+  INFINITE_GROUND_3D: 14,
+  INFINITE_DOT_PLANE_3D: 15,
+  CUBOID_3D: 16,
+  INFINITE_GRID_3D: 17,
+  SPHERE_3D: 18,
+  ROUNDED_RECT: 19,
+  MODEL_3D: 20,
+  ROUNDED_CUBOID_3D: 21,
+  IMAGE_3D: 22,
 });
 
 export const SHADERS = Object.freeze({
@@ -22,9 +39,11 @@ export function decodeCommandBuffer(buffer) {
     const floatCount = headers[i++] ?? 0;
     const meta0 = headers[i++] ?? 0;
     const args = floats.subarray(floatStart, floatStart + floatCount);
-    if (opcode === OPCODES.TEXT) {
+    if (opcode === OPCODES.TEXT || opcode === OPCODES.TEXT_3D) {
       const fontId = headers[i++] ?? 0;
       commands.push({ opcode, args, text: strings[meta0] || "", font: strings[fontId] || "sans-serif" });
+    } else if (opcode === OPCODES.MODEL_3D || opcode === OPCODES.IMAGE_3D) {
+      commands.push({ opcode, args, asset: strings[meta0] || "" });
     } else {
       commands.push({ opcode, args, meta: meta0, shader: SHADERS[meta0] || "" });
     }

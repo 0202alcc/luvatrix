@@ -67,10 +67,28 @@ class HDIThreadTests(unittest.TestCase):
         time.sleep(0.01)
         thread.stop()
         events = thread.poll_events(max_events=10)
-        self.assertEqual([e.event_type for e in events], ["pointer_move", "press"])
-        payload = events[1].payload
+        self.assertEqual([e.event_type for e in events], ["press", "pointer_move"])
+        payload = events[0].payload
         assert isinstance(payload, dict)
         self.assertEqual(payload.get("phase"), "down")
+
+    def test_pointer_motion_uses_latest_slot_without_consuming_edge_queue(self) -> None:
+        thread = HDIThread(source=_ScriptedHDISource([]), max_queue_size=1, poll_interval_s=0.001)
+        for i in range(100):
+            thread._enqueue(  # type: ignore[attr-defined]
+                HDIEvent(i, i, "w", "mouse", "pointer_move", "OK", {"x": float(i), "y": float(i)})
+            )
+        thread._enqueue(  # type: ignore[attr-defined]
+            HDIEvent(101, 101, "w", "keyboard", "key_down", "OK", {"key": "a", "phase": "down"})
+        )
+
+        self.assertEqual(thread.pending_count(), 2)
+        events = thread.poll_events(max_events=10)
+        self.assertEqual([e.event_type for e in events], ["key_down", "pointer_move"])
+        payload = events[1].payload
+        assert isinstance(payload, dict)
+        self.assertEqual(payload["x"], 99.0)
+        self.assertEqual(payload["y"], 99.0)
 
     def test_touch_moves_coalesce_per_touch_id_and_preserve_transitions(self) -> None:
         source = _ScriptedHDISource(
@@ -479,6 +497,23 @@ class HDIThreadTests(unittest.TestCase):
         telemetry = thread.consume_telemetry()
         self.assertEqual(int(telemetry.get("events_coalesced", 0)), 1)
         self.assertEqual(int(telemetry.get("events_dequeued", 0)), 1)
+
+    def test_scroll_events_are_coalesced_deterministically_for_trackpad(self) -> None:
+        thread = HDIThread(source=_ScriptedHDISource([]), max_queue_size=4, poll_interval_s=0.001)
+        thread._enqueue(  # type: ignore[attr-defined]
+            HDIEvent(1, 1, "w", "trackpad", "scroll", "OK", {"delta_x": 1.0, "delta_y": -2.0})
+        )
+        thread._enqueue(  # type: ignore[attr-defined]
+            HDIEvent(2, 2, "w", "trackpad", "scroll", "OK", {"delta_x": 2.0, "delta_y": -3.0})
+        )
+        events = thread.poll_events(max_events=10)
+        self.assertEqual(len(events), 1)
+        payload = events[0].payload
+        assert isinstance(payload, dict)
+        self.assertAlmostEqual(float(payload.get("delta_x", 0.0)), 3.0, places=6)
+        self.assertAlmostEqual(float(payload.get("delta_y", 0.0)), -5.0, places=6)
+        self.assertEqual(int(payload.get("coalesced_count", 0)), 2)
+        self.assertEqual(str(payload.get("coalesce_mode", "")), "sum")
 
     def test_queue_latency_telemetry_reports_non_negative_values(self) -> None:
         thread = HDIThread(source=_ScriptedHDISource([]), max_queue_size=8, poll_interval_s=0.001)

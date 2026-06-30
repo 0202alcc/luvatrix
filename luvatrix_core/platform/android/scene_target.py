@@ -36,7 +36,8 @@ class AndroidNativeSceneTarget:
     def should_close(self) -> bool:
         return False
 
-    def present_scene(self, frame: SceneFrame) -> None:
+    def present_scene(self, frame: SceneFrame, target_present_time: float | None = None) -> None:
+        _ = target_present_time
         if not self._started:
             raise RuntimeError("AndroidNativeSceneTarget.present_scene called before start")
         method = getattr(self.presenter, "presentScene", None) or getattr(self.presenter, "present_scene", None)

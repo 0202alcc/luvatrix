@@ -23,6 +23,7 @@ class MacOSWindowHDISource(HDIEventSource):
         self._queued_events: deque[HDIEvent] = deque()
         self._monitor = None
         self._last_mouse_buttons_mask = 0
+        self._last_pointer_payload: dict[str, float | int] | None = None
         # IOKit path (populated by _install_iohid; None → NSEvent fallback).
         self._iohid = None
         self._last_window_active_local = True
@@ -118,11 +119,13 @@ class MacOSWindowHDISource(HDIEventSource):
                     view_h = float(view.bounds().size.height)
                     phase = _scroll_phase_name(int(event.phase()))
                     momentum_phase = _scroll_phase_name(int(event.momentumPhase()))
+                    scale = _scroll_delta_scale(bool(event.hasPreciseScrollingDeltas()))
                     payload = {
                         "x": float(loc.x),
                         "y": _to_top_left_y(float(loc.y), view_h),
-                        "delta_x": float(event.scrollingDeltaX()),
-                        "delta_y": float(event.scrollingDeltaY()),
+                        # App-level scroll uses positive x/y for moving content right/down.
+                        "delta_x": -float(event.scrollingDeltaX()) * scale,
+                        "delta_y": -float(event.scrollingDeltaY()) * scale,
                         "precise": bool(event.hasPreciseScrollingDeltas()),
                         "phase": phase,
                         "momentum_phase": momentum_phase,
@@ -189,7 +192,7 @@ class MacOSWindowHDISource(HDIEventSource):
                     }
                 else:
                     return event
-                self._queued_events.append(
+                self._queue_event(
                     HDIEvent(
                         event_id=self._next_id,
                         ts_ns=time.time_ns(),
@@ -223,6 +226,24 @@ class MacOSWindowHDISource(HDIEventSource):
 
         self._last_window_active_local = window_active
         return out
+
+    def _queue_event(self, event: HDIEvent) -> None:
+        if event.event_type == "scroll":
+            scroll_index = self._find_last_queued_scroll_index(event)
+            if scroll_index is not None:
+                self._queued_events[scroll_index] = _merge_scroll_events(self._queued_events[scroll_index], event)
+                return
+        self._queued_events.append(event)
+
+    def _find_last_queued_scroll_index(self, incoming: HDIEvent) -> int | None:
+        incoming_key = _scroll_coalesce_key(incoming)
+        for index in range(len(self._queued_events) - 1, -1, -1):
+            queued = self._queued_events[index]
+            if queued.event_type != "scroll":
+                continue
+            if _scroll_coalesce_key(queued) == incoming_key:
+                return index
+        return None
 
     def _poll_iohid(self, window_active: bool, ts_ns: int) -> list[HDIEvent]:
         """Drain the IOKit HID source and synthesise a pointer_move event."""
@@ -288,18 +309,20 @@ class MacOSWindowHDISource(HDIEventSource):
         sx, sy = self._iohid.current_screen_xy()
         px = sx - win_x
         py = _to_top_left_y(sy - win_y, view_h)
-        out.append(
-            HDIEvent(
-                event_id=self._next_id,
-                ts_ns=ts_ns,
-                window_id="logger-demo",
-                device="mouse",
-                event_type="pointer_move",
-                status="OK",
-                payload={"x": px, "y": py, "buttons_mask": int(self._iohid.current_buttons_mask())},
+        pointer_payload = {"x": px, "y": py, "buttons_mask": int(self._iohid.current_buttons_mask())}
+        if self._pointer_payload_changed(pointer_payload):
+            out.append(
+                HDIEvent(
+                    event_id=self._next_id,
+                    ts_ns=ts_ns,
+                    window_id="logger-demo",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload=pointer_payload,
+                )
             )
-        )
-        self._next_id += 1
+            self._next_id += 1
         return out
 
     def _poll_nsevent(self, ts_ns: int) -> list[HDIEvent]:
@@ -344,19 +367,28 @@ class MacOSWindowHDISource(HDIEventSource):
                     )
                     self._next_id += 1
             self._last_mouse_buttons_mask = int(buttons_mask)
-        out.append(
-            HDIEvent(
-                event_id=self._next_id,
-                ts_ns=ts_ns,
-                window_id="logger-demo",
-                device="mouse",
-                event_type="pointer_move",
-                status="OK",
-                payload={"x": px, "y": py, "buttons_mask": int(self._last_mouse_buttons_mask)},
+        pointer_payload = {"x": px, "y": py, "buttons_mask": int(self._last_mouse_buttons_mask)}
+        if self._pointer_payload_changed(pointer_payload):
+            out.append(
+                HDIEvent(
+                    event_id=self._next_id,
+                    ts_ns=ts_ns,
+                    window_id="logger-demo",
+                    device="mouse",
+                    event_type="pointer_move",
+                    status="OK",
+                    payload=pointer_payload,
+                )
             )
-        )
-        self._next_id += 1
+            self._next_id += 1
         return out
+
+    def _pointer_payload_changed(self, payload: dict[str, float | int]) -> bool:
+        last_payload = getattr(self, "_last_pointer_payload", None)
+        if last_payload == payload:
+            return False
+        self._last_pointer_payload = dict(payload)
+        return True
 
     # ── cleanup ───────────────────────────────────────────────────────────────
 
@@ -415,6 +447,51 @@ def _read_pressed_mouse_buttons_mask(*, NSEvent) -> int:
         return (1 if left_down else 0) | (2 if right_down else 0)
     except Exception:
         return 0
+
+
+def _scroll_delta_scale(precise: bool) -> float:
+    return 48.0 if precise else 120.0
+
+
+def _scroll_coalesce_key(event: HDIEvent) -> tuple[str, str, str, str]:
+    payload = event.payload if isinstance(event.payload, dict) else {}
+    return (
+        event.window_id,
+        event.device,
+        str(payload.get("phase", "")),
+        str(payload.get("momentum_phase", "")),
+    )
+
+
+def _merge_scroll_events(existing: HDIEvent, incoming: HDIEvent) -> HDIEvent:
+    existing_payload = existing.payload if isinstance(existing.payload, dict) else {}
+    incoming_payload = incoming.payload if isinstance(incoming.payload, dict) else {}
+    merged = dict(existing_payload)
+    merged.update(incoming_payload)
+    merged["delta_x"] = _float_or_zero(existing_payload.get("delta_x")) + _float_or_zero(
+        incoming_payload.get("delta_x")
+    )
+    merged["delta_y"] = _float_or_zero(existing_payload.get("delta_y")) + _float_or_zero(
+        incoming_payload.get("delta_y")
+    )
+    merged["coalesced_count"] = int(existing_payload.get("coalesced_count", 1)) + 1
+    merged["coalesce_mode"] = "sum"
+    return HDIEvent(
+        event_id=incoming.event_id,
+        ts_ns=incoming.ts_ns,
+        window_id=incoming.window_id,
+        device=incoming.device,
+        event_type=incoming.event_type,
+        status=incoming.status,
+        payload=merged,
+    )
+
+
+def _float_or_zero(value: object) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _scroll_phase_name(raw: int) -> str:

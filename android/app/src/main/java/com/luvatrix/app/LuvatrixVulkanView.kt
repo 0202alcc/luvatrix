@@ -68,6 +68,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         surfaceView.holder.addCallback(this)
         addView(surfaceView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(overlayView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        overlayView.isClickable = true
         isFocusable = true
         isFocusableInTouchMode = true
         requestFocus()
@@ -165,8 +166,52 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         return cameraBridge.captureRawStill()
     }
 
+    fun captureYuvBurst(frameCount: Int): String {
+        return cameraBridge.captureYuvBurst(frameCount)
+    }
+
+    fun captureRawBurst(frameCount: Int): String {
+        return cameraBridge.captureRawBurst(frameCount)
+    }
+
+    fun captureRawComparisonBurst(frameCount: Int): String {
+        return cameraBridge.captureRawComparisonBurst(frameCount)
+    }
+
+    fun registerProcessedOutput(outputPath: String, previewPath: String): String {
+        return cameraBridge.registerProcessedOutput(outputPath, previewPath)
+    }
+
+    fun processLastYuvBurst(): String {
+        return cameraBridge.processLastYuvBurst()
+    }
+
+    fun processLastRawBurst(): String {
+        return cameraBridge.processLastRawBurst()
+    }
+
+    fun processLastRawComparison(): String {
+        return cameraBridge.processLastRawComparison()
+    }
+
     fun setRawCaptureMode(mode: String): String {
         return cameraBridge.setRawCaptureMode(mode)
+    }
+
+    fun setRawQualityMode(mode: String): String {
+        return cameraBridge.setRawQualityMode(mode)
+    }
+
+    fun setRawDemosaicMode(mode: String): String {
+        return cameraBridge.setRawDemosaicMode(mode)
+    }
+
+    fun setRawMergeMode(mode: String): String {
+        return cameraBridge.setRawMergeMode(mode)
+    }
+
+    fun setRawRenderStyle(style: String): String {
+        return cameraBridge.setRawRenderStyle(style)
     }
 
     fun setPreviewManualMode(mode: String): String {
@@ -668,6 +713,19 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     private inner class SceneOverlayView(context: Context) : View(context) {
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            this@LuvatrixVulkanView.onTouchEvent(event)
+            if (event.actionMasked == MotionEvent.ACTION_UP) {
+                performClick()
+            }
+            return true
+        }
+
+        override fun performClick(): Boolean {
+            super.performClick()
+            return true
+        }
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             when (overlayMode) {
