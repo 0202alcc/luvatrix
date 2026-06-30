@@ -38,7 +38,8 @@ def build_web_app(app_dir: str | Path, out_dir: str | Path) -> WebBuildResult:
 
     _copy_runtime_assets(out_path)
     _copy_python_shim(out_path)
-    _copy_app_files(app_path, out_path / "app")
+    _copy_first_party_python_packages(out_path / "py")
+    _copy_app_files(app_path, out_path / "app", exclude_paths={out_path})
     _copy_declared_assets(app_path, out_path / "assets", manifest.web.assets)
     _write_file_manifest(out_path / "py", out_path / "py_manifest.json", url_prefix="./py")
     _write_file_manifest(out_path / "app", out_path / "app_files.json", url_prefix="./app")
@@ -79,9 +80,34 @@ def _copy_python_shim(out_path: Path) -> None:
     shutil.copytree(src, out_path / "py")
 
 
-def _copy_app_files(app_path: Path, dest: Path) -> None:
+def _copy_first_party_python_packages(dest: Path) -> None:
+    project_root = Path(__file__).resolve().parents[3]
+    for package_name in ("luvatrix_ui",):
+        source = project_root / package_name
+        if not source.exists():
+            continue
+        _copy_python_package(source, dest / package_name)
+
+
+def _copy_python_package(source: Path, dest: Path) -> None:
+    for child in source.rglob("*"):
+        if child.is_dir():
+            continue
+        if "__pycache__" in child.parts or child.suffix in {".pyc", ".pyo"}:
+            continue
+        relative = child.relative_to(source)
+        target = dest / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(child, target)
+
+
+def _copy_app_files(app_path: Path, dest: Path, *, exclude_paths: set[Path] | None = None) -> None:
     dest.mkdir(parents=True, exist_ok=True)
+    resolved_excludes = {path.resolve() for path in exclude_paths or set()}
     for child in app_path.rglob("*"):
+        resolved_child = child.resolve()
+        if any(resolved_child == excluded or excluded in resolved_child.parents for excluded in resolved_excludes):
+            continue
         if child.is_dir():
             continue
         if "__pycache__" in child.parts or child.suffix in {".pyc", ".pyo"}:
