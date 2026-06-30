@@ -1,230 +1,102 @@
 # Luvatrix
 
-Custom app protocol + custom rendering protocol runtime in Python.
+Luvatrix is a Python app protocol and rendering runtime for building custom apps
+that can run headless, on macOS, as static browser-side web apps, and through
+scaffolded native Android/iOS projects.
 
-## Current Focus
+## Install
 
-Phase 1 is a macOS-first OS-level renderer:
-- Window Matrix protocol (`H x W x 4` RGBA255, PyTorch)
-- Vulkan presentation loop (`init -> loop -> stop`)
-- HDI thread + Sensor manager thread
-- In-process app protocol (`app.toml` + Python entrypoint)
+Base install:
 
-## Install Notes
-
-Base package:
 ```bash
 pip install luvatrix
 ```
 
 Optional platform/runtime extras:
+
 ```bash
 pip install "luvatrix[macos]"
 pip install "luvatrix[vulkan]"
 pip install "luvatrix[macos,vulkan]"
 pip install "luvatrix[web]"
+pip install "luvatrix[android]"
+pip install "luvatrix[ios]"
 ```
 
-Important:
-- `pip` can install Python bindings, but it does not install the native Vulkan SDK/loader.
-- On macOS, install Vulkan SDK or MoltenVK + Vulkan loader separately.
-- `luvatrix` now prints a Vulkan preflight notice at runtime if these native components are missing.
-- `run-app --render macos` uses the Vulkan-backed macOS renderer and expects `luvatrix[macos,vulkan]`.
-- `run-app --render macos-metal` uses the Metal-backed macOS renderer and expects `luvatrix[macos]`.
-- iOS render modes use native Xcode packaging; `luvatrix[ios]` is reserved for Python-installable iOS helpers.
+The base package intentionally includes common raster/data dependencies
+(`numpy` and `Pillow`). Platform-specific renderers still live behind extras.
+
+## Create An External App
+
+Create a standalone app outside this repository:
+
+```bash
+luvatrix init-app my_app
+cd my_app
+luvatrix validate-app . --render headless
+luvatrix run-app . --render headless --ticks 1
+```
+
+Build and serve a browser-side app:
+
+```bash
+luvatrix build-web . --out dist/web
+luvatrix serve-web .
+```
+
+Run with macOS rendering:
+
+```bash
+pip install "luvatrix[macos,vulkan]"
+luvatrix validate-app . --render macos
+luvatrix run-app . --render macos
+```
+
+## Native Scaffolds
+
+Native Android and iOS projects are app-owned. Scaffold them into your app
+repository when you need native targets:
+
+```bash
+luvatrix init-native . --target android --out android
+luvatrix init-native . --target ios --out ios
+```
+
+Then run with the app-owned native project:
+
+```bash
+luvatrix run-app . --render android-emulator --native-project android
+luvatrix run-app . --render ios-simulator --native-project ios
+```
+
+Native prerequisites:
+
+- Android: Android SDK, ADB, Gradle/Android Gradle Plugin support, and a
+  configured emulator or device.
+- iOS: Xcode, xcodegen, signing for physical devices, and the iOS Python support
+  assets prepared by the scaffold's `ios/scripts/setup_ios.sh`.
+- Vulkan on macOS: the Python `vulkan` binding plus a native Vulkan SDK/loader
+  such as Vulkan SDK or MoltenVK.
+
+## App Layout
+
+A minimal Luvatrix app is just:
+
+```text
+my_app/
+├── app.toml
+└── app_main.py
+```
+
+`app.toml` declares the app id, protocol version, entrypoint, capabilities,
+platform support, display metadata, and render preferences. The Python
+entrypoint returns an object compatible with `init(ctx)`, `loop(ctx, dt)`, and
+`stop(ctx)`, or a subclass of `luvatrix.app.App`.
 
 Public app-developer API:
+
 ```python
-from luvatrix.app import AppContext, validate_app_install
+from luvatrix.app import App, AppContext, validate_app_install
 ```
 
-Validate an app manifest and render target before launching:
-```bash
-luvatrix validate-app examples/full_suite_interactive --render headless
-luvatrix validate-app examples/full_suite_interactive --render macos
-```
-
-## Planning Document
-
-See `planning.md` for the integrated Phase 1 spec and visual TLDR protocol models.
-
-## Repository Layout
-
-- Core engine/runtime source lives in `luvatrix_core/`.
-- In-repo UI contracts/components live in `luvatrix_ui/` (`text/`, `controls/`, `style/`).
-
-## `luvatrix_ui` (In-Repo, v0)
-
-`luvatrix_ui` is a first-party in-repo UI layer with explicit, future-extractable boundaries.
-
-Current v0 surface:
-
-- `TextRenderer` + text command/style contracts in `luvatrix_ui/text/renderer.py`.
-- `SVGRenderer` + `SVGComponent` contracts in `luvatrix_ui/controls/svg_renderer.py` and
-  `luvatrix_ui/controls/svg_component.py`.
-- `ButtonModel` state machine in `luvatrix_ui/controls/button.py`:
-  `idle`, `hover`, `press_down`, `press_hold`, `disabled`.
-- `ThemeTokens` + validation/default merging in `luvatrix_ui/style/theme.py`.
-
-Runtime-side compiler:
-
-- `MatrixUIFrameRenderer` in `luvatrix_core/core/ui_frame_renderer.py` compiles first-party
-  component batches (including SVG) into matrix frame tensors for `WriteBatch` submission.
-
-Interaction model:
-
-- Consumes standardized HDI `press` phases (`down`, `hold_start`, `hold_tick`, `up`, `cancel`, etc.).
-- Keeps runtime/platform internals out of `luvatrix_ui`; integrations should adapt events/renderers at the boundary.
-
-See:
-
-- `docs/ui_component_protocol.md` for component contracts
-- `docs/app_protocol.md` for runtime contract
-- `docs/json_ui_compiler.md` for JSON page/lottie-oriented compiler design
-- `docs/app_protocol_variants_guide.md` for variant routing examples and precedence
-- `docs/app_protocol_compatibility_policy.md` for protocol support/deprecation policy
-- `docs/app_protocol_operator_runbook.md` for operator troubleshooting and audit verification
-- `docs/planes_protocol_v0.md` for the formal Planes JSON app-design schema (metadata, components, interactions, scripts, viewport semantics)
-- `docs/planes_protocol_vnext.md` for the multi-plane schema extension draft (`planes[]`, `camera_overlay`, section cuts, blend modes, v0->vNext compatibility mapping)
-- `docs/ui_ir_v2_gap_assessment.md` for current UI IR readiness and v2 gap/go-no-go analysis
-- `docs/ui_ir_v2_field_contract.md` for the normative UI IR v2 field contract (`planes-v2` page/plane/cut/component fields)
-- `docs/ui_ir_v2_validation_plan.md` for the IR v2 strict/permissive validation matrix, snapshot policy, and rollout gate criteria
-- `docs/ui_ir_v2_compiler_upgrade_design.md` for the compiler pipeline design from Planes schema vNext to deterministic `planes-v2` IR
-- `docs/ui_ir_v2_runtime_pipeline_design.md` for the runtime compose pipeline design (ordering, section-cuts, overlay, and RGBA clamp semantics)
-- `docs/ui_ir_v2_performance_execution_plan.md` for culling/prefetch/invalidation/cache strategy and determinism-safe rollout phases
-- `docs/ui_ir_v2_native_hot_path_extraction_plan.md` for optional C/Rust extraction boundaries and parity-safe rollout gates for hot runtime loops
-- `docs/ui_ir_v2_demo_verification_plan.md` for end-to-end demo validation scenarios and the verification command/checklist pack
-- `docs/ui_ir_v2_rollout_compatibility_gate_plan.md` for phased rollout, compatibility gates, rollback controls, and release-readiness criteria
-- `docs/app_protocol_v2_superset_spec.md` for protocol-v2 runtime/adapters/process-lane contract
-- `docs/app_protocol_v2_conformance_matrix.md` for v1/v2 test matrix and CI gate commands
-- `docs/app_protocol_v2_migration.md` for migration path from v1 in-process apps to v2
-
-## macOS Visualizer Examples
-
-Run stretch mode:
-```bash
-uv run --python 3.14+freethreaded python examples/macos_visualizer/stretch_mode.py
-```
-
-Run preserve-aspect mode (black bars when needed):
-```bash
-uv run --python 3.14+freethreaded python examples/macos_visualizer/preserve_aspect_mode.py
-```
-
-Run the full interactive suite app-protocol example (runs until window closes):
-```bash
-uv run --python 3.14+freethreaded python examples/app_protocol/run_full_suite_interactive.py --aspect stretch
-uv run --python 3.14+freethreaded python examples/app_protocol/run_full_suite_interactive.py --aspect preserve
-```
-
-Force experimental Vulkan path:
-```bash
-LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN=1 uv run --python 3.14+freethreaded python examples/macos_visualizer/stretch_mode.py
-```
-
-Force fallback layer-blit path:
-```bash
-unset LUVATRIX_ENABLE_EXPERIMENTAL_VULKAN
-uv run --python 3.14+freethreaded python examples/macos_visualizer/stretch_mode.py
-```
-
-Quick Vulkan environment probe (no window):
-```bash
-uv run --python 3.14+freethreaded python examples/macos_visualizer/vulkan_probe.py
-```
-
-## App Protocol Example
-
-Minimal input + sensor logger app:
-```bash
-uv run --python 3.14+freethreaded python examples/app_protocol/run_input_sensor_logger.py --simulate-hdi --simulate-sensors
-```
-
-Protocol-v2 + Planes proof-of-concept app:
-```bash
-PYTHONPATH=. uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/planes_v2_poc --render headless --ticks 300
-```
-
-Media transport lab (image + animated video rendering with aspect-ratio preserve and transport controls):
-```bash
-uv run --python 3.14+freethreaded python main.py run-app examples/media_transport_lab --render macos --width 960 --height 540
-```
-
-Choose which sensors to log:
-```bash
-uv run --python 3.14+freethreaded python examples/app_protocol/run_input_sensor_logger.py \
-  --simulate-hdi \
-  --sensor thermal.temperature \
-  --sensor power.voltage_current
-```
-
-Additional available sensor metadata types:
-`sensor.motion`, `camera.device`, `microphone.device`, `speaker.device`.
-
-Open a macOS logger window and report real mouse hover coordinates (window-relative only, gated by active/focused window):
-```bash
-uv run --python 3.14+freethreaded python examples/app_protocol/run_input_sensor_logger.py \
-  --open-window \
-  --sensor thermal.temperature \
-  --sensor power.voltage_current
-```
-
-Notes:
-- `--simulate-hdi` intentionally emits synthetic keyboard events (`key='a'`) for test visibility.
-- With `--open-window` and without `--simulate-hdi`, logger emits real window-gated mouse and keyboard input.
-
-## Unified Runtime CLI
-
-App manifests can now include optional `platform_support` and `[[variants]]` blocks so runtime picks only the host-compatible variant entrypoint/module root.
-For a macOS+iOS app with the same Python entrypoint on both platforms, declare:
-
-```toml
-platform_support = ["macos", "ios"]
-```
-
-Use `[[variants]]` only when a platform or architecture needs a different `module_root` or `entrypoint`.
-
-Run any app protocol folder (`app.toml` + entrypoint) headless:
-```bash
-uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --render headless --ticks 300
-```
-
-Run it with macOS window rendering:
-```bash
-uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --render macos --width 640 --height 360
-```
-
-Use real macOS sensor providers:
-```bash
-uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --render headless --sensor-backend macos
-```
-
-Enable runtime energy safety monitoring (throttles on warn, can enforce shutdown on sustained critical telemetry):
-```bash
-uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger \
-  --sensor-backend macos \
-  --energy-safety monitor
-```
-
-Enforce shutdown instead of monitor-only mode:
-```bash
-uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger \
-  --sensor-backend macos \
-  --energy-safety enforce \
-  --energy-critical-streak 3
-```
-
-Persist audit events to SQLite or JSONL:
-```bash
-uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --audit-sqlite ./.luvatrix/audit.db
-uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --audit-jsonl ./.luvatrix/audit.jsonl
-```
-
-With the logger example, you can explicitly include motion:
-```bash
-uv run --python 3.14+freethreaded python examples/app_protocol/run_input_sensor_logger.py \
-  --open-window \
-  --sensor sensor.motion \
-  --sensor thermal.temperature \
-  --simulate-sensors
-```
+See `docs/app_protocol.md` in the repository for the detailed protocol contract.

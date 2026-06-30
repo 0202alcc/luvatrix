@@ -102,6 +102,39 @@ def _warn_if_not_free_threaded():
         )
 
 
+def _run_web_shortcut(app_dir: Path, host: str | None, port: int | None) -> None:
+    resolved_app_dir = app_dir.resolve()
+    app_dev_server = resolved_app_dir / "dev_web.py"
+    if app_dev_server.exists():
+        command = [sys.executable, str(app_dev_server)]
+        if host is not None:
+            command.extend(["--host", host])
+        if port is not None:
+            command.extend(["--port", str(port)])
+        subprocess.run(command, cwd=resolved_app_dir, check=True)
+        return
+
+    from luvatrix_core.platform.web.server import serve_web_app
+
+    serve_web_app(app_dir, host=host or "127.0.0.1", port=port or 8765)
+
+
+def _dev_run_web_shortcut(app_dir: Path, host: str | None, port: int | None, smoke_out: Path | None, smoke_delay: float) -> None:
+    resolved_app_dir = app_dir.resolve()
+    app_dev_server = resolved_app_dir / "dev_web.py"
+    if not app_dev_server.exists():
+        raise SystemExit("`luvatrix dev run web` currently requires an app-owned dev_web.py")
+    command = [sys.executable, str(app_dev_server), "--visual-smoke"]
+    if host is not None:
+        command.extend(["--host", host])
+    if port is not None:
+        command.extend(["--port", str(port)])
+    if smoke_out is not None:
+        command.extend(["--smoke-out", str(smoke_out)])
+    command.extend(["--smoke-delay", str(smoke_delay)])
+    subprocess.run(command, cwd=resolved_app_dir, check=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Luvatrix high-performance UI runtime")
     subparsers = parser.add_subparsers(dest="command")
@@ -167,6 +200,12 @@ def main() -> None:
     run.add_argument("--android-device-id", default=None, help="ADB serial for --render android-device or android-emulator.")
     run.add_argument("--android-package", default="com.luvatrix.app", help="Android package name for native Android render modes.")
     run.add_argument(
+        "--native-project",
+        type=Path,
+        default=None,
+        help="Path to an app-owned native scaffold project for Android or iOS render modes.",
+    )
+    run.add_argument(
         "--android-import-probe",
         action="store_true",
         help="For Android render modes, launch a minimal native import probe instead of the app runtime.",
@@ -222,6 +261,69 @@ def main() -> None:
     serve_web.add_argument("--host", default="127.0.0.1", help="Host interface to bind. Default: 127.0.0.1.")
     serve_web.add_argument("--port", type=int, default=8765, help="HTTP port to bind. Default: 8765.")
 
+    run_shortcut = subparsers.add_parser("run", help="Run a Luvatrix shortcut command")
+    run_shortcut.add_argument("target", choices=["web"], help="Runtime target to launch")
+    run_shortcut.add_argument(
+        "app_dir",
+        nargs="?",
+        type=Path,
+        default=Path("."),
+        help="Path to the app directory. Default: current directory.",
+    )
+    run_shortcut.add_argument("--host", default=None, help="Host interface to bind.")
+    run_shortcut.add_argument("--port", type=int, default=None, help="HTTP port to bind.")
+
+    dev = subparsers.add_parser("dev", help="Run Luvatrix developer workflows")
+    dev_subparsers = dev.add_subparsers(dest="dev_command")
+    dev_subparsers.required = True
+    dev_run = dev_subparsers.add_parser("run", help="Run a developer shortcut command")
+    dev_run.add_argument("target", choices=["web"], help="Runtime target to launch")
+    dev_run.add_argument(
+        "app_dir",
+        nargs="?",
+        type=Path,
+        default=Path("."),
+        help="Path to the app directory. Default: current directory.",
+    )
+    dev_run.add_argument("--host", default=None, help="Host interface to bind.")
+    dev_run.add_argument("--port", type=int, default=None, help="HTTP port to bind.")
+    dev_run.add_argument("--smoke-out", type=Path, default=None, help="Directory for visual smoke screenshots.")
+    dev_run.add_argument("--smoke-delay", type=float, default=8.0, help="Seconds to wait before screenshot capture.")
+
+    validate = subparsers.add_parser("validate-app", help="Validate a luvatrix app for a render target")
+    validate.add_argument("app_dir", type=Path, help="Path to the app directory (containing app.toml)")
+    validate.add_argument(
+        "--render",
+        choices=[
+            "headless",
+            "macos",
+            "macos-metal",
+            "ios-simulator",
+            "ios-device",
+            "android-emulator",
+            "android-device",
+            "web",
+        ],
+        default="headless",
+    )
+
+    init_app = subparsers.add_parser("init-app", help="Create a standalone luvatrix app")
+    init_app.add_argument("app_dir", type=Path, help="App directory to create")
+    init_app.add_argument("--template", choices=["basic", "full-suite", "camera"], default="basic")
+    init_app.add_argument(
+        "--platform-support",
+        action="append",
+        default=None,
+        help="Supported platform. May be passed multiple times. Defaults depend on template.",
+    )
+    init_app.add_argument("--force", action="store_true", help="Replace an existing app directory.")
+
+    init_native = subparsers.add_parser("init-native", help="Create an app-owned native scaffold project")
+    init_native.add_argument("app_dir", type=Path, help="Path to the app directory")
+    init_native.add_argument("--target", choices=["android", "ios"], required=True)
+    init_native.add_argument("--out", type=Path, default=None, help="Native project directory to create")
+    init_native.add_argument("--force", action="store_true", help="Replace an existing native project directory.")
+
     args = parser.parse_args()
 
     if args.command == "build-web":
@@ -235,6 +337,60 @@ def main() -> None:
         from luvatrix_core.platform.web.server import serve_web_app
 
         serve_web_app(args.app_dir, host=args.host, port=args.port)
+        return
+
+    if args.command == "run":
+        if args.target == "web":
+            _run_web_shortcut(args.app_dir, host=args.host, port=args.port)
+            return
+
+    if args.command == "dev":
+        if args.dev_command == "run" and args.target == "web":
+            _dev_run_web_shortcut(
+                args.app_dir,
+                host=args.host,
+                port=args.port,
+                smoke_out=args.smoke_out,
+                smoke_delay=args.smoke_delay,
+            )
+            return
+
+    if args.command == "validate-app":
+        try:
+            validation = validate_app_install(args.app_dir, render=args.render)
+        except MissingOptionalDependencyError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(
+            f"[luvatrix] app valid: app_id={validation.manifest.app_id} "
+            f"render={validation.render} platform={validation.target_platform} "
+            f"variant={validation.resolved_variant.variant_id}"
+        )
+        if validation.required_extras:
+            print(f"[luvatrix] required extras: {','.join(validation.required_extras)}")
+        return
+
+    if args.command == "init-app":
+        from luvatrix_core.scaffold import init_app
+
+        result = init_app(
+            args.app_dir,
+            template=args.template,
+            platform_support=args.platform_support,
+            force=args.force,
+        )
+        print(f"[luvatrix] Created app at {result.path}")
+        return
+
+    if args.command == "init-native":
+        from luvatrix_core.scaffold import init_native_project
+
+        result = init_native_project(
+            args.app_dir,
+            target=args.target,
+            out=args.out,
+            force=args.force,
+        )
+        print(f"[luvatrix] Created {args.target} native project at {result.path}")
         return
 
     if args.command == "run-app":
@@ -257,6 +413,7 @@ def main() -> None:
             _run_ios_simulator(
                 args.app_dir.resolve(),
                 simulator_name=args.simulator,
+                native_project_dir=args.native_project,
                 render_scale=_resolve_render_scale(args.render_scale),
                 render_mode=args.render_mode,
                 target_fps=_resolve_target_fps(args.fps) if args.fps is not None else None,
@@ -270,6 +427,7 @@ def main() -> None:
                 args.app_dir.resolve(),
                 device_name=args.device,
                 team_id=args.team_id,
+                native_project_dir=args.native_project,
                 import_probe=args.ios_import_probe,
                 render_scale=_resolve_render_scale(args.render_scale),
                 render_mode=args.render_mode,
@@ -284,6 +442,7 @@ def main() -> None:
                 args.app_dir.resolve(),
                 device_id=args.android_device_id,
                 package_name=args.android_package,
+                native_project_dir=args.native_project,
                 import_probe=args.android_import_probe,
                 render_scale=_resolve_render_scale(args.render_scale),
                 render_mode=args.render_mode,
@@ -297,6 +456,7 @@ def main() -> None:
                 args.app_dir.resolve(),
                 device_id=args.android_device_id,
                 package_name=args.android_package,
+                native_project_dir=args.native_project,
                 import_probe=args.android_import_probe,
                 render_scale=_resolve_render_scale(args.render_scale),
                 render_mode=args.render_mode,
@@ -342,9 +502,38 @@ def main() -> None:
         try:
             sensors.start()
             on_targets_started = None
+            scene_target = None
             if args.render == "headless":
                 target: RenderTarget = _HeadlessTarget()
                 hdi = HDIThread(source=_NoopHDISource())
+            elif args.render in ("macos", "macos-metal") and args.render_mode in ("auto", "scene"):
+                from luvatrix_core.platform.macos.metal_scene_target import MacOSMetalSceneBackend, MacOSMetalSceneTarget
+
+                scene_backend = MacOSMetalSceneBackend(
+                    bar_color_rgba=bar_color,
+                    resizable=not has_native,
+                    icon_path=icon_path,
+                )
+                scene_target = MacOSMetalSceneTarget(
+                    width=width,
+                    height=height,
+                    title=app_title,
+                    backend=scene_backend,
+                )
+                target = _HeadlessTarget()
+                hdi_source = _MacOSPresenterHDISource()
+                hdi = HDIThread(
+                    source=hdi_source,
+                    poll_interval_s=1.0 / 1000.0,
+                    window_geometry_provider=_make_macos_window_geometry_provider(scene_backend),
+                    target_extent_provider=lambda: (float(width), float(height)),
+                )
+
+                def on_targets_started(_src=hdi_source, _backend=scene_backend):  # type: ignore[misc]
+                    handle = getattr(_backend, "_window_handle", None)
+                    if handle is not None:
+                        from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource
+                        _src.inject(MacOSWindowHDISource(handle))
             elif args.render == "macos-metal":
                 from luvatrix_core.platform.macos.metal_presenter import MacOSMetalPresenter
                 from luvatrix_core.targets.metal_target import MetalTarget
@@ -362,6 +551,7 @@ def main() -> None:
                 hdi_source = _MacOSPresenterHDISource()
                 hdi = HDIThread(
                     source=hdi_source,
+                    poll_interval_s=1.0 / 1000.0,
                     window_geometry_provider=_make_macos_window_geometry_provider(_macos_backend),
                     target_extent_provider=lambda: (float(width), float(height)),
                 )
@@ -395,6 +585,7 @@ def main() -> None:
                 hdi_source = _MacOSPresenterHDISource()
                 hdi = HDIThread(
                     source=hdi_source,
+                    poll_interval_s=1.0 / 1000.0,
                     window_geometry_provider=_make_macos_window_geometry_provider(_macos_backend),
                     target_extent_provider=lambda: (float(width), float(height)),
                 )
@@ -405,8 +596,7 @@ def main() -> None:
                         from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource
                         _src.inject(MacOSWindowHDISource(handle))
 
-            scene_target = None
-            if args.render_mode == "scene":
+            if scene_target is None and args.render_mode == "scene":
                 from luvatrix_core.targets.cpu_scene_target import CpuSceneTarget
                 scene_target = CpuSceneTarget(target)
 

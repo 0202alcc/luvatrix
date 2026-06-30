@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if command -v gradle >/dev/null 2>&1; then
+  exec gradle "$@"
+fi
+
+echo "error: gradle is not installed and no Gradle wrapper distribution is checked in." >&2
+echo "Install Gradle or generate a wrapper with a compatible Android Gradle Plugin before running Android gates." >&2
+exit 127
