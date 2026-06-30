@@ -1,9 +1,27 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "luvatrix"
-version = "0.1.0"
-description = "High-performance interactive UI runtime"
+version = "0.1.2"
+description = "Luvatrix runtime and plotting toolkit"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE"]
+authors = [
+  { name = "Luvatrix contributors" },
+]
+keywords = ["apps", "runtime", "rendering", "ui", "visualization"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
 dependencies = [
   "numpy>=2.4.2",
   "Pillow>=10.3.0",
@@ -14,6 +32,7 @@ desktop = [
   "torch>=2.4.0",
 ]
 macos = [
+  "torch>=2.4.0",
   "pyobjc-core>=12.1",
   "pyobjc-framework-cocoa>=12.1",
   "pyobjc-framework-quartz>=12.1",
@@ -29,20 +48,32 @@ vulkan = [
 ]
 web = [
 ]
+android = [
+]
 dev = [
   "matplotlib>=3.10.8",
 ]
+
+[project.urls]
+Homepage = "https://github.com/0202alcc/luvatrix"
+Repository = "https://github.com/0202alcc/luvatrix"
+Issues = "https://github.com/0202alcc/luvatrix/issues"
 
 [project.scripts]
 luvatrix = "main:main"
 
 [tool.setuptools]
 py-modules = ["main"]
+include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ["luvatrix*", "luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
 
 [tool.setuptools.package-data]
+"luvatrix_core" = [
+  "templates/native/android/**/*",
+  "templates/native/ios/**/*",
+]
 "luvatrix_core.platform.web" = [
   "runtime_assets/index.html",
   "runtime_assets/runtime/*.js",

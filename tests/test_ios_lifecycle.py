@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+import tempfile
 import unittest
 
 from luvatrix_core.platform.ios import lifecycle
+from luvatrix_core.platform.ios.runner import _resolve_ios_project
 
 
 class IOSLifecycleTests(unittest.TestCase):
@@ -26,6 +29,19 @@ class IOSLifecycleTests(unittest.TestCase):
             active["ios_lifecycle_transition_count"],
             inactive["ios_lifecycle_transition_count"],
         )
+
+    def test_resolve_ios_project_uses_app_local_scaffold(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app = Path(td) / "app"
+            project = app / ".luvatrix" / "ios"
+            project.mkdir(parents=True)
+
+            self.assertEqual(_resolve_ios_project(app), project)
+
+    def test_resolve_ios_project_requires_scaffold(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaisesRegex(RuntimeError, "init-native"):
+                _resolve_ios_project(Path(td) / "app")
 
 
 if __name__ == "__main__":
