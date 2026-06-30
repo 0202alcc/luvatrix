@@ -1,0 +1,13 @@
+{
+  "name": "Neutral",
+  "version": 1,
+  "shadow_lift": 0.0,
+  "highlight_rolloff": 0.5,
+  "global_saturation": 1.0,
+  "local_contrast": 1.0,
+  "sharpening": 1.0,
+  "skin_smoothing": 0.0,
+  "sky_saturation": 1.0,
+  "foliage_saturation": 1.0,
+  "white_balance_bias": "neutral"
+}

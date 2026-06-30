@@ -35,7 +35,7 @@ class AndroidNativeSceneTargetTests(unittest.TestCase):
             ),
         )
 
-        target.present_scene(frame)
+        target.present_scene(frame, target_present_time=123.456)
 
         self.assertEqual(target.frames_presented, 1)
         self.assertEqual(presenter.calls[0][1:4], (2, 100, 200))

@@ -28,6 +28,7 @@ TouchButton = MODULE.TouchButton
 format_camera_status_lines = MODULE.format_camera_status_lines
 format_camera_compact_status_lines = MODULE.format_camera_compact_status_lines
 format_camera_collapsed_status_lines = MODULE.format_camera_collapsed_status_lines
+camera_capability_summary = MODULE.camera_capability_summary
 planned_camera_mode_statuses = MODULE.planned_camera_mode_statuses
 
 
@@ -133,6 +134,68 @@ class CameraExampleTests(unittest.TestCase):
         lines = format_camera_status_lines(app._last_samples)
         self.assertTrue(any("UNAVAILABLE" in line for line in lines))
 
+    def test_init_applies_preview_and_raw_defaults_to_android_bridge(self) -> None:
+        sample = SensorSample(
+            sample_id=1,
+            ts_ns=1,
+            sensor_type="camera.permission",
+            status="UNAVAILABLE",
+            value=None,
+            unit=None,
+        )
+        app = CameraLabApp()
+        ctx = _FakeCtx(width=180, height=120, sample=sample)
+        calls: list[tuple[str, object]] = []
+        old_quality = MODULE._android_set_preview_quality_mode
+        old_target = MODULE._android_set_preview_target_mode
+        old_sharpness = MODULE._android_set_preview_sharpness_mode
+        old_layers = MODULE._android_set_preview_convolution_layers
+        old_wb = MODULE._android_set_preview_white_balance_mode
+        old_pipeline = MODULE._android_set_preview_pipeline_mode
+        old_raw_quality = MODULE._android_set_raw_quality_mode
+        old_raw_demosaic = MODULE._android_set_raw_demosaic_mode
+        old_raw_merge = MODULE._android_set_raw_merge_mode
+        old_raw_style = MODULE._android_set_raw_render_style
+        MODULE._android_set_preview_quality_mode = lambda mode: calls.append(("quality", mode))
+        MODULE._android_set_preview_target_mode = lambda mode: calls.append(("target", mode))
+        MODULE._android_set_preview_sharpness_mode = lambda mode: calls.append(("sharpness", mode))
+        MODULE._android_set_preview_convolution_layers = lambda layers: calls.append(("layers", layers))
+        MODULE._android_set_preview_white_balance_mode = lambda mode: calls.append(("wb", mode))
+        MODULE._android_set_preview_pipeline_mode = lambda mode: calls.append(("pipeline", mode))
+        MODULE._android_set_raw_quality_mode = lambda mode: calls.append(("raw_quality", mode))
+        MODULE._android_set_raw_demosaic_mode = lambda mode: calls.append(("raw_demosaic", mode))
+        MODULE._android_set_raw_merge_mode = lambda mode: calls.append(("raw_merge", mode))
+        MODULE._android_set_raw_render_style = lambda style: calls.append(("style", style))
+        try:
+            app.init(ctx)
+        finally:
+            MODULE._android_set_preview_quality_mode = old_quality
+            MODULE._android_set_preview_target_mode = old_target
+            MODULE._android_set_preview_sharpness_mode = old_sharpness
+            MODULE._android_set_preview_convolution_layers = old_layers
+            MODULE._android_set_preview_white_balance_mode = old_wb
+            MODULE._android_set_preview_pipeline_mode = old_pipeline
+            MODULE._android_set_raw_quality_mode = old_raw_quality
+            MODULE._android_set_raw_demosaic_mode = old_raw_demosaic
+            MODULE._android_set_raw_merge_mode = old_raw_merge
+            MODULE._android_set_raw_render_style = old_raw_style
+
+        self.assertEqual(
+            calls,
+            [
+                ("quality", "max"),
+                ("target", "raw"),
+                ("sharpness", "natural"),
+                ("layers", 0),
+                ("wb", "natural_plus"),
+                ("pipeline", "hq"),
+                ("raw_quality", "balanced_2400"),
+                ("raw_demosaic", "malvar_approx"),
+                ("raw_merge", "raw_average_motion_aware"),
+                ("style", "Google"),
+            ],
+        )
+
     def test_helper_formatting_names_yuv_and_raw_modes(self) -> None:
         statuses = planned_camera_mode_statuses()
         lines = format_camera_status_lines([])
@@ -207,6 +270,87 @@ class CameraExampleTests(unittest.TestCase):
         self.assertIn("active=0,2", text)
         self.assertIn("dual preview: supported active", text)
         self.assertIn("primary YUV matrix: 1920x1080", text)
+
+    def test_helper_formatting_summarizes_camera_capabilities(self) -> None:
+        sample = SensorSample(
+            sample_id=1,
+            ts_ns=1,
+            sensor_type="camera.device",
+            status="OK",
+            value={
+                "camera.capabilities.raw": True,
+                "camera.capabilities.private_preview": True,
+                "camera.capabilities.max_burst": 8,
+                "camera.capabilities.hardware_level": "FULL",
+                "inventory": {
+                    "cameras": [
+                        {"camera_id": "0", "facing": "back"},
+                    ],
+                },
+            },
+            unit="metadata",
+        )
+
+        text = "\n".join(format_camera_status_lines([sample]))
+
+        self.assertIn("cap: FULL raw=yes private=yes burst=8", text)
+
+    def test_camera_capability_summary_accepts_dotted_keys(self) -> None:
+        summary = camera_capability_summary(
+            {
+                "camera.capabilities.raw": True,
+                "camera.capabilities.private_preview": True,
+                "camera.capabilities.max_burst": 8,
+                "camera.capabilities.hardware_level": "FULL",
+            }
+        )
+
+        self.assertEqual(summary.hardware_level, "FULL")
+        self.assertTrue(summary.supports_raw)
+        self.assertTrue(summary.supports_private_preview)
+        self.assertEqual(summary.max_burst, 8)
+
+    def test_camera_capability_summary_accepts_nested_capabilities(self) -> None:
+        summary = camera_capability_summary(
+            {
+                "capabilities": {
+                    "raw": False,
+                    "private_preview": True,
+                    "max_burst": 4,
+                    "hardware_level": "LIMITED",
+                }
+            }
+        )
+
+        self.assertEqual(summary.hardware_level, "LIMITED")
+        self.assertFalse(summary.supports_raw)
+        self.assertTrue(summary.supports_private_preview)
+        self.assertEqual(summary.max_burst, 4)
+
+    def test_camera_capability_summary_accepts_active_profile(self) -> None:
+        summary = camera_capability_summary(
+            {
+                "active_capability_profile": {
+                    "supports_raw": True,
+                    "supports_private_preview": False,
+                    "max_burst_targets": 2,
+                    "hardware_level": "LEVEL_3",
+                }
+            }
+        )
+
+        self.assertEqual(summary.hardware_level, "LEVEL_3")
+        self.assertTrue(summary.supports_raw)
+        self.assertFalse(summary.supports_private_preview)
+        self.assertEqual(summary.max_burst, 2)
+
+    def test_camera_capability_summary_defaults_missing_fields(self) -> None:
+        summary = camera_capability_summary({})
+
+        self.assertEqual(summary.hardware_level, "UNKNOWN")
+        self.assertFalse(summary.supports_raw)
+        self.assertFalse(summary.supports_private_preview)
+        self.assertEqual(summary.max_burst, 0)
 
     def test_touch_buttons_route_to_camera_bridge_commands(self) -> None:
         app = CameraLabApp()
@@ -602,6 +746,12 @@ class CameraExampleTests(unittest.TestCase):
                     "preview_export_status": "saved",
                     "preview_export_error": "",
                     "last_dng_path": "/data/user/0/com.luvatrix.app/files/raw/camera_raw_1.dng",
+                    "diagnostics": {
+                        "raw_size_available": True,
+                        "raw_reader_active": True,
+                        "raw_in_active_session": True,
+                        "active_targets": ["private", "yuv_cache", "raw_sensor"],
+                    },
                     "last_error": "",
                 },
                 "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
@@ -617,6 +767,197 @@ class CameraExampleTests(unittest.TestCase):
         self.assertIn("RAW lens: 5.4mm f/1.8", text)
         self.assertIn("preview: camera_raw_1_preview.png", text)
         self.assertIn("saved: camera_raw_1.dng", text)
+        self.assertIn("raw diag: size=yes reader=yes session=yes targets=private,yuv_cache,raw_sensor", text)
+
+    def test_burst_capture_idle_telemetry_is_formatted(self) -> None:
+        sample = SensorSample(
+            sample_id=1,
+            ts_ns=1,
+            sensor_type="camera.device",
+            status="OK",
+            value={
+                "burst_capture": {
+                    "status": "idle",
+                    "requested_frames": 0,
+                    "captured_frames": 0,
+                },
+                "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
+            },
+            unit="metadata",
+        )
+
+        text = "\n".join(format_camera_status_lines([sample]))
+
+        self.assertIn("burst: idle 0/0", text)
+
+    def test_burst_capture_capturing_telemetry_is_formatted(self) -> None:
+        sample = SensorSample(
+            sample_id=1,
+            ts_ns=1,
+            sensor_type="camera.device",
+            status="OK",
+            value={
+                "burst_capture": {
+                    "status": "capturing",
+                    "requested_frames": 10,
+                    "captured_frames": 4,
+                },
+                "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
+            },
+            unit="metadata",
+        )
+
+        text = "\n".join(format_camera_status_lines([sample]))
+
+        self.assertIn("burst: capturing 4/10", text)
+
+    def test_burst_capture_saved_telemetry_is_formatted(self) -> None:
+        sample = SensorSample(
+            sample_id=1,
+            ts_ns=1,
+            sensor_type="camera.device",
+            status="OK",
+            value={
+                "burst_capture": {
+                    "status": "saved",
+                    "last_burst_id": "2026-06-04T12-00-00Z",
+                    "requested_frames": 10,
+                    "captured_frames": 10,
+                    "manifest_path": "/data/user/0/com.luvatrix.app/files/computational_camera/bursts/2026/burst_manifest.json",
+                },
+                "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
+            },
+            unit="metadata",
+        )
+
+        text = "\n".join(format_camera_status_lines([sample]))
+
+        self.assertIn("burst: saved 10/10 id=2026-06-04T12-00-00Z manifest=burst_manifest.json", text)
+
+    def test_burst_capture_error_telemetry_is_formatted(self) -> None:
+        sample = SensorSample(
+            sample_id=1,
+            ts_ns=1,
+            sensor_type="camera.device",
+            status="OK",
+            value={
+                "burst_capture": {
+                    "status": "error",
+                    "requested_frames": 10,
+                    "captured_frames": 3,
+                    "last_error": "ImageReader closed unexpectedly",
+                },
+                "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
+            },
+            unit="metadata",
+        )
+
+        text = "\n".join(format_camera_status_lines([sample]))
+
+        self.assertIn("burst: error 3/10 error=ImageReader closed unexpectedly", text)
+
+    def test_processing_idle_telemetry_is_formatted(self) -> None:
+        sample = SensorSample(
+            sample_id=1,
+            ts_ns=1,
+            sensor_type="camera.device",
+            status="OK",
+            value={
+                "processing": {
+                    "status": "idle",
+                    "stage": "",
+                    "last_output_path": "",
+                    "last_preview_path": "",
+                    "last_error": "",
+                },
+                "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
+            },
+            unit="metadata",
+        )
+
+        text = "\n".join(format_camera_status_lines([sample]))
+
+        self.assertIn("processing: idle", text)
+
+    def test_processing_success_telemetry_is_formatted(self) -> None:
+        sample = SensorSample(
+            sample_id=1,
+            ts_ns=1,
+            sensor_type="camera.device",
+            status="OK",
+            value={
+                "processing": {
+                    "status": "done",
+                    "stage": "gallery_export",
+                    "last_output_path": "/data/user/0/com.luvatrix.app/files/processed/IMG_burst_0001.jpg",
+                    "last_preview_path": "/data/user/0/com.luvatrix.app/files/processed/IMG_burst_0001_preview.jpg",
+                    "last_gallery_uri": "content://media/external/images/media/42",
+                    "reference_frame": 2,
+                    "used_frames": 5,
+                    "rejected_frames": 0,
+                    "last_error": "",
+                },
+                "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
+            },
+            unit="metadata",
+        )
+
+        text = "\n".join(format_camera_status_lines([sample]))
+
+        self.assertIn("processing: gallery_export done", text)
+        self.assertIn("output: IMG_burst_0001.jpg", text)
+        self.assertIn("processed preview: IMG_burst_0001_preview.jpg", text)
+        self.assertIn("gallery: 42", text)
+        self.assertIn("reference: frame 2 used=5 rejected=0", text)
+
+    def test_processing_queued_and_processing_states_are_formatted(self) -> None:
+        for status in ("queued", "processing"):
+            sample = SensorSample(
+                sample_id=1,
+                ts_ns=1,
+                sensor_type="camera.device",
+                status="OK",
+                value={
+                    "processing": {
+                        "status": status,
+                        "stage": "sharpest_native",
+                        "last_output_path": "",
+                        "last_preview_path": "",
+                        "last_gallery_uri": "",
+                        "last_error": "",
+                    },
+                    "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
+                },
+                unit="metadata",
+            )
+
+            text = "\n".join(format_camera_status_lines([sample]))
+
+            self.assertIn(f"processing: sharpest_native {status}", text)
+
+    def test_processing_error_telemetry_is_formatted(self) -> None:
+        sample = SensorSample(
+            sample_id=1,
+            ts_ns=1,
+            sensor_type="camera.device",
+            status="OK",
+            value={
+                "processing": {
+                    "status": "error",
+                    "stage": "sharpest",
+                    "last_output_path": "",
+                    "last_preview_path": "",
+                    "last_error": "missing burst manifest",
+                },
+                "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
+            },
+            unit="metadata",
+        )
+
+        text = "\n".join(format_camera_status_lines([sample]))
+
+        self.assertIn("processing: sharpest error", text)
+        self.assertIn("processing error: missing burst manifest", text)
 
     def test_compact_hud_omits_debug_inventory_by_default(self) -> None:
         sample = SensorSample(
@@ -723,10 +1064,12 @@ class CameraExampleTests(unittest.TestCase):
                     "edge_preserve": 0.65,
                     "convolution_layers": 2,
                     "crop_fit_blend": 0.5,
-                    "color_mode": "neutral",
-                    "red_gain": 1.06,
+                    "color_mode": "natural_plus",
+                    "red_gain": 1.04,
                     "green_gain": 1.0,
-                    "blue_gain": 0.94,
+                    "blue_gain": 0.97,
+                    "color_brightness": 0.015,
+                    "color_contrast": 1.04,
                     "last_downsample_ms": 1.8,
                     "last_filter_ms": 1.8,
                     "frames_in_flight": 2,
@@ -744,7 +1087,7 @@ class CameraExampleTests(unittest.TestCase):
         self.assertIn("pipeline=preview", text)
         self.assertIn("layer=2 fit=0.50", text)
         self.assertIn("sharp=natural taps=5 luma=0.08 chroma=0.55 edge=0.65 str=0.15", text)
-        self.assertIn("wb=neutral rgb=1.06/1.00/0.94", text)
+        self.assertIn("wb=natural_plus rgb=1.04/1.00/0.97 b=0.015 c=1.04", text)
         self.assertIn("manual=unknown", text)
         self.assertNotIn("preview:", text)
         self.assertNotIn("perf:", text)
@@ -868,10 +1211,12 @@ class CameraExampleTests(unittest.TestCase):
                     "luma_smoothing": 0.08,
                     "chroma_smoothing": 0.55,
                     "edge_preserve": 0.65,
-                    "color_mode": "auto",
-                    "red_gain": 1.0,
+                    "color_mode": "natural_plus",
+                    "red_gain": 1.04,
                     "green_gain": 1.0,
-                    "blue_gain": 1.0,
+                    "blue_gain": 0.97,
+                    "color_brightness": 0.015,
+                    "color_contrast": 1.04,
                     "last_downsample_ms": 1.8,
                     "last_filter_ms": 1.8,
                     "frames_in_flight": 2,
@@ -1016,6 +1361,187 @@ class CameraExampleTests(unittest.TestCase):
         self.assertEqual(calls, ["raw"])
         self.assertEqual(app._last_action_status, "capturing RAW still")
 
+    def test_raw_burst_routes_to_android_for_structured_error_when_capability_profile_says_no_raw(self) -> None:
+        app = CameraLabApp()
+        app._last_samples = [
+            SensorSample(
+                sample_id=1,
+                ts_ns=1,
+                sensor_type="camera.device",
+                status="OK",
+                value={
+                    "active_capability_profile": {
+                        "supports_raw": False,
+                        "supports_private_preview": True,
+                        "max_burst_targets": 5,
+                        "hardware_level": "FULL",
+                    },
+                    "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
+                },
+                unit="metadata",
+            )
+        ]
+        calls: list[int] = []
+        old_capture = MODULE._android_capture_raw_burst
+        MODULE._android_capture_raw_burst = lambda frame_count: calls.append(frame_count)
+        try:
+            app._capture_raw_burst()
+        finally:
+            MODULE._android_capture_raw_burst = old_capture
+
+        self.assertEqual(calls, [5])
+        self.assertEqual(app._last_action_status, "capturing and processing RAW burst x5")
+
+    def test_raw_burst_routes_to_android_bridge_when_supported(self) -> None:
+        app = CameraLabApp()
+        app._last_samples = [
+            SensorSample(
+                sample_id=1,
+                ts_ns=1,
+                sensor_type="camera.device",
+                status="OK",
+                value={
+                    "camera.capabilities.raw": True,
+                    "camera.capabilities.private_preview": True,
+                    "camera.capabilities.max_burst": 8,
+                    "camera.capabilities.hardware_level": "FULL",
+                    "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
+                },
+                unit="metadata",
+            )
+        ]
+        calls: list[int] = []
+        old_capture = MODULE._android_capture_raw_burst
+        MODULE._android_capture_raw_burst = lambda frame_count: calls.append(frame_count)
+        try:
+            app._capture_raw_burst()
+        finally:
+            MODULE._android_capture_raw_burst = old_capture
+
+        self.assertEqual(calls, [5])
+        self.assertEqual(app._last_action_status, "capturing and processing RAW burst x5")
+
+    def test_keyboard_raw_burst_routes_to_android_bridge_when_supported(self) -> None:
+        app = CameraLabApp()
+        app._last_samples = [
+            SensorSample(
+                sample_id=1,
+                ts_ns=1,
+                sensor_type="camera.device",
+                status="OK",
+                value={
+                    "camera.capabilities.raw": True,
+                    "camera.capabilities.private_preview": True,
+                    "camera.capabilities.max_burst": 8,
+                    "camera.capabilities.hardware_level": "FULL",
+                    "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
+                },
+                unit="metadata",
+            )
+        ]
+        calls: list[int] = []
+        old_capture = MODULE._android_capture_raw_burst
+        MODULE._android_capture_raw_burst = lambda frame_count: calls.append(frame_count)
+        try:
+            app._handle_camera_key("x")
+        finally:
+            MODULE._android_capture_raw_burst = old_capture
+
+        self.assertEqual(calls, [5])
+        self.assertEqual(app._last_action_status, "capturing and processing RAW burst x5")
+
+    def test_raw_processing_telemetry_is_formatted(self) -> None:
+        sample = SensorSample(
+            sample_id=1,
+            ts_ns=1,
+            sensor_type="camera.device",
+            status="OK",
+            value={
+                "processing": {
+                    "status": "done",
+                    "stage": "raw_gallery_export",
+                    "last_output_path": "/data/user/0/com.luvatrix.app/files/processed/IMG_raw_burst_0001.jpg",
+                    "last_preview_path": "/data/user/0/com.luvatrix.app/files/processed/IMG_raw_burst_0001_preview.jpg",
+                    "last_gallery_uri": "content://media/external/images/media/43",
+                    "reference_frame": 2,
+                    "used_frames": 1,
+                    "rejected_frames": 4,
+                    "source_format": "RAW_SENSOR",
+                    "render_mode": "raw_single_frame",
+                    "raw_quality_mode": "balanced_2400",
+                    "raw_demosaic_mode": "malvar_approx",
+                    "raw_merge_mode": "raw_single_frame",
+                    "raw_requested_merge_mode": "raw_average_tile_motion_aware",
+                    "raw_quality_verdict": "artifact_warn",
+                    "raw_quality_fallback": "artifact_guard_single_frame",
+                    "raw_requested_shadow_purple_ratio_after": 0.091,
+                    "style_profile": "Samsung",
+                    "tone_map_exposure": 3.10468,
+                    "tone_map_p50": 0.0289495,
+                    "tone_map_p95": 0.27378,
+                    "tone_map_p99": 0.553291,
+                    "tone_map_highlight_rolloff": 0.35,
+                    "tone_map_shadow_lift": 0.08,
+                    "raw_color_gains_usable": True,
+                    "raw_color_transform_usable": True,
+                    "raw_color_matrix_mode": "normalized_camera_transform",
+                    "raw_color_gain_mode": "green_normalized_clamped_0.55_2.60",
+                    "raw_lens_shading_mode": "radial_chroma_guard_v1",
+                    "raw_lens_shading_map_used": False,
+                    "raw_artifact_guard": "shadow_purple_v1",
+                    "raw_shadow_purple_ratio_before": 0.021,
+                    "raw_shadow_purple_ratio_after": 0.004,
+                    "raw_shadow_purple_suppressed_pixels": 42,
+                    "merge_count": 3,
+                    "merge_rejected": 2,
+                    "sharpness_rejected": 1,
+                    "exposure_rejected": 1,
+                    "alignment_failures": 0,
+                    "motion_rejected_samples": 25,
+                    "motion_total_samples": 100,
+                    "comparison_count": 7,
+                    "comparison_labels": "single,aligned,motion,unshaded,radial,tile,neutral",
+                    "exposure_consistent": True,
+                    "native_timing_ms": {
+                        "frame_score": 12.4,
+                        "selected_load": 4.2,
+                        "merge_load": 18.8,
+                        "raw_reduce": 55.3,
+                        "alignment": 7.6,
+                        "merge": 9.9,
+                        "render": 120.1,
+                        "preview": 11.3,
+                        "write": 6.7,
+                        "total": 246.3,
+                    },
+                    "last_error": "",
+                },
+                "inventory": {"cameras": [{"camera_id": "0", "facing": "back"}]},
+            },
+            unit="metadata",
+        )
+
+        text = "\n".join(format_camera_status_lines([sample]))
+
+        self.assertIn("processing: raw_gallery_export done", text)
+        self.assertIn("raw quality: balanced_2400", text)
+        self.assertIn("demosaic: malvar_approx", text)
+        self.assertIn("merge: raw_single_frame", text)
+        self.assertIn("quality verdict: artifact_warn fallback=artifact_guard_single_frame requested=raw_average_tile_motion_aware requested_purple=9.10%", text)
+        self.assertIn("style: Samsung", text)
+        self.assertIn("comparison: 7 variants single,aligned,motion,unshaded,radial,tile,neutral", text)
+        self.assertIn("tone: exp=3.10 p95=0.274 roll=0.35 shadow=0.08", text)
+        self.assertIn("tone range: p50=0.029 p99=0.553", text)
+        self.assertIn("color: normalized_camera_transform gains=yes matrix=yes", text)
+        self.assertIn("color guard: green_normalized_clamped_0.55_2.60 lens=radial_chroma_guard_v1 map=no", text)
+        self.assertIn("artifact: shadow_purple_v1 purple=2.10%->0.40%", text)
+        self.assertIn("artifact suppressed: 42 px", text)
+        self.assertIn("merge diag: count=3 reject=2 blur=1 exposure=1 align_fail=0 motion=25.0% locked=yes", text)
+        self.assertIn("native ms: score=12ms load=4ms mload=19ms reduce=55ms align=8ms merge=10ms render=120ms prev=11ms write=7ms total=246ms", text)
+        self.assertIn("output: IMG_raw_burst_0001.jpg", text)
+        self.assertIn("gallery: 43", text)
+        self.assertIn("reference: frame 2 used=1 rejected=4", text)
+
     def test_keyboard_raw_controls_route_to_android_bridge(self) -> None:
         app = CameraLabApp()
         app._last_samples = [
@@ -1035,15 +1561,27 @@ class CameraExampleTests(unittest.TestCase):
         old_focus = MODULE._android_adjust_raw_focus
         old_reset = MODULE._android_reset_raw_capture_controls
         old_wb = MODULE._android_set_preview_white_balance_mode
+        old_quality = MODULE._android_set_raw_quality_mode
+        old_demosaic = MODULE._android_set_raw_demosaic_mode
+        old_merge = MODULE._android_set_raw_merge_mode
+        old_style = MODULE._android_set_raw_render_style
         MODULE._android_set_preview_manual_mode = lambda mode: calls.append(("mode", mode))
         MODULE._android_adjust_raw_iso = lambda delta: calls.append(("iso", delta))
         MODULE._android_adjust_raw_shutter = lambda delta: calls.append(("shutter", delta))
         MODULE._android_adjust_raw_focus = lambda delta: calls.append(("focus", delta))
         MODULE._android_reset_raw_capture_controls = lambda: calls.append(("reset", 0))
         MODULE._android_set_preview_white_balance_mode = lambda mode: calls.append(("wb", mode))
+        MODULE._android_set_raw_quality_mode = lambda mode: calls.append(("raw_quality", mode))
+        MODULE._android_set_raw_demosaic_mode = lambda mode: calls.append(("raw_demosaic", mode))
+        MODULE._android_set_raw_merge_mode = lambda mode: calls.append(("raw_merge", mode))
+        MODULE._android_set_raw_render_style = lambda style: calls.append(("style", style))
         try:
             app._handle_camera_key("m")
             app._handle_camera_key("w")
+            app._handle_camera_key("y")
+            app._handle_camera_key("u")
+            app._handle_camera_key("g")
+            app._handle_camera_key("j")
             app._handle_camera_key("]")
             app._handle_camera_key("-")
             app._handle_camera_key(".")
@@ -1055,8 +1593,50 @@ class CameraExampleTests(unittest.TestCase):
             MODULE._android_adjust_raw_focus = old_focus
             MODULE._android_reset_raw_capture_controls = old_reset
             MODULE._android_set_preview_white_balance_mode = old_wb
+            MODULE._android_set_raw_quality_mode = old_quality
+            MODULE._android_set_raw_demosaic_mode = old_demosaic
+            MODULE._android_set_raw_merge_mode = old_merge
+            MODULE._android_set_raw_render_style = old_style
 
-        self.assertEqual(calls, [("mode", "manual"), ("wb", "neutral"), ("iso", 1), ("shutter", -1), ("focus", 1), ("reset", 0)])
+        self.assertEqual(
+            calls,
+            [
+                ("mode", "manual"),
+                ("wb", "auto"),
+                ("raw_quality", "full_res"),
+                ("raw_demosaic", "bilinear_fast"),
+                ("raw_merge", "raw_average_tile_motion_aware"),
+                ("style", "Apple"),
+                ("iso", 1),
+                ("shutter", -1),
+                ("focus", 1),
+                ("reset", 0),
+            ],
+        )
+
+    def test_keyboard_burst_capture_routes_to_android_bridge(self) -> None:
+        app = CameraLabApp()
+        calls: list[int] = []
+        old_capture = MODULE._android_capture_yuv_burst
+        MODULE._android_capture_yuv_burst = lambda frame_count: calls.append(frame_count)
+        try:
+            app._handle_camera_key("b")
+        finally:
+            MODULE._android_capture_yuv_burst = old_capture
+
+        self.assertEqual(calls, [5])
+        self.assertEqual(app._last_action_status, "capturing and processing burst x5")
+
+    def test_keyboard_burst_depth_cycles(self) -> None:
+        app = CameraLabApp()
+
+        app._handle_camera_key("n")
+        self.assertEqual(app._burst_frame_count, 10)
+        self.assertEqual(app._last_action_status, "burst depth 10")
+
+        app._handle_camera_key("n")
+        self.assertEqual(app._burst_frame_count, 12)
+        self.assertEqual(app._last_action_status, "burst depth 12")
 
     def test_touch_raw_controls_route_to_android_bridge(self) -> None:
         app = CameraLabApp()
@@ -1114,16 +1694,35 @@ class CameraExampleTests(unittest.TestCase):
                 ("shutter", 1),
                 ("focus", -1),
                 ("focus", 1),
-                ("wb", "neutral"),
+                ("wb", "auto"),
             ],
         )
+
+    def test_touch_burst_controls_route_to_android_bridge(self) -> None:
+        app = CameraLabApp()
+        app._buttons = [
+            TouchButton("capture_yuv_burst", "burst", 0.0, 0.0, 50.0, 40.0),
+            TouchButton("cycle_burst_depth", "depth", 60.0, 0.0, 110.0, 40.0),
+        ]
+        calls: list[int] = []
+        old_capture = MODULE._android_capture_yuv_burst
+        MODULE._android_capture_yuv_burst = lambda frame_count: calls.append(frame_count)
+        try:
+            app._handle_touch_action(25.0, 20.0)
+            app._handle_touch_action(85.0, 20.0)
+            app._handle_touch_action(25.0, 20.0)
+        finally:
+            MODULE._android_capture_yuv_burst = old_capture
+
+        self.assertEqual(calls, [5, 10])
+        self.assertEqual(app._last_action_status, "capturing and processing burst x10")
 
     def test_generated_touch_buttons_include_device_controls(self) -> None:
         app = CameraLabApp()
         buttons = app._control_buttons(width=480.0, height=900.0, margin=16.0)
         actions = {button.action for button in buttons}
 
-        self.assertEqual(len(buttons), 12)
+        self.assertEqual(len(buttons), 20)
         self.assertEqual(
             actions,
             {
@@ -1139,6 +1738,14 @@ class CameraExampleTests(unittest.TestCase):
                 "shutter_up",
                 "focus_down",
                 "focus_up",
+                "capture_yuv_burst",
+                "capture_raw_burst",
+                "capture_raw_comparison",
+                "cycle_burst_depth",
+                "cycle_raw_quality",
+                "cycle_raw_demosaic",
+                "cycle_raw_merge",
+                "cycle_raw_style",
             },
         )
 

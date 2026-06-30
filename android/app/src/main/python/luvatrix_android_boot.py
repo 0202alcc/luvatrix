@@ -25,7 +25,6 @@ def _log(message: str) -> None:
 
 def import_probe() -> str:
     import luvatrix_core  # noqa: F401
-    import luvatrix_ui  # noqa: F401
     _import_configured_app_main()
 
     return _mark("luvatrix import probe ok")
@@ -157,8 +156,52 @@ def capture_raw_still() -> str:
     return str(method())
 
 
+def capture_yuv_burst(frame_count: int = 10) -> str:
+    return _call_view_raw_control("captureYuvBurst", "capture_yuv_burst", int(frame_count))
+
+
+def capture_raw_burst(frame_count: int = 10) -> str:
+    return _call_view_raw_control("captureRawBurst", "capture_raw_burst", int(frame_count))
+
+
+def capture_raw_comparison_burst(frame_count: int = 10) -> str:
+    return _call_view_raw_control("captureRawComparisonBurst", "capture_raw_comparison_burst", int(frame_count))
+
+
+def register_processed_output(output_path: str, preview_path: str = "") -> str:
+    return _call_view_raw_control("registerProcessedOutput", "register_processed_output", str(output_path), str(preview_path))
+
+
+def process_last_yuv_burst() -> str:
+    return _call_view_raw_control("processLastYuvBurst", "process_last_yuv_burst")
+
+
+def process_last_raw_burst() -> str:
+    return _call_view_raw_control("processLastRawBurst", "process_last_raw_burst")
+
+
+def process_last_raw_comparison() -> str:
+    return _call_view_raw_control("processLastRawComparison", "process_last_raw_comparison")
+
+
 def set_raw_capture_mode(mode: str) -> str:
     return _call_view_raw_control("setRawCaptureMode", "set_raw_capture_mode", str(mode))
+
+
+def set_raw_quality_mode(mode: str) -> str:
+    return _call_view_raw_control("setRawQualityMode", "set_raw_quality_mode", str(mode))
+
+
+def set_raw_demosaic_mode(mode: str) -> str:
+    return _call_view_raw_control("setRawDemosaicMode", "set_raw_demosaic_mode", str(mode))
+
+
+def set_raw_merge_mode(mode: str) -> str:
+    return _call_view_raw_control("setRawMergeMode", "set_raw_merge_mode", str(mode))
+
+
+def set_raw_render_style(style: str) -> str:
+    return _call_view_raw_control("setRawRenderStyle", "set_raw_render_style", str(style))
 
 
 def set_preview_manual_mode(mode: str) -> str:

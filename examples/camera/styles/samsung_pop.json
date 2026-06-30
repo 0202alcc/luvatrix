@@ -1,0 +1,13 @@
+{
+  "name": "Samsung Pop",
+  "version": 1,
+  "shadow_lift": 0.45,
+  "highlight_rolloff": 0.65,
+  "global_saturation": 1.22,
+  "local_contrast": 1.2,
+  "sharpening": 1.25,
+  "skin_smoothing": 0.2,
+  "sky_saturation": 1.3,
+  "foliage_saturation": 1.2,
+  "white_balance_bias": "slightly_warm"
+}
