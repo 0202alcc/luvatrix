@@ -35,6 +35,9 @@ Repository-level operating rules and quick-start context for human and AI contri
    - Use `[[variants]]` only when a platform or architecture needs a different `module_root` or `entrypoint`.
 3. Keep app lifecycle objects compatible with `init(ctx)`, `loop(ctx, dt)`, and `stop(ctx)`.
 4. Validate platform support and optional dependency availability through `luvatrix.app.check_app_install` or `luvatrix.app.validate_app_install`.
+5. Scroll-heavy scene apps should build stable content-space primitives with `App.frame(..., retained=True, content_offset=(x, y))`. After the retained scene exists, use `App.set_scene_content_offset(x, y)` for transform-only revisions that do not rebuild nodes. On native Metal this preserves geometry buffers and applies scrolling as a GPU transform; do not pre-translate every primitive unless its content actually changed.
+6. Apps without continuous animation may call `set_continuous_render(False)` and use `invalidate()` after data or state changes. Input consumed through `InputManager.snapshot()` invalidates automatically.
+7. Use `luvatrix.app.ScrollbarController` for custom scene scrollbars. It supplies track clicking, thumb-anchor dragging, pointer capture outside the track, release handling, and horizontal/vertical parity; keep painted scrollbar geometry separate from a comfortably sized interaction target.
 
 ## Python Tooling Policy
 1. Use `uv` for Python workflows:
@@ -71,3 +74,4 @@ Repository-level operating rules and quick-start context for human and AI contri
    - `uv run python main.py validate-app examples/full_suite_interactive --render headless`
    - `uv run python main.py run-app examples/hello_world --render headless --ticks 1 --energy-safety off`
 4. Broader runtime checks should be chosen based on touched modules, for example macOS renderer tests for `luvatrix_core/platform/macos/*` changes or planes tests for `luvatrix_ui/planes_*` changes.
+5. Retained scene-scroll throughput: `uv run python tools/perf/macos_scene_scroll_harness.py`.

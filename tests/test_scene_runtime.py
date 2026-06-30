@@ -6,7 +6,7 @@ import unittest
 
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
 from luvatrix_core.core.scene_display_runtime import SceneDisplayRuntime
-from luvatrix_core.core.scene_graph import ClearNode, RectNode, SceneFrame, SceneGraphBuffer
+from luvatrix_core.core.scene_graph import Camera3DNode, ClearNode, Cube3DNode, RectNode, SceneFrame, SceneGraphBuffer
 from luvatrix_core.core.scene_graph import CircleNode, TextNode
 from luvatrix_core.core.sensor_manager import SensorManagerThread
 from luvatrix_core.core.unified_runtime import UnifiedRuntime
@@ -161,6 +161,28 @@ class SceneRuntimeTests(unittest.TestCase):
         presented = matrix_target.presented[0]
         self.assertEqual(presented.revision, 7)
         self.assertEqual(int(presented.rgba[0, 0, 0]), 255)
+
+    def test_cpu_scene_target_rasterizes_cube3d_fallback(self) -> None:
+        matrix_target = _RecordingMatrixTarget()
+        scene_target = CpuSceneTarget(matrix_target)
+        frame = SceneFrame(
+            revision=8,
+            logical_width=120,
+            logical_height=80,
+            display_width=120,
+            display_height=80,
+            ts_ns=1,
+            nodes=(
+                ClearNode((0, 0, 0, 255)),
+                Camera3DNode(position=(0, 0, 5), target=(0, 0, 0)),
+                Cube3DNode(size=2.0, edge_rgba=(255, 255, 255, 255)),
+            ),
+        )
+        scene_target.start()
+        scene_target.present_scene(frame)
+        scene_target.stop()
+        presented = matrix_target.presented[0]
+        self.assertGreater(int(presented.rgba[:, :, 0].max()), 0)
 
     def test_scene_display_runtime_can_repeat_latest_frame_without_new_revision(self) -> None:
         buffer = SceneGraphBuffer()

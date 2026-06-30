@@ -65,6 +65,8 @@ class HDIThread:
         self._target_extent_provider = target_extent_provider
         self._source_content_rect_provider = source_content_rect_provider
         self._queue: deque[HDIEvent] = deque()
+        self._motion_slots: dict[tuple[str, str, tuple[str, str]], HDIEvent] = {}
+        self._motion_order: deque[tuple[str, str, tuple[str, str]]] = deque()
         self._lock = threading.Lock()
         self._running = threading.Event()
         self._thread: threading.Thread | None = None
@@ -105,17 +107,20 @@ class HDIThread:
         with self._lock:
             while self._queue and len(out) < max_events:
                 event = self._queue.popleft()
+                self._record_dequeued_locked(event, now_ns)
                 out.append(event)
-                self._telemetry_window["events_dequeued"] += 1
-                latency_ns = max(0, int(now_ns - int(event.ts_ns)))
-                self._latency_samples_ns.append(latency_ns)
-                if latency_ns > int(self._telemetry_window.get("queue_latency_ns_max", 0)):
-                    self._telemetry_window["queue_latency_ns_max"] = latency_ns
+            while self._motion_order and len(out) < max_events:
+                key = self._motion_order.popleft()
+                event = self._motion_slots.pop(key, None)
+                if event is None:
+                    continue
+                self._record_dequeued_locked(event, now_ns)
+                out.append(event)
         return out
 
     def pending_count(self) -> int:
         with self._lock:
-            return len(self._queue)
+            return len(self._queue) + len(self._motion_slots)
 
     def consume_telemetry(self) -> dict[str, int]:
         with self._lock:
@@ -497,8 +502,19 @@ class HDIThread:
 
     def _enqueue(self, event: HDIEvent) -> None:
         with self._lock:
+            if _uses_latest_motion_slot(event):
+                key = _motion_slot_key(event)
+                existing = self._motion_slots.get(key)
+                if existing is not None:
+                    self._motion_slots[key] = _merge_motion_events(existing, event)
+                    self._telemetry_window["events_coalesced"] += 1
+                    return
+                self._motion_slots[key] = event
+                self._motion_order.append(key)
+                self._telemetry_window["events_enqueued"] += 1
+                return
             if _is_motion_event(event):
-                idx = self._find_last_motion_index(event)
+                idx = self._find_last_queued_motion_index(event)
                 if idx is not None:
                     self._queue[idx] = _merge_motion_events(self._queue[idx], event)
                     self._telemetry_window["events_coalesced"] += 1
@@ -521,7 +537,7 @@ class HDIThread:
             self._telemetry_window["events_dropped"] += 1
             self._telemetry_window["events_enqueued"] += 1
 
-    def _find_last_motion_index(self, incoming: HDIEvent) -> int | None:
+    def _find_last_queued_motion_index(self, incoming: HDIEvent) -> int | None:
         for i in range(len(self._queue) - 1, -1, -1):
             e = self._queue[i]
             if not _is_motion_event(e):
@@ -540,6 +556,13 @@ class HDIThread:
                 self._telemetry_window["events_dropped"] += 1
                 return True
         return False
+
+    def _record_dequeued_locked(self, event: HDIEvent, now_ns: int) -> None:
+        self._telemetry_window["events_dequeued"] += 1
+        latency_ns = max(0, int(now_ns - int(event.ts_ns)))
+        self._latency_samples_ns.append(latency_ns)
+        if latency_ns > int(self._telemetry_window.get("queue_latency_ns_max", 0)):
+            self._telemetry_window["queue_latency_ns_max"] = latency_ns
 
 
 def _is_keyboard_transition(event: HDIEvent) -> bool:
@@ -567,6 +590,10 @@ def _is_motion_event(event: HDIEvent) -> bool:
     return _is_move_event(event) or _is_scroll_event(event)
 
 
+def _uses_latest_motion_slot(event: HDIEvent) -> bool:
+    return event.device in ("mouse", "trackpad") and _is_motion_event(event)
+
+
 def _motion_coalesce_key(event: HDIEvent) -> tuple[str, str]:
     if event.device == "touch" and event.event_type == "touch":
         payload = event.payload if isinstance(event.payload, dict) else {}
@@ -581,6 +608,10 @@ def _motion_coalesce_key(event: HDIEvent) -> tuple[str, str]:
     return ("", "")
 
 
+def _motion_slot_key(event: HDIEvent) -> tuple[str, str, tuple[str, str]]:
+    return (event.device, event.window_id, _motion_coalesce_key(event))
+
+
 def _merge_motion_events(existing: HDIEvent, incoming: HDIEvent) -> HDIEvent:
     payload_existing = existing.payload if isinstance(existing.payload, dict) else {}
     payload_incoming = incoming.payload if isinstance(incoming.payload, dict) else {}
@@ -591,14 +622,9 @@ def _merge_motion_events(existing: HDIEvent, incoming: HDIEvent) -> HDIEvent:
         ex_dy = _float_or_zero(payload_existing.get("delta_y", 0.0))
         in_dx = _float_or_zero(payload_incoming.get("delta_x", 0.0))
         in_dy = _float_or_zero(payload_incoming.get("delta_y", 0.0))
-        if incoming.device == "trackpad":
-            merged["delta_x"] = in_dx
-            merged["delta_y"] = in_dy
-            merged["coalesce_mode"] = "latest"
-        else:
-            merged["delta_x"] = ex_dx + in_dx
-            merged["delta_y"] = ex_dy + in_dy
-            merged["coalesce_mode"] = "sum"
+        merged["delta_x"] = ex_dx + in_dx
+        merged["delta_y"] = ex_dy + in_dy
+        merged["coalesce_mode"] = "sum"
         merged["coalesced_count"] = int(payload_existing.get("coalesced_count", 1)) + 1
     return replace(incoming, payload=merged)
 
