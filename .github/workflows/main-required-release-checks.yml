@@ -1,0 +1,135 @@
+name: main-required-release-checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gateflow-continuity:
+    name: gateflow-continuity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Validate release metadata and gateflow continuity
+        run: |
+          uv run python - <<'PY'
+          import json
+          import os
+          import tomllib
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          package = tomllib.loads(Path("uv.lock").read_text(encoding="utf-8"))
+          project = pyproject["project"]
+          version = project["version"]
+          locked = next(pkg for pkg in package["package"] if pkg["name"] == project["name"])
+          if locked["version"] != version:
+              raise SystemExit(f"uv.lock version {locked['version']} does not match pyproject {version}")
+
+          with Path(".github/workflows/main-required-release-checks.yml").open("r", encoding="utf-8") as f:
+              workflow_text = f.read()
+          for context in (
+              "gateflow-continuity",
+              "uvx-published-smoke (",
+          ):
+              if context not in workflow_text:
+                  raise SystemExit(f"missing required branch-protection context: {context}")
+
+          if os.environ.get("GITHUB_EVENT_NAME") == "pull_request":
+              exists = False
+              try:
+                  with urllib.request.urlopen(
+                      f"https://pypi.org/pypi/{project['name']}/json",
+                      timeout=20,
+                  ) as response:
+                      releases = json.load(response).get("releases", {})
+                  exists = version in releases
+              except urllib.error.HTTPError as exc:
+                  if exc.code != 404:
+                      raise
+              if exists:
+                  raise SystemExit(f"{project['name']} {version} already exists on PyPI; bump version before merging")
+          PY
+
+  uvx-published-smoke:
+    name: uvx-published-smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Build local release artifact
+        run: uv build --wheel
+      - name: Smoke install target-scoped extras
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv venv --python 3.14 .smoke-venv
+          PY=".smoke-venv/bin/python"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            PY=".smoke-venv/Scripts/python.exe"
+          fi
+          WHEEL="$(ls dist/luvatrix-*.whl | head -n 1)"
+          uv pip install --python "$PY" "${WHEEL}[ios]"
+          "$PY" - <<'PY'
+          from importlib import metadata
+          from pathlib import Path
+          import sys
+          import tempfile
+
+          blocked = {
+              "pyobjc-core",
+              "pyobjc-framework-cocoa",
+              "pyobjc-framework-quartz",
+              "pyobjc-framework-metal",
+              "vulkan",
+              "websocket-client",
+              "websockets",
+          }
+          installed = {dist.metadata["Name"].lower() for dist in metadata.distributions()}
+          present = sorted(blocked & installed)
+          if present:
+              raise SystemExit(f"iOS extra installed unrelated platform dependencies: {present}")
+
+          from luvatrix.app import PLATFORM_IOS, check_app_install
+
+          with tempfile.TemporaryDirectory() as td:
+              app = Path(td)
+              (app / "app.toml").write_text(
+                  "\n".join(
+                      [
+                          'app_id = "ci.platform_isolation"',
+                          'protocol_version = "1"',
+                          'entrypoint = "app_main:create"',
+                          "required_capabilities = []",
+                          "optional_capabilities = []",
+                          'platform_support = ["ios"]',
+                      ]
+                  ),
+                  encoding="utf-8",
+              )
+              (app / "app_main.py").write_text("def create():\n    return object()\n", encoding="utf-8")
+              validation = check_app_install(app, render="ios-simulator", host_arch="arm64")
+              if validation.target_platform != PLATFORM_IOS:
+                  raise SystemExit(f"unexpected target platform: {validation.target_platform}")
+              if validation.required_extras != ("ios",):
+                  raise SystemExit(f"unexpected required extras: {validation.required_extras}")
+              if validation.missing_modules:
+                  raise SystemExit(f"unexpected missing modules: {validation.missing_modules}")
+
+          from luvatrix import __version__
+
+          print(f"luvatrix {__version__} target-scoped install smoke passed on {sys.platform}")
+          PY
