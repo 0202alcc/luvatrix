@@ -152,8 +152,10 @@ import importlib
 import shutil
 import sys
 
+from luvatrix_core.platform.package_sync import make_target_package_ignore
+
 target = Path(sys.argv[1])
-ignore = shutil.ignore_patterns("__pycache__", "*.pyc")
+ignore = make_target_package_ignore("ios")
 for name in ("luvatrix", "luvatrix_core", "luvatrix_ui"):
     mod = importlib.import_module(name)
     src = Path(mod.__file__).resolve().parent
