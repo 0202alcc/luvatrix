@@ -251,11 +251,6 @@ desktop = [
 dev = [
     { name = "matplotlib" },
 ]
-ios = [
-    { name = "pyobjc-framework-cocoa" },
-    { name = "pyobjc-framework-metal" },
-    { name = "pyobjc-framework-quartz" },
-]
 macos = [
     { name = "pyobjc-core" },
     { name = "pyobjc-framework-cocoa" },
@@ -273,11 +268,8 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.2" },
     { name = "pillow", specifier = ">=10.3.0" },
     { name = "pyobjc-core", marker = "extra == 'macos'", specifier = ">=12.1" },
-    { name = "pyobjc-framework-cocoa", marker = "extra == 'ios'", specifier = ">=12.1" },
     { name = "pyobjc-framework-cocoa", marker = "extra == 'macos'", specifier = ">=12.1" },
-    { name = "pyobjc-framework-metal", marker = "extra == 'ios'", specifier = ">=12.1" },
     { name = "pyobjc-framework-metal", marker = "extra == 'macos'", specifier = ">=12.1" },
-    { name = "pyobjc-framework-quartz", marker = "extra == 'ios'", specifier = ">=12.1" },
     { name = "pyobjc-framework-quartz", marker = "extra == 'macos'", specifier = ">=12.1" },
     { name = "torch", marker = "extra == 'desktop'", specifier = ">=2.4.0" },
     { name = "torch", marker = "extra == 'macos'", specifier = ">=2.4.0" },
