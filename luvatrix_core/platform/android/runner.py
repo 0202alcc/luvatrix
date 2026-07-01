@@ -10,6 +10,7 @@ import subprocess
 import time
 import tomllib
 
+from luvatrix_core.platform.package_sync import copy_package_tree_for_target
 from luvatrix_core.scaffold import resolve_native_project_dir
 
 
@@ -208,7 +209,7 @@ def _resolve_android_project(app_dir: Path, explicit: Path | None = None) -> Pat
 def sync_android_python_assets(app_dir: Path, *, project_dir: Path) -> None:
     py_dst = project_dir / "app" / "src" / "main" / "python"
     py_dst.mkdir(parents=True, exist_ok=True)
-    ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache")
+    app_ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache")
 
     all_pkg_names = ("luvatrix", "luvatrix_core", "luvatrix_ui", "luvatrix_plot")
     pkg_names = _android_python_packages_for_app(app_dir)
@@ -220,15 +221,13 @@ def sync_android_python_assets(app_dir: Path, *, project_dir: Path) -> None:
     for pkg_name in pkg_names:
         src = _python_package_dir(pkg_name)
         dst = py_dst / pkg_name
-        if dst.exists():
-            shutil.rmtree(dst)
-        shutil.copytree(src, dst, ignore=ignore)
+        copy_package_tree_for_target(src, dst, target_platform="android")
 
     for rel in ("examples", "luvatrix_app"):
         dst = py_dst / rel
         if dst.exists():
             shutil.rmtree(dst)
-    shutil.copytree(app_dir, py_dst / "luvatrix_app", ignore=ignore)
+    shutil.copytree(app_dir, py_dst / "luvatrix_app", ignore=app_ignore)
     (py_dst / "luvatrix_app" / "__init__.py").touch()
     _write_android_app_bundle(app_dir, py_dst=py_dst)
 

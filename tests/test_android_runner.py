@@ -194,6 +194,14 @@ class AndroidRunnerTests(unittest.TestCase):
             self.assertTrue((py_root / "luvatrix_core").is_dir())
             self.assertFalse((py_root / "luvatrix_ui").exists())
             self.assertFalse((py_root / "luvatrix_plot").exists())
+            platform_root = py_root / "luvatrix_core" / "platform"
+            self.assertTrue((platform_root / "android").is_dir())
+            self.assertFalse((platform_root / "ios").exists())
+            self.assertFalse((platform_root / "macos").exists())
+            self.assertFalse((platform_root / "web").exists())
+            native_templates = py_root / "luvatrix_core" / "templates" / "native"
+            self.assertTrue((native_templates / "android").is_dir())
+            self.assertFalse((native_templates / "ios").exists())
             self.assertTrue((py_root / "luvatrix_app" / "app.toml").exists())
             self.assertTrue((py_root / "examples" / "app" / "_luvatrix_bundle.py").exists())
             self.assertTrue((py_root / "luvatrix_launch_config.json").exists())
