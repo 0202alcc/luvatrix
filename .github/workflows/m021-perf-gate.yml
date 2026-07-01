@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Sync deps
-        run: uv sync
+        run: uv sync --extra desktop
       - name: Perf baseline tests
         run: PYTHONPATH=. uv run --with pytest pytest tests/test_planes_runtime.py tests/test_app_runtime.py tests/test_display_runtime.py tests/test_perf_tools.py
       - name: Build interactive baseline artifact

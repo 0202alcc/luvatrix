@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Sync deps
-        run: uv sync
+        run: uv sync --extra desktop
       - name: Runtime perf tests
         run: PYTHONPATH=. uv run --with pytest pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py tests/test_m008_perf_gate.py
       - name: M-008 perf smoke gate

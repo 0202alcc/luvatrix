@@ -1,0 +1,88 @@
+name: publish-pypi
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Check PyPI version
+        id: release
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import tomllib
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+
+          project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]
+          name = project["name"]
+          version = project["version"]
+          exists = False
+          try:
+              with urllib.request.urlopen(f"https://pypi.org/pypi/{name}/json", timeout=20) as response:
+                  releases = json.load(response).get("releases", {})
+              exists = version in releases
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              print(f"version={version}", file=output)
+              print(f"publish={'false' if exists else 'true'}", file=output)
+
+          state = "already exists on PyPI; skipping publish" if exists else "not found on PyPI; publishing"
+          print(f"{name} {version} {state}")
+          PY
+
+      - name: Build distributions
+        if: steps.release.outputs.publish == 'true'
+        run: uv build
+
+      - name: Upload distributions
+        if: steps.release.outputs.publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    if: needs.build.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/luvatrix/${{ needs.build.outputs.version }}/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
