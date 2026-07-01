@@ -49,6 +49,24 @@ Install validation:
 3. `run-app --render macos` requires the `macos` and `vulkan` extras.
 4. `run-app --render macos-metal` requires the `macos` extra.
 5. `run-app --render web` requires the `web` extra.
+6. `run-app --render ios-simulator` and `run-app --render ios-device` require
+   only the `ios` extra; iOS ABI-specific packages are prepared by the native
+   scaffold's `ios/scripts/setup_ios.sh`.
+7. `run-app --render android-emulator` and `run-app --render android-device`
+   require only the `android` extra.
+
+Platform runtime isolation:
+
+1. Extras are target-scoped. Installing `luvatrix[ios]` must not install macOS
+   PyObjC bindings, Vulkan bindings, web socket runtimes, or Android-only
+   helpers.
+2. Public imports such as `from luvatrix.app import App` and CLI import paths
+   must not eagerly import platform runtimes.
+3. Native package sync prunes sibling platform runtime trees from app bundles.
+   Android bundles keep `luvatrix_core/platform/android`; iOS bundles keep
+   `luvatrix_core/platform/ios`.
+4. Missing platform dependencies should fail only when the matching render path
+   is selected, with an install hint for the selected extra.
 
 ## 2. Lifecycle Contract
 

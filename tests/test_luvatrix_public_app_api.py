@@ -23,6 +23,7 @@ from luvatrix.app import (
     load_app_manifest,
     validate_app_install,
 )
+from luvatrix import __version__
 from luvatrix_core.core.app_runtime import AppRuntime
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
 from luvatrix_core.core.sensor_manager import SensorManagerThread
@@ -482,6 +483,26 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         self.assertFalse(any(dep.startswith("pyobjc-") for dep in ios_deps))
         self.assertFalse(any(dep.startswith("vulkan") for dep in ios_deps))
         self.assertFalse(any("websocket" in dep.lower() for dep in ios_deps))
+
+    def test_public_version_matches_package_metadata(self) -> None:
+        pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+        with pyproject.open("rb") as f:
+            data = tomllib.load(f)
+
+        self.assertEqual(__version__, data["project"]["version"])
+
+    def test_main_branch_required_release_contexts_are_defined(self) -> None:
+        workflow = (
+            Path(__file__).resolve().parents[1]
+            / ".github"
+            / "workflows"
+            / "main-required-release-checks.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("name: gateflow-continuity", workflow)
+        self.assertIn("name: uvx-published-smoke (${{ matrix.os }})", workflow)
+        self.assertIn("ubuntu-latest", workflow)
+        self.assertIn("macos-latest", workflow)
 
 
 if __name__ == "__main__":
