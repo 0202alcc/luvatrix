@@ -25,6 +25,10 @@ pip install "luvatrix[ios]"
 
 The base package intentionally includes common raster/data dependencies
 (`numpy` and `Pillow`). Platform-specific renderers still live behind extras.
+Extras are target-scoped: installing `luvatrix[ios]` does not install macOS
+PyObjC bindings, Vulkan bindings, web socket runtimes, or Android-only helpers.
+iOS ABI-specific packages are prepared by the native scaffold's
+`ios/scripts/setup_ios.sh` and copied into the app-owned `PyPackages` bundle.
 
 ## Create An External App
 
@@ -77,6 +81,11 @@ Native prerequisites:
   assets prepared by the scaffold's `ios/scripts/setup_ios.sh`.
 - Vulkan on macOS: the Python `vulkan` binding plus a native Vulkan SDK/loader
   such as Vulkan SDK or MoltenVK.
+
+Native package sync also prunes unrelated platform runtimes from app bundles.
+Android bundles keep the Android runtime tree, iOS bundles keep the iOS runtime
+tree, and sibling macOS/web/native-template trees are left out unless that target
+is being packaged.
 
 ## App Layout
 
