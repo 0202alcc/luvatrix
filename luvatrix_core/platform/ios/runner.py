@@ -15,6 +15,7 @@ import threading
 import time
 from pathlib import Path
 
+from luvatrix_core.platform.package_sync import copy_package_tree_for_target
 from luvatrix_core.scaffold import resolve_native_project_dir
 
 LOGGER = logging.getLogger(__name__)
@@ -816,16 +817,13 @@ def _sync_local_packages(repo_root: Path, packages_dir: Path) -> None:
 
 def _sync_luvatrix_packages(packages_dir: Path) -> None:
     """Sync installed luvatrix packages into the iOS PyPackages dir."""
-    ignore = shutil.ignore_patterns("__pycache__", "*.pyc")
     for pkg in ("luvatrix", "luvatrix_core", "luvatrix_ui"):
         mod = importlib.import_module(pkg)
         src = Path(mod.__file__).resolve().parent
         dst = packages_dir / pkg
         if not src.is_dir():
             continue
-        if dst.exists():
-            shutil.rmtree(dst)
-        shutil.copytree(src, dst, ignore=ignore)
+        copy_package_tree_for_target(src, dst, target_platform="ios")
         print(f"[ios] synced {src} → {dst}")
 
 

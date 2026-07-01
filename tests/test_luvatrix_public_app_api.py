@@ -240,15 +240,39 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
 
             self.assertIn('pip install "luvatrix[macos]"', str(cm.exception))
 
+    def test_ios_validation_is_scoped_to_ios_extra_only(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_app(root, [PLATFORM_IOS])
+            checked_modules: list[str] = []
+
+            validation = check_app_install(
+                root,
+                render="ios-simulator",
+                host_arch="arm64",
+                module_available=lambda name: checked_modules.append(name) or False,
+            )
+
+            self.assertTrue(validation.ok)
+            self.assertEqual(validation.target_platform, PLATFORM_IOS)
+            self.assertEqual(validation.required_extras, ("ios",))
+            self.assertEqual(validation.missing_modules, ())
+            self.assertEqual(checked_modules, [])
+
     def test_importing_public_api_and_cli_does_not_import_platform_modules(self) -> None:
         code = (
             "import sys\n"
             "from luvatrix.app import App, InputState\n"
             "import main\n"
+            "blocked_prefixes = (\n"
+            "    'luvatrix_core.platform.macos',\n"
+            "    'luvatrix_core.platform.ios',\n"
+            "    'luvatrix_core.platform.web',\n"
+            "    'luvatrix_core.platform.android',\n"
+            ")\n"
+            "blocked_modules = {'AppKit', 'Quartz', 'Metal', 'objc', 'vulkan', 'websocket', 'websockets'}\n"
             "blocked = [name for name in sys.modules "
-            "if name.startswith('luvatrix_core.platform.macos') "
-            "or name.startswith('luvatrix_core.platform.web') "
-            "or name.startswith('luvatrix_core.platform.android')]\n"
+            "if name.startswith(blocked_prefixes) or name in blocked_modules]\n"
             "if blocked:\n"
             "    raise SystemExit('\\n'.join(blocked))\n"
         )
@@ -449,11 +473,15 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
 
         base_deps = data["project"]["dependencies"]
         optional = data["project"]["optional-dependencies"]
+        ios_deps = optional["ios"]
 
         self.assertNotIn("vulkan>=1.3.275.1", base_deps)
         self.assertFalse(any(dep.startswith("pyobjc-") for dep in base_deps))
         self.assertIn("vulkan>=1.3.275.1", optional["vulkan"])
         self.assertTrue(any(dep.startswith("pyobjc-core") for dep in optional["macos"]))
+        self.assertFalse(any(dep.startswith("pyobjc-") for dep in ios_deps))
+        self.assertFalse(any(dep.startswith("vulkan") for dep in ios_deps))
+        self.assertFalse(any("websocket" in dep.lower() for dep in ios_deps))
 
 
 if __name__ == "__main__":
