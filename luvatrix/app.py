@@ -500,19 +500,37 @@ class SceneFrame(AbstractContextManager["SceneFrame"]):
             self._ctx.finalize_scene_frame()
         return False
 
-    def shader_rect(self, shader: str, *, x: float = 0.0, y: float = 0.0, width: float | None = None, height: float | None = None, uniforms: tuple[float, ...] = (), z_index: int = 0) -> None:
+    def _point(self, x: float, y: float, frame: str | None = None) -> tuple[float, float]:
+        return self._ctx.to_render_coords(float(x), float(y), frame=frame)
+
+    def _rect(self, x: float, y: float, width: float, height: float, frame: str | None = None) -> tuple[float, float, float, float]:
+        x0, y0 = self._point(x, y, frame=frame)
+        x1, y1 = self._point(x + width, y + height, frame=frame)
+        left = min(x0, x1)
+        top = min(y0, y1)
+        return left, top, abs(x1 - x0), abs(y1 - y0)
+
+    def shader_rect(self, shader: str, *, x: float = 0.0, y: float = 0.0, width: float | None = None, height: float | None = None, uniforms: tuple[float, ...] = (), z_index: int = 0, frame: str | None = None) -> None:
+        rx, ry, rw, rh = self._rect(
+            x,
+            y,
+            float(self._ctx.display_width_px if width is None else width),
+            float(self._ctx.display_height_px if height is None else height),
+            frame=frame,
+        )
         self._ctx.draw_shader_rect(
-            x=x,
-            y=y,
-            width=float(self._ctx.display_width_px if width is None else width),
-            height=float(self._ctx.display_height_px if height is None else height),
+            x=rx,
+            y=ry,
+            width=rw,
+            height=rh,
             shader=shader,
             uniforms=uniforms,
             z_index=z_index,
         )
 
-    def rect(self, *, x: float, y: float, width: float, height: float, color: tuple[int, int, int, int] | str, z_index: int = 0) -> None:
-        self._ctx.draw_rect(x=x, y=y, width=width, height=height, color_rgba=_rgba(color), z_index=z_index)
+    def rect(self, *, x: float, y: float, width: float, height: float, color: tuple[int, int, int, int] | str, z_index: int = 0, frame: str | None = None) -> None:
+        rx, ry, rw, rh = self._rect(x, y, width, height, frame=frame)
+        self._ctx.draw_rect(x=rx, y=ry, width=rw, height=rh, color_rgba=_rgba(color), z_index=z_index)
 
     def rounded_rect(
         self,
@@ -524,21 +542,24 @@ class SceneFrame(AbstractContextManager["SceneFrame"]):
         radius: float,
         color: tuple[int, int, int, int] | str,
         z_index: int = 0,
+        frame: str | None = None,
     ) -> None:
+        rx, ry, rw, rh = self._rect(x, y, width, height, frame=frame)
         self._ctx.draw_rounded_rect(
-            x=x,
-            y=y,
-            width=width,
-            height=height,
+            x=rx,
+            y=ry,
+            width=rw,
+            height=rh,
             radius=radius,
             color_rgba=_rgba(color),
             z_index=z_index,
         )
 
-    def circle(self, *, cx: float, cy: float, radius: float, fill: tuple[int, int, int, int] | str, stroke: tuple[int, int, int, int] | str = (0, 0, 0, 0), stroke_width: float = 0.0, z_index: int = 0) -> None:
+    def circle(self, *, cx: float, cy: float, radius: float, fill: tuple[int, int, int, int] | str, stroke: tuple[int, int, int, int] | str = (0, 0, 0, 0), stroke_width: float = 0.0, z_index: int = 0, frame: str | None = None) -> None:
+        rx, ry = self._point(cx, cy, frame=frame)
         self._ctx.draw_circle(
-            cx=cx,
-            cy=cy,
+            cx=rx,
+            cy=ry,
             radius=radius,
             fill_rgba=_rgba(fill),
             stroke_rgba=_rgba(stroke),
@@ -546,8 +567,9 @@ class SceneFrame(AbstractContextManager["SceneFrame"]):
             z_index=z_index,
         )
 
-    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0) -> None:
-        self._ctx.draw_text(text, x=x, y=y, font_size_px=font_size_px, color_rgba=_rgba(color), z_index=z_index, cache_key=cache_key, rotation_deg=rotation_deg)
+    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0, frame: str | None = None) -> None:
+        rx, ry = self._point(x, y, frame=frame)
+        self._ctx.draw_text(text, x=rx, y=ry, font_size_px=font_size_px, color_rgba=_rgba(color), z_index=z_index, cache_key=cache_key, rotation_deg=rotation_deg)
 
     def camera3d(
         self,
@@ -874,22 +896,34 @@ class UIFrame(AbstractContextManager["UIFrame"]):
     def shader_rect(self, shader: str, **kwargs: Any) -> None:
         _ = shader, kwargs
 
-    def rect(self, *, x: float, y: float, width: float, height: float, color: tuple[int, int, int, int] | str, z_index: int = 0) -> None:
+    def _point(self, x: float, y: float, frame: str | None = None) -> tuple[float, float]:
+        return self._ctx.to_render_coords(float(x), float(y), frame=frame)
+
+    def _rect(self, x: float, y: float, width: float, height: float, frame: str | None = None) -> tuple[float, float, float, float]:
+        x0, y0 = self._point(x, y, frame=frame)
+        x1, y1 = self._point(x + width, y + height, frame=frame)
+        left = min(x0, x1)
+        top = min(y0, y1)
+        return left, top, abs(x1 - x0), abs(y1 - y0)
+
+    def rect(self, *, x: float, y: float, width: float, height: float, color: tuple[int, int, int, int] | str, z_index: int = 0, frame: str | None = None) -> None:
         from luvatrix_ui.component_schema import CoordinatePoint
         from luvatrix_ui.controls.svg_component import SVGComponent
 
+        rx, ry, rw, rh = self._rect(x, y, width, height, frame=frame)
         r, g, b, a = _rgba(color)
         markup = (
-            f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
-            f'<rect x="0" y="0" width="{width}" height="{height}" fill="#{r:02x}{g:02x}{b:02x}{a:02x}"/>'
+            f'<svg width="{rw}" height="{rh}" viewBox="0 0 {rw} {rh}">'
+            f'<rect x="0" y="0" width="{rw}" height="{rh}" fill="#{r:02x}{g:02x}{b:02x}{a:02x}"/>'
             "</svg>"
         )
-        self._ctx.mount_component(SVGComponent(component_id=f"rect_{z_index}_{x}_{y}", svg_markup=markup, position=CoordinatePoint(x, y, "screen_tl"), width=width, height=height))
+        self._ctx.mount_component(SVGComponent(component_id=f"rect_{z_index}_{x}_{y}", svg_markup=markup, position=CoordinatePoint(rx, ry, "screen_tl"), width=rw, height=rh))
 
-    def circle(self, *, cx: float, cy: float, radius: float, fill: tuple[int, int, int, int] | str, stroke: tuple[int, int, int, int] | str = (0, 0, 0, 0), stroke_width: float = 0.0, z_index: int = 0) -> None:
+    def circle(self, *, cx: float, cy: float, radius: float, fill: tuple[int, int, int, int] | str, stroke: tuple[int, int, int, int] | str = (0, 0, 0, 0), stroke_width: float = 0.0, z_index: int = 0, frame: str | None = None) -> None:
         from luvatrix_ui.component_schema import CoordinatePoint
         from luvatrix_ui.controls.svg_component import SVGComponent
 
+        rx, ry = self._point(cx, cy, frame=frame)
         size = max(1.0, radius * 2.0 + stroke_width * 2.0)
         fr, fg, fb, fa = _rgba(fill)
         sr, sg, sb, sa = _rgba(stroke)
@@ -900,20 +934,21 @@ class UIFrame(AbstractContextManager["UIFrame"]):
             f'stroke-width="{stroke_width}"/>'
             "</svg>"
         )
-        self._ctx.mount_component(SVGComponent(component_id=f"circle_{z_index}_{cx}_{cy}", svg_markup=markup, position=CoordinatePoint(cx - size / 2.0, cy - size / 2.0, "screen_tl"), width=size, height=size))
+        self._ctx.mount_component(SVGComponent(component_id=f"circle_{z_index}_{cx}_{cy}", svg_markup=markup, position=CoordinatePoint(rx - size / 2.0, ry - size / 2.0, "screen_tl"), width=size, height=size))
 
-    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0) -> None:
+    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0, frame: str | None = None) -> None:
         _ = rotation_deg
         from luvatrix_ui.component_schema import CoordinatePoint
         from luvatrix_ui.text.component import TextComponent
         from luvatrix_ui.text.renderer import TextAppearance, TextSizeSpec
 
+        rx, ry = self._point(x, y, frame=frame)
         r, g, b, _ = _rgba(color)
         self._ctx.mount_component(
             TextComponent(
                 component_id=cache_key or f"text_{z_index}_{x}_{y}",
                 text=text,
-                position=CoordinatePoint(x, y, "screen_tl"),
+                position=CoordinatePoint(rx, ry, "screen_tl"),
                 appearance=TextAppearance(color_hex=f"#{r:02x}{g:02x}{b:02x}"),
                 size=TextSizeSpec(unit="px", value=font_size_px),
             )
@@ -976,18 +1011,30 @@ class MatrixFrame(AbstractContextManager["MatrixFrame"]):
     def shader_rect(self, shader: str, **kwargs: Any) -> None:
         _ = shader, kwargs
 
-    def rect(self, *, x: float, y: float, width: float, height: float, color: tuple[int, int, int, int] | str, z_index: int = 0) -> None:
+    def _point(self, x: float, y: float, frame: str | None = None) -> tuple[float, float]:
+        return self._ctx.to_render_coords(float(x), float(y), frame=frame)
+
+    def _rect(self, x: float, y: float, width: float, height: float, frame: str | None = None) -> tuple[float, float, float, float]:
+        x0, y0 = self._point(x, y, frame=frame)
+        x1, y1 = self._point(x + width, y + height, frame=frame)
+        left = min(x0, x1)
+        top = min(y0, y1)
+        return left, top, abs(x1 - x0), abs(y1 - y0)
+
+    def rect(self, *, x: float, y: float, width: float, height: float, color: tuple[int, int, int, int] | str, z_index: int = 0, frame: str | None = None) -> None:
         _ = z_index
         assert self._frame is not None
-        x0 = max(0, min(self.width, int(round(x))))
-        y0 = max(0, min(self.height, int(round(y))))
-        x1 = max(x0, min(self.width, int(round(x + width))))
-        y1 = max(y0, min(self.height, int(round(y + height))))
+        rx, ry, rw, rh = self._rect(x, y, width, height, frame=frame)
+        x0 = max(0, min(self.width, int(round(rx))))
+        y0 = max(0, min(self.height, int(round(ry))))
+        x1 = max(x0, min(self.width, int(round(rx + rw))))
+        y1 = max(y0, min(self.height, int(round(ry + rh))))
         self._fill_rect(x0, y0, x1, y1, _rgba(color))
 
-    def circle(self, *, cx: float, cy: float, radius: float, fill: tuple[int, int, int, int] | str, stroke: tuple[int, int, int, int] | str = (0, 0, 0, 0), stroke_width: float = 0.0, z_index: int = 0) -> None:
+    def circle(self, *, cx: float, cy: float, radius: float, fill: tuple[int, int, int, int] | str, stroke: tuple[int, int, int, int] | str = (0, 0, 0, 0), stroke_width: float = 0.0, z_index: int = 0, frame: str | None = None) -> None:
         _ = z_index
         assert self._frame is not None
+        cx, cy = self._point(cx, cy, frame=frame)
         fill_rgba = _rgba(fill)
         stroke_rgba = _rgba(stroke)
         r2 = radius * radius
@@ -1005,10 +1052,11 @@ class MatrixFrame(AbstractContextManager["MatrixFrame"]):
                 elif stroke_width > 0 and d2 <= r2:
                     self._fill_rect(xx, yy, xx + 1, yy + 1, stroke_rgba)
 
-    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0) -> None:
+    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0, frame: str | None = None) -> None:
         _ = rotation_deg
         _ = z_index, cache_key
         assert self._frame is not None
+        x, y = self._point(x, y, frame=frame)
         scale = max(1, int(round(font_size_px / 7.0)))
         cursor = int(x)
         rgba = _rgba(color)
@@ -1018,7 +1066,14 @@ class MatrixFrame(AbstractContextManager["MatrixFrame"]):
                 for gx, bit in enumerate(row):
                     if bit != "1":
                         continue
-                    self.rect(x=cursor + gx * scale, y=int(y) + gy * scale, width=scale, height=scale, color=rgba)
+                    self.rect(
+                        x=cursor + gx * scale,
+                        y=int(y) + gy * scale,
+                        width=scale,
+                        height=scale,
+                        color=rgba,
+                        frame=COORD_SCREEN_TL,
+                    )
             cursor += 4 * scale
 
     def _fill_rect(self, x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int, int]) -> None:
