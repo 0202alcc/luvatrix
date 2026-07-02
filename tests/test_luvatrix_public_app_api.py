@@ -25,7 +25,9 @@ from luvatrix.app import (
 )
 from luvatrix import __version__
 from luvatrix_core.core.app_runtime import AppRuntime
+from luvatrix_core.core.coordinates import CoordinateFrameRegistry
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
+from luvatrix_core.core.scene_graph import RectNode, SceneGraphBuffer
 from luvatrix_core.core.sensor_manager import SensorManagerThread
 from luvatrix_core.core.window_matrix import WindowMatrix
 
@@ -349,6 +351,27 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         runtime.run(root / "examples" / "hello_world", max_ticks=1, target_fps=1000)
 
         self.assertGreater(int(matrix.read_snapshot().sum()), 0)
+
+    def test_scene_frame_helpers_use_default_coordinate_frame(self) -> None:
+        scene_buffer = SceneGraphBuffer()
+        ctx = AppRuntime(
+            matrix=WindowMatrix(101, 101),
+            hdi=HDIThread(source=_NoopHDISource()),
+            sensor_manager=SensorManagerThread(providers={}),
+        ).build_context({"window.write"})
+        ctx.scene_buffer = scene_buffer
+        ctx.coordinate_frames = CoordinateFrameRegistry(101, 101, default_frame="cartesian_center")
+        app = App()
+        app.init(ctx)
+
+        with app.scene_frame(clear=(0, 0, 0, 255)) as frame:
+            frame.rect(x=0, y=0, width=10, height=10, color=(255, 255, 255, 255))
+
+        latest = scene_buffer.latest_frame()
+        self.assertIsNotNone(latest)
+        assert latest is not None
+        rect = next(node for node in latest.nodes if isinstance(node, RectNode))
+        self.assertEqual((rect.x, rect.y, rect.width, rect.height), (50.0, 40.0, 10.0, 10.0))
 
     def test_input_state_reduces_hdi_events(self) -> None:
         class _Event:

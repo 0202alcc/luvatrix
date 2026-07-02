@@ -449,20 +449,38 @@ class SceneFrame(AbstractContextManager["SceneFrame"]):
             self._ctx.finalize_scene_frame()
         return False
 
-    def shader_rect(self, shader: str, *, x: float = 0.0, y: float = 0.0, width: float | None = None, height: float | None = None, uniforms: tuple[float, ...] = (), z_index: int = 0) -> None:
+    def _point(self, x: float, y: float, frame: str | None = None) -> tuple[float, float]:
+        return CoordinateFrames(self._ctx).to_render(float(x), float(y), frame=frame)
+
+    def _rect(self, x: float, y: float, width: float, height: float, frame: str | None = None) -> tuple[float, float, float, float]:
+        x0, y0 = self._point(x, y, frame=frame)
+        x1, y1 = self._point(x + width, y + height, frame=frame)
+        left = min(x0, x1)
+        top = min(y0, y1)
+        return left, top, abs(x1 - x0), abs(y1 - y0)
+
+    def shader_rect(self, shader: str, *, x: float = 0.0, y: float = 0.0, width: float | None = None, height: float | None = None, uniforms: tuple[float, ...] = (), z_index: int = 0, frame: str | None = None) -> None:
         _ = z_index
+        rx, ry, rw, rh = self._rect(
+            x,
+            y,
+            float(self._ctx.width if width is None else width),
+            float(self._ctx.height if height is None else height),
+            frame=frame,
+        )
         self._ctx.draw_shader_rect(
-            x=x,
-            y=y,
-            width=float(self._ctx.width if width is None else width),
-            height=float(self._ctx.height if height is None else height),
+            x=rx,
+            y=ry,
+            width=rw,
+            height=rh,
             shader=shader,
             uniforms=uniforms,
         )
 
-    def rect(self, *, x: float, y: float, width: float, height: float, color: tuple[int, int, int, int] | str, z_index: int = 0) -> None:
+    def rect(self, *, x: float, y: float, width: float, height: float, color: tuple[int, int, int, int] | str, z_index: int = 0, frame: str | None = None) -> None:
         _ = z_index
-        self._ctx.draw_rect(x=x, y=y, width=width, height=height, color_rgba=_rgba(color))
+        rx, ry, rw, rh = self._rect(x, y, width, height, frame=frame)
+        self._ctx.draw_rect(x=rx, y=ry, width=rw, height=rh, color_rgba=_rgba(color))
 
     def rounded_rect(
         self,
@@ -474,17 +492,21 @@ class SceneFrame(AbstractContextManager["SceneFrame"]):
         radius: float,
         color: tuple[int, int, int, int] | str,
         z_index: int = 0,
+        frame: str | None = None,
     ) -> None:
         _ = z_index
-        self._ctx.draw_rounded_rect(x=x, y=y, width=width, height=height, radius=radius, color_rgba=_rgba(color))
+        rx, ry, rw, rh = self._rect(x, y, width, height, frame=frame)
+        self._ctx.draw_rounded_rect(x=rx, y=ry, width=rw, height=rh, radius=radius, color_rgba=_rgba(color))
 
-    def circle(self, *, cx: float, cy: float, radius: float, fill: tuple[int, int, int, int] | str, stroke: tuple[int, int, int, int] | str = (0, 0, 0, 0), stroke_width: float = 0.0, z_index: int = 0) -> None:
+    def circle(self, *, cx: float, cy: float, radius: float, fill: tuple[int, int, int, int] | str, stroke: tuple[int, int, int, int] | str = (0, 0, 0, 0), stroke_width: float = 0.0, z_index: int = 0, frame: str | None = None) -> None:
         _ = z_index
-        self._ctx.draw_circle(cx=cx, cy=cy, radius=radius, fill_rgba=_rgba(fill), stroke_rgba=_rgba(stroke), stroke_width=stroke_width)
+        rx, ry = self._point(cx, cy, frame=frame)
+        self._ctx.draw_circle(cx=rx, cy=ry, radius=radius, fill_rgba=_rgba(fill), stroke_rgba=_rgba(stroke), stroke_width=stroke_width)
 
-    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0) -> None:
+    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0, frame: str | None = None) -> None:
         _ = z_index, cache_key
-        self._ctx.draw_text(text, x=x, y=y, font_size_px=font_size_px, color_rgba=_rgba(color), rotation_deg=rotation_deg)
+        rx, ry = self._point(x, y, frame=frame)
+        self._ctx.draw_text(text, x=rx, y=ry, font_size_px=font_size_px, color_rgba=_rgba(color), rotation_deg=rotation_deg)
 
     def camera3d(
         self,
