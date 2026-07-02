@@ -41,6 +41,16 @@ luvatrix validate-app . --render headless
 luvatrix run-app . --render headless --ticks 1
 ```
 
+For an Android-only app, validate against the Android runtime from your
+development machine:
+
+```bash
+luvatrix init-app my_android_app --template camera
+cd my_android_app
+luvatrix validate-app . --render android-emulator
+luvatrix run-app . --render headless --ticks 1
+```
+
 Build and serve a browser-side app:
 
 ```bash

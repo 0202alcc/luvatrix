@@ -65,6 +65,8 @@ class UnifiedRuntime:
         render_mode: str = "auto",
         active_provider: Callable[[], bool] | None = None,
         vsync_read_fd: int | None = None,
+        host_os: str | None = None,
+        host_arch: str | None = None,
     ) -> None:
         if render_mode not in ("auto", "matrix", "scene"):
             raise ValueError("render_mode must be one of: auto, matrix, scene")
@@ -87,6 +89,8 @@ class UnifiedRuntime:
             logical_width_px=logical_width_px,
             logical_height_px=logical_height_px,
             scene_buffer=self._scene_buffer,
+            host_os=host_os,
+            host_arch=host_arch,
         )
         self._display_runtime = DisplayRuntime(matrix=matrix, target=target)
         self._scene_display_runtime = (

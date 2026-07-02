@@ -141,7 +141,25 @@ pyodide_packages = []
 assets = []
 api_base_url = "/api"
 '''
-    readme = f"""# My Luvatrix App
+    if platform_support == ["android"]:
+        readme = """# My Luvatrix App
+
+Validate and smoke-test locally:
+
+```bash
+luvatrix validate-app . --render android-emulator
+luvatrix run-app . --render headless --ticks 1
+```
+
+Create and run an Android native project:
+
+```bash
+luvatrix init-native . --target android --out android
+luvatrix run-app . --render android-emulator --native-project android
+```
+"""
+    else:
+        readme = """# My Luvatrix App
 
 Run locally:
 
