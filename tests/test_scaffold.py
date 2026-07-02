@@ -32,6 +32,7 @@ class ScaffoldTests(unittest.TestCase):
             init_app(app, template="camera")
 
             self.assertIn('platform_support = ["android"]', (app / "app.toml").read_text(encoding="utf-8"))
+            self.assertIn("luvatrix validate-app . --render android-emulator", (app / "README.md").read_text(encoding="utf-8"))
 
     def test_init_native_android_copies_template(self) -> None:
         with tempfile.TemporaryDirectory() as td:

@@ -395,7 +395,7 @@ def main() -> None:
 
     if args.command == "run-app":
         try:
-            validate_app_install(args.app_dir, render=args.render)
+            validation = validate_app_install(args.app_dir, render=args.render)
         except MissingOptionalDependencyError as exc:
             raise SystemExit(str(exc)) from exc
 
@@ -614,6 +614,7 @@ def main() -> None:
                 logical_height_px=float(logical_height),
                 scene_target=scene_target,
                 render_mode=args.render_mode,
+                host_os=validation.target_platform,
             )
             max_ticks = args.ticks
             if max_ticks is None and args.render == "headless":

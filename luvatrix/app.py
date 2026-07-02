@@ -1174,10 +1174,15 @@ def check_app_install(
     if render not in RENDER_PLATFORM:
         raise ValueError(f"unsupported render target: {render}")
 
-    target_platform = RENDER_PLATFORM[render] or _normalize_host_os(host_os or platform.system())
-    runtime = _manifest_runtime(host_os=target_platform, host_arch=host_arch)
+    render_platform = RENDER_PLATFORM[render]
+    manifest_runtime = _manifest_runtime(host_os=render_platform or host_os, host_arch=host_arch)
     app_path = Path(app_dir)
-    manifest = runtime.load_manifest(app_path)
+    manifest = manifest_runtime.load_manifest(app_path)
+    target_platform = render_platform or _infer_headless_target_platform(
+        manifest,
+        host_os=host_os,
+    )
+    runtime = _manifest_runtime(host_os=target_platform, host_arch=host_arch)
     resolved = runtime.resolve_variant(app_path.resolve(), manifest)
 
     module_available = module_available or _module_available
@@ -1232,6 +1237,23 @@ def _manifest_runtime(*, host_os: str | None = None, host_arch: str | None = Non
 
 def _module_available(module_name: str) -> bool:
     return importlib.util.find_spec(module_name) is not None
+
+
+def _infer_headless_target_platform(manifest: AppManifest, *, host_os: str | None = None) -> str:
+    normalized_host = _normalize_host_os(host_os or platform.system())
+    if not manifest.platform_support or normalized_host in manifest.platform_support:
+        return normalized_host
+
+    supported = tuple(dict.fromkeys(manifest.platform_support))
+    if len(supported) == 1:
+        return supported[0]
+
+    supported_display = ",".join(sorted(supported))
+    raise RuntimeError(
+        f"headless validation for app `{manifest.app_id}` cannot infer target platform from "
+        f"host os `{normalized_host}`; supported={supported_display}. Use a platform render target "
+        "such as --render android-emulator, --render ios-simulator, or --render web."
+    )
 
 
 def _normalize_host_os(value: str) -> str:
