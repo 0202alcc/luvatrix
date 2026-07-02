@@ -206,6 +206,54 @@ class AndroidRunnerTests(unittest.TestCase):
             self.assertTrue((py_root / "examples" / "app" / "_luvatrix_bundle.py").exists())
             self.assertTrue((py_root / "luvatrix_launch_config.json").exists())
 
+    def test_sync_android_python_assets_ignores_app_owned_native_project(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app = Path(td) / "app"
+            project = app / "android"
+            app.mkdir()
+            project.mkdir()
+            (app / "app.toml").write_text('app_id = "x"\n', encoding="utf-8")
+            (app / "app_main.py").write_text("def create(): pass\n", encoding="utf-8")
+            assets = project / "app" / "src" / "main" / "assets"
+            assets.mkdir(parents=True)
+            (assets / "luvatrix_launch_config.json").write_text("{}", encoding="utf-8")
+
+            def _copy_app_tree(src, dst, *, ignore=None):
+                self.assertEqual(Path(src), app)
+                self.assertIsNotNone(ignore)
+                ignored = ignore(str(app), ["app.toml", "app_main.py", "android"])
+                self.assertIn("android", ignored)
+                Path(dst).mkdir(parents=True)
+                return dst
+
+            with (
+                patch("luvatrix_core.platform.android.runner.copy_package_tree_for_target"),
+                patch("luvatrix_core.platform.android.runner._write_android_app_bundle"),
+                patch("luvatrix_core.platform.android.runner.shutil.copytree", side_effect=_copy_app_tree),
+            ):
+                sync_android_python_assets(app, project_dir=project)
+
+    def test_sync_android_python_assets_skips_nested_native_project_on_disk(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app = Path(td) / "app"
+            project = app / "android"
+            app.mkdir()
+            (app / "app.toml").write_text('app_id = "x"\n', encoding="utf-8")
+            (app / "app_main.py").write_text("def create(): pass\n", encoding="utf-8")
+            assets = project / "app" / "src" / "main" / "assets"
+            assets.mkdir(parents=True)
+            (assets / "luvatrix_launch_config.json").write_text("{}", encoding="utf-8")
+            stale_app = project / "app" / "src" / "main" / "python" / "luvatrix_app"
+            stale_app.mkdir(parents=True)
+            (stale_app / "old_generated.py").write_text("import luvatrix_plot\n", encoding="utf-8")
+
+            sync_android_python_assets(app, project_dir=project)
+
+            py_root = project / "app" / "src" / "main" / "python"
+            self.assertTrue((py_root / "luvatrix_app" / "app.toml").exists())
+            self.assertFalse((py_root / "luvatrix_app" / "android").exists())
+            self.assertFalse((py_root / "luvatrix_plot").exists())
+
     def test_sync_android_python_assets_includes_only_imported_optional_packages(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

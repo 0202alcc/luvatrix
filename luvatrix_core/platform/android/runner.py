@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Iterable
 import json
 import importlib.util
 import os
@@ -207,12 +208,13 @@ def _resolve_android_project(app_dir: Path, explicit: Path | None = None) -> Pat
 
 
 def sync_android_python_assets(app_dir: Path, *, project_dir: Path) -> None:
-    py_dst = project_dir / "app" / "src" / "main" / "python"
+    project = project_dir.resolve()
+    py_dst = project / "app" / "src" / "main" / "python"
     py_dst.mkdir(parents=True, exist_ok=True)
-    app_ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache")
+    app_ignore = _make_android_app_ignore(project)
 
     all_pkg_names = ("luvatrix", "luvatrix_core", "luvatrix_ui", "luvatrix_plot")
-    pkg_names = _android_python_packages_for_app(app_dir)
+    pkg_names = _android_python_packages_for_app(app_dir, exclude_dirs=(project,))
     for stale_pkg in set(all_pkg_names) - set(pkg_names):
         stale_dst = py_dst / stale_pkg
         if stale_dst.exists():
@@ -231,25 +233,29 @@ def sync_android_python_assets(app_dir: Path, *, project_dir: Path) -> None:
     (py_dst / "luvatrix_app" / "__init__.py").touch()
     _write_android_app_bundle(app_dir, py_dst=py_dst)
 
-    config = project_dir / "app" / "src" / "main" / "assets" / "luvatrix_launch_config.json"
+    config = project / "app" / "src" / "main" / "assets" / "luvatrix_launch_config.json"
     if config.exists():
         shutil.copy2(config, py_dst / "luvatrix_launch_config.json")
     print(f"[android] synced Python assets for {app_dir}")
 
 
-def _android_python_packages_for_app(app_dir: Path) -> tuple[str, ...]:
+def _android_python_packages_for_app(app_dir: Path, *, exclude_dirs: Iterable[Path] = ()) -> tuple[str, ...]:
     packages = ["luvatrix", "luvatrix_core"]
-    imports = _top_level_imports_for_app(app_dir)
+    imports = _top_level_imports_for_app(app_dir, exclude_dirs=exclude_dirs)
     for optional_pkg in ("luvatrix_ui", "luvatrix_plot"):
         if optional_pkg in imports:
             packages.append(optional_pkg)
     return tuple(packages)
 
 
-def _top_level_imports_for_app(app_dir: Path) -> set[str]:
+def _top_level_imports_for_app(app_dir: Path, *, exclude_dirs: Iterable[Path] = ()) -> set[str]:
     imports: set[str] = set()
+    excluded = tuple(path.resolve() for path in exclude_dirs)
     for path in app_dir.rglob("*.py"):
-        if "__pycache__" in path.parts:
+        resolved = path.resolve()
+        if "__pycache__" in path.parts or ".luvatrix" in path.parts:
+            continue
+        if any(_path_is_relative_to(resolved, root) for root in excluded):
             continue
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -262,6 +268,25 @@ def _top_level_imports_for_app(app_dir: Path) -> set[str]:
             elif isinstance(node, ast.ImportFrom) and node.module:
                 imports.add(node.module.split(".", 1)[0])
     return imports
+
+
+def _make_android_app_ignore(project_dir: Path):
+    pattern_ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", ".luvatrix")
+    project = project_dir.resolve()
+
+    def _ignore(directory: str, names: list[str]) -> set[str]:
+        ignored = set(pattern_ignore(directory, names))
+        root = Path(directory).resolve()
+        for name in names:
+            if (root / name).resolve() == project:
+                ignored.add(name)
+        return ignored
+
+    return _ignore
+
+
+def _path_is_relative_to(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
 
 
 def _python_package_dir(pkg_name: str) -> Path:
