@@ -616,6 +616,8 @@ def run_loop(app_dir: str) -> None:
         render_mode=render_mode,
         active_provider=is_app_active,
         vsync_read_fd=vsync_read_fd,
+        host_os="ios",
+        host_arch="arm64",
     )
 
     print(f"[ios] luvatrix accel backend: {accel.BACKEND}", file=_sys.stderr, flush=True)

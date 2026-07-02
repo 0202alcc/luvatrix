@@ -208,6 +208,18 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
             self.assertEqual(validation.missing_modules, ())
             self.assertEqual(validation.resolved_variant.variant_id, "default")
 
+    def test_headless_validation_infers_single_non_host_supported_platform(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_app(root, [PLATFORM_ANDROID])
+
+            validation = check_app_install(root, render="headless", host_os="macos", host_arch="arm64")
+
+            self.assertTrue(validation.ok)
+            self.assertEqual(validation.target_platform, PLATFORM_ANDROID)
+            self.assertEqual(validation.required_extras, ())
+            self.assertEqual(validation.missing_modules, ())
+
     def test_macos_vulkan_validation_reports_actionable_optional_extra_hint(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
