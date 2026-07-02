@@ -142,6 +142,31 @@ def test_python_shim_command_builder_emits_text() -> None:
     assert encoded["strings"][0] == "abc"
 
 
+def test_python_shim_scene_helpers_use_default_coordinate_frame() -> None:
+    shim_path = ROOT / "luvatrix_core" / "platform" / "web" / "python_shim" / "luvatrix" / "app.py"
+    spec = importlib.util.spec_from_file_location("luvatrix_web_coords_shim_for_test", shim_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    class Demo(module.App):
+        def render(self):
+            with self.frame(clear=(0, 0, 0, 255)) as frame:
+                frame.rect(x=0, y=0, width=10, height=10, color=(255, 255, 255, 255))
+
+    app = Demo()
+    manifest = {"display": {"default_coordinate_frame": "cartesian_center"}}
+    app.init_browser(width=100, height=100, input_provider=lambda: {}, manifest=manifest)
+
+    encoded = app.loop_browser(1 / 60)
+
+    rect_header_offset = 4
+    assert encoded["headers"][rect_header_offset] == module.OP_RECT
+    float_start = encoded["headers"][rect_header_offset + 1]
+    assert encoded["floats"][float_start : float_start + 4] == [50.0, 40.0, 10.0, 10.0]
+
+
 def test_python_shim_exposes_scrollbar_controller() -> None:
     shim_path = ROOT / "luvatrix_core" / "platform" / "web" / "python_shim" / "luvatrix" / "app.py"
     spec = importlib.util.spec_from_file_location("luvatrix_web_scrollbar_shim_for_test", shim_path)
