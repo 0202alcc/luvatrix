@@ -57,6 +57,8 @@ def run_headless_ticks(ticks: int = 5) -> str:
         capability_decider=lambda cap: True,
         logical_width_px=393.0,
         logical_height_px=852.0,
+        host_os="android",
+        host_arch="arm64",
     )
     result = runtime.run_app(_app_dir(), max_ticks=int(ticks), target_fps=60, present_fps=60)
     _log(f"luvatrix headless ticks={result.ticks_run} frames={result.frames_presented}")
@@ -298,6 +300,8 @@ def _run_visual_runtime(view):
         logical_height_px=float(height),
         scene_target=scene_target,
         render_mode=render_mode,
+        host_os="android",
+        host_arch="arm64",
     )
     app_dir = _app_dir()
     _log(f"luvatrix configured app_dir={app_dir}")

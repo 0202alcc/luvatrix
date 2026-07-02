@@ -172,6 +172,57 @@ class UnifiedRuntimeTests(unittest.TestCase):
             self.assertEqual(matrix.revision, 5)
             self.assertIn(("thermal.temperature", True, "unified_runtime"), sensors.set_calls)
 
+    def test_unified_runtime_uses_explicit_target_os_for_single_platform_app(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            (app_dir / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "test.unified.android"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'platform_support = ["android"]',
+                        'required_capabilities = ["window.write"]',
+                        "optional_capabilities = []",
+                    ]
+                )
+            )
+            (app_dir / "app_main.py").write_text(
+                "\n".join(
+                    [
+                        "import torch",
+                        "from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch",
+                        "",
+                        "class _App:",
+                        "    def init(self, ctx):",
+                        "        pass",
+                        "",
+                        "    def loop(self, ctx, dt):",
+                        "        frame = torch.tensor([[[1, 0, 0, 255]]], dtype=torch.uint8)",
+                        "        ctx.submit_write_batch(WriteBatch([FullRewrite(frame)]))",
+                        "",
+                        "    def stop(self, ctx):",
+                        "        pass",
+                        "",
+                        "def create():",
+                        "    return _App()",
+                    ]
+                )
+            )
+            runtime = UnifiedRuntime(
+                matrix=WindowMatrix(height=1, width=1),
+                target=_RecordingTarget(),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=_FakeSensorManager(),
+                capability_decider=lambda cap: True,
+                host_os="android",
+                host_arch="arm64",
+            )
+
+            result = runtime.run_app(app_dir, max_ticks=1, target_fps=1000)
+
+            self.assertEqual(result.ticks_run, 1)
+
     def test_on_targets_started_runs_after_target_start_before_app_init(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             app_dir = Path(td)
