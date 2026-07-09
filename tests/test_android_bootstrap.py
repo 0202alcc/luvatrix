@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
 
 
@@ -40,6 +41,32 @@ class AndroidBootstrapTests(unittest.TestCase):
                 return 90.0
 
         self.assertEqual(boot._runtime_frame_rates(_View(), {}), (180, 90))
+
+    def test_runtime_render_mode_honors_explicit_config_before_manifest(self) -> None:
+        boot = _load_boot_module()
+
+        self.assertEqual(boot._runtime_render_mode({"render_mode": "scene"}), "scene")
+
+    def test_runtime_render_mode_reads_manifest_when_config_is_auto(self) -> None:
+        boot = _load_boot_module()
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            app = root / "luvatrix_app"
+            app.mkdir()
+            (app / "app.toml").write_text(
+                'app_id = "x"\n'
+                "[render]\n"
+                'preferred = "matrix"\n',
+                encoding="utf-8",
+            )
+            (app / "app_main.py").write_text("def create(): pass\n", encoding="utf-8")
+            (root / "luvatrix_launch_config.json").write_text('{"app_dir": "luvatrix_app"}\n', encoding="utf-8")
+            old_root = boot._ROOT
+            try:
+                boot._ROOT = root
+                self.assertEqual(boot._runtime_render_mode({"render_mode": "auto"}), "matrix")
+            finally:
+                boot._ROOT = old_root
 
     def test_camera_app_defaults_to_120_present_even_when_display_reports_60(self) -> None:
         boot = _load_boot_module()

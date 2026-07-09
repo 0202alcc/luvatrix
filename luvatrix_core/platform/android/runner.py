@@ -16,6 +16,12 @@ from luvatrix_core.scaffold import resolve_native_project_dir
 
 
 DEFAULT_ANDROID_PACKAGE = "com.luvatrix.app"
+ANDROID_GENERATED_GITIGNORE_RULES = (
+    "app/.cxx/",
+    "app/build/",
+    "app/src/main/assets/luvatrix_launch_config.json",
+    "app/src/main/python/luvatrix_launch_config.json",
+)
 
 
 def android_project_dir(repo_root: Path | None = None) -> Path:
@@ -68,6 +74,7 @@ def write_android_launch_config(
     low_latency_mode: bool = True,
 ) -> Path:
     project = (project_dir or android_project_dir()).resolve()
+    _ensure_android_generated_gitignore(project)
     dest = project / "app" / "src" / "main" / "assets" / "luvatrix_launch_config.json"
     dest.parent.mkdir(parents=True, exist_ok=True)
     display = _read_app_display_config(app_dir)
@@ -83,6 +90,24 @@ def write_android_launch_config(
     data.update(display)
     dest.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return dest
+
+
+def _ensure_android_generated_gitignore(project_dir: Path) -> Path:
+    project_dir.mkdir(parents=True, exist_ok=True)
+    gitignore = project_dir / ".gitignore"
+    try:
+        existing = gitignore.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        existing = ""
+    missing = [rule for rule in ANDROID_GENERATED_GITIGNORE_RULES if rule not in existing.splitlines()]
+    if not missing:
+        return gitignore
+
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    block = "# Luvatrix Android generated files\n" + "\n".join(missing) + "\n"
+    gitignore.write_text(existing + block, encoding="utf-8")
+    return gitignore
 
 
 def _read_app_display_config(app_dir: Path) -> dict[str, int]:

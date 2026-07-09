@@ -17,20 +17,10 @@ class AndroidVulkanBridge:
         if not callable(method):
             raise RuntimeError("Android Vulkan bridge must expose presentRgba/present_rgba")
         contiguous = accel.to_contiguous_numpy(rgba)
-        # Android Bitmap.Config.ARGB_8888 consumes native-endian ARGB pixels.
-        # On Android's little-endian targets, a byte buffer for those pixels is
-        # BGRA. Doing the swizzle here keeps Kotlin out of the per-pixel loop.
         if hasattr(contiguous, "tobytes"):
-            payload = contiguous[:, :, [2, 1, 0, 3]].tobytes()
+            payload = contiguous.tobytes()
         elif hasattr(contiguous, "_data"):
-            raw = contiguous._data
-            out = bytearray(len(raw))
-            for idx in range(0, len(raw), 4):
-                out[idx] = raw[idx + 2]
-                out[idx + 1] = raw[idx + 1]
-                out[idx + 2] = raw[idx]
-                out[idx + 3] = raw[idx + 3]
-            payload = bytes(out)
+            payload = bytes(contiguous._data)
         else:
             payload = bytes(contiguous)
         method(payload, int(revision), int(width), int(height))

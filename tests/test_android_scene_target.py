@@ -41,8 +41,38 @@ class AndroidNativeSceneTargetTests(unittest.TestCase):
         self.assertEqual(presenter.calls[0][1:4], (2, 100, 200))
         payload = json.loads(presenter.calls[0][0])
         self.assertEqual([node["type"] for node in payload], ["meta", "clear", "shader_rect", "circle", "text"])
-        self.assertEqual(payload[0], {"type": "meta", "presentation_mode": ""})
+        self.assertEqual(
+            payload[0],
+            {
+                "type": "meta",
+                "presentation_mode": "",
+                "content_offset_x": 0.0,
+                "content_offset_y": 0.0,
+            },
+        )
         self.assertEqual(payload[2]["uniforms"], [1.0, 2.0, 3.0])
+
+    def test_present_scene_serializes_content_offset(self) -> None:
+        presenter = _Presenter()
+        target = AndroidNativeSceneTarget(presenter)
+        target.start()
+        frame = SceneFrame(
+            revision=3,
+            logical_width=100,
+            logical_height=200,
+            display_width=100,
+            display_height=200,
+            ts_ns=1,
+            nodes=(ClearNode((0, 0, 0, 255)),),
+            content_offset_x=4.5,
+            content_offset_y=-12.25,
+        )
+
+        target.present_scene(frame)
+
+        payload = json.loads(presenter.calls[0][0])
+        self.assertEqual(payload[0]["content_offset_x"], 4.5)
+        self.assertEqual(payload[0]["content_offset_y"], -12.25)
 
     def test_present_scene_requires_start(self) -> None:
         target = AndroidNativeSceneTarget(_Presenter())

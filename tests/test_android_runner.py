@@ -51,6 +51,22 @@ class AndroidRunnerTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertIn('"low_latency_mode": false', text)
 
+    def test_write_launch_config_updates_generated_gitignore(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td)
+            app = project / "example"
+            app.mkdir()
+            (project / ".gitignore").write_text("custom.log\n", encoding="utf-8")
+
+            write_android_launch_config(app, project_dir=project)
+
+            text = (project / ".gitignore").read_text(encoding="utf-8")
+            self.assertIn("custom.log", text)
+            self.assertIn("app/.cxx/", text)
+            self.assertIn("app/build/", text)
+            self.assertIn("app/src/main/assets/luvatrix_launch_config.json", text)
+            self.assertIn("app/src/main/python/luvatrix_launch_config.json", text)
+
     def test_write_launch_config_includes_manifest_display_size(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             project = Path(td)

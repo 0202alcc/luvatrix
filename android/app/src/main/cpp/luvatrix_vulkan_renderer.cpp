@@ -1137,6 +1137,19 @@ uint32_t pack_bgra(Rgba color) {
         | (static_cast<uint32_t>(clamp255(color.a)) << 24);
 }
 
+void convert_bgra_pixels_for_swapchain(std::vector<uint32_t>& pixels, VkFormat format) {
+    if (format != VK_FORMAT_R8G8B8A8_UNORM && format != VK_FORMAT_R8G8B8A8_SRGB) {
+        return;
+    }
+    for (uint32_t& pixel : pixels) {
+        uint32_t b = pixel & 0x000000ffu;
+        uint32_t g = pixel & 0x0000ff00u;
+        uint32_t r = pixel & 0x00ff0000u;
+        uint32_t a = pixel & 0xff000000u;
+        pixel = (r >> 16) | g | (b << 16) | a;
+    }
+}
+
 uint8_t plane_value(const std::vector<uint8_t>& plane, int x, int y, int row_stride, int pixel_stride) {
     if (row_stride <= 0 || pixel_stride <= 0 || x < 0 || y < 0) return 128;
     size_t idx = static_cast<size_t>(y) * static_cast<size_t>(row_stride) +
@@ -2941,6 +2954,7 @@ bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_
     int width = static_cast<int>(vk.extent.width);
     int height = static_cast<int>(vk.extent.height);
     auto pixels = rasterize_scene_pixels(scene, width, height, logical_width, logical_height);
+    convert_bgra_pixels_for_swapchain(pixels, vk.swapchain_format);
     VkDeviceSize byte_count = static_cast<VkDeviceSize>(pixels.size() * sizeof(uint32_t));
     if (!ensure_staging_buffer(vk, byte_count)) return false;
     void* mapped = nullptr;

@@ -499,7 +499,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         overlayView.post {
             bootstrapMessage = null
             overlayMode = OverlayMode.Scene
-            overlaySceneJson = sceneJson
+            overlaySceneJson = if (nativeBackground) null else sceneJson
             overlayLogicalWidth = logicalWidth
             overlayLogicalHeight = logicalHeight
             overlayNativeBackground = nativeBackground
