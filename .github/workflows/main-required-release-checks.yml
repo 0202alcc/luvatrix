@@ -22,6 +22,7 @@ jobs:
           uv run python - <<'PY'
           import json
           import os
+          import subprocess
           import tomllib
           import urllib.error
           import urllib.request
@@ -45,6 +46,44 @@ jobs:
                   raise SystemExit(f"missing required branch-protection context: {context}")
 
           if os.environ.get("GITHUB_EVENT_NAME") == "pull_request":
+              release_version_changed = True
+              base_ref = os.environ.get("GITHUB_BASE_REF")
+              if base_ref:
+                  subprocess.run(
+                      [
+                          "git",
+                          "fetch",
+                          "--no-tags",
+                          "origin",
+                          f"+refs/heads/{base_ref}:refs/remotes/origin/{base_ref}",
+                      ],
+                      check=True,
+                      stdout=subprocess.DEVNULL,
+                  )
+                  base_pyproject = tomllib.loads(
+                      subprocess.check_output(
+                          ["git", "show", f"origin/{base_ref}:pyproject.toml"],
+                          text=True,
+                      )
+                  )
+                  base_package = tomllib.loads(
+                      subprocess.check_output(
+                          ["git", "show", f"origin/{base_ref}:uv.lock"],
+                          text=True,
+                      )
+                  )
+                  base_project = base_pyproject["project"]
+                  base_locked = next(
+                      pkg for pkg in base_package["package"] if pkg["name"] == base_project["name"]
+                  )
+                  release_version_changed = (
+                      base_project["version"] != version or base_locked["version"] != locked["version"]
+                  )
+
+              if not release_version_changed:
+                  print(f"{project['name']} {version} unchanged from base; skipping PyPI uniqueness check")
+                  raise SystemExit(0)
+
               exists = False
               try:
                   with urllib.request.urlopen(
