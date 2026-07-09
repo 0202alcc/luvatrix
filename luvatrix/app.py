@@ -1036,7 +1036,8 @@ def _fill_matrix_rect(
     y1 = max(y0, min(height, int(y1)))
     if x1 <= x0 or y1 <= y0:
         return
-    matrix[y0:y1, x0:x1, :] = color
+    for channel, value in enumerate(color):
+        matrix[y0:y1, x0:x1, channel] = int(value)
 
 
 class MatrixFrame(AbstractContextManager["MatrixFrame"]):

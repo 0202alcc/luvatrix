@@ -7,6 +7,7 @@ import tempfile
 import tomllib
 import unittest
 
+import luvatrix.app as luvatrix_app_api
 from luvatrix.app import (
     App,
     CoordinateFrames,
@@ -71,6 +72,27 @@ def _rgba_at(frame, row: int, col: int) -> tuple[int, int, int, int]:
     if hasattr(value, "_data"):
         return tuple(int(v) for v in value._data[:4])
     return tuple(int(v) for v in value)
+
+
+class _ChannelOnlyMatrix:
+    def __init__(self, height: int = 6, width: int = 6) -> None:
+        self.shape = (height, width, 4)
+        self.writes: list[tuple[int, int, int, int, int, int]] = []
+
+    def __setitem__(self, key, value) -> None:
+        y_key, x_key, channel = key
+        if isinstance(channel, slice):
+            raise AssertionError("matrix helper must write per-channel scalars")
+        self.writes.append(
+            (
+                int(y_key.start),
+                int(y_key.stop),
+                int(x_key.start),
+                int(x_key.stop),
+                int(channel),
+                int(value),
+            )
+        )
 
 
 class LuvatrixPublicAppApiTests(unittest.TestCase):
@@ -138,34 +160,6 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         self.assertTrue(started.dragging)
         self.assertAlmostEqual(started.offset, 100.0)
 
-    def test_draw_text_to_matrix_rasterizes_default_matrix_font(self) -> None:
-        frame = accel.zeros((10, 20, 4))
-
-        result = draw_text_to_matrix(
-            frame,
-            "04",
-            x=1,
-            y=2,
-            font_size_px=7.0,
-            color=(10, 20, 30, 255),
-        )
-
-        self.assertIs(result, frame)
-        self.assertEqual(_rgba_at(frame, 2, 1), (10, 20, 30, 255))
-        self.assertEqual(_rgba_at(frame, 2, 2), (10, 20, 30, 255))
-        self.assertEqual(_rgba_at(frame, 2, 3), (10, 20, 30, 255))
-        self.assertEqual(_rgba_at(frame, 2, 4), (0, 0, 0, 0))
-        self.assertEqual(_rgba_at(frame, 2, 5), (10, 20, 30, 255))
-        self.assertEqual(_rgba_at(frame, 2, 6), (0, 0, 0, 0))
-        self.assertEqual(_rgba_at(frame, 2, 7), (10, 20, 30, 255))
-
-    def test_draw_text_to_matrix_clips_at_matrix_edges(self) -> None:
-        frame = accel.zeros((4, 4, 4))
-
-        draw_text_to_matrix(frame, "8", x=-1, y=-1, font_size_px=7.0, color="#ffffff")
-
-        self.assertEqual(_rgba_at(frame, 0, 1), (255, 255, 255, 255))
-
     def test_app_render_on_invalidation_skips_clean_ticks(self) -> None:
         class CountingApp(App):
             def __init__(self) -> None:
@@ -190,6 +184,46 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
 
         self.assertEqual(app.updates, 3)
         self.assertEqual(app.renders, 2)
+
+    def test_draw_text_to_matrix_rasterizes_default_matrix_font(self) -> None:
+        self.assertIn("draw_text_to_matrix", luvatrix_app_api.__all__)
+        frame = accel.zeros((10, 20, 4))
+
+        result = draw_text_to_matrix(
+            frame,
+            "04",
+            x=1,
+            y=2,
+            font_size_px=7.0,
+            color=(10, 20, 30, 255),
+        )
+
+        self.assertIs(result, frame)
+        self.assertEqual(_rgba_at(frame, 2, 1), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 2), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 3), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 4), (0, 0, 0, 0))
+        self.assertEqual(_rgba_at(frame, 2, 5), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 6), (0, 0, 0, 0))
+        self.assertEqual(_rgba_at(frame, 2, 7), (10, 20, 30, 255))
+
+    def test_draw_text_to_matrix_writes_backend_safe_channel_slices(self) -> None:
+        matrix = _ChannelOnlyMatrix()
+
+        result = draw_text_to_matrix(matrix, "1", x=1, y=1, font_size_px=7.0, color=(7, 8, 9, 10))
+
+        self.assertIs(result, matrix)
+        self.assertIn((1, 2, 2, 3, 0, 7), matrix.writes)
+        self.assertIn((1, 2, 2, 3, 1, 8), matrix.writes)
+        self.assertIn((1, 2, 2, 3, 2, 9), matrix.writes)
+        self.assertIn((1, 2, 2, 3, 3, 10), matrix.writes)
+
+    def test_draw_text_to_matrix_clips_at_matrix_edges(self) -> None:
+        frame = accel.zeros((4, 4, 4))
+
+        draw_text_to_matrix(frame, "8", x=-1, y=-1, font_size_px=7.0, color="#ffffff")
+
+        self.assertEqual(_rgba_at(frame, 0, 1), (255, 255, 255, 255))
 
     def test_v3_manifest_parses_render_and_display_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as td:
