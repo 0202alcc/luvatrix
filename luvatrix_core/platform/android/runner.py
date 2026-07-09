@@ -6,6 +6,7 @@ import json
 import importlib.util
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import time
@@ -67,6 +68,8 @@ def write_android_launch_config(
     app_dir: Path,
     *,
     project_dir: Path | None = None,
+    device_id: str | None = None,
+    infer_device_dimensions: bool = False,
     render_scale: float = 1.0,
     render_mode: str = "auto",
     target_fps: int | None = None,
@@ -88,6 +91,13 @@ def write_android_launch_config(
         "low_latency_mode": bool(low_latency_mode),
     }
     data.update(display)
+    if infer_device_dimensions and ("native_width" not in data or "native_height" not in data):
+        device_display = _android_device_logical_display_config(device_id=device_id)
+        data.update({key: value for key, value in device_display.items() if key.startswith("device_")})
+        if "native_width" not in data and "native_width" in device_display:
+            data["native_width"] = device_display["native_width"]
+        if "native_height" not in data and "native_height" in device_display:
+            data["native_height"] = device_display["native_height"]
     dest.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return dest
 
@@ -128,6 +138,60 @@ def _read_app_display_config(app_dir: Path) -> dict[str, int]:
         if value > 0:
             out[dest_key] = value
     return out
+
+
+def _android_device_logical_display_config(*, device_id: str | None = None) -> dict[str, int]:
+    adb = shutil.which("adb")
+    if adb is None:
+        return {}
+    try:
+        prefix = _adb_prefix(adb, device_id=device_id)
+        size = _parse_wm_size(_adb_shell_text(prefix, "wm", "size"))
+        density = _parse_wm_density(_adb_shell_text(prefix, "wm", "density"))
+    except (OSError, RuntimeError, subprocess.CalledProcessError):
+        return {}
+    if size is None or density is None or density <= 0:
+        return {}
+    physical_width, physical_height = size
+    logical_width = max(1, int(round(float(physical_width) * 160.0 / float(density))))
+    logical_height = max(1, int(round(float(physical_height) * 160.0 / float(density))))
+    return {
+        "native_width": logical_width,
+        "native_height": logical_height,
+        "device_physical_width": physical_width,
+        "device_physical_height": physical_height,
+        "device_density_dpi": density,
+    }
+
+
+def _adb_shell_text(prefix: list[str], *args: str) -> str:
+    completed = subprocess.run(
+        prefix + ["shell", *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=_android_subprocess_env(),
+    )
+    return completed.stdout
+
+
+def _parse_wm_size(output: str) -> tuple[int, int] | None:
+    matches = re.findall(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", output)
+    if not matches:
+        matches = re.findall(r"\b(\d+)x(\d+)\b", output)
+    if not matches:
+        return None
+    width, height = matches[-1]
+    return int(width), int(height)
+
+
+def _parse_wm_density(output: str) -> int | None:
+    matches = re.findall(r"(?:Physical|Override) density:\s*(\d+)", output)
+    if not matches:
+        matches = re.findall(r"\b(\d{2,4})\b", output)
+    if not matches:
+        return None
+    return int(matches[-1])
 
 
 def run_android_emulator(
@@ -202,6 +266,8 @@ def _run_android(
     write_android_launch_config(
         app_dir,
         project_dir=project,
+        device_id=device_id,
+        infer_device_dimensions=True,
         render_scale=render_scale,
         render_mode=render_mode,
         target_fps=target_fps,

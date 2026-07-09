@@ -1,10 +1,22 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import unittest
 
 from luvatrix_core.core.scene_graph import CircleNode, ClearNode, SceneFrame, ShaderRectNode, TextNode
 from luvatrix_core.platform.android.scene_target import AndroidNativeSceneTarget
+
+
+ROOT = Path(__file__).resolve().parents[1]
+ANDROID_CPP_RENDERERS = (
+    ROOT / "android" / "app" / "src" / "main" / "cpp" / "luvatrix_vulkan_renderer.cpp",
+    ROOT / "luvatrix_core" / "templates" / "native" / "android" / "app" / "src" / "main" / "cpp" / "luvatrix_vulkan_renderer.cpp",
+)
+ANDROID_KOTLIN_VIEWS = (
+    ROOT / "android" / "app" / "src" / "main" / "java" / "com" / "luvatrix" / "app" / "LuvatrixVulkanView.kt",
+    ROOT / "luvatrix_core" / "templates" / "native" / "android" / "app" / "src" / "main" / "java" / "com" / "luvatrix" / "app" / "LuvatrixVulkanView.kt",
+)
 
 
 class _Presenter:
@@ -73,6 +85,26 @@ class AndroidNativeSceneTargetTests(unittest.TestCase):
         payload = json.loads(presenter.calls[0][0])
         self.assertEqual(payload[0]["content_offset_x"], 4.5)
         self.assertEqual(payload[0]["content_offset_y"], -12.25)
+
+    def test_native_renderer_applies_serialized_content_offset(self) -> None:
+        for source in ANDROID_CPP_RENDERERS:
+            with self.subTest(source=source):
+                text = source.read_text(encoding="utf-8")
+                self.assertIn("double content_offset_x = 0.0;", text)
+                self.assertIn('parse_number_key(node, "content_offset_x"', text)
+                self.assertIn("shifted.x -= scene.content_offset_x;", text)
+                self.assertIn("shifted.cx -= scene.content_offset_x;", text)
+                self.assertIn("shifted.y -= scene.content_offset_y;", text)
+                self.assertIn('key += "/offset="', text)
+
+    def test_canvas_fallback_applies_serialized_content_offset(self) -> None:
+        for source in ANDROID_KOTLIN_VIEWS:
+            with self.subTest(source=source):
+                text = source.read_text(encoding="utf-8")
+                self.assertIn('contentOffsetX = node.optDouble("content_offset_x"', text)
+                self.assertIn('node.optDouble("x", 0.0) - contentOffsetX', text)
+                self.assertIn('node.optDouble("cx", 0.0) - contentOffsetX', text)
+                self.assertIn('node.optDouble("y", 0.0) - contentOffsetY', text)
 
     def test_present_scene_requires_start(self) -> None:
         target = AndroidNativeSceneTarget(_Presenter())
