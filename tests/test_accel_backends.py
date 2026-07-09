@@ -63,6 +63,36 @@ assert PresentationMode.STRETCH.value == "stretch"
 
         self.assertEqual(_flat_values(rolled), [4, 5, 0, 1, 2, 3])
 
+    def test_roll_dispatches_numpy_arrays_under_torch_selected_backend(self) -> None:
+        code = r'''
+import sys
+import types
+
+fake_torch = types.ModuleType("torch")
+fake_torch.uint8 = object()
+fake_torch.is_tensor = lambda value: False
+def roll(*args, **kwargs):
+    raise AssertionError("torch.roll should not receive numpy arrays")
+fake_torch.roll = roll
+sys.modules["torch"] = fake_torch
+
+from luvatrix_core import accel
+import numpy as np
+
+assert accel.BACKEND == "torch", accel.BACKEND
+frame = np.arange(6, dtype=np.uint8).reshape((2, 3, 1))
+rolled = accel.roll(frame, -1, dims=1)
+assert rolled.reshape(-1).tolist() == [1, 2, 0, 4, 5, 3], rolled
+'''
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
     def test_roll_works_in_pure_python_backend(self) -> None:
         code = r'''
 import builtins

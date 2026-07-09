@@ -9,8 +9,9 @@ Tier 3 — pure:   iOS fallback when numpy is absent. Backed by bytearray.
                  raise NotImplementedError (Multiply write-op is not used
                  on the pure-Python path).
 
-All functions accept whichever array type matches the current backend and
-return the same type. Do not mix backends within one call chain.
+Functions return the same concrete array type they receive. The selected
+backend provides defaults such as zeros/from_sequence, while adapters may still
+accept another known array type when that type is already available.
 """
 from __future__ import annotations
 
@@ -43,10 +44,10 @@ try:
 except Exception as exc:
     BACKEND_IMPORT_ERROR = f"torch:{type(exc).__name__}:{exc}"
 
-if _torch is None:
-    try:
-        import numpy as _np
-    except Exception as exc:
+try:
+    import numpy as _np
+except Exception as exc:
+    if _torch is None:
         cause = getattr(exc, "__cause__", None) or getattr(exc, "__context__", None)
         parts: list[str] = []
         if cause is not None:
@@ -354,7 +355,21 @@ if _torch is not None:
         return x.expand(shape).clone()
 
     def roll(x, shifts, dims=None):
-        return _torch.roll(x, shifts=shifts, dims=dims)
+        if _torch.is_tensor(x):
+            return _torch.roll(x, shifts=shifts, dims=dims)
+        if _np is not None and isinstance(x, _np.ndarray):
+            return _np.roll(x, shift=shifts, axis=dims)
+        if isinstance(x, _PureArray):
+            if dims is None:
+                return _roll_pure_flat(x, _single_roll_shift(shifts))
+            out = x
+            specs = _normalize_roll_specs(shifts, dims, x.ndim)
+            if not specs:
+                return x.copy()
+            for shift, axis in specs:
+                out = _roll_pure_axis(out, shift, axis)
+            return out
+        raise TypeError(f"roll expects a tensor, numpy array, or _PureArray, got {type(x)!r}")
 
     def isfinite(x):
         return _torch.isfinite(x)
