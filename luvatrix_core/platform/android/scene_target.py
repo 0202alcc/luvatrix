@@ -64,7 +64,14 @@ class AndroidNativeSceneTarget:
 
 def _scene_payload(frame: SceneFrame) -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
-    out.append({"type": "meta", "presentation_mode": frame.presentation_mode or ""})
+    out.append(
+        {
+            "type": "meta",
+            "presentation_mode": frame.presentation_mode or "",
+            "content_offset_x": float(frame.content_offset_x),
+            "content_offset_y": float(frame.content_offset_y),
+        }
+    )
     for node in frame.nodes:
         if isinstance(node, ClearNode):
             out.append({"type": "clear", "color": list(node.color_rgba)})

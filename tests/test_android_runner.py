@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -9,15 +10,26 @@ from unittest.mock import patch
 from luvatrix_core.platform.android.runner import (
     DEFAULT_ANDROID_PACKAGE,
     _adb_prefix,
+    _android_device_logical_display_config,
     _android_subprocess_env,
     _android_python_packages_for_app,
     _find_emulator_binary,
+    _parse_wm_density,
+    _parse_wm_size,
     _resolve_android_project,
     build_android_debug_apk,
     force_stop_android_app,
     sync_android_python_assets,
     write_android_launch_config,
 )
+
+
+def subprocess_result(stdout: str):
+    class _Completed:
+        def __init__(self, value: str) -> None:
+            self.stdout = value
+
+    return _Completed(stdout)
 
 
 class AndroidRunnerTests(unittest.TestCase):
@@ -51,6 +63,22 @@ class AndroidRunnerTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertIn('"low_latency_mode": false', text)
 
+    def test_write_launch_config_updates_generated_gitignore(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td)
+            app = project / "example"
+            app.mkdir()
+            (project / ".gitignore").write_text("custom.log\n", encoding="utf-8")
+
+            write_android_launch_config(app, project_dir=project)
+
+            text = (project / ".gitignore").read_text(encoding="utf-8")
+            self.assertIn("custom.log", text)
+            self.assertIn("app/.cxx/", text)
+            self.assertIn("app/build/", text)
+            self.assertIn("app/src/main/assets/luvatrix_launch_config.json", text)
+            self.assertIn("app/src/main/python/luvatrix_launch_config.json", text)
+
     def test_write_launch_config_includes_manifest_display_size(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             project = Path(td)
@@ -68,6 +96,92 @@ class AndroidRunnerTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertIn('"native_width": 393', text)
             self.assertIn('"native_height": 852', text)
+
+    def test_parse_android_wm_display_values(self) -> None:
+        self.assertEqual(_parse_wm_size("Physical size: 1080x2400\n"), (1080, 2400))
+        self.assertEqual(_parse_wm_size("Physical size: 1080x2400\nOverride size: 720x1600\n"), (720, 1600))
+        self.assertEqual(_parse_wm_density("Physical density: 440\n"), 440)
+        self.assertEqual(_parse_wm_density("Physical density: 440\nOverride density: 320\n"), 320)
+
+    def test_device_logical_display_config_converts_physical_pixels_to_dp_canvas(self) -> None:
+        calls: list[list[str]] = []
+
+        def _run(args, **kwargs):
+            calls.append(list(args))
+            if args[-1] == "size":
+                return subprocess_result("Physical size: 1080x2400\n")
+            if args[-1] == "density":
+                return subprocess_result("Physical density: 440\n")
+            return subprocess_result("")
+
+        with (
+            patch("luvatrix_core.platform.android.runner.shutil.which", return_value="adb"),
+            patch("luvatrix_core.platform.android.runner._adb_prefix", return_value=["adb", "-s", "serial"]),
+            patch("luvatrix_core.platform.android.runner.subprocess.run", side_effect=_run),
+        ):
+            config = _android_device_logical_display_config(device_id="serial")
+
+        self.assertEqual(config["native_width"], 393)
+        self.assertEqual(config["native_height"], 873)
+        self.assertEqual(config["device_physical_width"], 1080)
+        self.assertEqual(config["device_physical_height"], 2400)
+        self.assertEqual(config["device_density_dpi"], 440)
+        self.assertEqual(calls[0][-2:], ["wm", "size"])
+        self.assertEqual(calls[1][-2:], ["wm", "density"])
+
+    def test_write_launch_config_uses_device_logical_size_when_manifest_omits_size(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td)
+            app = project / "example"
+            app.mkdir()
+
+            with patch(
+                "luvatrix_core.platform.android.runner._android_device_logical_display_config",
+                return_value={
+                    "native_width": 393,
+                    "native_height": 873,
+                    "device_physical_width": 1080,
+                    "device_physical_height": 2400,
+                    "device_density_dpi": 440,
+                },
+            ):
+                path = write_android_launch_config(
+                    app,
+                    project_dir=project,
+                    device_id="serial",
+                    infer_device_dimensions=True,
+                )
+
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(data["native_width"], 393)
+            self.assertEqual(data["native_height"], 873)
+            self.assertEqual(data["device_physical_width"], 1080)
+            self.assertEqual(data["device_density_dpi"], 440)
+
+    def test_manifest_display_size_wins_over_device_query(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td)
+            app = project / "example"
+            app.mkdir()
+            (app / "app.toml").write_text(
+                "[display]\n"
+                "native_width = 320\n"
+                "native_height = 568\n",
+                encoding="utf-8",
+            )
+
+            with patch("luvatrix_core.platform.android.runner._android_device_logical_display_config") as query:
+                path = write_android_launch_config(
+                    app,
+                    project_dir=project,
+                    device_id="serial",
+                    infer_device_dimensions=True,
+                )
+
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(data["native_width"], 320)
+            self.assertEqual(data["native_height"], 568)
+            query.assert_not_called()
 
     def test_build_reports_missing_gradle_wrapper(self) -> None:
         with tempfile.TemporaryDirectory() as td:

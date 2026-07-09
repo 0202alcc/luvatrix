@@ -46,6 +46,9 @@ class ScaffoldTests(unittest.TestCase):
             self.assertTrue((out / "settings.gradle.kts").exists())
             self.assertTrue((out / "app" / "src" / "main" / "python" / "luvatrix_android_boot.py").exists())
             self.assertFalse((out / "app" / "src" / "main" / "python" / "luvatrix_core").exists())
+            gitignore = (out / ".gitignore").read_text(encoding="utf-8")
+            self.assertIn("app/src/main/assets/luvatrix_launch_config.json", gitignore)
+            self.assertIn("app/src/main/python/luvatrix_launch_config.json", gitignore)
 
     def test_init_native_ios_copies_template(self) -> None:
         with tempfile.TemporaryDirectory() as td:

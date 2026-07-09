@@ -499,7 +499,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         overlayView.post {
             bootstrapMessage = null
             overlayMode = OverlayMode.Scene
-            overlaySceneJson = sceneJson
+            overlaySceneJson = if (nativeBackground) null else sceneJson
             overlayLogicalWidth = logicalWidth
             overlayLogicalHeight = logicalHeight
             overlayNativeBackground = nativeBackground
@@ -513,6 +513,15 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         val nodes = JSONArray(sceneJson)
         val scaleX = canvas.width.toFloat() / logicalWidth.coerceAtLeast(1).toFloat()
         val scaleY = canvas.height.toFloat() / logicalHeight.coerceAtLeast(1).toFloat()
+        var contentOffsetX = 0.0
+        var contentOffsetY = 0.0
+        for (idx in 0 until nodes.length()) {
+            val node = nodes.getJSONObject(idx)
+            if (node.optString("type") == "meta") {
+                contentOffsetX = node.optDouble("content_offset_x", contentOffsetX)
+                contentOffsetY = node.optDouble("content_offset_y", contentOffsetY)
+            }
+        }
         for (idx in 0 until nodes.length()) {
             val node = nodes.getJSONObject(idx)
             when (node.optString("type")) {
@@ -532,21 +541,22 @@ class LuvatrixVulkanView @JvmOverloads constructor(
                         fillPaint.color = colorFromArray(node.getJSONArray("color"))
                     }
                     fillPaint.style = Paint.Style.FILL
-                    drawRectNode(canvas, node, scaleX, scaleY, fillPaint)
+                    val applyContentOffset = node.optString("shader") != "full_suite_background"
+                    drawRectNode(canvas, node, scaleX, scaleY, fillPaint, if (applyContentOffset) contentOffsetX else 0.0, if (applyContentOffset) contentOffsetY else 0.0)
                     fillPaint.shader = null
                 }
                 "rect" -> {
                     fillPaint.shader = null
                     fillPaint.color = colorFromArray(node.getJSONArray("color"))
                     fillPaint.style = Paint.Style.FILL
-                    drawRectNode(canvas, node, scaleX, scaleY, fillPaint)
+                    drawRectNode(canvas, node, scaleX, scaleY, fillPaint, contentOffsetX, contentOffsetY)
                 }
                 "circle" -> {
                     fillPaint.color = colorFromArray(node.getJSONArray("fill"))
                     fillPaint.style = Paint.Style.FILL
                     canvas.drawCircle(
-                        (node.optDouble("cx", 0.0) * scaleX).toFloat(),
-                        (node.optDouble("cy", 0.0) * scaleY).toFloat(),
+                        ((node.optDouble("cx", 0.0) - contentOffsetX) * scaleX).toFloat(),
+                        ((node.optDouble("cy", 0.0) - contentOffsetY) * scaleY).toFloat(),
                         (node.optDouble("r", 0.0) * kotlin.math.min(scaleX, scaleY)).toFloat(),
                         fillPaint,
                     )
@@ -555,8 +565,8 @@ class LuvatrixVulkanView @JvmOverloads constructor(
                         strokePaint.color = colorFromArray(node.getJSONArray("stroke"))
                         strokePaint.strokeWidth = (strokeWidth * kotlin.math.min(scaleX, scaleY)).toFloat()
                         canvas.drawCircle(
-                            (node.optDouble("cx", 0.0) * scaleX).toFloat(),
-                            (node.optDouble("cy", 0.0) * scaleY).toFloat(),
+                            ((node.optDouble("cx", 0.0) - contentOffsetX) * scaleX).toFloat(),
+                            ((node.optDouble("cy", 0.0) - contentOffsetY) * scaleY).toFloat(),
                             (node.optDouble("r", 0.0) * kotlin.math.min(scaleX, scaleY)).toFloat(),
                             strokePaint,
                         )
@@ -567,8 +577,8 @@ class LuvatrixVulkanView @JvmOverloads constructor(
                     textPaint.textSize = (node.optDouble("size", 12.0) * kotlin.math.min(scaleX, scaleY)).toFloat()
                     canvas.drawText(
                         node.optString("text", ""),
-                        (node.optDouble("x", 0.0) * scaleX).toFloat(),
-                        (node.optDouble("y", 0.0) * scaleY + textPaint.textSize).toFloat(),
+                        ((node.optDouble("x", 0.0) - contentOffsetX) * scaleX).toFloat(),
+                        ((node.optDouble("y", 0.0) - contentOffsetY) * scaleY + textPaint.textSize).toFloat(),
                         textPaint,
                     )
                 }
@@ -665,11 +675,11 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         }
     }
 
-    private fun drawRectNode(canvas: android.graphics.Canvas, node: org.json.JSONObject, scaleX: Float, scaleY: Float, paint: Paint) {
-        val left = (node.optDouble("x", 0.0) * scaleX).toFloat()
-        val top = (node.optDouble("y", 0.0) * scaleY).toFloat()
-        val right = ((node.optDouble("x", 0.0) + node.optDouble("w", 0.0)) * scaleX).toFloat()
-        val bottom = ((node.optDouble("y", 0.0) + node.optDouble("h", 0.0)) * scaleY).toFloat()
+    private fun drawRectNode(canvas: android.graphics.Canvas, node: org.json.JSONObject, scaleX: Float, scaleY: Float, paint: Paint, contentOffsetX: Double = 0.0, contentOffsetY: Double = 0.0) {
+        val left = ((node.optDouble("x", 0.0) - contentOffsetX) * scaleX).toFloat()
+        val top = ((node.optDouble("y", 0.0) - contentOffsetY) * scaleY).toFloat()
+        val right = ((node.optDouble("x", 0.0) + node.optDouble("w", 0.0) - contentOffsetX) * scaleX).toFloat()
+        val bottom = ((node.optDouble("y", 0.0) + node.optDouble("h", 0.0) - contentOffsetY) * scaleY).toFloat()
         canvas.drawRect(left, top, right, bottom, paint)
     }
 
