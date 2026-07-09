@@ -92,6 +92,8 @@ struct ParsedScene {
     double background_t = 0.0;
     double background_rotation = 0.0;
     double background_scroll_y = 0.0;
+    double content_offset_x = 0.0;
+    double content_offset_y = 0.0;
     std::vector<RectPrimitive> rects;
     std::vector<CirclePrimitive> circles;
     std::vector<TextPrimitive> texts;
@@ -551,22 +553,15 @@ ParsedScene parse_scene(const std::string& json) {
     ParsedScene scene;
     scene.background = parse_scene_background(json);
 
-    // Look for meta node to extract presentation_mode
-    std::string presentation_mode_from_json = "";
+    // Look for meta node to extract scene-wide rendering state.
     for (const auto& node : parse_node_objects(json)) {
         std::string type = parse_type(node);
         if (type == "meta") {
-            // Extract presentation_mode from meta node
-            std::string pm_key = parse_string_key(node, "presentation_mode");
-            if (!pm_key.empty()) {
-                presentation_mode_from_json = parse_string_key(node, pm_key);
-            }
+            std::string presentation_mode_from_json = parse_string_key(node, "presentation_mode");
+            if (!presentation_mode_from_json.empty()) scene.presentation_mode = presentation_mode_from_json;
+            scene.content_offset_x = parse_number_key(node, "content_offset_x", scene.content_offset_x);
+            scene.content_offset_y = parse_number_key(node, "content_offset_y", scene.content_offset_y);
         }
-    }
-
-    // If we found a presentation_mode in JSON, use it; otherwise keep empty (will be overridden by JNI param if provided)
-    if (!presentation_mode_from_json.empty()) {
-        scene.presentation_mode = presentation_mode_from_json;
     }
 
     for (const auto& node : parse_node_objects(json)) {
@@ -1137,6 +1132,19 @@ uint32_t pack_bgra(Rgba color) {
         | (static_cast<uint32_t>(clamp255(color.a)) << 24);
 }
 
+void convert_bgra_pixels_for_swapchain(std::vector<uint32_t>& pixels, VkFormat format) {
+    if (format != VK_FORMAT_R8G8B8A8_UNORM && format != VK_FORMAT_R8G8B8A8_SRGB) {
+        return;
+    }
+    for (uint32_t& pixel : pixels) {
+        uint32_t b = pixel & 0x000000ffu;
+        uint32_t g = pixel & 0x0000ff00u;
+        uint32_t r = pixel & 0x00ff0000u;
+        uint32_t a = pixel & 0xff000000u;
+        pixel = (r >> 16) | g | (b << 16) | a;
+    }
+}
+
 uint8_t plane_value(const std::vector<uint8_t>& plane, int x, int y, int row_stride, int pixel_stride) {
     if (row_stride <= 0 || pixel_stride <= 0 || x < 0 || y < 0) return 128;
     size_t idx = static_cast<size_t>(y) * static_cast<size_t>(row_stride) +
@@ -1651,9 +1659,24 @@ std::vector<uint32_t> rasterize_scene_pixels_impl(
     draw_secondary_inset(pixels, width, height);
     double scale_x = static_cast<double>(width) / static_cast<double>(std::max(1, logical_width));
     double scale_y = static_cast<double>(height) / static_cast<double>(std::max(1, logical_height));
-    for (const auto& rect : scene.rects) draw_rect_pixels(pixels, width, height, scale_x, scale_y, rect);
-    for (const auto& circle : scene.circles) draw_circle_pixels(pixels, width, height, scale_x, scale_y, circle);
-    for (const auto& text : scene.texts) draw_text_pixels(pixels, width, height, scale_x, scale_y, text);
+    for (const auto& rect : scene.rects) {
+        RectPrimitive shifted = rect;
+        shifted.x -= scene.content_offset_x;
+        shifted.y -= scene.content_offset_y;
+        draw_rect_pixels(pixels, width, height, scale_x, scale_y, shifted);
+    }
+    for (const auto& circle : scene.circles) {
+        CirclePrimitive shifted = circle;
+        shifted.cx -= scene.content_offset_x;
+        shifted.cy -= scene.content_offset_y;
+        draw_circle_pixels(pixels, width, height, scale_x, scale_y, shifted);
+    }
+    for (const auto& text : scene.texts) {
+        TextPrimitive shifted = text;
+        shifted.x -= scene.content_offset_x;
+        shifted.y -= scene.content_offset_y;
+        draw_text_pixels(pixels, width, height, scale_x, scale_y, shifted);
+    }
     return pixels;
 }
 
@@ -2614,6 +2637,7 @@ std::string overlay_cache_key_for_scene(const ParsedScene& scene, int width, int
     std::string key = std::to_string(width) + "x" + std::to_string(height) + "/" +
         std::to_string(logical_width) + "x" + std::to_string(logical_height) + "/";
     key += std::to_string(scene.rects.size()) + "," + std::to_string(scene.circles.size()) + "," + std::to_string(scene.texts.size());
+    key += "/offset=" + std::to_string(scene.content_offset_x) + "," + std::to_string(scene.content_offset_y);
     for (const auto& text : scene.texts) {
         key += "|" + text.text + "@" + std::to_string(static_cast<int>(text.x)) + "," + std::to_string(static_cast<int>(text.y));
     }
@@ -2941,6 +2965,7 @@ bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_
     int width = static_cast<int>(vk.extent.width);
     int height = static_cast<int>(vk.extent.height);
     auto pixels = rasterize_scene_pixels(scene, width, height, logical_width, logical_height);
+    convert_bgra_pixels_for_swapchain(pixels, vk.swapchain_format);
     VkDeviceSize byte_count = static_cast<VkDeviceSize>(pixels.size() * sizeof(uint32_t));
     if (!ensure_staging_buffer(vk, byte_count)) return false;
     void* mapped = nullptr;
