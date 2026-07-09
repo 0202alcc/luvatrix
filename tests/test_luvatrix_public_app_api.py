@@ -20,10 +20,12 @@ from luvatrix.app import (
     apply_hdi_events,
     SUPPORTED_APP_PLATFORMS,
     check_app_install,
+    draw_text_to_matrix,
     load_app_manifest,
     validate_app_install,
 )
 from luvatrix import __version__
+from luvatrix_core import accel
 from luvatrix_core.core.app_runtime import AppRuntime
 from luvatrix_core.core.coordinates import CoordinateFrameRegistry
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
@@ -58,6 +60,17 @@ def _write_app(root: Path, platform_support: list[str] | None = None) -> None:
         "    return App()\n",
         encoding="utf-8",
     )
+
+
+def _rgba_at(frame, row: int, col: int) -> tuple[int, int, int, int]:
+    value = frame[row, col, :]
+    if hasattr(value, "detach"):
+        return tuple(int(v) for v in value.detach().cpu().reshape(-1).tolist())
+    if hasattr(value, "tolist"):
+        return tuple(int(v) for v in value.tolist())
+    if hasattr(value, "_data"):
+        return tuple(int(v) for v in value._data[:4])
+    return tuple(int(v) for v in value)
 
 
 class LuvatrixPublicAppApiTests(unittest.TestCase):
@@ -124,6 +137,34 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
 
         self.assertTrue(started.dragging)
         self.assertAlmostEqual(started.offset, 100.0)
+
+    def test_draw_text_to_matrix_rasterizes_default_matrix_font(self) -> None:
+        frame = accel.zeros((10, 20, 4))
+
+        result = draw_text_to_matrix(
+            frame,
+            "04",
+            x=1,
+            y=2,
+            font_size_px=7.0,
+            color=(10, 20, 30, 255),
+        )
+
+        self.assertIs(result, frame)
+        self.assertEqual(_rgba_at(frame, 2, 1), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 2), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 3), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 4), (0, 0, 0, 0))
+        self.assertEqual(_rgba_at(frame, 2, 5), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 6), (0, 0, 0, 0))
+        self.assertEqual(_rgba_at(frame, 2, 7), (10, 20, 30, 255))
+
+    def test_draw_text_to_matrix_clips_at_matrix_edges(self) -> None:
+        frame = accel.zeros((4, 4, 4))
+
+        draw_text_to_matrix(frame, "8", x=-1, y=-1, font_size_px=7.0, color="#ffffff")
+
+        self.assertEqual(_rgba_at(frame, 0, 1), (255, 255, 255, 255))
 
     def test_app_render_on_invalidation_skips_clean_ticks(self) -> None:
         class CountingApp(App):

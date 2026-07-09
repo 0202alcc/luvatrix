@@ -980,6 +980,65 @@ _DEBUG_GLYPHS: dict[str, tuple[str, ...]] = {
 }
 
 
+def draw_text_to_matrix(
+    matrix,
+    text: str,
+    *,
+    x: float,
+    y: float,
+    font_size_px: float = 14.0,
+    color: tuple[int, int, int, int] | str = (255, 255, 255, 255),
+):
+    """Rasterize Luvatrix's default matrix text glyphs into an RGBA matrix."""
+    height = int(matrix.shape[0])
+    width = int(matrix.shape[1])
+    if height <= 0 or width <= 0:
+        return matrix
+
+    scale = max(1, int(round(float(font_size_px) / 7.0)))
+    cursor = int(x)
+    top = int(y)
+    rgba = _rgba(color)
+    for raw_ch in str(text).upper():
+        glyph = _DEBUG_GLYPHS.get(raw_ch, _DEBUG_GLYPHS[" "])
+        for gy, row in enumerate(glyph):
+            for gx, bit in enumerate(row):
+                if bit != "1":
+                    continue
+                _fill_matrix_rect(
+                    matrix,
+                    cursor + gx * scale,
+                    top + gy * scale,
+                    cursor + (gx + 1) * scale,
+                    top + (gy + 1) * scale,
+                    rgba,
+                    width=width,
+                    height=height,
+                )
+        cursor += 4 * scale
+    return matrix
+
+
+def _fill_matrix_rect(
+    matrix,
+    x0: int,
+    y0: int,
+    x1: int,
+    y1: int,
+    color: tuple[int, int, int, int],
+    *,
+    width: int,
+    height: int,
+) -> None:
+    x0 = max(0, min(width, int(x0)))
+    y0 = max(0, min(height, int(y0)))
+    x1 = max(x0, min(width, int(x1)))
+    y1 = max(y0, min(height, int(y1)))
+    if x1 <= x0 or y1 <= y0:
+        return
+    matrix[y0:y1, x0:x1, :] = color
+
+
 class MatrixFrame(AbstractContextManager["MatrixFrame"]):
     def __init__(self, ctx: AppContext, clear: tuple[int, int, int, int] | str = (0, 0, 0, 255)) -> None:
         self._ctx = ctx
@@ -1057,24 +1116,7 @@ class MatrixFrame(AbstractContextManager["MatrixFrame"]):
         _ = z_index, cache_key
         assert self._frame is not None
         x, y = self._point(x, y, frame=frame)
-        scale = max(1, int(round(font_size_px / 7.0)))
-        cursor = int(x)
-        rgba = _rgba(color)
-        for raw_ch in text.upper():
-            glyph = _DEBUG_GLYPHS.get(raw_ch, _DEBUG_GLYPHS[" "])
-            for gy, row in enumerate(glyph):
-                for gx, bit in enumerate(row):
-                    if bit != "1":
-                        continue
-                    self.rect(
-                        x=cursor + gx * scale,
-                        y=int(y) + gy * scale,
-                        width=scale,
-                        height=scale,
-                        color=rgba,
-                        frame=COORD_SCREEN_TL,
-                    )
-            cursor += 4 * scale
+        draw_text_to_matrix(self._frame, text, x=x, y=y, font_size_px=font_size_px, color=color)
 
     def _fill_rect(self, x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int, int]) -> None:
         assert self._frame is not None
@@ -1366,6 +1408,7 @@ __all__ = [
     "UIFrame",
     "apply_hdi_events",
     "check_app_install",
+    "draw_text_to_matrix",
     "load_app_manifest",
     "validate_app_install",
 ]
