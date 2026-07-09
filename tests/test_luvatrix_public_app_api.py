@@ -7,6 +7,7 @@ import tempfile
 import tomllib
 import unittest
 
+import luvatrix.app as luvatrix_app_api
 from luvatrix.app import (
     App,
     CoordinateFrames,
@@ -62,6 +63,17 @@ def _write_app(root: Path, platform_support: list[str] | None = None) -> None:
 
 
 class LuvatrixPublicAppApiTests(unittest.TestCase):
+    def test_public_interaction_helpers_are_explicit_exports(self) -> None:
+        for name in (
+            "ScrollbarController",
+            "ScrollbarMetrics",
+            "ScrollbarUpdate",
+            "SwipeMomentumController",
+            "SwipeMomentumUpdate",
+        ):
+            self.assertIn(name, luvatrix_app_api.__all__)
+            self.assertIsNotNone(getattr(luvatrix_app_api, name))
+
     def test_vertical_scrollbar_supports_track_click_drag_and_release_capture(self) -> None:
         controller = ScrollbarController("vertical", min_thumb_extent=20.0)
         state = InputState(mouse_x=95.0, mouse_y=100.0, left_clicked=True, left_down=True)
