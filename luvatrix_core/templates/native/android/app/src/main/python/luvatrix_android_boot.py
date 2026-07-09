@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import tempfile
 import time
+import tomllib
 
 
 _ROOT = Path(__file__).resolve().parent
@@ -259,7 +260,7 @@ def _run_visual_runtime(view):
     matrix_width = max(1, int(round(width * render_scale)))
     matrix_height = max(1, int(round(height * render_scale)))
     target_fps, present_fps = _runtime_frame_rates(view, config)
-    render_mode = str(config.get("render_mode") or "auto")
+    render_mode = _runtime_render_mode(config)
     if view is not None and _truthy(config.get("low_latency_mode"), default=True):
         _apply_low_latency_mode(view, target_fps=target_fps, present_fps=present_fps)
     clear_android_input_events()
@@ -427,6 +428,27 @@ def _launch_config() -> dict[str, object]:
     except Exception:
         raw = {}
     return raw if isinstance(raw, dict) else {}
+
+
+def _runtime_render_mode(config: dict[str, object]) -> str:
+    render_mode = str(config.get("render_mode") or "auto")
+    if render_mode != "auto":
+        return render_mode
+    return _app_manifest_render_mode() or render_mode
+
+
+def _app_manifest_render_mode() -> str | None:
+    try:
+        raw = tomllib.loads((_app_dir() / "app.toml").read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    render = raw.get("render")
+    if not isinstance(render, dict):
+        return None
+    preferred = str(render.get("preferred") or "").strip()
+    if preferred in ("auto", "matrix", "scene"):
+        return preferred
+    return None
 
 
 def _paint_view(view, frames: int) -> None:

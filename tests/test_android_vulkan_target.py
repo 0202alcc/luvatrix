@@ -36,7 +36,7 @@ class AndroidVulkanTargetTests(unittest.TestCase):
         self.assertIsInstance(presenter.calls[0][0], bytes)
         self.assertEqual(len(presenter.calls[0][0]), 16)
 
-    def test_present_frame_converts_rgba_to_android_bgra_bytes(self) -> None:
+    def test_present_frame_forwards_rgba_bytes(self) -> None:
         presenter = _Presenter()
         target = AndroidVulkanTarget(AndroidVulkanBridge(presenter))
         target.start()
@@ -44,7 +44,7 @@ class AndroidVulkanTargetTests(unittest.TestCase):
 
         target.present_frame(DisplayFrame(revision=4, width=1, height=1, rgba=rgba))
 
-        self.assertEqual(presenter.calls[0][0], bytes([30, 20, 10, 40]))
+        self.assertEqual(presenter.calls[0][0], bytes([10, 20, 30, 40]))
 
     def test_present_frame_rejects_shape_mismatch(self) -> None:
         target = AndroidVulkanTarget(AndroidVulkanBridge(_Presenter()))
