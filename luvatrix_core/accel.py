@@ -9,8 +9,9 @@ Tier 3 — pure:   iOS fallback when numpy is absent. Backed by bytearray.
                  raise NotImplementedError (Multiply write-op is not used
                  on the pure-Python path).
 
-All functions accept whichever array type matches the current backend and
-return the same type. Do not mix backends within one call chain.
+Functions return the same concrete array type they receive. The selected
+backend provides defaults such as zeros/from_sequence, while adapters may still
+accept another known array type when that type is already available.
 """
 from __future__ import annotations
 
@@ -43,10 +44,10 @@ try:
 except Exception as exc:
     BACKEND_IMPORT_ERROR = f"torch:{type(exc).__name__}:{exc}"
 
-if _torch is None:
-    try:
-        import numpy as _np
-    except Exception as exc:
+try:
+    import numpy as _np
+except Exception as exc:
+    if _torch is None:
         cause = getattr(exc, "__cause__", None) or getattr(exc, "__context__", None)
         parts: list[str] = []
         if cause is not None:
@@ -235,6 +236,95 @@ class _PureArray:
         return sum(_struct.unpack_from("f", self._data, i * 4)[0] for i in range(n))
 
 
+def _shape_numel(shape: tuple[int, ...]) -> int:
+    n = 1
+    for size in shape:
+        n *= int(size)
+    return n
+
+
+def _pure_item_size(x: _PureArray) -> int:
+    if x.dtype == "uint8":
+        return 1
+    if x.dtype == "float32":
+        return 4
+    raise TypeError(f"unsupported pure array dtype for roll: {x.dtype!r}")
+
+
+def _single_roll_shift(shifts) -> int:
+    if isinstance(shifts, (tuple, list)):
+        if len(shifts) != 1:
+            raise ValueError("flat roll expects a single shift when dims is None")
+        return int(shifts[0])
+    return int(shifts)
+
+
+def _normalize_roll_specs(shifts, dims, ndim: int) -> tuple[tuple[int, int], ...]:
+    if isinstance(dims, int):
+        axes = (dims,)
+    elif isinstance(dims, (tuple, list)):
+        axes = tuple(int(axis) for axis in dims)
+    else:
+        raise TypeError("dims must be an int, a tuple/list of ints, or None")
+    if not axes:
+        return ()
+    if isinstance(shifts, (tuple, list)):
+        shift_values = tuple(int(shift) for shift in shifts)
+    else:
+        shift_values = (int(shifts),) * len(axes)
+    if len(shift_values) != len(axes):
+        raise ValueError("shifts and dims must have the same length")
+
+    specs: list[tuple[int, int]] = []
+    for shift, axis in zip(shift_values, axes):
+        if axis < 0:
+            axis += ndim
+        if axis < 0 or axis >= ndim:
+            raise IndexError(f"roll axis {axis} out of range for array with {ndim} dimensions")
+        specs.append((shift, axis))
+    return tuple(specs)
+
+
+def _roll_pure_flat(x: _PureArray, shift: int) -> _PureArray:
+    total_items = _shape_numel(x.shape)
+    if total_items <= 0:
+        return x.copy()
+    shift %= total_items
+    if shift == 0:
+        return x.copy()
+
+    item_size = _pure_item_size(x)
+    shift_bytes = shift * item_size
+    out = x.copy()
+    out._data[:shift_bytes] = x._data[-shift_bytes:]
+    out._data[shift_bytes:] = x._data[:-shift_bytes]
+    return out
+
+
+def _roll_pure_axis(x: _PureArray, shift: int, axis: int) -> _PureArray:
+    axis_size = int(x.shape[axis])
+    if axis_size <= 0:
+        return x.copy()
+    shift %= axis_size
+    if shift == 0:
+        return x.copy()
+
+    item_size = _pure_item_size(x)
+    before = _shape_numel(x.shape[:axis])
+    after = _shape_numel(x.shape[axis + 1 :])
+    element_block_bytes = after * item_size
+    axis_block_bytes = axis_size * element_block_bytes
+    head_bytes = shift * element_block_bytes
+    split = (axis_size - shift) * element_block_bytes
+    out = x.copy()
+    for prefix in range(before):
+        base = prefix * axis_block_bytes
+        end = base + axis_block_bytes
+        out._data[base : base + head_bytes] = x._data[base + split : end]
+        out._data[base + head_bytes : end] = x._data[base : base + split]
+    return out
+
+
 # ── Tier 1: torch ─────────────────────────────────────────────────────────────
 
 if _torch is not None:
@@ -263,6 +353,23 @@ if _torch is not None:
 
     def broadcast_to_clone(x, shape: tuple[int, ...]):
         return x.expand(shape).clone()
+
+    def roll(x, shifts, dims=None):
+        if _torch.is_tensor(x):
+            return _torch.roll(x, shifts=shifts, dims=dims)
+        if _np is not None and isinstance(x, _np.ndarray):
+            return _np.roll(x, shift=shifts, axis=dims)
+        if isinstance(x, _PureArray):
+            if dims is None:
+                return _roll_pure_flat(x, _single_roll_shift(shifts))
+            out = x
+            specs = _normalize_roll_specs(shifts, dims, x.ndim)
+            if not specs:
+                return x.copy()
+            for shift, axis in specs:
+                out = _roll_pure_axis(out, shift, axis)
+            return out
+        raise TypeError(f"roll expects a tensor, numpy array, or _PureArray, got {type(x)!r}")
 
     def isfinite(x):
         return _torch.isfinite(x)
@@ -351,6 +458,9 @@ elif _np is not None:
     def broadcast_to_clone(x, shape: tuple[int, ...]):
         return _np.broadcast_to(x, shape).copy()
 
+    def roll(x, shifts, dims=None):
+        return _np.roll(x, shift=shifts, axis=dims)
+
     def isfinite(x):
         return _np.isfinite(x)
 
@@ -435,6 +545,17 @@ else:
         for i in range(H * W):
             data[i * C:(i + 1) * C] = src
         return _PureArray(data, shape, x.dtype)
+
+    def roll(x: _PureArray, shifts, dims=None) -> _PureArray:
+        if dims is None:
+            return _roll_pure_flat(x, _single_roll_shift(shifts))
+        out = x
+        specs = _normalize_roll_specs(shifts, dims, x.ndim)
+        if not specs:
+            return x.copy()
+        for shift, axis in specs:
+            out = _roll_pure_axis(out, shift, axis)
+        return out
 
     def isfinite(x: _PureArray) -> _PureArray:
         # uint8 values are always finite — return all-True mask

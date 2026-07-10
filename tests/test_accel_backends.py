@@ -6,6 +6,14 @@ import sys
 import unittest
 
 
+def _flat_values(x):
+    if hasattr(x, "_data"):
+        return list(x._data)
+    if hasattr(x, "detach"):
+        return x.detach().cpu().reshape(-1).tolist()
+    return x.reshape(-1).tolist()
+
+
 class AccelBackendTests(unittest.TestCase):
     def test_accel_imports_when_torch_is_unavailable(self) -> None:
         code = r'''
@@ -21,6 +29,88 @@ from luvatrix_core.platform.frame_pipeline import PresentationMode
 assert accel.BACKEND in ("numpy", "pure"), accel.BACKEND
 assert accel.zeros((1, 1, 4)).shape == (1, 1, 4)
 assert PresentationMode.STRETCH.value == "stretch"
+'''
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
+    def test_roll_shifts_rows_on_active_backend(self) -> None:
+        from luvatrix_core import accel
+
+        frame = accel.from_sequence(list(range(24)), (3, 2, 4))
+        rolled = accel.roll(frame, 1, dims=0)
+
+        self.assertEqual(_flat_values(rolled), list(range(16, 24)) + list(range(16)))
+
+    def test_roll_wraps_negative_shift_on_active_backend(self) -> None:
+        from luvatrix_core import accel
+
+        frame = accel.from_sequence(list(range(6)), (2, 3, 1))
+        rolled = accel.roll(frame, -1, dims=1)
+
+        self.assertEqual(_flat_values(rolled), [1, 2, 0, 4, 5, 3])
+
+    def test_roll_without_dims_rolls_flattened_active_backend(self) -> None:
+        from luvatrix_core import accel
+
+        frame = accel.from_sequence(list(range(6)), (2, 3, 1))
+        rolled = accel.roll(frame, 2)
+
+        self.assertEqual(_flat_values(rolled), [4, 5, 0, 1, 2, 3])
+
+    def test_roll_dispatches_numpy_arrays_under_torch_selected_backend(self) -> None:
+        code = r'''
+import sys
+import types
+
+fake_torch = types.ModuleType("torch")
+fake_torch.uint8 = object()
+fake_torch.is_tensor = lambda value: False
+def roll(*args, **kwargs):
+    raise AssertionError("torch.roll should not receive numpy arrays")
+fake_torch.roll = roll
+sys.modules["torch"] = fake_torch
+
+from luvatrix_core import accel
+import numpy as np
+
+assert accel.BACKEND == "torch", accel.BACKEND
+frame = np.arange(6, dtype=np.uint8).reshape((2, 3, 1))
+rolled = accel.roll(frame, -1, dims=1)
+assert rolled.reshape(-1).tolist() == [1, 2, 0, 4, 5, 3], rolled
+'''
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
+    def test_roll_works_in_pure_python_backend(self) -> None:
+        code = r'''
+import builtins
+real_import = builtins.__import__
+def blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "torch" or name.startswith("torch.") or name == "numpy" or name.startswith("numpy."):
+        raise ImportError("blocked numeric backend for pure accel test")
+    return real_import(name, globals, locals, fromlist, level)
+builtins.__import__ = blocked_import
+from luvatrix_core import accel
+assert accel.BACKEND == "pure", accel.BACKEND
+frame = accel.from_sequence(list(range(24)), (3, 2, 4))
+rolled = accel.roll(frame, 1, dims=0)
+assert list(rolled._data) == list(range(16, 24)) + list(range(16)), list(rolled._data)
+rolled_axis = accel.roll(accel.from_sequence(list(range(6)), (2, 3, 1)), -1, dims=1)
+assert list(rolled_axis._data) == [1, 2, 0, 4, 5, 3], list(rolled_axis._data)
+rolled_flat = accel.roll(accel.from_sequence(list(range(6)), (2, 3, 1)), 2)
+assert list(rolled_flat._data) == [4, 5, 0, 1, 2, 3], list(rolled_flat._data)
 '''
         result = subprocess.run(
             [sys.executable, "-c", code],
