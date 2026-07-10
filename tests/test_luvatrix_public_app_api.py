@@ -7,6 +7,7 @@ import tempfile
 import tomllib
 import unittest
 
+import luvatrix.app as luvatrix_app_api
 from luvatrix.app import (
     App,
     CoordinateFrames,
@@ -17,6 +18,7 @@ from luvatrix.app import (
     PLATFORM_IOS,
     PLATFORM_MACOS,
     ScrollbarController,
+    SwipeMomentumController,
     apply_hdi_events,
     SUPPORTED_APP_PLATFORMS,
     check_app_install,
@@ -61,6 +63,17 @@ def _write_app(root: Path, platform_support: list[str] | None = None) -> None:
 
 
 class LuvatrixPublicAppApiTests(unittest.TestCase):
+    def test_public_interaction_helpers_are_explicit_exports(self) -> None:
+        for name in (
+            "ScrollbarController",
+            "ScrollbarMetrics",
+            "ScrollbarUpdate",
+            "SwipeMomentumController",
+            "SwipeMomentumUpdate",
+        ):
+            self.assertIn(name, luvatrix_app_api.__all__)
+            self.assertIsNotNone(getattr(luvatrix_app_api, name))
+
     def test_vertical_scrollbar_supports_track_click_drag_and_release_capture(self) -> None:
         controller = ScrollbarController("vertical", min_thumb_extent=20.0)
         state = InputState(mouse_x=95.0, mouse_y=100.0, left_clicked=True, left_down=True)
@@ -124,6 +137,66 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
 
         self.assertTrue(started.dragging)
         self.assertAlmostEqual(started.offset, 100.0)
+
+    def test_swipe_momentum_samples_drag_velocity_and_requests_render(self) -> None:
+        renders: list[str] = []
+        controller = SwipeMomentumController("y", direction=-1.0, request_render=lambda: renders.append("render"))
+        state = InputState(active_touches={7: (0.0, 100.0)}, touch_count=1)
+
+        started = controller.update(state, 1.0 / 120.0)
+        state.active_touches[7] = (0.0, 90.0)
+        moved = controller.update(state, 1.0 / 60.0)
+
+        self.assertTrue(started.dragging)
+        self.assertFalse(started.needs_render)
+        self.assertEqual(moved.delta, 10.0)
+        self.assertAlmostEqual(moved.velocity, 270.0)
+        self.assertTrue(moved.dragging)
+        self.assertFalse(moved.inertial)
+        self.assertTrue(moved.needs_render)
+        self.assertEqual(renders, ["render"])
+
+    def test_swipe_momentum_applies_inertia_after_release(self) -> None:
+        renders: list[str] = []
+        controller = SwipeMomentumController("y", direction=-1.0, request_render=lambda: renders.append("render"))
+        state = InputState(active_touches={7: (0.0, 100.0)}, touch_count=1)
+        controller.update(state, 1.0 / 120.0)
+        state.active_touches[7] = (0.0, 90.0)
+        controller.update(state, 1.0 / 60.0)
+
+        state.active_touches.clear()
+        state.touch_count = 0
+        inertial = controller.update(state, 1.0 / 60.0)
+
+        self.assertGreater(inertial.delta, 0.0)
+        self.assertAlmostEqual(inertial.delta, 4.5)
+        self.assertAlmostEqual(inertial.velocity, 270.0 - 3200.0 / 60.0)
+        self.assertFalse(inertial.dragging)
+        self.assertTrue(inertial.inertial)
+        self.assertTrue(inertial.needs_render)
+        self.assertEqual(renders, ["render", "render"])
+
+    def test_swipe_momentum_hold_cancels_release_inertia(self) -> None:
+        controller = SwipeMomentumController("y", direction=-1.0)
+        state = InputState(active_touches={7: (0.0, 100.0)}, touch_count=1)
+        controller.update(state, 1.0 / 120.0)
+        state.active_touches[7] = (0.0, 90.0)
+        controller.update(state, 1.0 / 60.0)
+
+        for _ in range(5):
+            controller.update(state, 1.0 / 30.0)
+        state.active_touches.clear()
+        state.touch_count = 0
+        released = controller.update(state, 1.0 / 60.0)
+
+        self.assertEqual(released.delta, 0.0)
+        self.assertEqual(released.velocity, 0.0)
+        self.assertFalse(released.inertial)
+        self.assertFalse(released.needs_render)
+
+    def test_swipe_momentum_rejects_invalid_axis(self) -> None:
+        with self.assertRaises(ValueError):
+            SwipeMomentumController("z")
 
     def test_app_render_on_invalidation_skips_clean_ticks(self) -> None:
         class CountingApp(App):
