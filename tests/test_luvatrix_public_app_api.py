@@ -7,6 +7,7 @@ import tempfile
 import tomllib
 import unittest
 
+import luvatrix.app as luvatrix_app_api
 from luvatrix.app import (
     App,
     CoordinateFrames,
@@ -17,13 +18,16 @@ from luvatrix.app import (
     PLATFORM_IOS,
     PLATFORM_MACOS,
     ScrollbarController,
+    SwipeMomentumController,
     apply_hdi_events,
     SUPPORTED_APP_PLATFORMS,
     check_app_install,
+    draw_text_to_matrix,
     load_app_manifest,
     validate_app_install,
 )
 from luvatrix import __version__
+from luvatrix_core import accel
 from luvatrix_core.core.app_runtime import AppRuntime
 from luvatrix_core.core.coordinates import CoordinateFrameRegistry
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
@@ -60,7 +64,50 @@ def _write_app(root: Path, platform_support: list[str] | None = None) -> None:
     )
 
 
+def _rgba_at(frame, row: int, col: int) -> tuple[int, int, int, int]:
+    value = frame[row, col, :]
+    if hasattr(value, "detach"):
+        return tuple(int(v) for v in value.detach().cpu().reshape(-1).tolist())
+    if hasattr(value, "tolist"):
+        return tuple(int(v) for v in value.tolist())
+    if hasattr(value, "_data"):
+        return tuple(int(v) for v in value._data[:4])
+    return tuple(int(v) for v in value)
+
+
+class _ChannelOnlyMatrix:
+    def __init__(self, height: int = 6, width: int = 6) -> None:
+        self.shape = (height, width, 4)
+        self.writes: list[tuple[int, int, int, int, int, int]] = []
+
+    def __setitem__(self, key, value) -> None:
+        y_key, x_key, channel = key
+        if isinstance(channel, slice):
+            raise AssertionError("matrix helper must write per-channel scalars")
+        self.writes.append(
+            (
+                int(y_key.start),
+                int(y_key.stop),
+                int(x_key.start),
+                int(x_key.stop),
+                int(channel),
+                int(value),
+            )
+        )
+
+
 class LuvatrixPublicAppApiTests(unittest.TestCase):
+    def test_public_interaction_helpers_are_explicit_exports(self) -> None:
+        for name in (
+            "ScrollbarController",
+            "ScrollbarMetrics",
+            "ScrollbarUpdate",
+            "SwipeMomentumController",
+            "SwipeMomentumUpdate",
+        ):
+            self.assertIn(name, luvatrix_app_api.__all__)
+            self.assertIsNotNone(getattr(luvatrix_app_api, name))
+
     def test_vertical_scrollbar_supports_track_click_drag_and_release_capture(self) -> None:
         controller = ScrollbarController("vertical", min_thumb_extent=20.0)
         state = InputState(mouse_x=95.0, mouse_y=100.0, left_clicked=True, left_down=True)
@@ -125,6 +172,66 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         self.assertTrue(started.dragging)
         self.assertAlmostEqual(started.offset, 100.0)
 
+    def test_swipe_momentum_samples_drag_velocity_and_requests_render(self) -> None:
+        renders: list[str] = []
+        controller = SwipeMomentumController("y", direction=-1.0, request_render=lambda: renders.append("render"))
+        state = InputState(active_touches={7: (0.0, 100.0)}, touch_count=1)
+
+        started = controller.update(state, 1.0 / 120.0)
+        state.active_touches[7] = (0.0, 90.0)
+        moved = controller.update(state, 1.0 / 60.0)
+
+        self.assertTrue(started.dragging)
+        self.assertFalse(started.needs_render)
+        self.assertEqual(moved.delta, 10.0)
+        self.assertAlmostEqual(moved.velocity, 270.0)
+        self.assertTrue(moved.dragging)
+        self.assertFalse(moved.inertial)
+        self.assertTrue(moved.needs_render)
+        self.assertEqual(renders, ["render"])
+
+    def test_swipe_momentum_applies_inertia_after_release(self) -> None:
+        renders: list[str] = []
+        controller = SwipeMomentumController("y", direction=-1.0, request_render=lambda: renders.append("render"))
+        state = InputState(active_touches={7: (0.0, 100.0)}, touch_count=1)
+        controller.update(state, 1.0 / 120.0)
+        state.active_touches[7] = (0.0, 90.0)
+        controller.update(state, 1.0 / 60.0)
+
+        state.active_touches.clear()
+        state.touch_count = 0
+        inertial = controller.update(state, 1.0 / 60.0)
+
+        self.assertGreater(inertial.delta, 0.0)
+        self.assertAlmostEqual(inertial.delta, 4.5)
+        self.assertAlmostEqual(inertial.velocity, 270.0 - 3200.0 / 60.0)
+        self.assertFalse(inertial.dragging)
+        self.assertTrue(inertial.inertial)
+        self.assertTrue(inertial.needs_render)
+        self.assertEqual(renders, ["render", "render"])
+
+    def test_swipe_momentum_hold_cancels_release_inertia(self) -> None:
+        controller = SwipeMomentumController("y", direction=-1.0)
+        state = InputState(active_touches={7: (0.0, 100.0)}, touch_count=1)
+        controller.update(state, 1.0 / 120.0)
+        state.active_touches[7] = (0.0, 90.0)
+        controller.update(state, 1.0 / 60.0)
+
+        for _ in range(5):
+            controller.update(state, 1.0 / 30.0)
+        state.active_touches.clear()
+        state.touch_count = 0
+        released = controller.update(state, 1.0 / 60.0)
+
+        self.assertEqual(released.delta, 0.0)
+        self.assertEqual(released.velocity, 0.0)
+        self.assertFalse(released.inertial)
+        self.assertFalse(released.needs_render)
+
+    def test_swipe_momentum_rejects_invalid_axis(self) -> None:
+        with self.assertRaises(ValueError):
+            SwipeMomentumController("z")
+
     def test_app_render_on_invalidation_skips_clean_ticks(self) -> None:
         class CountingApp(App):
             def __init__(self) -> None:
@@ -149,6 +256,46 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
 
         self.assertEqual(app.updates, 3)
         self.assertEqual(app.renders, 2)
+
+    def test_draw_text_to_matrix_rasterizes_default_matrix_font(self) -> None:
+        self.assertIn("draw_text_to_matrix", luvatrix_app_api.__all__)
+        frame = accel.zeros((10, 20, 4))
+
+        result = draw_text_to_matrix(
+            frame,
+            "04",
+            x=1,
+            y=2,
+            font_size_px=7.0,
+            color=(10, 20, 30, 255),
+        )
+
+        self.assertIs(result, frame)
+        self.assertEqual(_rgba_at(frame, 2, 1), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 2), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 3), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 4), (0, 0, 0, 0))
+        self.assertEqual(_rgba_at(frame, 2, 5), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 6), (0, 0, 0, 0))
+        self.assertEqual(_rgba_at(frame, 2, 7), (10, 20, 30, 255))
+
+    def test_draw_text_to_matrix_writes_backend_safe_channel_slices(self) -> None:
+        matrix = _ChannelOnlyMatrix()
+
+        result = draw_text_to_matrix(matrix, "1", x=1, y=1, font_size_px=7.0, color=(7, 8, 9, 10))
+
+        self.assertIs(result, matrix)
+        self.assertIn((1, 2, 2, 3, 0, 7), matrix.writes)
+        self.assertIn((1, 2, 2, 3, 1, 8), matrix.writes)
+        self.assertIn((1, 2, 2, 3, 2, 9), matrix.writes)
+        self.assertIn((1, 2, 2, 3, 3, 10), matrix.writes)
+
+    def test_draw_text_to_matrix_clips_at_matrix_edges(self) -> None:
+        frame = accel.zeros((4, 4, 4))
+
+        draw_text_to_matrix(frame, "8", x=-1, y=-1, font_size_px=7.0, color="#ffffff")
+
+        self.assertEqual(_rgba_at(frame, 0, 1), (255, 255, 255, 255))
 
     def test_v3_manifest_parses_render_and_display_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as td:

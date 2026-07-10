@@ -4,6 +4,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 import importlib.util
+import math
 import platform
 from pathlib import Path
 from typing import Any
@@ -148,6 +149,15 @@ class ScrollbarUpdate:
     dragging: bool
 
 
+@dataclass(frozen=True)
+class SwipeMomentumUpdate:
+    delta: float
+    velocity: float
+    dragging: bool
+    inertial: bool
+    needs_render: bool
+
+
 class ScrollbarController:
     """Pointer interaction state for a horizontal or vertical scrollbar."""
 
@@ -242,6 +252,117 @@ class ScrollbarController:
             self._drag_anchor = 0.0
 
         return ScrollbarUpdate(offset=clamped, consumed=consumed, dragging=self._dragging)
+
+
+class SwipeMomentumController:
+    """Touch drag velocity and post-release inertia for one input axis."""
+
+    def __init__(
+        self,
+        axis: str = "y",
+        *,
+        direction: float = 1.0,
+        velocity_smoothing: float = 0.45,
+        max_velocity: float = 3600.0,
+        deceleration: float = 3200.0,
+        stop_velocity: float = 8.0,
+        hold_cancel_time: float = 0.14,
+        fallback_dt: float = 1.0 / 120.0,
+        max_dt: float = 1.0 / 30.0,
+        request_render: Callable[[], None] | None = None,
+    ) -> None:
+        if axis not in {"x", "y"}:
+            raise ValueError("axis must be 'x' or 'y'")
+        self.axis = axis
+        self.direction = float(direction)
+        self.velocity_smoothing = _clamp_float(float(velocity_smoothing), 0.0, 1.0)
+        self.max_velocity = max(0.0, float(max_velocity))
+        self.deceleration = max(0.0, float(deceleration))
+        self.stop_velocity = max(0.0, float(stop_velocity))
+        self.hold_cancel_time = max(0.0, float(hold_cancel_time))
+        self.fallback_dt = max(0.000001, float(fallback_dt))
+        self.max_dt = max(self.fallback_dt, float(max_dt))
+        self.request_render = request_render
+        self._touch_id: int | None = None
+        self._last_position: float | None = None
+        self._sample_dt = 0.0
+        self._velocity = 0.0
+        self._dragging = False
+
+    @property
+    def velocity(self) -> float:
+        return self._velocity
+
+    @property
+    def dragging(self) -> bool:
+        return self._dragging
+
+    def reset(self) -> None:
+        self._touch_id = None
+        self._last_position = None
+        self._sample_dt = 0.0
+        self._velocity = 0.0
+        self._dragging = False
+
+    def update(self, state: InputState, dt: float) -> SwipeMomentumUpdate:
+        frame_dt = _motion_dt(dt, fallback_dt=self.fallback_dt, max_dt=self.max_dt)
+        if not state.active_touches:
+            if self._sample_dt > self.hold_cancel_time:
+                self._velocity = 0.0
+            self._touch_id = None
+            self._last_position = None
+            self._sample_dt = 0.0
+            self._dragging = False
+            return self._apply_inertia(frame_dt)
+
+        touch_id, point = next(iter(sorted(state.active_touches.items())))
+        position = float(point[0] if self.axis == "x" else point[1])
+        if self._touch_id != touch_id or self._last_position is None:
+            self._touch_id = touch_id
+            self._last_position = position
+            self._sample_dt = 0.0
+            self._velocity = 0.0
+            self._dragging = True
+            return SwipeMomentumUpdate(0.0, 0.0, True, False, False)
+
+        self._sample_dt += frame_dt
+        pointer_delta = position - self._last_position
+        self._last_position = position
+        if pointer_delta:
+            delta = pointer_delta * self.direction
+            sample_dt = max(self._sample_dt, self.fallback_dt)
+            sample_velocity = _clamp_float(
+                delta / sample_dt,
+                -self.max_velocity,
+                self.max_velocity,
+            )
+            self._velocity = (
+                self._velocity * (1.0 - self.velocity_smoothing)
+                + sample_velocity * self.velocity_smoothing
+            )
+            self._sample_dt = 0.0
+            self._request_render()
+            return SwipeMomentumUpdate(delta, self._velocity, True, False, True)
+
+        if self._sample_dt > self.hold_cancel_time:
+            self._velocity = 0.0
+        return SwipeMomentumUpdate(0.0, self._velocity, True, False, False)
+
+    def _apply_inertia(self, dt: float) -> SwipeMomentumUpdate:
+        velocity = self._velocity
+        if abs(velocity) <= self.stop_velocity:
+            self._velocity = 0.0
+            return SwipeMomentumUpdate(0.0, 0.0, False, False, False)
+
+        delta = velocity * dt
+        speed = max(0.0, abs(velocity) - self.deceleration * dt)
+        self._velocity = 0.0 if speed <= self.stop_velocity else math.copysign(speed, velocity)
+        self._request_render()
+        return SwipeMomentumUpdate(delta, self._velocity, False, True, True)
+
+    def _request_render(self) -> None:
+        if self.request_render is not None:
+            self.request_render()
 
 
 def reset_transient_input(state: InputState) -> None:
@@ -368,6 +489,20 @@ def _effective_touch_pressure(*, force: float, major_radius: float) -> float:
     if 0.0 < force < 0.98:
         return max(force, area_pressure)
     return area_pressure
+
+
+def _motion_dt(dt: float, *, fallback_dt: float, max_dt: float) -> float:
+    try:
+        value = float(dt)
+    except (TypeError, ValueError):
+        value = fallback_dt
+    if value <= 0.0 or not math.isfinite(value):
+        return fallback_dt
+    return min(value, max_dt)
+
+
+def _clamp_float(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, value))
 
 
 class CoordinateFrames:
@@ -980,6 +1115,66 @@ _DEBUG_GLYPHS: dict[str, tuple[str, ...]] = {
 }
 
 
+def draw_text_to_matrix(
+    matrix,
+    text: str,
+    *,
+    x: float,
+    y: float,
+    font_size_px: float = 14.0,
+    color: tuple[int, int, int, int] | str = (255, 255, 255, 255),
+):
+    """Rasterize Luvatrix's default matrix text glyphs into an RGBA matrix."""
+    height = int(matrix.shape[0])
+    width = int(matrix.shape[1])
+    if height <= 0 or width <= 0:
+        return matrix
+
+    scale = max(1, int(round(float(font_size_px) / 7.0)))
+    cursor = int(x)
+    top = int(y)
+    rgba = _rgba(color)
+    for raw_ch in str(text).upper():
+        glyph = _DEBUG_GLYPHS.get(raw_ch, _DEBUG_GLYPHS[" "])
+        for gy, row in enumerate(glyph):
+            for gx, bit in enumerate(row):
+                if bit != "1":
+                    continue
+                _fill_matrix_rect(
+                    matrix,
+                    cursor + gx * scale,
+                    top + gy * scale,
+                    cursor + (gx + 1) * scale,
+                    top + (gy + 1) * scale,
+                    rgba,
+                    width=width,
+                    height=height,
+                )
+        cursor += 4 * scale
+    return matrix
+
+
+def _fill_matrix_rect(
+    matrix,
+    x0: int,
+    y0: int,
+    x1: int,
+    y1: int,
+    color: tuple[int, int, int, int],
+    *,
+    width: int,
+    height: int,
+) -> None:
+    x0 = max(0, min(width, int(x0)))
+    y0 = max(0, min(height, int(y0)))
+    x1 = max(x0, min(width, int(x1)))
+    y1 = max(y0, min(height, int(y1)))
+    if x1 <= x0 or y1 <= y0:
+        return
+    for channel, value in enumerate(color):
+        matrix[y0:y1, x0:x1, channel] = int(value)
+
+
 class MatrixFrame(AbstractContextManager["MatrixFrame"]):
     def __init__(self, ctx: AppContext, clear: tuple[int, int, int, int] | str = (0, 0, 0, 255)) -> None:
         self._ctx = ctx
@@ -1057,24 +1252,7 @@ class MatrixFrame(AbstractContextManager["MatrixFrame"]):
         _ = z_index, cache_key
         assert self._frame is not None
         x, y = self._point(x, y, frame=frame)
-        scale = max(1, int(round(font_size_px / 7.0)))
-        cursor = int(x)
-        rgba = _rgba(color)
-        for raw_ch in text.upper():
-            glyph = _DEBUG_GLYPHS.get(raw_ch, _DEBUG_GLYPHS[" "])
-            for gy, row in enumerate(glyph):
-                for gx, bit in enumerate(row):
-                    if bit != "1":
-                        continue
-                    self.rect(
-                        x=cursor + gx * scale,
-                        y=int(y) + gy * scale,
-                        width=scale,
-                        height=scale,
-                        color=rgba,
-                        frame=COORD_SCREEN_TL,
-                    )
-            cursor += 4 * scale
+        draw_text_to_matrix(self._frame, text, x=x, y=y, font_size_px=font_size_px, color=color)
 
     def _fill_rect(self, x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int, int]) -> None:
         assert self._frame is not None
@@ -1362,10 +1540,16 @@ __all__ = [
     "MissingOptionalDependencyError",
     "ResolvedAppVariant",
     "SceneFrame",
+    "ScrollbarController",
+    "ScrollbarMetrics",
+    "ScrollbarUpdate",
     "Sensors",
+    "SwipeMomentumController",
+    "SwipeMomentumUpdate",
     "UIFrame",
     "apply_hdi_events",
     "check_app_install",
+    "draw_text_to_matrix",
     "load_app_manifest",
     "validate_app_install",
 ]
