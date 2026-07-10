@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
+from importlib import resources
 import importlib.util
 import math
 import platform
@@ -1090,6 +1091,14 @@ class UIFrame(AbstractContextManager["UIFrame"]):
         )
 
 
+@dataclass(frozen=True)
+class _BitmapFont:
+    width: int
+    height: int
+    advance: int
+    glyphs: dict[str, tuple[int, ...]]
+
+
 _DEBUG_GLYPHS: dict[str, tuple[str, ...]] = {
     " ": ("000", "000", "000", "000", "000"), "-": ("000", "000", "111", "000", "000"),
     ".": ("000", "000", "000", "000", "010"), ":": ("000", "010", "000", "010", "000"),
@@ -1115,6 +1124,86 @@ _DEBUG_GLYPHS: dict[str, tuple[str, ...]] = {
 }
 
 
+_DEFAULT_MATRIX_FONT: _BitmapFont | None = None
+_BITMAP_FONT_ASSET = "templates/native/android/app/src/main/assets/luvatrix_bitmap_font.txt"
+_BITMAP_FONT_KEY_ALIASES = {
+    "U+0020": " ",
+    "colon": ":",
+    "period": ".",
+    "comma": ",",
+    "dash": "-",
+    "underscore": "_",
+    "equals": "=",
+    "pipe": "|",
+    "slash": "/",
+}
+
+
+def _debug_bitmap_font() -> _BitmapFont:
+    glyphs = {
+        ch: tuple(int(row, 2) for row in rows)
+        for ch, rows in _DEBUG_GLYPHS.items()
+    }
+    return _BitmapFont(width=3, height=5, advance=4, glyphs=glyphs)
+
+
+def _bitmap_font_key_to_char(key: str) -> str:
+    if key in _BITMAP_FONT_KEY_ALIASES:
+        return _BITMAP_FONT_KEY_ALIASES[key]
+    if key.startswith("U+"):
+        try:
+            return chr(int(key[2:], 16))
+        except ValueError:
+            return ""
+    return key if len(key) == 1 else ""
+
+
+def _parse_bitmap_font_table(source: str) -> _BitmapFont:
+    width = 0
+    height = 0
+    advance = 0
+    glyphs: dict[str, tuple[int, ...]] = {}
+    for raw_line in source.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, raw_value = (part.strip() for part in line.split("=", 1))
+        if key == "width":
+            width = int(raw_value)
+            continue
+        if key == "height":
+            height = int(raw_value)
+            continue
+        if key == "advance":
+            advance = int(raw_value)
+            continue
+        ch = _bitmap_font_key_to_char(key)
+        if not ch:
+            continue
+        rows = tuple(int(part.strip(), 16) for part in raw_value.split(",") if part.strip())
+        glyphs[ch] = rows
+        if ch.isalpha():
+            glyphs.setdefault(ch.lower(), rows)
+
+    if width <= 0 or height <= 0 or advance <= 0:
+        raise ValueError("bitmap font table is missing width, height, or advance")
+    if " " not in glyphs:
+        glyphs[" "] = tuple(0 for _ in range(height))
+    return _BitmapFont(width=width, height=height, advance=advance, glyphs=glyphs)
+
+
+def _default_matrix_font() -> _BitmapFont:
+    global _DEFAULT_MATRIX_FONT
+    if _DEFAULT_MATRIX_FONT is not None:
+        return _DEFAULT_MATRIX_FONT
+    try:
+        text = resources.files("luvatrix_core").joinpath(_BITMAP_FONT_ASSET).read_text(encoding="utf-8")
+        _DEFAULT_MATRIX_FONT = _parse_bitmap_font_table(text)
+    except (FileNotFoundError, ModuleNotFoundError, ValueError):
+        _DEFAULT_MATRIX_FONT = _debug_bitmap_font()
+    return _DEFAULT_MATRIX_FONT
+
+
 def draw_text_to_matrix(
     matrix,
     text: str,
@@ -1130,15 +1219,18 @@ def draw_text_to_matrix(
     if height <= 0 or width <= 0:
         return matrix
 
-    scale = max(1, int(round(float(font_size_px) / 7.0)))
+    font = _default_matrix_font()
+    scale = max(1, int(round(float(font_size_px) / float(font.height))))
     cursor = int(x)
     top = int(y)
     rgba = _rgba(color)
-    for raw_ch in str(text).upper():
-        glyph = _DEBUG_GLYPHS.get(raw_ch, _DEBUG_GLYPHS[" "])
+    space = font.glyphs[" "]
+    for raw_ch in str(text):
+        glyph = font.glyphs.get(raw_ch, font.glyphs.get(raw_ch.upper(), space))
         for gy, row in enumerate(glyph):
-            for gx, bit in enumerate(row):
-                if bit != "1":
+            for gx in range(font.width):
+                mask = 1 << (font.width - 1 - gx)
+                if not row & mask:
                     continue
                 _fill_matrix_rect(
                     matrix,
@@ -1150,7 +1242,7 @@ def draw_text_to_matrix(
                     width=width,
                     height=height,
                 )
-        cursor += 4 * scale
+        cursor += font.advance * scale
     return matrix
 
 
