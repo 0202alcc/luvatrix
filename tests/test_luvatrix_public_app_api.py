@@ -280,6 +280,31 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         self.assertEqual(_rgba_at(frame, 2, 14), (10, 20, 30, 255))
         self.assertEqual(_rgba_at(frame, 2, 15), (0, 0, 0, 0))
 
+    def test_default_matrix_font_uses_packaged_table(self) -> None:
+        font = luvatrix_app_api._default_matrix_font()
+
+        self.assertEqual((font.width, font.height, font.advance), (9, 12, 8))
+        self.assertEqual(len(font.glyphs["0"]), 12)
+        self.assertEqual(font.glyphs["a"], font.glyphs["A"])
+
+    def test_bitmap_font_parser_skips_malformed_glyph_rows(self) -> None:
+        font = luvatrix_app_api._parse_bitmap_font_table(
+            "\n".join(
+                [
+                    "width=3",
+                    "height=2",
+                    "advance=4",
+                    "A=7",
+                    "B=3,3",
+                    "C=zz,3",
+                ]
+            )
+        )
+
+        self.assertNotIn("A", font.glyphs)
+        self.assertNotIn("C", font.glyphs)
+        self.assertEqual(font.glyphs["B"], (3, 3))
+
     def test_draw_text_to_matrix_writes_backend_safe_channel_slices(self) -> None:
         matrix = _ChannelOnlyMatrix()
 

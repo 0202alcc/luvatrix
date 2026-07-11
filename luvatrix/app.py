@@ -1180,13 +1180,27 @@ def _parse_bitmap_font_table(source: str) -> _BitmapFont:
         ch = _bitmap_font_key_to_char(key)
         if not ch:
             continue
-        rows = tuple(int(part.strip(), 16) for part in raw_value.split(",") if part.strip())
+        parsed_rows: list[int] = []
+        for part in raw_value.split(","):
+            token = part.strip()
+            if not token:
+                continue
+            try:
+                parsed_rows.append(int(token, 16))
+            except ValueError:
+                parsed_rows.clear()
+                break
+        if len(parsed_rows) != height:
+            continue
+        rows = tuple(parsed_rows)
         glyphs[ch] = rows
         if ch.isalpha():
             glyphs.setdefault(ch.lower(), rows)
 
     if width <= 0 or height <= 0 or advance <= 0:
         raise ValueError("bitmap font table is missing width, height, or advance")
+    if not glyphs:
+        raise ValueError("bitmap font table has no valid glyphs")
     if " " not in glyphs:
         glyphs[" "] = tuple(0 for _ in range(height))
     return _BitmapFont(width=width, height=height, advance=advance, glyphs=glyphs)
