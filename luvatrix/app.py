@@ -1261,8 +1261,13 @@ def draw_text_to_matrix(
     y: float,
     font_size_px: float = 14.0,
     color: tuple[int, int, int, int] | str = (255, 255, 255, 255),
+    antialias: bool = True,
 ):
-    """Rasterize Luvatrix's default matrix text glyphs into an RGBA matrix."""
+    """Rasterize Luvatrix's default matrix text glyphs into an RGBA matrix.
+
+    Set ``antialias=False`` for crisp, thresholded glyph pixels on compact
+    matrix surfaces such as calendar event tiles.
+    """
     height = int(matrix.shape[0])
     width = int(matrix.shape[1])
     if height <= 0 or width <= 0:
@@ -1278,6 +1283,8 @@ def draw_text_to_matrix(
         glyph = font.glyphs.get(raw_ch, font.glyphs.get(raw_ch.upper(), space))
         for gy, row in enumerate(glyph):
             for gx, coverage in enumerate(row):
+                if not antialias:
+                    coverage = 255 if coverage >= 128 else 0
                 if coverage <= 0:
                     continue
                 _paint_matrix_rect(
