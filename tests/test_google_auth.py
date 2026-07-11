@@ -81,3 +81,23 @@ def test_refresh_requires_refresh_token() -> None:
 
     with pytest.raises(GoogleAuthError, match="refresh token"):
         client.refresh()
+
+
+def test_client_preserves_falsey_token_store() -> None:
+    class FalseyTokenStore(InMemoryTokenStore):
+        def __bool__(self) -> bool:
+            return False
+
+    store = FalseyTokenStore()
+
+    client = GoogleOAuthClient(_config(), token_store=store)
+
+    assert client.token_store is store
+
+
+@pytest.mark.parametrize("expires_in", ["nan", "inf", "-inf"])
+def test_token_response_rejects_non_finite_expiry(expires_in: str) -> None:
+    client = GoogleOAuthClient(_config(), clock=lambda: 100.0)
+
+    with pytest.raises(GoogleAuthError, match="invalid expires_in"):
+        client._token_from_response({"access_token": "access-token", "expires_in": expires_in})

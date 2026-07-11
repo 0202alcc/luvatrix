@@ -6,6 +6,7 @@ from base64 import urlsafe_b64encode
 from dataclasses import dataclass
 from hashlib import sha256
 import json
+import math
 import secrets
 import time
 from typing import Callable, Protocol
@@ -100,7 +101,7 @@ class GoogleOAuthClient:
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.config = config
-        self.token_store = token_store or InMemoryTokenStore()
+        self.token_store = token_store if token_store is not None else InMemoryTokenStore()
         self._post_form = post_form or _post_form
         self._clock = clock
 
@@ -182,6 +183,8 @@ class GoogleOAuthClient:
             expires_in = float(payload.get("expires_in", 3600))
         except (TypeError, ValueError) as exc:
             raise GoogleAuthError("Google token response has an invalid expires_in value") from exc
+        if not math.isfinite(expires_in):
+            raise GoogleAuthError("Google token response has an invalid expires_in value")
         response_refresh_token = str(payload.get("refresh_token") or "")
         return GoogleOAuthToken(
             access_token=access_token,
