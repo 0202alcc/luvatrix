@@ -9,6 +9,14 @@ from .google import (
     InMemoryTokenStore,
     TokenStore,
 )
+from .sign_in import (
+    GoogleAuthSession,
+    GoogleProfile,
+    GoogleSignInController,
+    GoogleSignInState,
+    PlatformGoogleAuthSession,
+    SecureTokenStore,
+)
 
 __all__ = [
     "GoogleAuthError",
@@ -16,6 +24,12 @@ __all__ = [
     "GoogleOAuthClient",
     "GoogleOAuthConfig",
     "GoogleOAuthToken",
+    "GoogleAuthSession",
+    "GoogleProfile",
+    "GoogleSignInController",
+    "GoogleSignInState",
+    "PlatformGoogleAuthSession",
+    "SecureTokenStore",
     "InMemoryTokenStore",
     "TokenStore",
 ]
