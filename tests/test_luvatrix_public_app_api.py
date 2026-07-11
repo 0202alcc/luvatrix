@@ -280,6 +280,38 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         self.assertEqual(_rgba_at(frame, 2, 14), (10, 20, 30, 255))
         self.assertEqual(_rgba_at(frame, 2, 15), (10, 20, 30, 119))
 
+    def test_draw_text_to_matrix_can_threshold_glyphs_for_crisp_output(self) -> None:
+        frame = accel.zeros((14, 24, 4))
+
+        draw_text_to_matrix(
+            frame,
+            "04",
+            x=1,
+            y=0,
+            font_size_px=7.0,
+            color=(10, 20, 30, 255),
+            antialias=False,
+        )
+
+        self.assertEqual(_rgba_at(frame, 2, 4), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 5), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 15), (0, 0, 0, 0))
+
+    def test_crisp_matrix_text_preserves_requested_color_alpha(self) -> None:
+        frame = accel.zeros((14, 24, 4))
+
+        draw_text_to_matrix(
+            frame,
+            "0",
+            x=1,
+            y=0,
+            font_size_px=7.0,
+            color=(10, 20, 30, 96),
+            antialias=False,
+        )
+
+        self.assertEqual(_rgba_at(frame, 2, 4), (10, 20, 30, 96))
+
     def test_default_matrix_font_uses_packaged_table(self) -> None:
         luvatrix_app_api._DEFAULT_MATRIX_FONT = None
         font = luvatrix_app_api._default_matrix_font()
