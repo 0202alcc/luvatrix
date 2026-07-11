@@ -119,3 +119,61 @@ from luvatrix.app import App, AppContext, validate_app_install
 ```
 
 See `docs/app_protocol.md` in the repository for the detailed protocol contract.
+
+## Google Sign-In
+
+Luvatrix provides an in-app sign-in control and an event-driven controller. The
+user starts inside the app, authenticates in Google's trusted system browser
+surface, and returns to the same app through its configured callback URL.
+
+```python
+from luvatrix.app import App
+from luvatrix.auth import (
+    GoogleOAuthClient,
+    GoogleOAuthConfig,
+    GoogleSignInController,
+    PlatformGoogleAuthSession,
+    SecureTokenStore,
+)
+from luvatrix.auth.ui import GoogleSignInButton
+
+
+class MyApp(App):
+    def init(self, ctx):
+        session = PlatformGoogleAuthSession(open_browser=my_native_bridge.open_google_auth)
+        store = SecureTokenStore(
+            read_secret=my_native_bridge.read_secret,
+            write_secret=my_native_bridge.write_secret,
+            delete_secret=my_native_bridge.delete_secret,
+            key="google-account",
+        )
+        oauth = GoogleOAuthClient(
+            GoogleOAuthConfig(
+                client_id="YOUR_CLIENT_ID.apps.googleusercontent.com",
+                redirect_uri="com.example.app:/oauth2redirect",
+                scopes=("openid", "email", "profile"),
+            ),
+            token_store=store,
+        )
+        self.google = GoogleSignInController(
+            oauth,
+            session=session,
+            invalidate=self.invalidate,
+        )
+        self.google_button = GoogleSignInButton(self.google)
+
+    def loop(self, ctx, dt):
+        state = self.input.snapshot()
+        self.google_button.update(state, x=24, y=24, width=220, height=44)
+
+    def render(self):
+        with self.frame(clear=(14, 18, 26, 255)) as frame:
+            self.google_button.render(frame, x=24, y=24, width=220, height=44)
+```
+
+The native callback handler calls `session.deliver_callback(callback_url)`.
+Android bridges should open a Custom Tab and back `SecureTokenStore` with
+Android Keystore. iOS bridges should use `ASWebAuthenticationSession` and
+Keychain. `InMemoryTokenStore` remains available for tests, but production apps
+should not use it for long-lived refresh tokens. Mobile apps must not embed a
+Google client secret.
