@@ -1174,6 +1174,8 @@ def _parse_bitmap_font_table(source: str) -> _BitmapFont:
             continue
         key, raw_value = (part.strip() for part in line.split("=", 1))
         if key == "format":
+            if raw_value not in ("bitmask", "alpha"):
+                raise ValueError(f"unsupported bitmap font format: {raw_value}")
             table_format = raw_value
             continue
         if key == "supersample":
@@ -1338,12 +1340,13 @@ def _blend_matrix_rect(
 
     for py in range(y0, y1):
         for px in range(x0, x1):
+            dst_alpha = _read_matrix_channel(matrix, py, px, 3)
+            out_alpha = _source_over_alpha(dst_alpha, effective_alpha)
             for channel in range(3):
                 dst = _read_matrix_channel(matrix, py, px, channel)
-                value = _source_over_channel(int(color[channel]), dst, effective_alpha)
+                value = _source_over_channel(int(color[channel]), dst, effective_alpha, dst_alpha, out_alpha)
                 matrix[py : py + 1, px : px + 1, channel] = value
-            dst_alpha = _read_matrix_channel(matrix, py, px, 3)
-            matrix[py : py + 1, px : px + 1, 3] = _source_over_alpha(dst_alpha, effective_alpha)
+            matrix[py : py + 1, px : px + 1, 3] = out_alpha
 
 
 def _read_matrix_channel(matrix, y: int, x: int, channel: int) -> int | None:
@@ -1361,15 +1364,29 @@ def _read_matrix_channel(matrix, y: int, x: int, channel: int) -> int | None:
             while isinstance(listed, list):
                 listed = listed[0]
             value = listed
+        elif hasattr(value, "_data"):
+            value = value._data[0]
         return max(0, min(255, int(value)))
     except (TypeError, ValueError):
         return None
 
 
-def _source_over_channel(src: int, dst: int | None, alpha: int) -> int:
-    if dst is None:
-        return (src * alpha + 127) // 255
-    return (src * alpha + dst * (255 - alpha) + 127) // 255
+def _source_over_channel(
+    src: int,
+    dst: int | None,
+    src_alpha: int,
+    dst_alpha: int | None,
+    out_alpha: int,
+) -> int:
+    if src_alpha >= 255 or dst is None or dst_alpha is None or dst_alpha <= 0:
+        return src
+    if src_alpha <= 0:
+        return 0 if dst is None else dst
+    if out_alpha <= 0:
+        return 0
+    numerator = src * src_alpha * 255 + dst * dst_alpha * (255 - src_alpha)
+    denominator = out_alpha * 255
+    return max(0, min(255, (numerator + denominator // 2) // denominator))
 
 
 def _source_over_alpha(dst: int | None, alpha: int) -> int:
