@@ -43,6 +43,18 @@ class AndroidPackagingTests(unittest.TestCase):
         self.assertTrue(script.exists())
         self.assertIn("FullSuiteEmulatorAcceptanceTest", script.read_text(encoding="utf-8"))
 
+    def test_matrix_alpha_font_asset_matches_packaged_template(self) -> None:
+        project_asset = ANDROID / "app/src/main/assets/luvatrix_matrix_font_alpha.txt"
+        template_asset = (
+            ROOT
+            / "luvatrix_core/templates/native/android/app/src/main/assets/luvatrix_matrix_font_alpha.txt"
+        )
+
+        self.assertTrue(project_asset.exists())
+        self.assertTrue(template_asset.exists())
+        self.assertEqual(project_asset.read_text(encoding="utf-8"), template_asset.read_text(encoding="utf-8"))
+        self.assertIn("format=alpha", template_asset.read_text(encoding="utf-8"))
+
     def test_androidx_is_enabled_for_instrumentation_dependencies(self) -> None:
         props = (ANDROID / "gradle.properties").read_text(encoding="utf-8")
 
