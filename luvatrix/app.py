@@ -1096,7 +1096,7 @@ class _BitmapFont:
     width: int
     height: int
     advance: int
-    glyphs: dict[str, tuple[int, ...]]
+    glyphs: dict[str, tuple[tuple[int, ...], ...]]
 
 
 _DEBUG_GLYPHS: dict[str, tuple[str, ...]] = {
@@ -1125,6 +1125,7 @@ _DEBUG_GLYPHS: dict[str, tuple[str, ...]] = {
 
 
 _DEFAULT_MATRIX_FONT: _BitmapFont | None = None
+_MATRIX_FONT_ALPHA_ASSET = "templates/native/android/app/src/main/assets/luvatrix_matrix_font_alpha.txt"
 _BITMAP_FONT_ASSET = "templates/native/android/app/src/main/assets/luvatrix_bitmap_font.txt"
 _BITMAP_FONT_KEY_ALIASES = {
     "U+0020": " ",
@@ -1141,7 +1142,10 @@ _BITMAP_FONT_KEY_ALIASES = {
 
 def _debug_bitmap_font() -> _BitmapFont:
     glyphs = {
-        ch: tuple(int(row, 2) for row in rows)
+        ch: tuple(
+            tuple(255 if bit == "1" else 0 for bit in row)
+            for row in rows
+        )
         for ch, rows in _DEBUG_GLYPHS.items()
     }
     return _BitmapFont(width=3, height=5, advance=4, glyphs=glyphs)
@@ -1159,15 +1163,23 @@ def _bitmap_font_key_to_char(key: str) -> str:
 
 
 def _parse_bitmap_font_table(source: str) -> _BitmapFont:
+    table_format = "bitmask"
     width = 0
     height = 0
     advance = 0
-    glyphs: dict[str, tuple[int, ...]] = {}
+    glyphs: dict[str, tuple[tuple[int, ...], ...]] = {}
     for raw_line in source.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, raw_value = (part.strip() for part in line.split("=", 1))
+        if key == "format":
+            if raw_value not in ("bitmask", "alpha"):
+                raise ValueError(f"unsupported bitmap font format: {raw_value}")
+            table_format = raw_value
+            continue
+        if key == "supersample":
+            continue
         if key == "width":
             width = int(raw_value)
             continue
@@ -1180,17 +1192,20 @@ def _parse_bitmap_font_table(source: str) -> _BitmapFont:
         ch = _bitmap_font_key_to_char(key)
         if not ch:
             continue
-        parsed_rows: list[int] = []
+        parsed_rows: list[tuple[int, ...]] = []
         for part in raw_value.split(","):
             token = part.strip()
             if not token:
                 continue
             try:
-                parsed_rows.append(int(token, 16))
+                if table_format == "alpha":
+                    parsed_rows.append(_parse_bitmap_alpha_row(token, width))
+                else:
+                    parsed_rows.append(_bitmap_mask_to_coverage_row(int(token, 16), width))
             except ValueError:
                 parsed_rows.clear()
                 break
-        if len(parsed_rows) != height:
+        if len(parsed_rows) != height or any(len(row) != width for row in parsed_rows):
             continue
         rows = tuple(parsed_rows)
         glyphs[ch] = rows
@@ -1202,8 +1217,24 @@ def _parse_bitmap_font_table(source: str) -> _BitmapFont:
     if not glyphs:
         raise ValueError("bitmap font table has no valid glyphs")
     if " " not in glyphs:
-        glyphs[" "] = tuple(0 for _ in range(height))
+        glyphs[" "] = tuple(tuple(0 for _ in range(width)) for _ in range(height))
     return _BitmapFont(width=width, height=height, advance=advance, glyphs=glyphs)
+
+
+def _bitmap_mask_to_coverage_row(mask: int, width: int) -> tuple[int, ...]:
+    return tuple(
+        255 if mask & (1 << (width - 1 - x)) else 0
+        for x in range(width)
+    )
+
+
+def _parse_bitmap_alpha_row(token: str, width: int) -> tuple[int, ...]:
+    if width <= 0 or len(token) != width * 2:
+        raise ValueError("alpha row length does not match font width")
+    return tuple(
+        int(token[index : index + 2], 16)
+        for index in range(0, len(token), 2)
+    )
 
 
 def _default_matrix_font() -> _BitmapFont:
@@ -1211,10 +1242,14 @@ def _default_matrix_font() -> _BitmapFont:
     if _DEFAULT_MATRIX_FONT is not None:
         return _DEFAULT_MATRIX_FONT
     try:
-        text = resources.files("luvatrix_core").joinpath(_BITMAP_FONT_ASSET).read_text(encoding="utf-8")
+        text = resources.files("luvatrix_core").joinpath(_MATRIX_FONT_ALPHA_ASSET).read_text(encoding="utf-8")
         _DEFAULT_MATRIX_FONT = _parse_bitmap_font_table(text)
     except (FileNotFoundError, ModuleNotFoundError, ValueError):
-        _DEFAULT_MATRIX_FONT = _debug_bitmap_font()
+        try:
+            text = resources.files("luvatrix_core").joinpath(_BITMAP_FONT_ASSET).read_text(encoding="utf-8")
+            _DEFAULT_MATRIX_FONT = _parse_bitmap_font_table(text)
+        except (FileNotFoundError, ModuleNotFoundError, ValueError):
+            _DEFAULT_MATRIX_FONT = _debug_bitmap_font()
     return _DEFAULT_MATRIX_FONT
 
 
@@ -1242,22 +1277,122 @@ def draw_text_to_matrix(
     for raw_ch in str(text):
         glyph = font.glyphs.get(raw_ch, font.glyphs.get(raw_ch.upper(), space))
         for gy, row in enumerate(glyph):
-            for gx in range(font.width):
-                mask = 1 << (font.width - 1 - gx)
-                if not row & mask:
+            for gx, coverage in enumerate(row):
+                if coverage <= 0:
                     continue
-                _fill_matrix_rect(
+                _paint_matrix_rect(
                     matrix,
                     cursor + gx * scale,
                     top + gy * scale,
                     cursor + (gx + 1) * scale,
                     top + (gy + 1) * scale,
                     rgba,
+                    coverage=coverage,
                     width=width,
                     height=height,
                 )
         cursor += font.advance * scale
     return matrix
+
+
+def _paint_matrix_rect(
+    matrix,
+    x0: int,
+    y0: int,
+    x1: int,
+    y1: int,
+    color: tuple[int, int, int, int],
+    *,
+    coverage: int,
+    width: int,
+    height: int,
+) -> None:
+    coverage = max(0, min(255, int(coverage)))
+    if coverage <= 0:
+        return
+    if coverage == 255 and color[3] >= 255:
+        _fill_matrix_rect(matrix, x0, y0, x1, y1, color, width=width, height=height)
+        return
+    _blend_matrix_rect(matrix, x0, y0, x1, y1, color, coverage=coverage, width=width, height=height)
+
+
+def _blend_matrix_rect(
+    matrix,
+    x0: int,
+    y0: int,
+    x1: int,
+    y1: int,
+    color: tuple[int, int, int, int],
+    *,
+    coverage: int,
+    width: int,
+    height: int,
+) -> None:
+    x0 = max(0, min(width, int(x0)))
+    y0 = max(0, min(height, int(y0)))
+    x1 = max(x0, min(width, int(x1)))
+    y1 = max(y0, min(height, int(y1)))
+    if x1 <= x0 or y1 <= y0:
+        return
+    effective_alpha = max(0, min(255, (int(color[3]) * int(coverage) + 127) // 255))
+    if effective_alpha <= 0:
+        return
+
+    for py in range(y0, y1):
+        for px in range(x0, x1):
+            dst_alpha = _read_matrix_channel(matrix, py, px, 3)
+            out_alpha = _source_over_alpha(dst_alpha, effective_alpha)
+            for channel in range(3):
+                dst = _read_matrix_channel(matrix, py, px, channel)
+                value = _source_over_channel(int(color[channel]), dst, effective_alpha, dst_alpha, out_alpha)
+                matrix[py : py + 1, px : px + 1, channel] = value
+            matrix[py : py + 1, px : px + 1, 3] = out_alpha
+
+
+def _read_matrix_channel(matrix, y: int, x: int, channel: int) -> int | None:
+    try:
+        value = matrix[y, x, channel]
+    except (AttributeError, IndexError, KeyError, TypeError):
+        return None
+    try:
+        if hasattr(value, "detach"):
+            value = value.detach().cpu()
+        if hasattr(value, "item"):
+            value = value.item()
+        elif hasattr(value, "tolist"):
+            listed = value.tolist()
+            while isinstance(listed, list):
+                listed = listed[0]
+            value = listed
+        elif hasattr(value, "_data"):
+            value = value._data[0]
+        return max(0, min(255, int(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _source_over_channel(
+    src: int,
+    dst: int | None,
+    src_alpha: int,
+    dst_alpha: int | None,
+    out_alpha: int,
+) -> int:
+    if src_alpha >= 255 or dst is None or dst_alpha is None or dst_alpha <= 0:
+        return src
+    if src_alpha <= 0:
+        return 0 if dst is None else dst
+    if out_alpha <= 0:
+        return 0
+    numerator = src * src_alpha * 255 + dst * dst_alpha * (255 - src_alpha)
+    denominator = out_alpha * 255
+    return max(0, min(255, (numerator + denominator // 2) // denominator))
+
+
+def _source_over_alpha(dst: int | None, alpha: int) -> int:
+    if dst is None:
+        return alpha
+    return alpha + (dst * (255 - alpha) + 127) // 255
 
 
 def _fill_matrix_rect(
