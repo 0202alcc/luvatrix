@@ -259,25 +259,51 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
 
     def test_draw_text_to_matrix_rasterizes_default_matrix_font(self) -> None:
         self.assertIn("draw_text_to_matrix", luvatrix_app_api.__all__)
-        frame = accel.zeros((10, 20, 4))
+        frame = accel.zeros((14, 24, 4))
 
         result = draw_text_to_matrix(
             frame,
             "04",
             x=1,
-            y=2,
+            y=0,
             font_size_px=7.0,
             color=(10, 20, 30, 255),
         )
 
         self.assertIs(result, frame)
-        self.assertEqual(_rgba_at(frame, 2, 1), (10, 20, 30, 255))
-        self.assertEqual(_rgba_at(frame, 2, 2), (10, 20, 30, 255))
-        self.assertEqual(_rgba_at(frame, 2, 3), (10, 20, 30, 255))
-        self.assertEqual(_rgba_at(frame, 2, 4), (0, 0, 0, 0))
+        self.assertEqual(_rgba_at(frame, 0, 4), (0, 0, 0, 0))
+        self.assertEqual(_rgba_at(frame, 2, 4), (10, 20, 30, 255))
         self.assertEqual(_rgba_at(frame, 2, 5), (10, 20, 30, 255))
-        self.assertEqual(_rgba_at(frame, 2, 6), (0, 0, 0, 0))
-        self.assertEqual(_rgba_at(frame, 2, 7), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 6), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 7), (0, 0, 0, 0))
+        self.assertEqual(_rgba_at(frame, 2, 13), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 14), (10, 20, 30, 255))
+        self.assertEqual(_rgba_at(frame, 2, 15), (0, 0, 0, 0))
+
+    def test_default_matrix_font_uses_packaged_table(self) -> None:
+        font = luvatrix_app_api._default_matrix_font()
+
+        self.assertEqual((font.width, font.height, font.advance), (9, 12, 8))
+        self.assertEqual(len(font.glyphs["0"]), 12)
+        self.assertEqual(font.glyphs["a"], font.glyphs["A"])
+
+    def test_bitmap_font_parser_skips_malformed_glyph_rows(self) -> None:
+        font = luvatrix_app_api._parse_bitmap_font_table(
+            "\n".join(
+                [
+                    "width=3",
+                    "height=2",
+                    "advance=4",
+                    "A=7",
+                    "B=3,3",
+                    "C=zz,3",
+                ]
+            )
+        )
+
+        self.assertNotIn("A", font.glyphs)
+        self.assertNotIn("C", font.glyphs)
+        self.assertEqual(font.glyphs["B"], (3, 3))
 
     def test_draw_text_to_matrix_writes_backend_safe_channel_slices(self) -> None:
         matrix = _ChannelOnlyMatrix()
@@ -285,17 +311,18 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         result = draw_text_to_matrix(matrix, "1", x=1, y=1, font_size_px=7.0, color=(7, 8, 9, 10))
 
         self.assertIs(result, matrix)
-        self.assertIn((1, 2, 2, 3, 0, 7), matrix.writes)
-        self.assertIn((1, 2, 2, 3, 1, 8), matrix.writes)
-        self.assertIn((1, 2, 2, 3, 2, 9), matrix.writes)
-        self.assertIn((1, 2, 2, 3, 3, 10), matrix.writes)
+        self.assertIn((3, 4, 4, 5, 0, 7), matrix.writes)
+        self.assertIn((3, 4, 4, 5, 1, 8), matrix.writes)
+        self.assertIn((3, 4, 4, 5, 2, 9), matrix.writes)
+        self.assertIn((3, 4, 4, 5, 3, 10), matrix.writes)
+        self.assertIn((3, 4, 5, 6, 0, 7), matrix.writes)
 
     def test_draw_text_to_matrix_clips_at_matrix_edges(self) -> None:
         frame = accel.zeros((4, 4, 4))
 
-        draw_text_to_matrix(frame, "8", x=-1, y=-1, font_size_px=7.0, color="#ffffff")
+        draw_text_to_matrix(frame, "8", x=-3, y=-2, font_size_px=7.0, color="#ffffff")
 
-        self.assertEqual(_rgba_at(frame, 0, 1), (255, 255, 255, 255))
+        self.assertEqual(_rgba_at(frame, 0, 0), (255, 255, 255, 255))
 
     def test_v3_manifest_parses_render_and_display_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as td:
