@@ -73,6 +73,10 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = android.graphics.Typeface.MONOSPACE
     }
+    private val matrixPaint = Paint().apply {
+        isFilterBitmap = false
+        isDither = false
+    }
 
     init {
         loadBitmapGlyphTable()
@@ -840,7 +844,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
                         y += 30.0f
                     }
                 }
-                OverlayMode.Bitmap -> frameBitmap?.let { canvas.drawBitmap(it, null, canvas.clipBounds, null) }
+                OverlayMode.Bitmap -> frameBitmap?.let { canvas.drawBitmap(it, null, canvas.clipBounds, matrixPaint) }
                 OverlayMode.Scene -> {
                     val scene = overlaySceneJson ?: return
                     drawSceneCanvas(canvas, scene, overlayLogicalWidth, overlayLogicalHeight, overlayNativeBackground)

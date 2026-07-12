@@ -81,6 +81,13 @@ class AndroidPackagingTests(unittest.TestCase):
             self.assertIn("Bitmap.createScaledBitmap", view)
             self.assertIn("def download_image_rgba", boot)
 
+    def test_android_matrix_presentation_disables_bitmap_filtering(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            view = (root / "app/src/main/java/com/luvatrix/app/LuvatrixVulkanView.kt").read_text(encoding="utf-8")
+
+            self.assertIn("isFilterBitmap = false", view)
+            self.assertIn("canvas.drawBitmap(it, null, canvas.clipBounds, matrixPaint)", view)
+
     def test_android_image_bridge_validates_https_size_and_rgba_length(self) -> None:
         module = runpy.run_path(str(ANDROID / "app/src/main/python/luvatrix_android_boot.py"))
 
