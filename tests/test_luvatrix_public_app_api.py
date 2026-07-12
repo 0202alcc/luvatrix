@@ -22,6 +22,7 @@ from luvatrix.app import (
     apply_hdi_events,
     SUPPORTED_APP_PLATFORMS,
     check_app_install,
+    draw_rounded_rect_to_matrix,
     draw_text_to_matrix,
     load_app_manifest,
     validate_app_install,
@@ -279,6 +280,30 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         self.assertEqual(_rgba_at(frame, 2, 13), (10, 20, 30, 164))
         self.assertEqual(_rgba_at(frame, 2, 14), (10, 20, 30, 255))
         self.assertEqual(_rgba_at(frame, 2, 15), (10, 20, 30, 119))
+
+    def test_draw_rounded_rect_to_matrix_preserves_corner_background(self) -> None:
+        self.assertIn("draw_rounded_rect_to_matrix", luvatrix_app_api.__all__)
+        background = (255, 250, 232, 255)
+        color = (65, 105, 225, 255)
+        frame = accel.from_sequence(list(background) * (8 * 12), (8, 12, 4))
+
+        result = draw_rounded_rect_to_matrix(
+            frame,
+            x=2,
+            y=1,
+            width=8,
+            height=6,
+            radius=3,
+            color=color,
+        )
+
+        self.assertIs(result, frame)
+        self.assertEqual(_rgba_at(frame, 1, 2), background)
+        self.assertEqual(_rgba_at(frame, 1, 6), color)
+        self.assertNotEqual(_rgba_at(frame, 4, 2), background)
+        self.assertNotEqual(_rgba_at(frame, 4, 2), color)
+        self.assertEqual(_rgba_at(frame, 4, 3), color)
+        self.assertEqual(_rgba_at(frame, 6, 9), background)
 
     def test_draw_text_to_matrix_can_threshold_glyphs_for_crisp_output(self) -> None:
         frame = accel.zeros((14, 24, 4))
