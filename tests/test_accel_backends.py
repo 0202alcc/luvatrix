@@ -58,6 +58,44 @@ class AccelBackendTests(unittest.TestCase):
 
         self.assertEqual(_flat_values(frame), [1, 1, 2, 3])
 
+    def test_alpha_blit_composites_rgba_and_preserves_transparent_pixels(self) -> None:
+        from luvatrix_core import accel
+
+        frame = accel.from_sequence([10, 20, 30, 255] * 2, (1, 2, 4))
+        tile = accel.from_sequence(
+            [110, 120, 130, 128, 200, 210, 220, 0],
+            (1, 2, 4),
+        )
+
+        result = accel.alpha_blit(frame, tile, x=0, y=0)
+
+        self.assertIs(result, frame)
+        self.assertEqual(_flat_values(frame), [60, 70, 80, 255, 10, 20, 30, 255])
+
+    def test_alpha_blit_applies_optional_coverage_mask(self) -> None:
+        from luvatrix_core import accel
+
+        frame = accel.from_sequence([10, 20, 30, 255], (1, 1, 4))
+        tile = accel.from_sequence([110, 120, 130, 255], (1, 1, 4))
+        mask = accel.from_sequence([128], (1, 1, 1))
+
+        accel.alpha_blit(frame, tile, x=0, y=0, mask=mask)
+
+        self.assertEqual(_flat_values(frame), [60, 70, 80, 255])
+
+    def test_alpha_blit_clips_negative_origin(self) -> None:
+        from luvatrix_core import accel
+
+        frame = accel.from_sequence([10, 20, 30, 255], (1, 1, 4))
+        tile = accel.from_sequence(
+            [0, 0, 0, 0] * 3 + [110, 120, 130, 128],
+            (2, 2, 4),
+        )
+
+        accel.alpha_blit(frame, tile, x=-1, y=-1)
+
+        self.assertEqual(_flat_values(frame), [60, 70, 80, 255])
+
     def test_accel_imports_when_torch_is_unavailable(self) -> None:
         code = r'''
 import builtins
@@ -71,6 +109,11 @@ from luvatrix_core import accel
 from luvatrix_core.platform.frame_pipeline import PresentationMode
 assert accel.BACKEND in ("numpy", "pure"), accel.BACKEND
 assert accel.zeros((1, 1, 4)).shape == (1, 1, 4)
+if accel.BACKEND == "numpy":
+    rgba = accel.from_sequence([10, 20, 30, 255], (1, 1, 4))
+    overlay = accel.from_sequence([110, 120, 130, 128], (1, 1, 4))
+    accel.alpha_blit(rgba, overlay, x=0, y=0)
+    assert rgba.reshape(-1).tolist() == [60, 70, 80, 255], rgba
 assert PresentationMode.STRETCH.value == "stretch"
 '''
         result = subprocess.run(
@@ -174,6 +217,7 @@ def blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
     return real_import(name, globals, locals, fromlist, level)
 builtins.__import__ = blocked_import
 from luvatrix_core import accel
+from luvatrix.app import draw_rounded_rect_to_matrix
 assert accel.BACKEND == "pure", accel.BACKEND
 frame = accel.zeros((3, 4, 4))
 tile = accel.from_sequence(list(range(1, 25)), (2, 3, 4))
@@ -187,6 +231,25 @@ assert list(clipped._data) == [5, 6, 8, 9], list(clipped._data)
 self_copy = accel.from_sequence([1, 2, 3, 4], (4, 1, 1))
 accel.blit(self_copy, self_copy, x=0, y=1)
 assert list(self_copy._data) == [1, 1, 2, 3], list(self_copy._data)
+rgba = accel.from_sequence([10, 20, 30, 255] * 2, (1, 2, 4))
+overlay = accel.from_sequence([110, 120, 130, 128, 200, 210, 220, 0], (1, 2, 4))
+accel.alpha_blit(rgba, overlay, x=0, y=0)
+assert list(rgba._data) == [60, 70, 80, 255, 10, 20, 30, 255], list(rgba._data)
+rounded = accel.from_sequence([255, 250, 232, 255] * (8 * 12), (8, 12, 4))
+draw_rounded_rect_to_matrix(
+    rounded,
+    x=2,
+    y=1,
+    width=8,
+    height=6,
+    radius=3,
+    color=(65, 105, 225, 255),
+)
+def pixel(frame, y, x):
+    start = (y * 12 + x) * 4
+    return tuple(frame._data[start:start + 4])
+assert pixel(rounded, 1, 2) == (255, 250, 232, 255), pixel(rounded, 1, 2)
+assert pixel(rounded, 4, 3) == (65, 105, 225, 255), pixel(rounded, 4, 3)
 '''
         result = subprocess.run(
             [sys.executable, "-c", code],

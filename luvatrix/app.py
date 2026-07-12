@@ -1302,6 +1302,45 @@ def draw_text_to_matrix(
     return matrix
 
 
+def draw_rounded_rect_to_matrix(
+    matrix,
+    *,
+    x: float,
+    y: float,
+    width: int,
+    height: int,
+    radius: float,
+    color: tuple[int, int, int, int] | str,
+    antialias: bool = True,
+):
+    """Source-over rasterize a rounded rectangle into an RGBA matrix."""
+    width = int(width)
+    height = int(height)
+    if width <= 0 or height <= 0:
+        return matrix
+    rgba = _rgba(color)
+    radius = max(0.0, min(float(radius), width / 2.0, height / 2.0))
+    sample_count = 4 if antialias and radius > 0.0 else 1
+    sample_total = sample_count * sample_count
+    values = []
+    for pixel_y in range(height):
+        for pixel_x in range(width):
+            covered = 0
+            for sample_y in range(sample_count):
+                point_y = pixel_y + (sample_y + 0.5) / sample_count
+                nearest_y = max(radius, min(height - radius, point_y))
+                for sample_x in range(sample_count):
+                    point_x = pixel_x + (sample_x + 0.5) / sample_count
+                    nearest_x = max(radius, min(width - radius, point_x))
+                    if math.hypot(point_x - nearest_x, point_y - nearest_y) <= radius:
+                        covered += 1
+            coverage = (covered * 255 + sample_total // 2) // sample_total
+            alpha = (rgba[3] * coverage + 127) // 255
+            values.extend((rgba[0], rgba[1], rgba[2], alpha))
+    tile = accel.from_sequence(values, (height, width, 4))
+    return accel.alpha_blit(matrix, tile, x=int(x), y=int(y))
+
+
 def _paint_matrix_rect(
     matrix,
     x0: int,
@@ -1797,6 +1836,7 @@ __all__ = [
     "UIFrame",
     "apply_hdi_events",
     "check_app_install",
+    "draw_rounded_rect_to_matrix",
     "draw_text_to_matrix",
     "load_app_manifest",
     "validate_app_install",
