@@ -71,6 +71,16 @@ class AndroidPackagingTests(unittest.TestCase):
             else:
                 os.environ["SSL_CERT_FILE"] = old_value
 
+    def test_android_template_exposes_native_rgba_image_loading(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            view = (root / "app/src/main/java/com/luvatrix/app/LuvatrixVulkanView.kt").read_text(encoding="utf-8")
+            boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")
+
+            self.assertIn("fun downloadImageRgba", view)
+            self.assertIn("BitmapFactory::decodeStream", view)
+            self.assertIn("Bitmap.createScaledBitmap", view)
+            self.assertIn("def download_image_rgba", boot)
+
     def test_emulator_acceptance_script_exists(self) -> None:
         script = ANDROID / "scripts" / "emulator_acceptance.sh"
 

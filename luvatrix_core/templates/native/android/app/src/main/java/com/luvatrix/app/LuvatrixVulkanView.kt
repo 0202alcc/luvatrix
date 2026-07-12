@@ -3,6 +3,8 @@ package com.luvatrix.app
 import android.app.Activity
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
@@ -30,6 +32,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import java.net.URL
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.abs
 
@@ -104,6 +107,35 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         }
     }
 
+    fun downloadImageRgba(url: String, size: Int): String? {
+        require(size in 1..512) { "image size must be between 1 and 512" }
+        return try {
+            val connection = URL(url).openConnection().apply {
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                setRequestProperty("User-Agent", "Luvatrix/Android")
+            }
+            val decoded = connection.getInputStream().use(BitmapFactory::decodeStream) ?: return null
+            val scaled = Bitmap.createScaledBitmap(decoded, size, size, true)
+            val pixels = IntArray(size * size)
+            scaled.getPixels(pixels, 0, size, 0, 0, size, size)
+            val rgba = ByteArray(size * size * 4)
+            pixels.forEachIndexed { index, color ->
+                val offset = index * 4
+                rgba[offset] = Color.red(color).toByte()
+                rgba[offset + 1] = Color.green(color).toByte()
+                rgba[offset + 2] = Color.blue(color).toByte()
+                rgba[offset + 3] = Color.alpha(color).toByte()
+            }
+            if (scaled !== decoded) scaled.recycle()
+            decoded.recycle()
+            android.util.Base64.encodeToString(rgba, android.util.Base64.NO_WRAP)
+        } catch (exc: Throwable) {
+            Log.e("Luvatrix", "Could not download image as RGBA", exc)
+            null
+        }
+    }
+
     fun deleteSecureSecret(key: String) {
         context.getSharedPreferences(SECURE_PREFS, Context.MODE_PRIVATE).edit().remove(key).apply()
     }
@@ -124,7 +156,6 @@ class LuvatrixVulkanView @JvmOverloads constructor(
             generateKey()
         }
     }
-
     private fun loadBitmapGlyphTable() {
         try {
             val table = context.assets.open("luvatrix_bitmap_font.txt").bufferedReader().use { it.readText() }

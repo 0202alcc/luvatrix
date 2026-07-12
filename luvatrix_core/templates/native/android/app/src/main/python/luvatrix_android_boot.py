@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import importlib.util
 import importlib
 import os
@@ -129,6 +130,15 @@ def delete_secure_secret(key: str) -> None:
     if not callable(method):
         raise RuntimeError("Android secure storage is unavailable")
     method(str(key))
+
+
+def download_image_rgba(url: str, size: int):
+    view = _ANDROID_VIEW
+    method = getattr(view, "downloadImageRgba", None) if view is not None else None
+    if not callable(method):
+        return None
+    encoded = method(str(url), int(size))
+    return base64.b64decode(str(encoded)) if encoded is not None else None
 
 
 def android_telemetry() -> dict[str, object]:
