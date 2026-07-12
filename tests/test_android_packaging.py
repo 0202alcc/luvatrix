@@ -37,6 +37,18 @@ class AndroidPackagingTests(unittest.TestCase):
         self.assertIn("JvmTarget.JVM_17", build)
         self.assertNotIn('install("numpy")', build)
         self.assertNotIn('install("Pillow")', build)
+        self.assertIn('install("certifi', build)
+
+    def test_android_template_enables_https_clients(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            manifest = (root / "app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+            build = (root / "app/build.gradle.kts").read_text(encoding="utf-8")
+            boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")
+
+            self.assertIn("android.permission.INTERNET", manifest)
+            self.assertIn("android.permission.ACCESS_NETWORK_STATE", manifest)
+            self.assertIn('install("certifi', build)
+            self.assertIn("def configure_android_tls", boot)
 
     def test_emulator_acceptance_script_exists(self) -> None:
         script = ANDROID / "scripts" / "emulator_acceptance.sh"
