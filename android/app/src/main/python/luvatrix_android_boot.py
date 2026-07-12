@@ -66,6 +66,7 @@ def run_headless_ticks(ticks: int = 5) -> str:
 
 def run_app_vulkan(view=None) -> str:
     try:
+        configure_android_tls()
         import_probe()
         result = _run_visual_runtime(view)
         _log(f"luvatrix visual ticks={result.ticks_run} frames={result.frames_presented}")
@@ -73,6 +74,14 @@ def run_app_vulkan(view=None) -> str:
     except Exception as exc:
         _log(f"luvatrix run_app_vulkan failed: {type(exc).__name__}: {exc}")
         raise
+
+
+def configure_android_tls() -> str:
+    import certifi
+
+    ca_bundle = certifi.where()
+    os.environ["SSL_CERT_FILE"] = ca_bundle
+    return ca_bundle
 
 
 def enqueue_touch(touch_id: int, phase: str, x: float, y: float, force: float = 0.0, major_radius: float = 0.0, tool_type: str = "") -> None:
