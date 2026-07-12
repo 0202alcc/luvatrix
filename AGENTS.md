@@ -47,6 +47,20 @@ Repository-level operating rules and quick-start context for human and AI contri
 2. Do not use bare `python` or `pip` unless blocked by environment constraints. If blocked, document the reason and fallback.
 3. For tests, prefer focused coverage first, then broaden only when the touched surface warrants it.
 
+## Test-First Development Policy
+1. For every behavior change or bug fix, write or update the test that defines the expected behavior before implementing the production change.
+2. Confirm the new or changed test fails for the expected reason before implementation, then make the smallest change that makes it pass.
+3. Tests must describe externally meaningful behavior and include relevant error or boundary cases; do not couple assertions to implementation details merely to raise coverage.
+4. Keep tests and implementation on the same feature branch. Separate test and implementation commits are encouraged when practical, but commit shape is not a merge requirement.
+5. Behavior-changing pull requests must complete the test-first evidence in the pull request template and pass the `required-tests` check before merging into `dev`.
+6. Documentation, metadata, generated artifacts, and provably behavior-neutral mechanical refactors may use the documented exception, with the reason recorded in the pull request.
+7. See `CONTRIBUTING.md` for the complete workflow and reviewer expectations.
+
+## Security Gate Policy
+1. Pull requests into `dev`, `staging`, and `main` must pass the aggregate `security-review` check described in `SECURITY.md`.
+2. Do not weaken or suppress dependency, secret, Python SAST, or GitHub Actions findings merely to make CI green. Document narrow false-positive or accepted-risk exceptions.
+3. The agent-review files under `.github/security/` are a provider-neutral contract only. Do not add credentials or enable model execution without an explicit security review of the workflow trust boundary.
+
 ## Git and Branch Policy
 1. Use one descriptive feature branch per feature, such as `feature/platform-scoped-package` or `fix/lazy-platform-imports`.
 2. Use the promotion ladder `feature/* -> dev -> staging -> main`.
@@ -64,6 +78,7 @@ Repository-level operating rules and quick-start context for human and AI contri
    - why it changed,
    - tests or commands run,
    - any known limitations or follow-up work.
+3. For behavior changes, include the expected behavior, the test-first failure observed, and the passing verification. Do not mark both test-first checklist alternatives.
 
 ## Useful Verification Commands
 1. Public API and optional install validation:
