@@ -337,6 +337,25 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
 
         self.assertEqual(_rgba_at(frame, 2, 4), (10, 20, 30, 96))
 
+    def test_matrix_text_uses_native_pretext_wrapping(self) -> None:
+        self.assertIn("TextWrapping", luvatrix_app_api.__all__)
+        frame = accel.zeros((30, 30, 4))
+
+        draw_text_to_matrix(
+            frame,
+            "AB CD",
+            x=0,
+            y=0,
+            font_size_px=12.0,
+            color=(255, 255, 255, 255),
+            max_width_px=16.0,
+            wrapping="pretext",
+            line_height_multiplier=1.0,
+        )
+
+        self.assertTrue(any(_rgba_at(frame, y, x)[3] for y in range(0, 12) for x in range(30)))
+        self.assertTrue(any(_rgba_at(frame, y, x)[3] for y in range(12, 24) for x in range(30)))
+
     def test_default_matrix_font_uses_packaged_table(self) -> None:
         luvatrix_app_api._DEFAULT_MATRIX_FONT = None
         font = luvatrix_app_api._default_matrix_font()

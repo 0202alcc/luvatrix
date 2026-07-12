@@ -177,3 +177,45 @@ Android Keystore. iOS bridges should use `ASWebAuthenticationSession` and
 Keychain. `InMemoryTokenStore` remains available for tests, but production apps
 should not use it for long-lived refresh tokens. Mobile apps must not embed a
 Google client secret.
+
+## Prepared Text Wrapping
+
+Luvatrix includes an optional, dependency-free prepared wrapping style inspired
+by the MIT-licensed [Pretext](https://github.com/chenglou/pretext) architecture.
+Text is segmented and measured once; changing only the available width reuses
+those native measurements.
+
+Scene/UI text uses `TextWrapping` on `TextComponent`:
+
+```python
+from luvatrix.app import TextWrapping
+from luvatrix_ui.text import TextComponent
+
+body = TextComponent(
+    component_id="body",
+    text="A paragraph which should wrap across multiple lines.",
+    max_width_px=320,
+    wrapping=TextWrapping(white_space="normal"),
+)
+```
+
+Matrix text uses the same layout engine and its matrix-font measurements:
+
+```python
+from luvatrix.app import draw_text_to_matrix
+
+draw_text_to_matrix(
+    matrix,
+    "A paragraph rendered into an RGBA matrix.",
+    x=12,
+    y=12,
+    font_size_px=12,
+    max_width_px=240,
+    wrapping="pretext",
+    line_height_multiplier=1.2,
+)
+```
+
+`white_space="pre-wrap"` preserves repeated spaces and hard line breaks.
+Ordinary wrapping collapses whitespace and uses grapheme-safe emergency breaks
+for content wider than a complete line.
