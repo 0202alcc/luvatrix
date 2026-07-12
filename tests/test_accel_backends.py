@@ -49,6 +49,15 @@ class AccelBackendTests(unittest.TestCase):
 
         self.assertEqual(_flat_values(frame), [7, 7, 7, 7])
 
+    def test_blit_self_copy_uses_source_snapshot_on_active_backend(self) -> None:
+        from luvatrix_core import accel
+
+        frame = accel.from_sequence([1, 2, 3, 4], (4, 1, 1))
+
+        accel.blit(frame, frame, x=0, y=1)
+
+        self.assertEqual(_flat_values(frame), [1, 1, 2, 3])
+
     def test_accel_imports_when_torch_is_unavailable(self) -> None:
         code = r'''
 import builtins
@@ -175,6 +184,9 @@ assert list(frame._data) == expected, list(frame._data)
 clipped = accel.zeros((2, 2, 1))
 accel.blit(clipped, accel.from_sequence(list(range(1, 10)), (3, 3, 1)), x=-1, y=-1)
 assert list(clipped._data) == [5, 6, 8, 9], list(clipped._data)
+self_copy = accel.from_sequence([1, 2, 3, 4], (4, 1, 1))
+accel.blit(self_copy, self_copy, x=0, y=1)
+assert list(self_copy._data) == [1, 1, 2, 3], list(self_copy._data)
 '''
         result = subprocess.run(
             [sys.executable, "-c", code],

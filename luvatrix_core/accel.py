@@ -341,6 +341,8 @@ def blit(destination, source, *, x: int, y: int):
         )
     if getattr(destination, "dtype", None) != getattr(source, "dtype", None):
         raise ValueError("blit source and destination must have the same dtype")
+    if source is destination:
+        source = clone(source)
 
     x = int(x)
     y = int(y)
