@@ -11,6 +11,7 @@ import secrets
 import time
 from typing import Callable, Protocol
 from urllib.parse import urlencode
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
@@ -209,9 +210,24 @@ def _post_form(url: str, payload: dict[str, str]) -> dict[str, object]:
     )
     try:
         with urlopen(request, timeout=20) as response:
-            data = json.loads(response.read().decode("utf-8"))
+            body = response.read().decode("utf-8")
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError as decode_exc:
+            raise GoogleAuthError(f"Google token request failed with HTTP {exc.code}") from decode_exc
+        if not isinstance(data, dict):
+            raise GoogleAuthError(f"Google token request failed with HTTP {exc.code}") from exc
+        return data
+    except URLError as exc:
+        raise GoogleAuthError(f"Google token network request failed: {exc.reason}") from exc
     except Exception as exc:
         raise GoogleAuthError("Google token request failed") from exc
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise GoogleAuthError("Google token response was not valid JSON") from exc
     if not isinstance(data, dict):
         raise GoogleAuthError("Google token response was not a JSON object")
     return data
