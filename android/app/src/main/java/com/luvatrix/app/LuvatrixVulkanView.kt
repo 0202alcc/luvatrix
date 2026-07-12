@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Looper
 import android.util.AttributeSet
 import android.util.Log
+import android.util.Base64
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
@@ -22,6 +23,13 @@ import android.widget.FrameLayout
 import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.ByteBuffer
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.abs
 
@@ -72,6 +80,50 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         isFocusable = true
         isFocusableInTouchMode = true
         requestFocus()
+    }
+
+    fun writeSecureSecret(key: String, value: String) {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, secureStorageKey())
+        val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
+        val encoded = Base64.encodeToString(cipher.iv + encrypted, Base64.NO_WRAP)
+        context.getSharedPreferences(SECURE_PREFS, Context.MODE_PRIVATE).edit().putString(key, encoded).apply()
+    }
+
+    fun readSecureSecret(key: String): String? {
+        val encoded = context.getSharedPreferences(SECURE_PREFS, Context.MODE_PRIVATE).getString(key, null) ?: return null
+        return try {
+            val payload = Base64.decode(encoded, Base64.NO_WRAP)
+            val iv = payload.copyOfRange(0, GCM_IV_BYTES)
+            val encrypted = payload.copyOfRange(GCM_IV_BYTES, payload.size)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, secureStorageKey(), GCMParameterSpec(128, iv))
+            String(cipher.doFinal(encrypted), Charsets.UTF_8)
+        } catch (exc: Throwable) {
+            Log.e("Luvatrix", "Could not decrypt secure app secret", exc)
+            null
+        }
+    }
+
+    fun deleteSecureSecret(key: String) {
+        context.getSharedPreferences(SECURE_PREFS, Context.MODE_PRIVATE).edit().remove(key).apply()
+    }
+
+    private fun secureStorageKey(): SecretKey {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (keyStore.getKey(SECURE_KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").run {
+            init(
+                KeyGenParameterSpec.Builder(
+                    SECURE_KEY_ALIAS,
+                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+                )
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .build()
+            )
+            generateKey()
+        }
     }
 
     private fun loadBitmapGlyphTable() {
@@ -720,6 +772,9 @@ class LuvatrixVulkanView @JvmOverloads constructor(
 
     companion object {
         const val CAMERA_PERMISSION_REQUEST = 4201
+        private const val SECURE_PREFS = "luvatrix_secure_app_storage"
+        private const val SECURE_KEY_ALIAS = "luvatrix_app_secrets"
+        private const val GCM_IV_BYTES = 12
     }
 
     private inner class SceneOverlayView(context: Context) : View(context) {

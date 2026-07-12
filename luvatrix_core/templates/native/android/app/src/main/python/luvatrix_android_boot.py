@@ -97,6 +97,31 @@ def enqueue_key(key: str, phase: str, scan_code: int = 0) -> None:
     enqueue_native_key_event(str(key), str(phase), scan_code=int(scan_code))
 
 
+def read_secure_secret(key: str):
+    view = _ANDROID_VIEW
+    method = getattr(view, "readSecureSecret", None) if view is not None else None
+    if not callable(method):
+        return None
+    value = method(str(key))
+    return str(value) if value is not None else None
+
+
+def write_secure_secret(key: str, value: str) -> None:
+    view = _ANDROID_VIEW
+    method = getattr(view, "writeSecureSecret", None) if view is not None else None
+    if not callable(method):
+        raise RuntimeError("Android secure storage is unavailable")
+    method(str(key), str(value))
+
+
+def delete_secure_secret(key: str) -> None:
+    view = _ANDROID_VIEW
+    method = getattr(view, "deleteSecureSecret", None) if view is not None else None
+    if not callable(method):
+        raise RuntimeError("Android secure storage is unavailable")
+    method(str(key))
+
+
 def android_telemetry() -> dict[str, object]:
     from luvatrix_core.platform.android.hdi_source import android_input_telemetry
 
