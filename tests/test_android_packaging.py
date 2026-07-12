@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import runpy
 import unittest
 
 
@@ -73,6 +74,37 @@ class AndroidPackagingTests(unittest.TestCase):
             self.assertIn("def write_secure_secret", boot)
             self.assertIn("def read_secure_secret", boot)
             self.assertIn("def delete_secure_secret", boot)
+
+    def test_android_secure_storage_python_bridge_round_trips(self) -> None:
+        module = runpy.run_path(str(ANDROID / "app/src/main/python/luvatrix_android_boot.py"))
+
+        class View:
+            def __init__(self) -> None:
+                self.values: dict[str, str] = {}
+
+            def writeSecureSecret(self, key: str, value: str) -> None:
+                self.values[key] = value
+
+            def readSecureSecret(self, key: str):
+                return self.values.get(key)
+
+            def deleteSecureSecret(self, key: str) -> None:
+                self.values.pop(key, None)
+
+        view = View()
+        module["write_secure_secret"].__globals__["_ANDROID_VIEW"] = view
+        module["write_secure_secret"]("account", "token")
+        self.assertEqual(module["read_secure_secret"]("account"), "token")
+        module["delete_secure_secret"]("account")
+        self.assertIsNone(module["read_secure_secret"]("account"))
+
+    def test_android_secure_storage_writes_fail_when_bridge_is_unavailable(self) -> None:
+        module = runpy.run_path(str(ANDROID / "app/src/main/python/luvatrix_android_boot.py"))
+
+        with self.assertRaisesRegex(RuntimeError, "unavailable"):
+            module["write_secure_secret"]("account", "token")
+        with self.assertRaisesRegex(RuntimeError, "unavailable"):
+            module["delete_secure_secret"]("account")
 
     def test_camera_bridge_declares_camera2_yuv_preview_contract(self) -> None:
         bridge = (ANDROID / "app/src/main/java/com/luvatrix/app/CameraBridge.kt").read_text(encoding="utf-8")
