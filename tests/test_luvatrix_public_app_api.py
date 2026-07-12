@@ -13,6 +13,7 @@ from luvatrix.app import (
     CoordinateFrames,
     InputManager,
     InputState,
+    InteractionAwareWorkScheduler,
     MissingOptionalDependencyError,
     PLATFORM_ANDROID,
     PLATFORM_IOS,
@@ -105,6 +106,7 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
             "ScrollbarUpdate",
             "SwipeMomentumController",
             "SwipeMomentumUpdate",
+            "InteractionAwareWorkScheduler",
         ):
             self.assertIn(name, luvatrix_app_api.__all__)
             self.assertIsNotNone(getattr(luvatrix_app_api, name))
@@ -210,6 +212,21 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         self.assertTrue(inertial.inertial)
         self.assertTrue(inertial.needs_render)
         self.assertEqual(renders, ["render", "render"])
+
+    def test_swipe_momentum_reports_active_drag_and_inertia(self) -> None:
+        controller = SwipeMomentumController("y")
+        state = InputState(active_touches={7: (0.0, 100.0)}, touch_count=1)
+
+        self.assertFalse(controller.active)
+        controller.update(state, 1.0 / 120.0)
+        self.assertTrue(controller.active)
+        state.active_touches[7] = (0.0, 90.0)
+        controller.update(state, 1.0 / 60.0)
+        state.active_touches.clear()
+        state.touch_count = 0
+        controller.update(state, 1.0 / 60.0)
+
+        self.assertTrue(controller.active)
 
     def test_swipe_momentum_hold_cancels_release_inertia(self) -> None:
         controller = SwipeMomentumController("y", direction=-1.0)

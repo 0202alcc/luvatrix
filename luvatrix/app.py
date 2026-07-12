@@ -22,6 +22,7 @@ from luvatrix_core.core.app_runtime import (
     ResolvedAppVariant,
 )
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
+from luvatrix_core.core.interaction_work import InteractionAwareWorkScheduler
 from luvatrix_core.core.sensor_manager import SensorManagerThread, SensorSample
 from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch, WindowMatrix
 from luvatrix_core import accel
@@ -298,6 +299,11 @@ class SwipeMomentumController:
     @property
     def dragging(self) -> bool:
         return self._dragging
+
+    @property
+    def active(self) -> bool:
+        """Whether a drag or post-release momentum is active."""
+        return self._dragging or self._velocity != 0.0
 
     def reset(self) -> None:
         self._touch_id = None
@@ -1856,6 +1862,7 @@ __all__ = [
     "Display",
     "InputManager",
     "InputState",
+    "InteractionAwareWorkScheduler",
     "MatrixFrame",
     "MissingOptionalDependencyError",
     "ResolvedAppVariant",

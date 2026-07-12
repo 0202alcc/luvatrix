@@ -395,6 +395,29 @@ class AndroidRunnerTests(unittest.TestCase):
             self.assertTrue((py_root / "luvatrix_ui").is_dir())
             self.assertTrue((py_root / "luvatrix_plot").is_dir())
 
+    def test_android_packages_follow_luvatrix_app_reexport_dependencies(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            app = root / "app"
+            project = root / "android"
+            app.mkdir()
+            (app / "app.toml").write_text('app_id = "x"\n', encoding="utf-8")
+            (app / "app_main.py").write_text(
+                "from luvatrix.app import TextWrapping\n"
+                "def create(): pass\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                _android_python_packages_for_app(app),
+                ("luvatrix", "luvatrix_core", "luvatrix_ui"),
+            )
+            sync_android_python_assets(app, project_dir=project)
+
+            self.assertTrue(
+                (project / "app" / "src" / "main" / "python" / "luvatrix_ui").is_dir()
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
