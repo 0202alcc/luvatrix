@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import time
 import tomllib
 from urllib.parse import urlparse
@@ -20,6 +21,71 @@ if str(_ROOT) not in sys.path:
 _LAST_MARKER = ""
 _FRAME_COUNT = 0
 _ANDROID_VIEW = None
+_RUNTIME_LOCK = threading.Lock()
+_RUNTIME_RUNNING = False
+
+
+class _AndroidViewPresenter:
+    """Rebinds a process-scoped runtime to the current Android Activity view."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._view = None
+        self._last_presentation: tuple[str, tuple[object, ...]] | None = None
+
+    def bind(self, view) -> None:
+        with self._lock:
+            self._view = view
+            presentation = self._last_presentation
+            if presentation is not None:
+                self._present(view, *presentation)
+
+    def unbind(self, view) -> None:
+        with self._lock:
+            if self._view is view:
+                self._view = None
+
+    def current_view(self):
+        with self._lock:
+            return self._view
+
+    def presentRgba(self, rgba: bytes, revision: int, width: int, height: int) -> None:
+        self._remember_and_present("presentRgba", (rgba, revision, width, height))
+
+    def presentScene(
+        self,
+        scene_json: str,
+        revision: int,
+        logical_width: int,
+        logical_height: int,
+        presentation_mode: str = "",
+    ) -> None:
+        self._remember_and_present(
+            "presentScene",
+            (scene_json, revision, logical_width, logical_height, presentation_mode),
+        )
+
+    def __getattr__(self, name: str):
+        view = self.current_view()
+        if view is None:
+            raise AttributeError(name)
+        return getattr(view, name)
+
+    def _remember_and_present(self, method_name: str, args: tuple[object, ...]) -> None:
+        with self._lock:
+            self._last_presentation = (method_name, args)
+            view = self._view
+            if view is not None:
+                self._present(view, method_name, args)
+
+    @staticmethod
+    def _present(view, method_name: str, args: tuple[object, ...]) -> None:
+        method = getattr(view, method_name, None)
+        if callable(method):
+            method(*args)
+
+
+_ANDROID_PRESENTER = _AndroidViewPresenter()
 
 
 def _log(message: str) -> None:
@@ -67,15 +133,33 @@ def run_headless_ticks(ticks: int = 5) -> str:
 
 
 def run_app_vulkan(view=None) -> str:
+    global _ANDROID_VIEW, _RUNTIME_RUNNING
+    if view is not None:
+        _ANDROID_VIEW = view
+        _ANDROID_PRESENTER.bind(view)
+    with _RUNTIME_LOCK:
+        if _RUNTIME_RUNNING:
+            return _mark("luvatrix visual reattached")
+        _RUNTIME_RUNNING = True
     try:
         configure_android_tls()
         import_probe()
-        result = _run_visual_runtime(view)
+        result = _run_visual_runtime(_ANDROID_PRESENTER if view is not None else None)
         _log(f"luvatrix visual ticks={result.ticks_run} frames={result.frames_presented}")
         return _mark("luvatrix visual ok")
     except Exception as exc:
         _log(f"luvatrix run_app_vulkan failed: {type(exc).__name__}: {exc}")
         raise
+    finally:
+        with _RUNTIME_LOCK:
+            _RUNTIME_RUNNING = False
+
+
+def detach_android_view(view) -> None:
+    global _ANDROID_VIEW
+    _ANDROID_PRESENTER.unbind(view)
+    if _ANDROID_VIEW is view:
+        _ANDROID_VIEW = None
 
 
 def configure_android_tls() -> str:
@@ -350,8 +434,6 @@ def _run_visual_runtime(view):
     if view is not None and _truthy(config.get("low_latency_mode"), default=True):
         _apply_low_latency_mode(view, target_fps=target_fps, present_fps=present_fps)
     clear_android_input_events()
-    if view is not None:
-        _ANDROID_VIEW = view
     if view is not None and _should_start_camera_preview(config):
         _start_camera_preview(view)
 
