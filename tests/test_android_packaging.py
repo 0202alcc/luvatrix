@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 import runpy
+import sys
+from types import SimpleNamespace
 import unittest
 
 
@@ -49,6 +52,24 @@ class AndroidPackagingTests(unittest.TestCase):
             self.assertIn("android.permission.ACCESS_NETWORK_STATE", manifest)
             self.assertIn('install("certifi', build)
             self.assertIn("def configure_android_tls", boot)
+
+    def test_android_tls_uses_packaged_ca_bundle(self) -> None:
+        module = runpy.run_path(str(ANDROID / "app/src/main/python/luvatrix_android_boot.py"))
+        previous = sys.modules.get("certifi")
+        sys.modules["certifi"] = SimpleNamespace(where=lambda: "/app/cacert.pem")
+        old_value = os.environ.get("SSL_CERT_FILE")
+        try:
+            self.assertEqual(module["configure_android_tls"](), "/app/cacert.pem")
+            self.assertEqual(os.environ["SSL_CERT_FILE"], "/app/cacert.pem")
+        finally:
+            if previous is None:
+                sys.modules.pop("certifi", None)
+            else:
+                sys.modules["certifi"] = previous
+            if old_value is None:
+                os.environ.pop("SSL_CERT_FILE", None)
+            else:
+                os.environ["SSL_CERT_FILE"] = old_value
 
     def test_emulator_acceptance_script_exists(self) -> None:
         script = ANDROID / "scripts" / "emulator_acceptance.sh"
