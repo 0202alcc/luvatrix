@@ -7,6 +7,25 @@ from luvatrix.app import InteractionAwareWorkScheduler
 
 
 class InteractionAwareWorkSchedulerTests(unittest.TestCase):
+    def test_work_waits_until_startup_is_ready(self) -> None:
+        startup_ready = Event()
+        started = Event()
+        scheduler = InteractionAwareWorkScheduler(
+            interaction_active=lambda: False,
+            startup_ready=startup_ready.is_set,
+            idle_poll_interval=0.005,
+        )
+        self.addCleanup(scheduler.close, wait=True)
+
+        self.assertTrue(scheduler.submit("prewarm", started.set))
+        self.assertFalse(started.wait(0.05))
+
+        startup_ready.set()
+        scheduler.notify_startup_state_changed()
+
+        self.assertTrue(started.wait(1.0))
+        self.assertTrue(scheduler.wait_idle(timeout=1.0))
+
     def test_work_waits_until_interaction_is_idle_then_invalidates(self) -> None:
         interaction_active = Event()
         interaction_active.set()

@@ -20,7 +20,9 @@ class InteractionAwareWorkScheduler:
 
     Work and callbacks execute sequentially on one daemon thread. Running work
     is not preempted when interaction begins; the idle gate prevents queued
-    work from starting until ``interaction_active`` returns false.
+    work from starting until ``interaction_active`` returns false. Pass
+    ``startup_ready=ctx.has_presented_frame`` to keep preparation from
+    competing with the app's first presentation.
 
     Pair with ``SwipeMomentumController`` using
     ``interaction_active=lambda: swipe.active`` and call
@@ -32,12 +34,14 @@ class InteractionAwareWorkScheduler:
         self,
         *,
         interaction_active: Callable[[], bool],
+        startup_ready: Callable[[], bool] | None = None,
         request_render: Callable[[], None] | None = None,
         on_error: Callable[[Hashable, Exception], None] | None = None,
         idle_poll_interval: float = 1.0 / 120.0,
         thread_name: str = "luvatrix-interaction-work",
     ) -> None:
         self.interaction_active = interaction_active
+        self.startup_ready = startup_ready
         self.request_render = request_render
         self.on_error = on_error
         self.idle_poll_interval = max(0.001, float(idle_poll_interval))
@@ -83,6 +87,11 @@ class InteractionAwareWorkScheduler:
         with self._condition:
             self._condition.notify_all()
 
+    def notify_startup_state_changed(self) -> None:
+        """Wake queued work after the startup gate becomes ready."""
+        with self._condition:
+            self._condition.notify_all()
+
     def wait_idle(self, timeout: float | None = None) -> bool:
         """Wait until queued/running work and its callbacks have completed."""
         deadline = None if timeout is None else time.monotonic() + max(0.0, float(timeout))
@@ -123,12 +132,20 @@ class InteractionAwareWorkScheduler:
                 self._report_error(pending_key, exc)
                 interaction_active = False
 
+            startup_ready = True
+            if self.startup_ready is not None:
+                try:
+                    startup_ready = bool(self.startup_ready())
+                except Exception as exc:
+                    self._report_error(pending_key, exc)
+                    startup_ready = False
+
             with self._condition:
                 if self._closed:
                     return
                 if not self._pending:
                     continue
-                if interaction_active:
+                if interaction_active or not startup_ready:
                     self._condition.wait(self.idle_poll_interval)
                     continue
                 item = self._pending.popleft()
