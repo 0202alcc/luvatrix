@@ -44,6 +44,9 @@ kotlin {
 chaquopy {
     defaultConfig {
         version = "3.14"
+        pip {
+            install("certifi>=2026.2.25")
+        }
     }
 }
 
