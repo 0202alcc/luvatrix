@@ -25,6 +25,7 @@ from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
 from luvatrix_core.core.sensor_manager import SensorManagerThread, SensorSample
 from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch, WindowMatrix
 from luvatrix_core import accel
+from luvatrix_ui.text.wrapping import TextWrapping, layout_text, prepare_text
 
 PLATFORM_MACOS = "macos"
 PLATFORM_IOS = "ios"
@@ -1262,11 +1263,15 @@ def draw_text_to_matrix(
     font_size_px: float = 14.0,
     color: tuple[int, int, int, int] | str = (255, 255, 255, 255),
     antialias: bool = True,
+    max_width_px: float | None = None,
+    wrapping: str | TextWrapping | None = None,
+    line_height_multiplier: float = 1.2,
 ):
     """Rasterize Luvatrix's default matrix text glyphs into an RGBA matrix.
 
     Set ``antialias=False`` for crisp, thresholded glyph pixels on compact
-    matrix surfaces such as calendar event tiles.
+    matrix surfaces such as calendar event tiles. Set ``wrapping="pretext"``
+    with ``max_width_px`` for prepared multiline wrapping.
     """
     height = int(matrix.shape[0])
     width = int(matrix.shape[1])
@@ -1275,30 +1280,58 @@ def draw_text_to_matrix(
 
     font = _default_matrix_font()
     scale = max(1, int(round(float(font_size_px) / float(font.height))))
-    cursor = int(x)
-    top = int(y)
+    line_height = max(1.0, float(font_size_px) * float(line_height_multiplier))
+    if line_height_multiplier <= 0:
+        raise ValueError("line_height_multiplier must be > 0")
+    if wrapping is not None and max_width_px is None:
+        raise ValueError("max_width_px is required when matrix text wrapping is enabled")
+    if isinstance(wrapping, str):
+        if wrapping != "pretext":
+            raise ValueError("wrapping must be None, 'pretext', or TextWrapping")
+        wrapping = TextWrapping()
+    if wrapping is not None and not isinstance(wrapping, TextWrapping):
+        raise TypeError("wrapping must be None, 'pretext', or TextWrapping")
+
+    lines = (str(text),)
+    if wrapping is not None:
+        advance = font.advance * scale
+        prepared = prepare_text(
+            str(text),
+            measure=lambda value: float(len(value) * advance),
+            wrapping=wrapping,
+        )
+        wrapped = layout_text(
+            prepared,
+            max_width_px=float(max_width_px),
+            line_height_px=line_height,
+        )
+        lines = tuple(line.text for line in wrapped.lines)
+
     rgba = _rgba(color)
     space = font.glyphs[" "]
-    for raw_ch in str(text):
-        glyph = font.glyphs.get(raw_ch, font.glyphs.get(raw_ch.upper(), space))
-        for gy, row in enumerate(glyph):
-            for gx, coverage in enumerate(row):
-                if not antialias:
-                    coverage = 255 if coverage >= 128 else 0
-                if coverage <= 0:
-                    continue
-                _paint_matrix_rect(
-                    matrix,
-                    cursor + gx * scale,
-                    top + gy * scale,
-                    cursor + (gx + 1) * scale,
-                    top + (gy + 1) * scale,
-                    rgba,
-                    coverage=coverage,
-                    width=width,
-                    height=height,
-                )
-        cursor += font.advance * scale
+    for line_index, line in enumerate(lines):
+        cursor = int(x)
+        top = int(float(y) + line_index * line_height)
+        for raw_ch in line:
+            glyph = font.glyphs.get(raw_ch, font.glyphs.get(raw_ch.upper(), space))
+            for gy, row in enumerate(glyph):
+                for gx, coverage in enumerate(row):
+                    if not antialias:
+                        coverage = 255 if coverage >= 128 else 0
+                    if coverage <= 0:
+                        continue
+                    _paint_matrix_rect(
+                        matrix,
+                        cursor + gx * scale,
+                        top + gy * scale,
+                        cursor + (gx + 1) * scale,
+                        top + (gy + 1) * scale,
+                        rgba,
+                        coverage=coverage,
+                        width=width,
+                        height=height,
+                    )
+            cursor += font.advance * scale
     return matrix
 
 
@@ -1833,6 +1866,7 @@ __all__ = [
     "Sensors",
     "SwipeMomentumController",
     "SwipeMomentumUpdate",
+    "TextWrapping",
     "UIFrame",
     "apply_hdi_events",
     "check_app_install",
