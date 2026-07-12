@@ -504,7 +504,7 @@ _DEBUG = {
 
 
 def _draw_debug_text(out, text: str, *, x: int, y: int, scale: int, color: tuple[int, int, int, int]) -> None:
-    digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:12].upper()
+    digest = hashlib.sha1(text.encode("utf-8"), usedforsecurity=False).hexdigest()[:12].upper()
     text = text.upper() if text else digest
     cursor = x
     for ch in text:

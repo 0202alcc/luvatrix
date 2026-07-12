@@ -1,0 +1,104 @@
+name: security-review
+
+on:
+  pull_request:
+    branches: [dev, staging, main]
+  push:
+    branches: [dev, staging, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-review-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-audit:
+    name: pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
+      - name: Audit locked base dependencies
+        run: >-
+          uv export --frozen --no-dev --no-emit-project --no-hashes |
+          uvx --from pip-audit==2.10.0 pip-audit -r /dev/stdin
+
+  python-sast:
+    name: bandit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
+      - name: Scan Python for high-confidence, high-severity findings
+        run: >-
+          uvx --from bandit==1.8.6 bandit
+          -r luvatrix luvatrix_core luvatrix_ui luvatrix_plot main.py
+          --severity-level high --confidence-level high
+
+  secret-scan:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan Git history and pull-request changes for secrets
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+
+  actions-audit:
+    name: zizmor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
+      - name: Audit GitHub Actions definitions
+        run: uvx --from zizmor==1.11.0 zizmor --persona auditor .github/workflows/security-review.yml
+
+  agent-review-framework:
+    name: agent-review-framework
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Validate provider-neutral review contract
+        run: |
+          python3 -m json.tool .github/security/agent-review-output.schema.json >/dev/null
+          test -s .github/security/agent-review-prompt.md
+          echo "Agent execution is intentionally disabled; contract validation only."
+
+  security-review:
+    name: security-review
+    if: always()
+    needs:
+      - dependency-audit
+      - python-sast
+      - secret-scan
+      - actions-audit
+      - agent-review-framework
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every security layer to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          if echo "$RESULTS" | jq -e 'all(.[]; .result == "success")' >/dev/null; then
+            echo "All deterministic security checks passed."
+          else
+            echo "$RESULTS" | jq .
+            echo "::error::One or more security checks failed or were cancelled."
+            exit 1
+          fi
