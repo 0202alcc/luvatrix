@@ -14,6 +14,7 @@ from .renderer import (
     TextRenderer,
     TextSizeSpec,
 )
+from .wrapping import PreparedText, TextWrapping, layout_text, prepare_text
 
 
 @dataclass
@@ -31,7 +32,10 @@ class TextComponent(ComponentBase):
     size: TextSizeSpec = field(default_factory=TextSizeSpec)
     appearance: TextAppearance = field(default_factory=TextAppearance)
     max_width_px: float | None = None
+    wrapping: TextWrapping | None = None
     _visual_bounds_cache: BoundingBox | None = field(default=None, init=False, repr=False)
+    _prepared_text_cache: PreparedText | None = field(default=None, init=False, repr=False)
+    _prepared_text_key: tuple[object, ...] | None = field(default=None, init=False, repr=False)
 
     def _resolved_frame(self) -> str:
         return self.position.frame or self.default_frame
@@ -89,10 +93,78 @@ class TextComponent(ComponentBase):
         *,
         transformer: CoordinateTransformer | None = None,
     ) -> TextRenderBatch:
+        if self.wrapping is not None and self.max_width_px is not None:
+            batch = self._wrapped_render_batch(renderer, display, transformer=transformer)
+            renderer.draw_text_batch(batch)
+            return batch
         command, _ = self.layout(renderer, display, transformer=transformer)
         batch = TextRenderBatch(commands=(command,))
         renderer.draw_text_batch(batch)
         return batch
+
+    def _wrapped_render_batch(
+        self,
+        renderer: TextRenderer,
+        display: DisplayableArea,
+        *,
+        transformer: CoordinateTransformer | None = None,
+    ) -> TextRenderBatch:
+        font_size_px = self.size.resolve_px(display)
+        key = (
+            id(renderer),
+            self.text,
+            self.font,
+            font_size_px,
+            self.appearance,
+            self.wrapping,
+        )
+        if self._prepared_text_cache is None or self._prepared_text_key != key:
+            def measure(value: str) -> float:
+                return renderer.measure_text(
+                    TextMeasureRequest(
+                        text=value,
+                        font=self.font,
+                        font_size_px=font_size_px,
+                        appearance=self.appearance,
+                    )
+                ).width_px
+
+            self._prepared_text_cache = prepare_text(
+                self.text,
+                measure=measure,
+                wrapping=self.wrapping,
+            )
+            self._prepared_text_key = key
+        line_height = font_size_px * self.appearance.line_height_multiplier
+        wrapped = layout_text(
+            self._prepared_text_cache,
+            max_width_px=self.max_width_px,
+            line_height_px=line_height,
+        )
+        x, y = self._resolved_xy(transformer)
+        frame = self._resolved_frame()
+        commands = tuple(
+            TextRenderCommand(
+                component_id=f"{self.component_id}:line:{index}",
+                text=line.text,
+                x=x,
+                y=y + index * line_height,
+                frame=frame,
+                font=self.font,
+                font_size_px=font_size_px,
+                appearance=self.appearance,
+                max_width_px=None,
+            )
+            for index, line in enumerate(wrapped.lines)
+        )
+        self._visual_bounds_cache = BoundingBox(
+            x=x,
+            y=y,
+            width=wrapped.width_px,
+            height=wrapped.height_px,
+            frame=frame,
+        )
+        return TextRenderBatch(commands=commands)
 
     def visual_bounds(self) -> BoundingBox:
         if self._visual_bounds_cache is None:
