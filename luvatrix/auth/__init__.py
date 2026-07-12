@@ -1,5 +1,11 @@
 """First-party authentication helpers for Luvatrix apps."""
 
+from .calendar import (
+    GoogleCalendarClient,
+    GoogleCalendarError,
+    GoogleCalendarEvent,
+    GoogleCalendarListEntry,
+)
 from .google import (
     GoogleAuthError,
     GoogleAuthorizationRequest,
@@ -19,6 +25,10 @@ from .sign_in import (
 )
 
 __all__ = [
+    "GoogleCalendarClient",
+    "GoogleCalendarError",
+    "GoogleCalendarEvent",
+    "GoogleCalendarListEntry",
     "GoogleAuthError",
     "GoogleAuthorizationRequest",
     "GoogleOAuthClient",

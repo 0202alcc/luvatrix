@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/0202alcc/luvatrix/security/agent-review-output.schema.json",
+  "title": "Luvatrix agent security review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "summary", "findings"],
+  "properties": {
+    "schema_version": {"const": "1"},
+    "summary": {"type": "string", "minLength": 1},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "severity",
+          "path",
+          "line",
+          "title",
+          "rationale",
+          "remediation"
+        ],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"]
+          },
+          "path": {"type": "string", "minLength": 1},
+          "line": {"type": ["integer", "null"], "minimum": 1},
+          "title": {"type": "string", "minLength": 1},
+          "rationale": {"type": "string", "minLength": 1},
+          "remediation": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}
