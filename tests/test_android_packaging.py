@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import runpy
+import sys
+from types import SimpleNamespace
 import unittest
 
 
@@ -36,6 +40,80 @@ class AndroidPackagingTests(unittest.TestCase):
         self.assertIn("JvmTarget.JVM_17", build)
         self.assertNotIn('install("numpy")', build)
         self.assertNotIn('install("Pillow")', build)
+        self.assertIn('install("certifi', build)
+
+    def test_android_template_enables_https_clients(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            manifest = (root / "app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+            build = (root / "app/build.gradle.kts").read_text(encoding="utf-8")
+            boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")
+
+            self.assertIn("android.permission.INTERNET", manifest)
+            self.assertIn("android.permission.ACCESS_NETWORK_STATE", manifest)
+            self.assertIn('install("certifi', build)
+            self.assertIn("def configure_android_tls", boot)
+
+    def test_android_tls_uses_packaged_ca_bundle(self) -> None:
+        module = runpy.run_path(str(ANDROID / "app/src/main/python/luvatrix_android_boot.py"))
+        previous = sys.modules.get("certifi")
+        sys.modules["certifi"] = SimpleNamespace(where=lambda: "/app/cacert.pem")
+        old_value = os.environ.get("SSL_CERT_FILE")
+        try:
+            self.assertEqual(module["configure_android_tls"](), "/app/cacert.pem")
+            self.assertEqual(os.environ["SSL_CERT_FILE"], "/app/cacert.pem")
+        finally:
+            if previous is None:
+                sys.modules.pop("certifi", None)
+            else:
+                sys.modules["certifi"] = previous
+            if old_value is None:
+                os.environ.pop("SSL_CERT_FILE", None)
+            else:
+                os.environ["SSL_CERT_FILE"] = old_value
+
+    def test_android_template_exposes_native_rgba_image_loading(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            view = (root / "app/src/main/java/com/luvatrix/app/LuvatrixVulkanView.kt").read_text(encoding="utf-8")
+            boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")
+
+            self.assertIn("fun downloadImageRgba", view)
+            self.assertIn("BitmapFactory::decodeStream", view)
+            self.assertIn("Bitmap.createScaledBitmap", view)
+            self.assertIn("def download_image_rgba", boot)
+
+    def test_android_image_bridge_validates_https_size_and_rgba_length(self) -> None:
+        module = runpy.run_path(str(ANDROID / "app/src/main/python/luvatrix_android_boot.py"))
+
+        class View:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, int]] = []
+
+            def downloadImageRgba(self, url: str, size: int) -> str:
+                import base64
+
+                self.calls.append((url, size))
+                return base64.b64encode(bytes(range(size * size * 4))).decode("ascii")
+
+        view = View()
+        module["download_image_rgba"].__globals__["_ANDROID_VIEW"] = view
+        self.assertEqual(len(module["download_image_rgba"]("https://example.com/avatar.png", 2)), 16)
+        self.assertEqual(view.calls, [("https://example.com/avatar.png", 2)])
+
+        with self.assertRaisesRegex(ValueError, "HTTPS"):
+            module["download_image_rgba"]("file:///data/local/token", 2)
+        with self.assertRaisesRegex(ValueError, "between 1 and 512"):
+            module["download_image_rgba"]("https://example.com/avatar.png", 0)
+
+    def test_android_image_bridge_rejects_malformed_native_payload(self) -> None:
+        module = runpy.run_path(str(ANDROID / "app/src/main/python/luvatrix_android_boot.py"))
+
+        class View:
+            def downloadImageRgba(self, _url: str, _size: int) -> str:
+                return "AA=="
+
+        module["download_image_rgba"].__globals__["_ANDROID_VIEW"] = View()
+        with self.assertRaisesRegex(RuntimeError, "RGBA"):
+            module["download_image_rgba"]("https://example.com/avatar.png", 2)
 
     def test_emulator_acceptance_script_exists(self) -> None:
         script = ANDROID / "scripts" / "emulator_acceptance.sh"
@@ -59,6 +137,51 @@ class AndroidPackagingTests(unittest.TestCase):
         props = (ANDROID / "gradle.properties").read_text(encoding="utf-8")
 
         self.assertIn("android.useAndroidX=true", props)
+
+    def test_android_template_exposes_keystore_secret_storage(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            view = (root / "app/src/main/java/com/luvatrix/app/LuvatrixVulkanView.kt").read_text(encoding="utf-8")
+            boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")
+
+            self.assertIn("AndroidKeyStore", view)
+            self.assertIn("KeyProperties.BLOCK_MODE_GCM", view)
+            self.assertIn("fun writeSecureSecret", view)
+            self.assertIn("fun readSecureSecret", view)
+            self.assertIn("fun deleteSecureSecret", view)
+            self.assertIn("def write_secure_secret", boot)
+            self.assertIn("def read_secure_secret", boot)
+            self.assertIn("def delete_secure_secret", boot)
+
+    def test_android_secure_storage_python_bridge_round_trips(self) -> None:
+        module = runpy.run_path(str(ANDROID / "app/src/main/python/luvatrix_android_boot.py"))
+
+        class View:
+            def __init__(self) -> None:
+                self.values: dict[str, str] = {}
+
+            def writeSecureSecret(self, key: str, value: str) -> None:
+                self.values[key] = value
+
+            def readSecureSecret(self, key: str):
+                return self.values.get(key)
+
+            def deleteSecureSecret(self, key: str) -> None:
+                self.values.pop(key, None)
+
+        view = View()
+        module["write_secure_secret"].__globals__["_ANDROID_VIEW"] = view
+        module["write_secure_secret"]("account", "token")
+        self.assertEqual(module["read_secure_secret"]("account"), "token")
+        module["delete_secure_secret"]("account")
+        self.assertIsNone(module["read_secure_secret"]("account"))
+
+    def test_android_secure_storage_writes_fail_when_bridge_is_unavailable(self) -> None:
+        module = runpy.run_path(str(ANDROID / "app/src/main/python/luvatrix_android_boot.py"))
+
+        with self.assertRaisesRegex(RuntimeError, "unavailable"):
+            module["write_secure_secret"]("account", "token")
+        with self.assertRaisesRegex(RuntimeError, "unavailable"):
+            module["delete_secure_secret"]("account")
 
     def test_camera_bridge_declares_camera2_yuv_preview_contract(self) -> None:
         bridge = (ANDROID / "app/src/main/java/com/luvatrix/app/CameraBridge.kt").read_text(encoding="utf-8")

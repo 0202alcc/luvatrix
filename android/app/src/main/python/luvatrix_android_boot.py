@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import importlib.util
 import importlib
 import os
@@ -9,6 +10,7 @@ import sys
 import tempfile
 import time
 import tomllib
+from urllib.parse import urlparse
 
 
 _ROOT = Path(__file__).resolve().parent
@@ -66,6 +68,7 @@ def run_headless_ticks(ticks: int = 5) -> str:
 
 def run_app_vulkan(view=None) -> str:
     try:
+        configure_android_tls()
         import_probe()
         result = _run_visual_runtime(view)
         _log(f"luvatrix visual ticks={result.ticks_run} frames={result.frames_presented}")
@@ -73,6 +76,14 @@ def run_app_vulkan(view=None) -> str:
     except Exception as exc:
         _log(f"luvatrix run_app_vulkan failed: {type(exc).__name__}: {exc}")
         raise
+
+
+def configure_android_tls() -> str:
+    import certifi
+
+    ca_bundle = certifi.where()
+    os.environ["SSL_CERT_FILE"] = ca_bundle
+    return ca_bundle
 
 
 def enqueue_touch(touch_id: int, phase: str, x: float, y: float, force: float = 0.0, major_radius: float = 0.0, tool_type: str = "") -> None:
@@ -93,6 +104,51 @@ def enqueue_key(key: str, phase: str, scan_code: int = 0) -> None:
     from luvatrix_core.platform.android.hdi_source import enqueue_native_key_event
 
     enqueue_native_key_event(str(key), str(phase), scan_code=int(scan_code))
+
+
+def read_secure_secret(key: str):
+    view = _ANDROID_VIEW
+    method = getattr(view, "readSecureSecret", None) if view is not None else None
+    if not callable(method):
+        return None
+    value = method(str(key))
+    return str(value) if value is not None else None
+
+
+def write_secure_secret(key: str, value: str) -> None:
+    view = _ANDROID_VIEW
+    method = getattr(view, "writeSecureSecret", None) if view is not None else None
+    if not callable(method):
+        raise RuntimeError("Android secure storage is unavailable")
+    method(str(key), str(value))
+
+
+def delete_secure_secret(key: str) -> None:
+    view = _ANDROID_VIEW
+    method = getattr(view, "deleteSecureSecret", None) if view is not None else None
+    if not callable(method):
+        raise RuntimeError("Android secure storage is unavailable")
+    method(str(key))
+
+
+def download_image_rgba(url: str, size: int):
+    url = str(url)
+    size = int(size)
+    if urlparse(url).scheme.lower() != "https":
+        raise ValueError("Android image downloads require an HTTPS URL")
+    if not 1 <= size <= 512:
+        raise ValueError("image size must be between 1 and 512")
+    view = _ANDROID_VIEW
+    method = getattr(view, "downloadImageRgba", None) if view is not None else None
+    if not callable(method):
+        return None
+    encoded = method(url, size)
+    if encoded is None:
+        return None
+    rgba = base64.b64decode(str(encoded), validate=True)
+    if len(rgba) != size * size * 4:
+        raise RuntimeError("Android image bridge returned an invalid RGBA payload")
+    return rgba
 
 
 def android_telemetry() -> dict[str, object]:

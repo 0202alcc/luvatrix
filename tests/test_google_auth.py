@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
+from urllib.error import HTTPError, URLError
+from io import BytesIO
 
 import pytest
 
 from luvatrix.auth import GoogleAuthError, GoogleOAuthClient, GoogleOAuthConfig, InMemoryTokenStore
+from luvatrix.auth import google as google_module
 
 
 def _config() -> GoogleOAuthConfig:
@@ -93,6 +96,33 @@ def test_client_preserves_falsey_token_store() -> None:
     client = GoogleOAuthClient(_config(), token_store=store)
 
     assert client.token_store is store
+
+
+def test_token_transport_preserves_google_http_error(monkeypatch) -> None:
+    response = HTTPError(
+        "https://oauth2.googleapis.com/token",
+        400,
+        "Bad Request",
+        {},
+        BytesIO(b'{"error":"invalid_grant","error_description":"Authorization code expired"}'),
+    )
+    monkeypatch.setattr(google_module, "urlopen", lambda *_args, **_kwargs: (_ for _ in ()).throw(response))
+
+    client = GoogleOAuthClient(_config())
+    with pytest.raises(GoogleAuthError, match="Authorization code expired"):
+        client.exchange_code("expired", code_verifier="verifier")
+
+
+def test_token_transport_preserves_network_failure_reason(monkeypatch) -> None:
+    monkeypatch.setattr(
+        google_module,
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(URLError("DNS unavailable")),
+    )
+
+    client = GoogleOAuthClient(_config())
+    with pytest.raises(GoogleAuthError, match="DNS unavailable"):
+        client.exchange_code("code", code_verifier="verifier")
 
 
 @pytest.mark.parametrize("expires_in", ["nan", "inf", "-inf"])
