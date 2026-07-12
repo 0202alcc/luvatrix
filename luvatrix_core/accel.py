@@ -325,6 +325,68 @@ def _roll_pure_axis(x: _PureArray, shift: int, axis: int) -> _PureArray:
     return out
 
 
+def blit(destination, source, *, x: int, y: int):
+    """Copy a 3-D tile into a matrix in place, clipping at its boundaries."""
+    if getattr(destination, "ndim", None) != 3 or getattr(source, "ndim", None) != 3:
+        raise ValueError("blit expects 3-D destination and source arrays")
+
+    destination_height, destination_width, destination_channels = (
+        int(value) for value in destination.shape
+    )
+    source_height, source_width, source_channels = (int(value) for value in source.shape)
+    if destination_channels != source_channels:
+        raise ValueError(
+            "blit source and destination must have the same channel count: "
+            f"{source_channels} != {destination_channels}"
+        )
+    if getattr(destination, "dtype", None) != getattr(source, "dtype", None):
+        raise ValueError("blit source and destination must have the same dtype")
+
+    x = int(x)
+    y = int(y)
+    destination_x0 = max(0, x)
+    destination_y0 = max(0, y)
+    destination_x1 = min(destination_width, x + source_width)
+    destination_y1 = min(destination_height, y + source_height)
+    if destination_x0 >= destination_x1 or destination_y0 >= destination_y1:
+        return destination
+
+    source_x0 = destination_x0 - x
+    source_y0 = destination_y0 - y
+    copy_width = destination_x1 - destination_x0
+    copy_height = destination_y1 - destination_y0
+
+    if isinstance(destination, _PureArray) and isinstance(source, _PureArray):
+        item_size = _pure_item_size(destination)
+        row_bytes = copy_width * destination_channels * item_size
+        for row in range(copy_height):
+            source_start = (
+                ((source_y0 + row) * source_width + source_x0)
+                * source_channels
+                * item_size
+            )
+            destination_start = (
+                ((destination_y0 + row) * destination_width + destination_x0)
+                * destination_channels
+                * item_size
+            )
+            destination._data[destination_start : destination_start + row_bytes] = source._data[
+                source_start : source_start + row_bytes
+            ]
+        return destination
+
+    destination[
+        destination_y0:destination_y1,
+        destination_x0:destination_x1,
+        :,
+    ] = source[
+        source_y0 : source_y0 + copy_height,
+        source_x0 : source_x0 + copy_width,
+        :,
+    ]
+    return destination
+
+
 # ── Tier 1: torch ─────────────────────────────────────────────────────────────
 
 if _torch is not None:

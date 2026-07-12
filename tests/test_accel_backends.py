@@ -15,6 +15,40 @@ def _flat_values(x):
 
 
 class AccelBackendTests(unittest.TestCase):
+    def test_blit_places_and_clips_tile_on_active_backend(self) -> None:
+        from luvatrix_core import accel
+
+        frame = accel.zeros((3, 4, 1))
+        tile = accel.from_sequence([1, 2, 3, 4, 5, 6], (2, 3, 1))
+
+        result = accel.blit(frame, tile, x=2, y=1)
+
+        self.assertIs(result, frame)
+        self.assertEqual(
+            _flat_values(frame),
+            [0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 4, 5],
+        )
+
+    def test_blit_clips_negative_origin_on_active_backend(self) -> None:
+        from luvatrix_core import accel
+
+        frame = accel.zeros((2, 2, 1))
+        tile = accel.from_sequence(list(range(1, 10)), (3, 3, 1))
+
+        accel.blit(frame, tile, x=-1, y=-1)
+
+        self.assertEqual(_flat_values(frame), [5, 6, 8, 9])
+
+    def test_blit_ignores_fully_offscreen_tile_on_active_backend(self) -> None:
+        from luvatrix_core import accel
+
+        frame = accel.from_sequence([7, 7, 7, 7], (2, 2, 1))
+        tile = accel.from_sequence([1], (1, 1, 1))
+
+        accel.blit(frame, tile, x=2, y=0)
+
+        self.assertEqual(_flat_values(frame), [7, 7, 7, 7])
+
     def test_accel_imports_when_torch_is_unavailable(self) -> None:
         code = r'''
 import builtins
@@ -111,6 +145,36 @@ rolled_axis = accel.roll(accel.from_sequence(list(range(6)), (2, 3, 1)), -1, dim
 assert list(rolled_axis._data) == [1, 2, 0, 4, 5, 3], list(rolled_axis._data)
 rolled_flat = accel.roll(accel.from_sequence(list(range(6)), (2, 3, 1)), 2)
 assert list(rolled_flat._data) == [4, 5, 0, 1, 2, 3], list(rolled_flat._data)
+'''
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
+    def test_blit_works_in_pure_python_backend(self) -> None:
+        code = r'''
+import builtins
+real_import = builtins.__import__
+def blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "torch" or name.startswith("torch.") or name == "numpy" or name.startswith("numpy."):
+        raise ImportError("blocked numeric backend for pure accel test")
+    return real_import(name, globals, locals, fromlist, level)
+builtins.__import__ = blocked_import
+from luvatrix_core import accel
+assert accel.BACKEND == "pure", accel.BACKEND
+frame = accel.zeros((3, 4, 4))
+tile = accel.from_sequence(list(range(1, 25)), (2, 3, 4))
+result = accel.blit(frame, tile, x=2, y=1)
+assert result is frame
+expected = [0] * 24 + list(range(1, 9)) + [0] * 8 + list(range(13, 21))
+assert list(frame._data) == expected, list(frame._data)
+clipped = accel.zeros((2, 2, 1))
+accel.blit(clipped, accel.from_sequence(list(range(1, 10)), (3, 3, 1)), x=-1, y=-1)
+assert list(clipped._data) == [5, 6, 8, 9], list(clipped._data)
 '''
         result = subprocess.run(
             [sys.executable, "-c", code],
