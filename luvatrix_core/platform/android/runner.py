@@ -332,14 +332,17 @@ def sync_android_python_assets(app_dir: Path, *, project_dir: Path) -> None:
 
 def _android_python_packages_for_app(app_dir: Path, *, exclude_dirs: Iterable[Path] = ()) -> tuple[str, ...]:
     packages = ["luvatrix", "luvatrix_core"]
-    imports = _top_level_imports_for_app(app_dir, exclude_dirs=exclude_dirs)
+    imported_modules = _imported_modules_for_app(app_dir, exclude_dirs=exclude_dirs)
+    imports = {module.split(".", 1)[0] for module in imported_modules}
+    for module in imported_modules:
+        imports.update(_first_party_module_import_roots(module))
     for optional_pkg in ("luvatrix_ui", "luvatrix_plot"):
         if optional_pkg in imports:
             packages.append(optional_pkg)
     return tuple(packages)
 
 
-def _top_level_imports_for_app(app_dir: Path, *, exclude_dirs: Iterable[Path] = ()) -> set[str]:
+def _imported_modules_for_app(app_dir: Path, *, exclude_dirs: Iterable[Path] = ()) -> set[str]:
     imports: set[str] = set()
     excluded = tuple(path.resolve() for path in exclude_dirs)
     for path in app_dir.rglob("*.py"):
@@ -355,10 +358,35 @@ def _top_level_imports_for_app(app_dir: Path, *, exclude_dirs: Iterable[Path] = 
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    imports.add(alias.name.split(".", 1)[0])
+                    imports.add(alias.name)
             elif isinstance(node, ast.ImportFrom) and node.module:
-                imports.add(node.module.split(".", 1)[0])
+                imports.add(node.module)
     return imports
+
+
+def _first_party_module_import_roots(module_name: str) -> set[str]:
+    package_name, _, relative_module = module_name.partition(".")
+    if package_name not in {"luvatrix", "luvatrix_core"}:
+        return set()
+    package_dir = _python_package_dir(package_name)
+    if relative_module:
+        module_path = package_dir.joinpath(*relative_module.split("."))
+        source_path = module_path.with_suffix(".py")
+        if not source_path.is_file():
+            source_path = module_path / "__init__.py"
+    else:
+        source_path = package_dir / "__init__.py"
+    try:
+        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+    except (OSError, SyntaxError):
+        return set()
+    roots: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            roots.update(alias.name.split(".", 1)[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            roots.add(node.module.split(".", 1)[0])
+    return roots
 
 
 def _make_android_app_ignore(project_dir: Path):
