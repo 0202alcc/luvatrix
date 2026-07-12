@@ -110,8 +110,10 @@ class LuvatrixVulkanView @JvmOverloads constructor(
 
     fun downloadImageRgba(url: String, size: Int): String? {
         require(size in 1..512) { "image size must be between 1 and 512" }
+        val parsedUrl = URL(url)
+        require(parsedUrl.protocol.equals("https", ignoreCase = true)) { "image URL must use HTTPS" }
         return try {
-            val connection = URL(url).openConnection().apply {
+            val connection = parsedUrl.openConnection().apply {
                 connectTimeout = 10_000
                 readTimeout = 10_000
                 setRequestProperty("User-Agent", "Luvatrix/Android")

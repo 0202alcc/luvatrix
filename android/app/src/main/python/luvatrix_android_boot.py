@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import tomllib
+from urllib.parse import urlparse
 
 
 _ROOT = Path(__file__).resolve().parent
@@ -131,12 +132,23 @@ def delete_secure_secret(key: str) -> None:
 
 
 def download_image_rgba(url: str, size: int):
+    url = str(url)
+    size = int(size)
+    if urlparse(url).scheme.lower() != "https":
+        raise ValueError("Android image downloads require an HTTPS URL")
+    if not 1 <= size <= 512:
+        raise ValueError("image size must be between 1 and 512")
     view = _ANDROID_VIEW
     method = getattr(view, "downloadImageRgba", None) if view is not None else None
     if not callable(method):
         return None
-    encoded = method(str(url), int(size))
-    return base64.b64decode(str(encoded)) if encoded is not None else None
+    encoded = method(url, size)
+    if encoded is None:
+        return None
+    rgba = base64.b64decode(str(encoded), validate=True)
+    if len(rgba) != size * size * 4:
+        raise RuntimeError("Android image bridge returned an invalid RGBA payload")
+    return rgba
 
 
 def android_telemetry() -> dict[str, object]:
