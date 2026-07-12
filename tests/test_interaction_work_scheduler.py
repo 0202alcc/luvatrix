@@ -72,6 +72,33 @@ class InteractionAwareWorkSchedulerTests(unittest.TestCase):
         self.assertTrue(scheduler.wait_idle(timeout=1.0))
         self.assertEqual(errors, [("bad", "bad event")])
 
+    def test_interaction_predicate_error_is_reported_without_killing_worker(self) -> None:
+        calls = 0
+        errors: list[tuple[str, str]] = []
+        completed = Event()
+
+        def interaction_active() -> bool:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("input state unavailable")
+            return False
+
+        scheduler = InteractionAwareWorkScheduler(
+            interaction_active=interaction_active,
+            on_error=lambda key, error: errors.append((str(key), str(error))),
+            idle_poll_interval=0.005,
+        )
+        self.addCleanup(scheduler.close, wait=True)
+
+        self.assertTrue(
+            scheduler.submit("recoverable", lambda: "ok", on_complete=lambda _value: completed.set())
+        )
+
+        self.assertTrue(completed.wait(1.0))
+        self.assertTrue(scheduler.wait_idle(timeout=1.0))
+        self.assertEqual(errors, [("recoverable", "input state unavailable")])
+
 
 if __name__ == "__main__":
     unittest.main()

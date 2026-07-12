@@ -111,13 +111,26 @@ class InteractionAwareWorkScheduler:
     def _run(self) -> None:
         while True:
             with self._condition:
-                while not self._closed and (
-                    not self._pending or self.interaction_active()
-                ):
-                    timeout = self.idle_poll_interval if self._pending else None
-                    self._condition.wait(timeout)
+                while not self._closed and not self._pending:
+                    self._condition.wait()
                 if self._closed:
                     return
+                pending_key = self._pending[0].key
+
+            try:
+                interaction_active = bool(self.interaction_active())
+            except Exception as exc:
+                self._report_error(pending_key, exc)
+                interaction_active = False
+
+            with self._condition:
+                if self._closed:
+                    return
+                if not self._pending:
+                    continue
+                if interaction_active:
+                    self._condition.wait(self.idle_poll_interval)
+                    continue
                 item = self._pending.popleft()
 
             try:
