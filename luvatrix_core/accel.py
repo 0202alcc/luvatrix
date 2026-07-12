@@ -389,6 +389,219 @@ def blit(destination, source, *, x: int, y: int):
     return destination
 
 
+def alpha_blit(destination, source, *, x: int, y: int, mask=None):
+    """Source-over composite an RGBA tile into a matrix with clipping.
+
+    ``mask`` may be a uint8 ``(height, width)`` or ``(height, width, 1)``
+    coverage array. A value of 0 preserves the destination and 255 applies the
+    source alpha unchanged.
+    """
+    if getattr(destination, "ndim", None) != 3 or getattr(source, "ndim", None) != 3:
+        raise ValueError("alpha_blit expects 3-D destination and source arrays")
+    destination_height, destination_width, destination_channels = (
+        int(value) for value in destination.shape
+    )
+    source_height, source_width, source_channels = (int(value) for value in source.shape)
+    if destination_channels != 4 or source_channels != 4:
+        raise ValueError("alpha_blit expects RGBA arrays with four channels")
+    if getattr(destination, "dtype", None) != getattr(source, "dtype", None):
+        raise ValueError("alpha_blit source and destination must have the same dtype")
+    destination_backend = _array_backend_name(destination)
+    if destination_backend is None or _array_backend_name(source) != destination_backend:
+        raise TypeError("alpha_blit source and destination must use the same supported array backend")
+    if not _is_uint8_array(destination) or not _is_uint8_array(source):
+        raise ValueError("alpha_blit expects uint8 source and destination arrays")
+    if mask is not None:
+        mask_shape = tuple(int(value) for value in getattr(mask, "shape", ()))
+        if mask_shape not in ((source_height, source_width), (source_height, source_width, 1)):
+            raise ValueError(
+                "alpha_blit mask must match the source height and width with one coverage channel"
+            )
+        if _array_backend_name(mask) != destination_backend:
+            raise TypeError("alpha_blit mask must use the same array backend as the destination")
+        if not _is_uint8_array(mask):
+            raise ValueError("alpha_blit mask must use uint8 coverage values")
+    if source is destination:
+        source = clone(source)
+
+    x = int(x)
+    y = int(y)
+    destination_x0 = max(0, x)
+    destination_y0 = max(0, y)
+    destination_x1 = min(destination_width, x + source_width)
+    destination_y1 = min(destination_height, y + source_height)
+    if destination_x0 >= destination_x1 or destination_y0 >= destination_y1:
+        return destination
+
+    source_x0 = destination_x0 - x
+    source_y0 = destination_y0 - y
+    copy_width = destination_x1 - destination_x0
+    copy_height = destination_y1 - destination_y0
+
+    if isinstance(destination, _PureArray) and isinstance(source, _PureArray):
+        _alpha_blit_pure(
+            destination,
+            source,
+            mask,
+            destination_x0=destination_x0,
+            destination_y0=destination_y0,
+            source_x0=source_x0,
+            source_y0=source_y0,
+            copy_width=copy_width,
+            copy_height=copy_height,
+        )
+        return destination
+
+    destination_view = destination[
+        destination_y0:destination_y1,
+        destination_x0:destination_x1,
+        :,
+    ]
+    source_view = source[
+        source_y0 : source_y0 + copy_height,
+        source_x0 : source_x0 + copy_width,
+        :,
+    ]
+    mask_view = None
+    if mask is not None:
+        if len(mask.shape) == 2:
+            mask_view = mask[
+                source_y0 : source_y0 + copy_height,
+                source_x0 : source_x0 + copy_width,
+            ]
+        else:
+            mask_view = mask[
+                source_y0 : source_y0 + copy_height,
+                source_x0 : source_x0 + copy_width,
+                0,
+            ]
+
+    if _torch is not None and _torch.is_tensor(destination_view):
+        destination[destination_y0:destination_y1, destination_x0:destination_x1, :] = (
+            _alpha_composite_torch(destination_view, source_view, mask_view)
+        )
+        return destination
+    if _np is not None and isinstance(destination_view, _np.ndarray):
+        destination[destination_y0:destination_y1, destination_x0:destination_x1, :] = (
+            _alpha_composite_numpy(destination_view, source_view, mask_view)
+        )
+        return destination
+    raise TypeError("alpha_blit source and destination must use the same supported array backend")
+
+
+def _array_backend_name(value):
+    if isinstance(value, _PureArray):
+        return "pure"
+    if _torch is not None and _torch.is_tensor(value):
+        return "torch"
+    if _np is not None and isinstance(value, _np.ndarray):
+        return "numpy"
+    return None
+
+
+def _is_uint8_array(value):
+    if isinstance(value, _PureArray):
+        return value.dtype == "uint8"
+    return is_uint8(value)
+
+
+def _alpha_blit_pure(
+    destination,
+    source,
+    mask,
+    *,
+    destination_x0,
+    destination_y0,
+    source_x0,
+    source_y0,
+    copy_width,
+    copy_height,
+):
+    destination_width = int(destination.shape[1])
+    source_width = int(source.shape[1])
+    mask_width = int(mask.shape[1]) if mask is not None else 0
+    mask_channels = int(mask.shape[2]) if mask is not None and mask.ndim == 3 else 1
+    for row in range(copy_height):
+        for column in range(copy_width):
+            source_pixel = ((source_y0 + row) * source_width + source_x0 + column) * 4
+            destination_pixel = (
+                (destination_y0 + row) * destination_width + destination_x0 + column
+            ) * 4
+            coverage = 255
+            if mask is not None:
+                mask_pixel = (
+                    (source_y0 + row) * mask_width + source_x0 + column
+                ) * mask_channels
+                coverage = int(mask._data[mask_pixel])
+            source_alpha = (int(source._data[source_pixel + 3]) * coverage + 127) // 255
+            if source_alpha <= 0:
+                continue
+            destination_alpha = int(destination._data[destination_pixel + 3])
+            output_alpha = source_alpha + (
+                destination_alpha * (255 - source_alpha) + 127
+            ) // 255
+            for channel in range(3):
+                numerator = (
+                    int(source._data[source_pixel + channel]) * source_alpha * 255
+                    + int(destination._data[destination_pixel + channel])
+                    * destination_alpha
+                    * (255 - source_alpha)
+                )
+                denominator = output_alpha * 255
+                destination._data[destination_pixel + channel] = (
+                    0 if denominator <= 0 else (numerator + denominator // 2) // denominator
+                )
+            destination._data[destination_pixel + 3] = output_alpha
+
+
+def _alpha_composite_torch(destination, source, mask):
+    destination = destination.to(_torch.int32)
+    source = source.to(_torch.int32)
+    source_alpha = source[..., 3]
+    if mask is not None:
+        source_alpha = (source_alpha * mask.to(_torch.int32) + 127) // 255
+    destination_alpha = destination[..., 3]
+    output_alpha = source_alpha + (destination_alpha * (255 - source_alpha) + 127) // 255
+    numerator = (
+        source[..., :3] * source_alpha[..., None] * 255
+        + destination[..., :3]
+        * destination_alpha[..., None]
+        * (255 - source_alpha[..., None])
+    )
+    denominator = output_alpha[..., None] * 255
+    output_rgb = _torch.where(
+        denominator > 0,
+        (numerator + denominator // 2) // _torch.clamp(denominator, min=1),
+        0,
+    )
+    return _torch.cat((output_rgb, output_alpha[..., None]), dim=-1).to(_torch.uint8)
+
+
+def _alpha_composite_numpy(destination, source, mask):
+    destination = destination.astype(_np.int64)
+    source = source.astype(_np.int64)
+    source_alpha = source[..., 3]
+    if mask is not None:
+        source_alpha = (source_alpha * mask.astype(_np.int64) + 127) // 255
+    destination_alpha = destination[..., 3]
+    output_alpha = source_alpha + (destination_alpha * (255 - source_alpha) + 127) // 255
+    numerator = (
+        source[..., :3] * source_alpha[..., None] * 255
+        + destination[..., :3]
+        * destination_alpha[..., None]
+        * (255 - source_alpha[..., None])
+    )
+    denominator = output_alpha[..., None] * 255
+    output_rgb = _np.zeros_like(numerator)
+    _np.floor_divide(
+        numerator + denominator // 2,
+        _np.maximum(denominator, 1),
+        out=output_rgb,
+        where=denominator > 0,
+    )
+    return _np.concatenate((output_rgb, output_alpha[..., None]), axis=-1).astype(_np.uint8)
+
+
 # ── Tier 1: torch ─────────────────────────────────────────────────────────────
 
 if _torch is not None:
