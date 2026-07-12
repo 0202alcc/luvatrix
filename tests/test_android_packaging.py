@@ -71,6 +71,50 @@ class AndroidPackagingTests(unittest.TestCase):
             else:
                 os.environ["SSL_CERT_FILE"] = old_value
 
+    def test_android_template_exposes_native_rgba_image_loading(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            view = (root / "app/src/main/java/com/luvatrix/app/LuvatrixVulkanView.kt").read_text(encoding="utf-8")
+            boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")
+
+            self.assertIn("fun downloadImageRgba", view)
+            self.assertIn("BitmapFactory::decodeStream", view)
+            self.assertIn("Bitmap.createScaledBitmap", view)
+            self.assertIn("def download_image_rgba", boot)
+
+    def test_android_image_bridge_validates_https_size_and_rgba_length(self) -> None:
+        module = runpy.run_path(str(ANDROID / "app/src/main/python/luvatrix_android_boot.py"))
+
+        class View:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, int]] = []
+
+            def downloadImageRgba(self, url: str, size: int) -> str:
+                import base64
+
+                self.calls.append((url, size))
+                return base64.b64encode(bytes(range(size * size * 4))).decode("ascii")
+
+        view = View()
+        module["download_image_rgba"].__globals__["_ANDROID_VIEW"] = view
+        self.assertEqual(len(module["download_image_rgba"]("https://example.com/avatar.png", 2)), 16)
+        self.assertEqual(view.calls, [("https://example.com/avatar.png", 2)])
+
+        with self.assertRaisesRegex(ValueError, "HTTPS"):
+            module["download_image_rgba"]("file:///data/local/token", 2)
+        with self.assertRaisesRegex(ValueError, "between 1 and 512"):
+            module["download_image_rgba"]("https://example.com/avatar.png", 0)
+
+    def test_android_image_bridge_rejects_malformed_native_payload(self) -> None:
+        module = runpy.run_path(str(ANDROID / "app/src/main/python/luvatrix_android_boot.py"))
+
+        class View:
+            def downloadImageRgba(self, _url: str, _size: int) -> str:
+                return "AA=="
+
+        module["download_image_rgba"].__globals__["_ANDROID_VIEW"] = View()
+        with self.assertRaisesRegex(RuntimeError, "RGBA"):
+            module["download_image_rgba"]("https://example.com/avatar.png", 2)
+
     def test_emulator_acceptance_script_exists(self) -> None:
         script = ANDROID / "scripts" / "emulator_acceptance.sh"
 
