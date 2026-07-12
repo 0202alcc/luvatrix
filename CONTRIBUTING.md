@@ -68,7 +68,7 @@ uv run --with pytest pytest -q tests/test_app_runtime.py
 Before requesting review, run the cross-platform contract suite used by the required `dev` gate when the touched surface warrants it:
 
 ```sh
-uv run --with pytest pytest -q \
+uv run --extra desktop --with pytest pytest -q \
   tests/test_repository_test_policy.py \
   tests/test_luvatrix_public_app_api.py \
   tests/test_app_runtime.py \
