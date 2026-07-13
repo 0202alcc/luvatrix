@@ -96,4 +96,26 @@ def test_verify_release_rejects_a_partial_pypi_release() -> None:
 
     with patch.object(release, "fetch_release_filenames", return_value=names):
         with pytest.raises(RuntimeError, match="arm64_v8a"):
-            release.verify_release("luvatrix", "1.2.3")
+            release.verify_release("luvatrix", "1.2.3", attempts=1)
+
+
+def test_verify_release_retries_while_pypi_indexes_files() -> None:
+    release = _load_release_module()
+    complete = _distribution_names()
+    partial = complete - {
+        "luvatrix-1.2.3-cp314-cp314-android_26_arm64_v8a.whl"
+    }
+
+    with patch.object(
+        release,
+        "fetch_release_filenames",
+        side_effect=(partial, complete),
+    ), patch.object(release.time, "sleep") as sleep:
+        assert release.verify_release(
+            "luvatrix",
+            "1.2.3",
+            attempts=2,
+            retry_delay=0.01,
+        ) == complete
+
+    sleep.assert_called_once_with(0.01)

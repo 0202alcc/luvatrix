@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import time
 import tomllib
 import urllib.error
 import urllib.request
@@ -87,12 +88,25 @@ def prepare_upload(
     return missing
 
 
-def verify_release(name: str, version: str) -> set[str]:
-    filenames = fetch_release_filenames(name, version)
-    try:
-        return validate_distribution_names(name, version, filenames, exact=False)
-    except ValueError as exc:
-        raise RuntimeError(f"PyPI release is incomplete: {exc}") from exc
+def verify_release(
+    name: str,
+    version: str,
+    *,
+    attempts: int = 12,
+    retry_delay: float = 5.0,
+) -> set[str]:
+    if attempts < 1:
+        raise ValueError("attempts must be >= 1")
+    last_error: ValueError | None = None
+    for attempt in range(attempts):
+        filenames = fetch_release_filenames(name, version)
+        try:
+            return validate_distribution_names(name, version, filenames, exact=False)
+        except ValueError as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                time.sleep(retry_delay)
+    raise RuntimeError(f"PyPI release is incomplete: {last_error}") from last_error
 
 
 def _write_outputs(path: Path | None, *, version: str, publish: bool) -> None:
