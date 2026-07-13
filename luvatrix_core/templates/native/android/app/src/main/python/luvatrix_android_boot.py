@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import time
 import tomllib
 from urllib.parse import urlparse
@@ -20,6 +21,72 @@ if str(_ROOT) not in sys.path:
 _LAST_MARKER = ""
 _FRAME_COUNT = 0
 _ANDROID_VIEW = None
+_RUNTIME_LOCK = threading.Lock()
+_RUNTIME_RUNNING = False
+_RUNTIME_VIEW_GENERATION = 0
+
+
+class _AndroidViewPresenter:
+    """Rebinds a process-scoped runtime to the current Android Activity view."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._view = None
+        self._last_presentation: tuple[str, tuple[object, ...]] | None = None
+
+    def bind(self, view) -> None:
+        with self._lock:
+            self._view = view
+            presentation = self._last_presentation
+            if presentation is not None:
+                self._present(view, *presentation)
+
+    def unbind(self, view) -> None:
+        with self._lock:
+            if self._view is view:
+                self._view = None
+
+    def current_view(self):
+        with self._lock:
+            return self._view
+
+    def presentRgba(self, rgba: bytes, revision: int, width: int, height: int) -> None:
+        self._remember_and_present("presentRgba", (rgba, revision, width, height))
+
+    def presentScene(
+        self,
+        scene_json: str,
+        revision: int,
+        logical_width: int,
+        logical_height: int,
+        presentation_mode: str = "",
+    ) -> None:
+        self._remember_and_present(
+            "presentScene",
+            (scene_json, revision, logical_width, logical_height, presentation_mode),
+        )
+
+    def __getattr__(self, name: str):
+        view = self.current_view()
+        if view is None:
+            raise AttributeError(name)
+        return getattr(view, name)
+
+    def _remember_and_present(self, method_name: str, args: tuple[object, ...]) -> None:
+        with self._lock:
+            self._last_presentation = (method_name, args)
+            view = self._view
+            if view is not None:
+                self._present(view, method_name, args)
+
+    @staticmethod
+    def _present(view, method_name: str, args: tuple[object, ...]) -> None:
+        method = getattr(view, method_name, None)
+        if callable(method):
+            method(*args)
+
+
+_ANDROID_PRESENTER = _AndroidViewPresenter()
 
 
 def _log(message: str) -> None:
@@ -69,15 +136,40 @@ def run_headless_ticks(ticks: int = 5) -> str:
 
 
 def run_app_vulkan(view=None) -> str:
+    global _ANDROID_VIEW, _RUNTIME_RUNNING, _RUNTIME_VIEW_GENERATION
+    with _RUNTIME_LOCK:
+        if view is not None:
+            _ANDROID_VIEW = view
+            _ANDROID_PRESENTER.bind(view)
+            _RUNTIME_VIEW_GENERATION += 1
+        owner_generation = _RUNTIME_VIEW_GENERATION
+        if _RUNTIME_RUNNING:
+            return _mark("luvatrix visual reattached")
+        _RUNTIME_RUNNING = True
     try:
-        configure_android_tls()
-        import_probe()
-        result = _run_visual_runtime(view)
-        _log(f"luvatrix visual ticks={result.ticks_run} frames={result.frames_presented}")
-        return _mark("luvatrix visual ok")
+        while True:
+            configure_android_tls()
+            import_probe()
+            result = _run_visual_runtime(_ANDROID_PRESENTER if view is not None else None)
+            _log(f"luvatrix visual ticks={result.ticks_run} frames={result.frames_presented}")
+            with _RUNTIME_LOCK:
+                if owner_generation == _RUNTIME_VIEW_GENERATION:
+                    return _mark("luvatrix visual ok")
+                owner_generation = _RUNTIME_VIEW_GENERATION
+            _log("restarting visual runtime for replacement Android view")
     except Exception as exc:
         _log(f"luvatrix run_app_vulkan failed: {type(exc).__name__}: {exc}")
         raise
+    finally:
+        with _RUNTIME_LOCK:
+            _RUNTIME_RUNNING = False
+
+
+def detach_android_view(view) -> None:
+    global _ANDROID_VIEW
+    _ANDROID_PRESENTER.unbind(view)
+    if _ANDROID_VIEW is view:
+        _ANDROID_VIEW = None
 
 
 def configure_android_tls() -> str:
@@ -320,8 +412,6 @@ def _run_visual_runtime(view):
     if view is not None and _truthy(config.get("low_latency_mode"), default=True):
         _apply_low_latency_mode(view, target_fps=target_fps, present_fps=present_fps)
     clear_android_input_events()
-    if view is not None:
-        _ANDROID_VIEW = view
     if view is not None and _should_start_camera_preview(config):
         _start_camera_preview(view)
 
@@ -526,9 +616,16 @@ def _paint_view(view, frames: int) -> None:
 
 def _app_dir() -> Path:
     config = _launch_config()
-    configured = (_ROOT / str(config.get("app_dir", "luvatrix_app"))).resolve()
-    if (configured / "app.toml").exists() and (configured / "app_main.py").exists():
+    configured_name = str(config.get("app_dir", "luvatrix_app"))
+    configured = (_ROOT / configured_name).resolve()
+    if (configured / "app.toml").exists() and any(
+        (configured / name).exists() for name in ("app_main.py", "app_main.pyc")
+    ):
         return configured
+
+    materialized_configured = _materialize_configured_app(configured_name)
+    if materialized_configured is not None:
+        return materialized_configured
 
     source = str(config.get("source_app_dir", "") or "")
     if source:
@@ -562,7 +659,10 @@ def _app_dir() -> Path:
 
 
 def _import_configured_app_main() -> None:
-    app_main = _app_dir() / "app_main.py"
+    app_dir = _app_dir()
+    app_main = app_dir / "app_main.py"
+    if not app_main.exists():
+        app_main = app_dir / "app_main.pyc"
     module_name = "luvatrix_configured_app_main"
     spec = importlib.util.spec_from_file_location(module_name, app_main)
     if spec is None or spec.loader is None:
@@ -574,6 +674,20 @@ def _import_configured_app_main() -> None:
     except Exception:
         sys.modules.pop(module_name, None)
         raise
+
+
+def _materialize_configured_app(package_name: str) -> Path | None:
+    try:
+        from importlib import resources
+
+        package = importlib.import_module(package_name)
+        package_root = resources.files(package)
+        app_toml = package_root.joinpath("app.toml").read_text(encoding="utf-8")
+        app_main = package_root.joinpath("app_main.pyc").read_bytes()
+    except Exception:
+        return None
+
+    return _write_materialized_bytecode_app(package_name, app_toml, app_main)
 
 
 def _materialize_packaged_app(source_app_dir: str = "") -> Path | None:
@@ -611,6 +725,16 @@ def _write_materialized_app(package_name: str, app_toml: str, app_main: str) -> 
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "app.toml").write_text(app_toml, encoding="utf-8")
     (dest / "app_main.py").write_text(app_main, encoding="utf-8")
+    (dest / "app_main.pyc").unlink(missing_ok=True)
+    return dest
+
+
+def _write_materialized_bytecode_app(package_name: str, app_toml: str, app_main: bytes) -> Path:
+    dest = Path(tempfile.gettempdir()) / f"luvatrix_{package_name.replace('.', '_')}"
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "app.toml").write_text(app_toml, encoding="utf-8")
+    (dest / "app_main.pyc").write_bytes(app_main)
+    (dest / "app_main.py").unlink(missing_ok=True)
     return dest
 
 

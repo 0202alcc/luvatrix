@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import py_compile
 import tempfile
 import unittest
 
@@ -137,6 +138,50 @@ class _FakeUIRenderer:
 
 
 class AppRuntimeTests(unittest.TestCase):
+    def test_app_context_reports_first_presented_frame_from_runtime_telemetry(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        frames_presented = 0
+        ctx = AppContext(
+            matrix=WindowMatrix(1, 1),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write"},
+            runtime_telemetry_provider=lambda: {"frames_presented": frames_presented},
+        )
+
+        self.assertFalse(ctx.has_presented_frame())
+        frames_presented = 1
+        self.assertTrue(ctx.has_presented_frame())
+
+    def test_app_runtime_loads_sourceless_bytecode_entrypoint(self) -> None:
+        from luvatrix_core.core.app_runtime import AppRuntime
+
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            source = app_dir / "app_main.py"
+            source.write_text(
+                "class App:\n"
+                "    def init(self, ctx): pass\n"
+                "    def loop(self, ctx, dt): pass\n"
+                "    def stop(self, ctx): pass\n"
+                "def create(): return App()\n",
+                encoding="utf-8",
+            )
+            py_compile.compile(str(source), cfile=str(app_dir / "app_main.pyc"), doraise=True)
+            source.unlink()
+            runtime = AppRuntime(
+                matrix=WindowMatrix(1, 1),
+                hdi=_FakeHDI(),  # type: ignore[arg-type]
+                sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            )
+
+            lifecycle = runtime.load_lifecycle(app_dir, "app_main:create")
+
+            self.assertTrue(callable(lifecycle.init))
+            self.assertTrue(callable(lifecycle.loop))
+            self.assertTrue(callable(lifecycle.stop))
+
     def test_manifest_parses_platform_support_and_variants(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

@@ -11,6 +11,7 @@ import com.chaquo.python.android.AndroidPlatform
 
 class MainActivity : Activity() {
     private lateinit var luvatrixView: LuvatrixVulkanView
+    private lateinit var pythonModule: PyObject
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,17 +25,17 @@ class MainActivity : Activity() {
             Python.start(AndroidPlatform(this))
         }
         Log.i(TAG, "loading luvatrix_android_boot")
-        val module = Python.getInstance().getModule("luvatrix_android_boot")
-        pythonBridge = PythonBridge(module)
+        pythonModule = Python.getInstance().getModule("luvatrix_android_boot")
+        pythonBridge = PythonBridge(pythonModule)
 
         val importProbe = intent.getBooleanExtra("luvatrix_import_probe", false)
         Thread {
             try {
                 Log.i(TAG, "starting Luvatrix visual runtime importProbe=$importProbe")
                 if (importProbe) {
-                    module.callAttr("import_probe")
+                    pythonModule.callAttr("import_probe")
                 } else {
-                    module.callAttr("run_app_vulkan", luvatrixView)
+                    pythonModule.callAttr("run_app_vulkan", luvatrixView)
                 }
                 Log.i(TAG, "Luvatrix visual runtime returned")
             } catch (exc: Throwable) {
@@ -42,6 +43,17 @@ class MainActivity : Activity() {
                 luvatrixView.showRuntimeError("${exc.javaClass.simpleName}: ${exc.message ?: "unknown error"}")
             }
         }.start()
+    }
+
+    override fun onDestroy() {
+        if (::pythonModule.isInitialized && ::luvatrixView.isInitialized) {
+            try {
+                pythonModule.callAttr("detach_android_view", luvatrixView)
+            } catch (exc: Throwable) {
+                Log.w(TAG, "could not detach destroyed Android view", exc)
+            }
+        }
+        super.onDestroy()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {

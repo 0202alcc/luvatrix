@@ -167,6 +167,7 @@ class UnifiedRuntimeTests(unittest.TestCase):
             self.assertEqual(target.started, 1)
             self.assertEqual(target.stopped, 1)
             self.assertGreaterEqual(len(target.presented), 1)
+            self.assertEqual(runtime._runtime_telemetry()["frames_presented"], len(target.presented))
             self.assertEqual(sensors.started, 1)
             self.assertEqual(sensors.stopped, 1)
             self.assertEqual(matrix.revision, 5)
