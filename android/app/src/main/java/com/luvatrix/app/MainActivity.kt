@@ -11,44 +11,58 @@ import com.chaquo.python.android.AndroidPlatform
 
 class MainActivity : Activity() {
     private lateinit var luvatrixView: LuvatrixVulkanView
-    private lateinit var pythonModule: PyObject
+    private var pythonModule: PyObject? = null
+    private val startupRunner = BackgroundStartupRunner()
+    @Volatile private var destroyed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AndroidLaunchTelemetry.mark("activity_on_create")
         luvatrixView = LuvatrixVulkanView(this)
         setContentView(luvatrixView)
+        AndroidLaunchTelemetry.mark("view_attached")
         luvatrixView.requestFocus()
         val presentFps = 60
         luvatrixView.applyLowLatencyMode(presentFps * 2, presentFps)
-        Log.i(TAG, "starting Python runtime")
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(this))
-        }
-        Log.i(TAG, "loading luvatrix_android_boot")
-        pythonModule = Python.getInstance().getModule("luvatrix_android_boot")
-        pythonBridge = PythonBridge(pythonModule)
-
         val importProbe = intent.getBooleanExtra("luvatrix_import_probe", false)
-        Thread {
-            try {
+        startupRunner.start(
+            task = {
+                AndroidLaunchTelemetry.mark("python_start_begin")
+                Log.i(TAG, "starting Python runtime")
+                if (!Python.isStarted()) {
+                    Python.start(AndroidPlatform(this))
+                }
+                AndroidLaunchTelemetry.mark("python_start_end")
+                Log.i(TAG, "loading luvatrix_android_boot")
+                val module = Python.getInstance().getModule("luvatrix_android_boot")
+                pythonModule = module
+                pythonBridge = PythonBridge(module)
+                AndroidLaunchTelemetry.mark("boot_module_loaded")
+                if (destroyed) return@start
                 Log.i(TAG, "starting Luvatrix visual runtime importProbe=$importProbe")
+                AndroidLaunchTelemetry.mark("runtime_call_begin")
                 if (importProbe) {
-                    pythonModule.callAttr("import_probe")
+                    module.callAttr("import_probe")
                 } else {
-                    pythonModule.callAttr("run_app_vulkan", luvatrixView)
+                    module.callAttr("run_app_vulkan", luvatrixView)
                 }
                 Log.i(TAG, "Luvatrix visual runtime returned")
-            } catch (exc: Throwable) {
+            },
+            onFailure = { exc ->
                 Log.e(TAG, "luvatrix python runtime failed", exc)
-                luvatrixView.showRuntimeError("${exc.javaClass.simpleName}: ${exc.message ?: "unknown error"}")
-            }
-        }.start()
+                if (!destroyed) {
+                    luvatrixView.showRuntimeError("${exc.javaClass.simpleName}: ${exc.message ?: "unknown error"}")
+                }
+            },
+        )
     }
 
     override fun onDestroy() {
-        if (::pythonModule.isInitialized && ::luvatrixView.isInitialized) {
+        destroyed = true
+        val module = pythonModule
+        if (module != null && ::luvatrixView.isInitialized) {
             try {
-                pythonModule.callAttr("detach_android_view", luvatrixView)
+                module.callAttr("detach_android_view", luvatrixView)
             } catch (exc: Throwable) {
                 Log.w(TAG, "could not detach destroyed Android view", exc)
             }
