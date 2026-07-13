@@ -46,6 +46,11 @@ chaquopy {
         version = "3.14"
         pip {
             install("certifi>=2026.2.25")
+            val acceleratorRequirement = file("luvatrix-android-accel.txt")
+            if (acceleratorRequirement.isFile) {
+                options("--find-links", file("wheels").toURI().toString(), "--no-deps")
+                install(acceleratorRequirement.readText().trim())
+            }
         }
     }
 }
@@ -53,6 +58,7 @@ chaquopy {
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
+    testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:rules:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

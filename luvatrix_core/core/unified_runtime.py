@@ -166,6 +166,7 @@ class UnifiedRuntime:
         present_fps: int | None = None,
         display_timeout: float = 0.0,
         on_targets_started: "Callable[[], None] | None" = None,
+        defer_optional_sensor_polling_until_first_frame: bool = False,
     ) -> UnifiedRunResult:
         if max_ticks is not None and max_ticks <= 0:
             raise ValueError("max_ticks must be > 0")
@@ -218,7 +219,15 @@ class UnifiedRuntime:
             )
             scene_present_loop_started = True
         ctx.hdi.start()
-        ctx.sensor_manager.start()
+        required_sensor_capability = any(
+            capability.startswith("sensor.") for capability in manifest.required_capabilities
+        )
+        sensor_manager_started = not (
+            defer_optional_sensor_polling_until_first_frame and not required_sensor_capability
+        )
+        if sensor_manager_started:
+            ctx.sensor_manager.start()
+        deferred_sensor_deadline = time.perf_counter() + 0.1
         last = time.perf_counter()
         was_active = self._is_active()
         try:
@@ -262,6 +271,15 @@ class UnifiedRuntime:
                     if matrix_tick is not None:
                         frames_presented += 1
                         self._frames_presented = frames_presented
+                if not sensor_manager_started:
+                    scene_frames = (
+                        self._scene_display_runtime.frames_presented
+                        if self._scene_display_runtime is not None
+                        else 0
+                    )
+                    if frames_presented > 0 or scene_frames > 0 or time.perf_counter() >= deferred_sensor_deadline:
+                        ctx.sensor_manager.start()
+                        sensor_manager_started = True
                 sleep_for = rate.compute_sleep(
                     loop_started_at=now,
                     loop_finished_at=time.perf_counter(),

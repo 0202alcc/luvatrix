@@ -67,6 +67,11 @@ def test_pypi_publish_uses_trusted_publishing_with_attestations() -> None:
     assert "PYPI_API_TOKEN" not in workflow
     assert "password:" not in workflow
     assert "persist-credentials: false" in workflow
+    assert 'version: "0.10.9"' in workflow
+    assert "skip-existing: true" in workflow
+    assert "tools/release/pypi_release.py prepare" in workflow
+    assert "tools/release/pypi_release.py verify" in workflow
+    assert "packages-dir: upload-dist/" in workflow
     for mutable_ref in (
         "actions/checkout@v4",
         "astral-sh/setup-uv@v5",

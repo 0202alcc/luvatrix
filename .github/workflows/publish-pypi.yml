@@ -25,48 +25,29 @@ jobs:
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
-
-      - name: Check PyPI version
-        id: release
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import tomllib
-          import urllib.error
-          import urllib.request
-          from pathlib import Path
-
-          project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]
-          name = project["name"]
-          version = project["version"]
-          exists = False
-          try:
-              with urllib.request.urlopen(f"https://pypi.org/pypi/{name}/json", timeout=20) as response:
-                  releases = json.load(response).get("releases", {})
-              exists = version in releases
-          except urllib.error.HTTPError as exc:
-              if exc.code != 404:
-                  raise
-
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              print(f"version={version}", file=output)
-              print(f"publish={'false' if exists else 'true'}", file=output)
-
-          state = "already exists on PyPI; skipping publish" if exists else "not found on PyPI; publishing"
-          print(f"{name} {version} {state}")
-          PY
+        with:
+          version: "0.10.9"
 
       - name: Build distributions
-        if: steps.release.outputs.publish == 'true'
-        run: uv build
+        run: |
+          uv build
+          uvx --from cibuildwheel==4.1.0 cibuildwheel --platform android --output-dir dist
+        env:
+          CIBW_BUILD: "cp314-android_arm64_v8a cp314-android_x86_64"
+          CIBW_ARCHS_ANDROID: "arm64_v8a x86_64"
+          CIBW_ENVIRONMENT_ANDROID: "LUVATRIX_BUILD_ACCEL=1"
 
-      - name: Upload distributions
+      - name: Reconcile PyPI files
+        id: release
+        run: python3 tools/release/pypi_release.py prepare
+
+      - name: Upload missing distributions
         if: steps.release.outputs.publish == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: python-package-distributions
-          path: dist/
+          path: upload-dist/
+          if-no-files-found: error
 
   publish:
     name: Publish to PyPI
@@ -83,9 +64,26 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-package-distributions
-          path: dist/
+          path: upload-dist/
 
       - name: Publish distributions
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
+          packages-dir: upload-dist/
+          skip-existing: true
           attestations: true
+
+  verify:
+    name: Verify PyPI release
+    needs: [build, publish]
+    if: >-
+      always() &&
+      needs.build.result == 'success' &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Verify all release files are on PyPI
+        run: python3 tools/release/pypi_release.py verify

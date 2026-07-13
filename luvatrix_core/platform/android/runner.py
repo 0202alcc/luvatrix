@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Iterable
+import hashlib
 import json
 import importlib.util
 import os
@@ -11,13 +12,18 @@ import shutil
 import subprocess
 import time
 import tomllib
+import urllib.error
+import urllib.request
 
+from luvatrix_core import __version__
 from luvatrix_core.platform.package_sync import copy_package_tree_for_target
 from luvatrix_core.scaffold import resolve_native_project_dir
 
 
 DEFAULT_ANDROID_PACKAGE = "com.luvatrix.app"
 ANDROID_GENERATED_GITIGNORE_RULES = (
+    "app/luvatrix-android-accel.txt",
+    "app/wheels/",
     "app/.cxx/",
     "app/build/",
     "app/src/main/assets/luvatrix_launch_config.json",
@@ -327,7 +333,106 @@ def sync_android_python_assets(app_dir: Path, *, project_dir: Path) -> None:
     config = project / "app" / "src" / "main" / "assets" / "luvatrix_launch_config.json"
     if config.exists():
         shutil.copy2(config, py_dst / "luvatrix_launch_config.json")
+    accelerator_mode = os.getenv("LUVATRIX_ANDROID_ACCEL_DOWNLOAD", "auto").strip().lower()
+    should_sync_accelerator = accelerator_mode == "on" or (
+        accelerator_mode == "auto" and not _running_from_source_checkout()
+    )
+    if (project / "app" / "build.gradle.kts").is_file() and should_sync_accelerator:
+        synced = sync_android_accelerator_wheels(project, version=__version__)
+        if synced:
+            print(f"[android] synced {len(synced)} native accelerator wheels")
     print(f"[android] synced Python assets for {app_dir}")
+
+
+def sync_android_accelerator_wheels(project_dir: Path, *, version: str) -> tuple[Path, ...]:
+    """Download verified CPython 3.14 Android wheels when this release provides them."""
+    project = project_dir.resolve()
+    app_dir = project / "app"
+    requirement = app_dir / "luvatrix-android-accel.txt"
+    cached = _cached_android_accelerator_wheels(app_dir, version=version)
+    try:
+        with urllib.request.urlopen(
+            f"https://pypi.org/pypi/luvatrix/{version}/json",
+            timeout=20,
+        ) as response:
+            release = json.loads(response.read())
+    except (OSError, ValueError, urllib.error.URLError):
+        return cached
+
+    normalized_version = str(version).replace("-", "_")
+    pattern = re.compile(
+        rf"^luvatrix-{re.escape(normalized_version)}-cp314-cp314-android_\d+_"
+        r"(arm64_v8a|x86_64)\.whl$"
+    )
+    selected: dict[str, dict[str, object]] = {}
+    for entry in release.get("urls", ()) if isinstance(release, dict) else ():
+        if not isinstance(entry, dict):
+            continue
+        match = pattern.match(str(entry.get("filename", "")))
+        if match is not None:
+            selected[match.group(1)] = entry
+    if set(selected) != {"arm64_v8a", "x86_64"}:
+        return cached
+
+    wheel_dir = app_dir / "wheels"
+    wheel_dir.mkdir(parents=True, exist_ok=True)
+    synced: list[Path] = []
+    pending: list[tuple[Path, Path]] = []
+    try:
+        for abi in ("arm64_v8a", "x86_64"):
+            entry = selected[abi]
+            filename = str(entry["filename"])
+            url = str(entry["url"])
+            digests = entry.get("digests")
+            digest = str(digests.get("sha256", "")) if isinstance(digests, dict) else ""
+            if not url.startswith("https://") or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise ValueError(f"invalid accelerator wheel metadata for {filename}")
+            destination = wheel_dir / filename
+            if destination.is_file() and hashlib.sha256(destination.read_bytes()).hexdigest() == digest:
+                synced.append(destination)
+                continue
+            with urllib.request.urlopen(url, timeout=20) as response:
+                payload = response.read()
+            if hashlib.sha256(payload).hexdigest() != digest:
+                raise ValueError(f"accelerator wheel digest mismatch for {filename}")
+            temporary = destination.with_suffix(destination.suffix + ".tmp")
+            temporary.write_bytes(payload)
+            pending.append((temporary, destination))
+            synced.append(destination)
+    except (KeyError, OSError, ValueError, urllib.error.URLError):
+        for temporary, _destination in pending:
+            temporary.unlink(missing_ok=True)
+        return cached
+
+    for temporary, destination in pending:
+        temporary.replace(destination)
+
+    requirement.write_text(f"luvatrix=={version}\n", encoding="utf-8")
+    return tuple(synced)
+
+
+def _cached_android_accelerator_wheels(app_dir: Path, *, version: str) -> tuple[Path, ...]:
+    requirement = app_dir / "luvatrix-android-accel.txt"
+    try:
+        if requirement.read_text(encoding="utf-8") != f"luvatrix=={version}\n":
+            return ()
+    except OSError:
+        return ()
+    wheel_dir = app_dir / "wheels"
+    normalized_version = str(version).replace("-", "_")
+    selected: list[Path] = []
+    for abi in ("arm64_v8a", "x86_64"):
+        matches = tuple(
+            wheel_dir.glob(f"luvatrix-{normalized_version}-cp314-cp314-android_*_{abi}.whl")
+        )
+        if len(matches) != 1:
+            return ()
+        selected.append(matches[0])
+    return tuple(selected)
+
+
+def _running_from_source_checkout() -> bool:
+    return (Path(__file__).resolve().parents[3] / "pyproject.toml").is_file()
 
 
 def _android_python_packages_for_app(app_dir: Path, *, exclude_dirs: Iterable[Path] = ()) -> tuple[str, ...]:

@@ -1,0 +1,38 @@
+name: android-accelerator-wheels
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - "luvatrix_core/_accel_native.pyx"
+      - "luvatrix_core/_accel_native.c"
+      - "setup.py"
+      - "pyproject.toml"
+      - ".github/workflows/android-accelerator-wheels.yml"
+      - ".github/workflows/publish-pypi.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-wheels:
+    name: build-android-wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
+        with:
+          version: "0.10.9"
+      - name: Build CPython 3.14 Android wheels
+        run: uvx --from cibuildwheel==4.1.0 cibuildwheel --platform android --output-dir wheelhouse
+        env:
+          CIBW_BUILD: "cp314-android_arm64_v8a cp314-android_x86_64"
+          CIBW_ARCHS_ANDROID: "arm64_v8a x86_64"
+          CIBW_ENVIRONMENT_ANDROID: "LUVATRIX_BUILD_ACCEL=1"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: luvatrix-android-accelerator-wheels
+          path: wheelhouse/*.whl
