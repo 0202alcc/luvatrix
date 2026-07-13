@@ -50,9 +50,12 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     private var frameBitmapWidth: Int = 0
     private var frameBitmapHeight: Int = 0
     private var overlaySceneJson: String? = null
+    private var retainedSceneJson: String? = null
     private var overlayLogicalWidth: Int = 1
     private var overlayLogicalHeight: Int = 1
     private var overlayNativeBackground: Boolean = false
+    private var overlayContentOffsetX: Double? = null
+    private var overlayContentOffsetY: Double? = null
     private var overlayMode: OverlayMode = OverlayMode.Scene
     private var bootstrapMessage: String? = null
     private var lowLatencyMode: Boolean = false
@@ -378,6 +381,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     fun presentRgba(rgba: ByteArray, revision: Int, width: Int, height: Int) {
+        AndroidLaunchTelemetry.mark("first_app_frame_submitted")
         overlayView.post {
             bootstrapMessage = null
             if (frameBitmap == null || frameBitmapWidth != width || frameBitmapHeight != height) {
@@ -389,6 +393,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
             bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(rgba))
             overlayMode = OverlayMode.Bitmap
             overlaySceneJson = null
+            retainedSceneJson = null
             overlayView.setBackgroundColor(Color.TRANSPARENT)
             overlayView.invalidate()
             framesPresented += 1
@@ -579,6 +584,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     fun presentScene(sceneJson: String, revision: Int, logicalWidth: Int, logicalHeight: Int, presentationMode: String = "") {
+        AndroidLaunchTelemetry.mark("first_app_frame_submitted")
         var nativeBackground = false
         try {
             nativeBackground = NativeVulkan.presentScene(sceneJson, revision, logicalWidth, logicalHeight, presentationMode)
@@ -588,25 +594,60 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         overlayView.post {
             bootstrapMessage = null
             overlayMode = OverlayMode.Scene
+            retainedSceneJson = sceneJson
             overlaySceneJson = if (nativeBackground) null else sceneJson
             overlayLogicalWidth = logicalWidth
             overlayLogicalHeight = logicalHeight
             overlayNativeBackground = nativeBackground
+            overlayContentOffsetX = null
+            overlayContentOffsetY = null
             overlayView.setBackgroundColor(Color.TRANSPARENT)
             overlayView.invalidate()
             framesPresented += 1
         }
     }
 
-    private fun drawSceneCanvas(canvas: Canvas, sceneJson: String, logicalWidth: Int, logicalHeight: Int, nativeBackground: Boolean) {
+    fun presentSceneTransform(revision: Int, contentOffsetX: Double, contentOffsetY: Double) {
+        var nativeBackground = false
+        try {
+            nativeBackground = NativeVulkan.presentSceneTransform(revision, contentOffsetX, contentOffsetY)
+        } catch (exc: Throwable) {
+            Log.w("Luvatrix", "native Vulkan scene transform unavailable; using Canvas fallback", exc)
+        }
+        overlayView.post {
+            bootstrapMessage = null
+            overlayMode = OverlayMode.Scene
+            overlaySceneJson = if (nativeBackground) null else retainedSceneJson
+            overlayNativeBackground = nativeBackground
+            overlayContentOffsetX = contentOffsetX
+            overlayContentOffsetY = contentOffsetY
+            overlayView.setBackgroundColor(Color.TRANSPARENT)
+            overlayView.invalidate()
+            framesPresented += 1
+        }
+    }
+
+    private fun drawSceneCanvas(
+        canvas: Canvas,
+        sceneJson: String,
+        logicalWidth: Int,
+        logicalHeight: Int,
+        nativeBackground: Boolean,
+        overrideContentOffsetX: Double? = null,
+        overrideContentOffsetY: Double? = null,
+    ) {
         val nodes = JSONArray(sceneJson)
         val scaleX = canvas.width.toFloat() / logicalWidth.coerceAtLeast(1).toFloat()
         val scaleY = canvas.height.toFloat() / logicalHeight.coerceAtLeast(1).toFloat()
-        var contentOffsetX = 0.0
-        var contentOffsetY = 0.0
+        var contentOffsetX = overrideContentOffsetX ?: 0.0
+        var contentOffsetY = overrideContentOffsetY ?: 0.0
         for (idx in 0 until nodes.length()) {
             val node = nodes.getJSONObject(idx)
-            if (node.optString("type") == "meta") {
+            if (
+                node.optString("type") == "meta" &&
+                overrideContentOffsetX == null &&
+                overrideContentOffsetY == null
+            ) {
                 contentOffsetX = node.optDouble("content_offset_x", contentOffsetX)
                 contentOffsetY = node.optDouble("content_offset_y", contentOffsetY)
             }
@@ -748,10 +789,19 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         overlayView.post {
             overlayMode = OverlayMode.Bootstrap
             overlaySceneJson = null
+            retainedSceneJson = null
             overlayView.setBackgroundColor(color)
             overlayView.invalidate()
             framesPresented += 1
         }
+    }
+
+    fun launchTelemetryJson(): String {
+        val payload = JSONObject()
+        for ((name, elapsedNs) in AndroidLaunchTelemetry.snapshot()) {
+            payload.put(name, elapsedNs)
+        }
+        return payload.toString()
     }
 
     fun showRuntimeError(message: String) {
@@ -759,6 +809,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
             bootstrapMessage = message.take(320)
             overlayMode = OverlayMode.Bootstrap
             overlaySceneJson = null
+            retainedSceneJson = null
             overlayView.setBackgroundColor(Color.rgb(72, 18, 30))
             overlayView.invalidate()
         }
@@ -830,6 +881,11 @@ class LuvatrixVulkanView @JvmOverloads constructor(
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
+            if (overlayMode == OverlayMode.Bootstrap) {
+                AndroidLaunchTelemetry.mark("bootstrap_frame_drawn")
+            } else {
+                AndroidLaunchTelemetry.mark("first_app_frame_drawn")
+            }
             when (overlayMode) {
                 OverlayMode.Bootstrap -> {
                     val message = bootstrapMessage ?: return
@@ -847,7 +903,15 @@ class LuvatrixVulkanView @JvmOverloads constructor(
                 OverlayMode.Bitmap -> frameBitmap?.let { canvas.drawBitmap(it, null, canvas.clipBounds, matrixPaint) }
                 OverlayMode.Scene -> {
                     val scene = overlaySceneJson ?: return
-                    drawSceneCanvas(canvas, scene, overlayLogicalWidth, overlayLogicalHeight, overlayNativeBackground)
+                    drawSceneCanvas(
+                        canvas,
+                        scene,
+                        overlayLogicalWidth,
+                        overlayLogicalHeight,
+                        overlayNativeBackground,
+                        overlayContentOffsetX,
+                        overlayContentOffsetY,
+                    )
                 }
             }
         }

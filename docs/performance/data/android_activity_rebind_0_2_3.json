@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "android-activity-rebind-0.2.3",
+  "recorded_at": "2026-07-12",
+  "device": {
+    "manufacturer_model": "Realme 12 5G (RMX3999)",
+    "physical_resolution": "1080x2400",
+    "refresh_rate_hz": 120
+  },
+  "conditions": {
+    "android_always_finish_activities": true,
+    "trials_per_version": 3,
+    "launch_timer_includes_adb_command_overhead": true,
+    "visual_detection": "First screenshot containing the schedule app cream field and dark-red hour-line signature.",
+    "screenshot_sampling_floor_s": 1.0,
+    "candidate_app_integration": "InteractionAwareWorkScheduler startup_ready=ctx.has_presented_frame"
+  },
+  "measurements": {
+    "baseline_0_2_2": {
+      "cold_launch_s": [6.3920668750070035, 5.297961291973479, 5.480462374980561],
+      "activity_recreation_s": [5.4543729580473155, 5.608468041056767, 4.9703517919406295]
+    },
+    "candidate_0_2_3": {
+      "cold_launch_s": [5.193204625044018, 4.434704957995564, 4.348577833967283],
+      "activity_recreation_s": [1.2719724170165136, 1.0114308750489727, 0.9816852079238743]
+    }
+  },
+  "summary": {
+    "cold_launch_s": {
+      "baseline_median": 5.48,
+      "candidate_median": 4.435,
+      "improvement_percent": 19.08
+    },
+    "activity_recreation_s": {
+      "baseline_median": 5.454,
+      "candidate_median": 1.011,
+      "improvement_percent": 81.46
+    }
+  },
+  "runtime_evidence": {
+    "python_reattach_ms": 34,
+    "refresh_request_hz_after_rebind": 120,
+    "refresh_actual_hz_after_rebind": 120.00001,
+    "refresh_surface_hint_hz_after_rebind": 120
+  }
+}

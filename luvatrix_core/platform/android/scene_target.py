@@ -23,12 +23,14 @@ class AndroidNativeSceneTarget:
     frames_presented: int = 0
     last_revision: int | None = None
     _telemetry: dict[str, int] = field(default_factory=dict)
+    _last_frame: SceneFrame | None = None
 
     def start(self) -> None:
         self._started = True
 
     def stop(self) -> None:
         self._started = False
+        self._last_frame = None
 
     def pump_events(self) -> None:
         return
@@ -44,15 +46,38 @@ class AndroidNativeSceneTarget:
         if not callable(method):
             raise RuntimeError("Android native scene presenter must expose presentScene/present_scene")
         started = time.perf_counter_ns()
-        payload = json.dumps(_scene_payload(frame), separators=(",", ":"))
-        encode_ns = time.perf_counter_ns() - started
-        method(payload, int(frame.revision), int(frame.logical_width), int(frame.logical_height), str(frame.presentation_mode or ""))
+        transform_method = getattr(self.presenter, "presentSceneTransform", None) or getattr(
+            self.presenter,
+            "present_scene_transform",
+            None,
+        )
+        transform_only = callable(transform_method) and _is_content_offset_only(self._last_frame, frame)
+        if transform_only:
+            encode_ns = 0
+            transform_method(
+                int(frame.revision),
+                float(frame.content_offset_x),
+                float(frame.content_offset_y),
+            )
+        else:
+            payload = json.dumps(_scene_payload(frame), separators=(",", ":"))
+            encode_ns = time.perf_counter_ns() - started
+            method(
+                payload,
+                int(frame.revision),
+                int(frame.logical_width),
+                int(frame.logical_height),
+                str(frame.presentation_mode or ""),
+            )
         present_ns = time.perf_counter_ns() - started
         self.frames_presented += 1
         self.last_revision = int(frame.revision)
+        self._last_frame = frame
         self._telemetry.update(
             {
                 "present_commits": int(self.frames_presented),
+                "full_commits": int(self._telemetry.get("full_commits", 0)) + int(not transform_only),
+                "transform_commits": int(self._telemetry.get("transform_commits", 0)) + int(transform_only),
                 "last_enc_ms_x10": int(encode_ns / 100_000),
                 "last_cmt_ms_x10": int(present_ns / 100_000),
             }
@@ -123,3 +148,26 @@ def _scene_payload(frame: SceneFrame) -> list[dict[str, object]]:
                 }
             )
     return out
+
+
+def _is_content_offset_only(previous: SceneFrame | None, incoming: SceneFrame) -> bool:
+    if previous is None or not previous.retained or not incoming.retained:
+        return False
+    if (
+        int(previous.logical_width) != int(incoming.logical_width)
+        or int(previous.logical_height) != int(incoming.logical_height)
+        or str(previous.presentation_mode or "") != str(incoming.presentation_mode or "")
+    ):
+        return False
+    if (
+        float(previous.content_offset_x) == float(incoming.content_offset_x)
+        and float(previous.content_offset_y) == float(incoming.content_offset_y)
+    ):
+        return False
+    if previous.nodes is incoming.nodes:
+        return True
+    try:
+        equal = previous.nodes == incoming.nodes
+        return equal if isinstance(equal, bool) else bool(equal)
+    except (TypeError, ValueError, RuntimeError):
+        return False

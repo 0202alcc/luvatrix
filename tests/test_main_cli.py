@@ -142,6 +142,26 @@ class MainCliTests(unittest.TestCase):
         self.assertEqual(init_native.call_args.kwargs["target"], "android")
         self.assertTrue(init_native.call_args.kwargs["force"])
 
+    def test_upgrade_native_command_uses_scaffold(self) -> None:
+        with (
+            patch.object(
+                sys,
+                "argv",
+                ["luvatrix", "upgrade-native", "my_app", "--target", "android", "--out", "my_app/android"],
+            ),
+            patch("luvatrix_core.scaffold.upgrade_native_project") as upgrade_native,
+        ):
+            upgrade_native.return_value.path = "my_app/android"
+            upgrade_native.return_value.updated_files = ()
+            upgrade_native.return_value.added_files = ()
+            upgrade_native.return_value.removed_files = ()
+            upgrade_native.return_value.conflicted_files = ()
+            upgrade_native.return_value.adopted = False
+            main()
+
+        upgrade_native.assert_called_once()
+        self.assertEqual(upgrade_native.call_args.kwargs["target"], "android")
+
 
 if __name__ == "__main__":
     unittest.main()

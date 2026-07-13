@@ -15,8 +15,6 @@ from urllib.parse import urlparse
 
 
 _ROOT = Path(__file__).resolve().parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 _LAST_MARKER = ""
 _FRAME_COUNT = 0
@@ -149,7 +147,6 @@ def run_app_vulkan(view=None) -> str:
     try:
         while True:
             configure_android_tls()
-            import_probe()
             result = _run_visual_runtime(_ANDROID_PRESENTER if view is not None else None)
             _log(f"luvatrix visual ticks={result.ticks_run} frames={result.frames_presented}")
             with _RUNTIME_LOCK:
@@ -249,12 +246,19 @@ def android_telemetry() -> dict[str, object]:
     from luvatrix_core.platform.android.hdi_source import android_input_telemetry
 
     camera = {}
+    launch = {}
     try:
         bridge = _ANDROID_VIEW
         if bridge is not None and hasattr(bridge, "cameraTelemetryJson"):
             camera = json.loads(str(bridge.cameraTelemetryJson()))
     except Exception:
         camera = {}
+    try:
+        bridge = _ANDROID_VIEW
+        if bridge is not None and hasattr(bridge, "launchTelemetryJson"):
+            launch = json.loads(str(bridge.launchTelemetryJson()))
+    except Exception:
+        launch = {}
 
     return {
         "marker": _LAST_MARKER,
@@ -262,6 +266,7 @@ def android_telemetry() -> dict[str, object]:
         "input": android_input_telemetry(),
         "sensors": ["thermal.temperature", "power.voltage_current", "motion.accelerometer", "camera.device"],
         "camera": camera,
+        "launch": launch,
     }
 
 
@@ -403,12 +408,13 @@ def _run_visual_runtime(view):
     from luvatrix_core.targets.base import RenderTarget
 
     config = _launch_config()
+    app_dir = _app_dir(config)
     width, height = _runtime_dimensions(view, config)
     render_scale = max(0.05, float(config.get("render_scale", 1.0) or 1.0))
     matrix_width = max(1, int(round(width * render_scale)))
     matrix_height = max(1, int(round(height * render_scale)))
     target_fps, present_fps = _runtime_frame_rates(view, config)
-    render_mode = _runtime_render_mode(config)
+    render_mode = _runtime_render_mode(config, app_dir=app_dir)
     if view is not None and _truthy(config.get("low_latency_mode"), default=True):
         _apply_low_latency_mode(view, target_fps=target_fps, present_fps=present_fps)
     clear_android_input_events()
@@ -450,13 +456,13 @@ def _run_visual_runtime(view):
         host_os="android",
         host_arch="arm64",
     )
-    app_dir = _app_dir()
     _log(f"luvatrix configured app_dir={app_dir}")
     result = runtime.run_app(
         app_dir,
         max_ticks=None if view is not None else 60,
         target_fps=target_fps,
         present_fps=present_fps,
+        defer_optional_sensor_polling_until_first_frame=True,
     )
     if view is not None:
         _FRAME_COUNT = int(getattr(scene_target, "frames_presented", 0) or getattr(target, "frames_presented", _FRAME_COUNT))
@@ -576,16 +582,17 @@ def _launch_config() -> dict[str, object]:
     return raw if isinstance(raw, dict) else {}
 
 
-def _runtime_render_mode(config: dict[str, object]) -> str:
+def _runtime_render_mode(config: dict[str, object], *, app_dir: Path | None = None) -> str:
     render_mode = str(config.get("render_mode") or "auto")
     if render_mode != "auto":
         return render_mode
-    return _app_manifest_render_mode() or render_mode
+    return _app_manifest_render_mode(app_dir=app_dir) or render_mode
 
 
-def _app_manifest_render_mode() -> str | None:
+def _app_manifest_render_mode(*, app_dir: Path | None = None) -> str | None:
     try:
-        raw = tomllib.loads((_app_dir() / "app.toml").read_text(encoding="utf-8"))
+        resolved_app_dir = app_dir if app_dir is not None else _app_dir()
+        raw = tomllib.loads((resolved_app_dir / "app.toml").read_text(encoding="utf-8"))
     except Exception:
         return None
     render = raw.get("render")
@@ -614,8 +621,8 @@ def _paint_view(view, frames: int) -> None:
         time.sleep(1.0 / 60.0)
 
 
-def _app_dir() -> Path:
-    config = _launch_config()
+def _app_dir(config: dict[str, object] | None = None) -> Path:
+    config = config if config is not None else _launch_config()
     configured_name = str(config.get("app_dir", "luvatrix_app"))
     configured = (_ROOT / configured_name).resolve()
     if (configured / "app.toml").exists() and any(

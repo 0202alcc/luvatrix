@@ -3,3 +3,4 @@ app/.cxx/
 app/build/
 app/src/main/assets/luvatrix_launch_config.json
 app/src/main/python/luvatrix_launch_config.json
+.luvatrix-scaffold-updates/
