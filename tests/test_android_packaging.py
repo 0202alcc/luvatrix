@@ -29,6 +29,30 @@ class AndroidPackagingTests(unittest.TestCase):
         ):
             self.assertTrue((ANDROID / rel).exists(), rel)
 
+    def test_android_activity_reattaches_and_detaches_process_runtime(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            activity = (root / "app/src/main/java/com/luvatrix/app/MainActivity.kt").read_text(encoding="utf-8")
+
+            self.assertIn('pythonModule.callAttr("run_app_vulkan", luvatrixView)', activity)
+            self.assertIn("override fun onDestroy()", activity)
+            self.assertIn('pythonModule.callAttr("detach_android_view", luvatrixView)', activity)
+
+    def test_android_bootstrap_has_process_scoped_rebindable_presenter(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")
+
+            self.assertIn("class _AndroidViewPresenter", boot)
+            self.assertIn("def detach_android_view", boot)
+            self.assertIn("_RUNTIME_RUNNING", boot)
+
+    def test_android_bootstrap_prefers_chaquopy_bytecode_without_source_wrapper(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")
+
+            self.assertIn("def _materialize_configured_app", boot)
+            self.assertIn('joinpath("app_main.pyc").read_bytes()', boot)
+            self.assertNotIn("SourcelessFileLoader", boot)
+
     def test_chaquopy_python_314_is_configured(self) -> None:
         build = (ANDROID / "app" / "build.gradle.kts").read_text(encoding="utf-8")
 
