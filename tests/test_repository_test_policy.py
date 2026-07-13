@@ -36,6 +36,7 @@ def test_dev_prs_have_a_general_required_test_workflow() -> None:
     assert "name: required-tests" in workflow
     for suite in (
         "test_repository_test_policy.py",
+        "test_pypi_release.py",
         "test_luvatrix_public_app_api.py",
         "test_app_runtime.py",
         "test_main_cli.py",

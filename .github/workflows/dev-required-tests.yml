@@ -29,6 +29,7 @@ jobs:
         run: |
           uv run --extra desktop --with pytest pytest -q \
             tests/test_repository_test_policy.py \
+            tests/test_pypi_release.py \
             tests/test_luvatrix_public_app_api.py \
             tests/test_app_runtime.py \
             tests/test_main_cli.py \
