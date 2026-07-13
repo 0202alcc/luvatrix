@@ -46,6 +46,11 @@ chaquopy {
         version = "3.14"
         pip {
             install("certifi>=2026.2.25")
+            val acceleratorRequirement = file("luvatrix-android-accel.txt")
+            if (acceleratorRequirement.isFile) {
+                options("--find-links", file("wheels").toURI().toString(), "--no-deps")
+                install(acceleratorRequirement.readText().trim())
+            }
         }
     }
 }

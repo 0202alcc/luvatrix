@@ -19,6 +19,13 @@ import ctypes as _ctypes
 import struct as _struct
 import traceback as _traceback
 
+try:
+    from . import _accel_native as _native_accel
+except ImportError:
+    _native_accel = None
+
+NATIVE_ACCEL_AVAILABLE = _native_accel is not None
+
 # ── probe for available backends ──────────────────────────────────────────────
 _torch = None
 _np = None
@@ -521,6 +528,23 @@ def _alpha_blit_pure(
     source_width = int(source.shape[1])
     mask_width = int(mask.shape[1]) if mask is not None else 0
     mask_channels = int(mask.shape[2]) if mask is not None and mask.ndim == 3 else 1
+    if _native_accel is not None:
+        _native_accel.alpha_blit_rgba_u8(
+            destination._data,
+            destination_width,
+            source._data,
+            source_width,
+            mask._data if mask is not None else None,
+            mask_width,
+            mask_channels,
+            int(destination_x0),
+            int(destination_y0),
+            int(source_x0),
+            int(source_y0),
+            int(copy_width),
+            int(copy_height),
+        )
+        return
     for row in range(copy_height):
         for column in range(copy_width):
             source_pixel = ((source_y0 + row) * source_width + source_x0 + column) * 4
@@ -548,10 +572,90 @@ def _alpha_blit_pure(
                     * (255 - source_alpha)
                 )
                 denominator = output_alpha * 255
-                destination._data[destination_pixel + channel] = (
+                output_channel = (
                     0 if denominator <= 0 else (numerator + denominator // 2) // denominator
                 )
+                destination._data[destination_pixel + channel] = max(0, min(255, output_channel))
             destination._data[destination_pixel + 3] = output_alpha
+
+
+def blend_solid_mask_rgba_pure(destination, mask, *, x: int, y: int, color) -> None:
+    """Blend one solid RGBA color through a pure-backend coverage mask."""
+    if not isinstance(destination, _PureArray) or not isinstance(mask, _PureArray):
+        raise TypeError("blend_solid_mask_rgba_pure expects pure-backend arrays")
+    if destination.ndim != 3 or destination.shape[2] != 4 or mask.ndim != 2:
+        raise ValueError("blend_solid_mask_rgba_pure expects RGBA destination and 2-D mask")
+    frame_height, frame_width, _ = destination.shape
+    mask_height, mask_width = mask.shape
+    rgba = tuple(int(value) for value in color)
+    if len(rgba) != 4 or any(value < 0 or value > 255 for value in rgba):
+        raise ValueError("color must contain four uint8 channel values")
+    if _native_accel is not None:
+        _native_accel.blend_solid_mask_rgba_u8(
+            destination._data,
+            int(frame_width),
+            int(frame_height),
+            mask._data,
+            int(mask_width),
+            int(mask_height),
+            int(x),
+            int(y),
+            *rgba,
+        )
+        return
+    _blend_solid_mask_rgba_python(
+        destination._data,
+        frame_width=frame_width,
+        frame_height=frame_height,
+        mask_data=mask._data,
+        mask_width=mask_width,
+        mask_height=mask_height,
+        x=int(x),
+        y=int(y),
+        color=rgba,
+    )
+
+
+def _blend_solid_mask_rgba_python(
+    destination_data,
+    *,
+    frame_width,
+    frame_height,
+    mask_data,
+    mask_width,
+    mask_height,
+    x,
+    y,
+    color,
+):
+    for mask_y in range(mask_height):
+        frame_y = y + mask_y
+        if frame_y < 0 or frame_y >= frame_height:
+            continue
+        for mask_x in range(mask_width):
+            frame_x = x + mask_x
+            if frame_x < 0 or frame_x >= frame_width:
+                continue
+            coverage = int(mask_data[mask_y * mask_width + mask_x])
+            if coverage <= 0:
+                continue
+            source_alpha = (coverage / 255.0) * (float(color[3]) / 255.0)
+            pixel = (frame_y * frame_width + frame_x) * 4
+            destination_alpha = destination_data[pixel + 3] / 255.0
+            output_alpha = source_alpha + destination_alpha * (1.0 - source_alpha)
+            safe_alpha = output_alpha if output_alpha > 1e-6 else 1.0
+            for channel in range(3):
+                destination = float(destination_data[pixel + channel])
+                source = float(color[channel])
+                output = (
+                    source * source_alpha
+                    + destination * destination_alpha * (1.0 - source_alpha)
+                ) / safe_alpha
+                destination_data[pixel + channel] = max(0, min(255, int(round(output))))
+            destination_data[pixel + 3] = max(
+                0,
+                min(255, int(round(output_alpha * 255.0))),
+            )
 
 
 def _alpha_composite_torch(destination, source, mask):

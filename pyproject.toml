@@ -80,5 +80,8 @@ include = ["luvatrix*", "luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
   "python_shim/luvatrix/*.py",
 ]
 
+[tool.setuptools.exclude-package-data]
+"luvatrix_core" = ["_accel_native.c", "_accel_native.pyx"]
+
 [tool.uv.sources]
 coinbasetraderbot = { path = "../CoinbaseTraderBot", editable = true }
