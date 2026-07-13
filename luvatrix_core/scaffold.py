@@ -1,19 +1,34 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib import resources
+import hashlib
+from importlib import metadata, resources
+import json
 from pathlib import Path
 import shutil
 
 
 APP_TEMPLATES = ("basic", "full-suite", "camera")
 NATIVE_TARGETS = ("android", "ios")
+NATIVE_SCAFFOLD_METADATA = ".luvatrix-scaffold.json"
+NATIVE_SCAFFOLD_UPDATES = ".luvatrix-scaffold-updates"
 
 
 @dataclass(frozen=True)
 class ScaffoldResult:
     path: Path
     created_files: tuple[Path, ...]
+
+
+@dataclass(frozen=True)
+class NativeScaffoldUpgradeResult:
+    path: Path
+    updated_files: tuple[Path, ...]
+    added_files: tuple[Path, ...]
+    removed_files: tuple[Path, ...]
+    conflicted_files: tuple[Path, ...]
+    candidate_dir: Path
+    adopted: bool = False
 
 
 def init_app(
@@ -61,7 +76,140 @@ def init_native_project(
             native_path,
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"),
         )
+    _write_native_scaffold_metadata(
+        native_path,
+        target=target,
+        files=_scaffold_file_hashes(native_path),
+        pending_conflicts=(),
+    )
     return ScaffoldResult(path=native_path, created_files=tuple(sorted(p for p in native_path.rglob("*") if p.is_file())))
+
+
+def upgrade_native_project(
+    app_dir: str | Path,
+    *,
+    target: str,
+    out: str | Path | None = None,
+    adopt: bool = False,
+) -> NativeScaffoldUpgradeResult:
+    """Safely reconcile an app-owned native project with the current template."""
+    if target not in NATIVE_TARGETS:
+        raise ValueError(f"unsupported native target: {target}")
+    app_path = Path(app_dir)
+    native_path = Path(out) if out is not None else default_native_project_dir(app_path, target)
+    if not native_path.is_dir():
+        raise FileNotFoundError(f"native project not found: {native_path}")
+    _reject_scaffold_symlink(native_path, native_path)
+
+    metadata_path = native_path / NATIVE_SCAFFOLD_METADATA
+    version = _luvatrix_version()
+    candidate_dir = native_path / NATIVE_SCAFFOLD_UPDATES / version
+    _reject_scaffold_symlink(native_path, metadata_path)
+    _reject_scaffold_symlink(native_path, candidate_dir)
+    template_root = resources.files("luvatrix_core").joinpath("templates", "native", target)
+    with resources.as_file(template_root) as source:
+        latest = _scaffold_file_hashes(source)
+        if not metadata_path.exists():
+            if not adopt:
+                raise RuntimeError(
+                    f"{native_path} has no scaffold provenance; rerun with --adopt to preserve existing custom files"
+                )
+            if candidate_dir.exists():
+                shutil.rmtree(candidate_dir)
+            adopted_files: dict[str, str] = {}
+            adoption_conflicts: list[Path] = []
+            for relative, digest in sorted(latest.items()):
+                relative_path = _safe_scaffold_relative_path(relative)
+                current = native_path / relative_path
+                _reject_scaffold_symlink(native_path, current)
+                if current.is_file() and _sha256(current) == digest:
+                    adopted_files[relative] = digest
+                    continue
+                candidate = candidate_dir / relative_path
+                candidate.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source / relative_path, candidate)
+                adoption_conflicts.append(current)
+            _write_native_scaffold_metadata(
+                native_path,
+                target=target,
+                files=adopted_files,
+                pending_conflicts=tuple(str(path.relative_to(native_path)) for path in adoption_conflicts),
+            )
+            return NativeScaffoldUpgradeResult(
+                path=native_path,
+                updated_files=(),
+                added_files=(),
+                removed_files=(),
+                conflicted_files=tuple(adoption_conflicts),
+                candidate_dir=candidate_dir,
+                adopted=True,
+            )
+
+        scaffold_metadata = _read_native_scaffold_metadata(metadata_path, target=target)
+        recorded = dict(scaffold_metadata["files"])
+        if candidate_dir.exists():
+            shutil.rmtree(candidate_dir)
+
+        updated: list[Path] = []
+        added: list[Path] = []
+        removed: list[Path] = []
+        conflicted: list[Path] = []
+        next_hashes = dict(recorded)
+
+        for relative, latest_hash in sorted(latest.items()):
+            relative_path = _safe_scaffold_relative_path(relative)
+            current = native_path / relative_path
+            _reject_scaffold_symlink(native_path, current)
+            template_file = source / relative_path
+            if not current.exists():
+                current.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(template_file, current)
+                next_hashes[relative] = latest_hash
+                added.append(current)
+                continue
+            current_hash = _sha256(current)
+            if current_hash == latest_hash:
+                next_hashes[relative] = latest_hash
+                continue
+            if recorded.get(relative) == current_hash:
+                shutil.copy2(template_file, current)
+                next_hashes[relative] = latest_hash
+                updated.append(current)
+                continue
+            candidate = candidate_dir / relative_path
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(template_file, candidate)
+            conflicted.append(current)
+
+        for relative, recorded_hash in sorted(recorded.items()):
+            if relative in latest:
+                continue
+            relative_path = _safe_scaffold_relative_path(relative)
+            current = native_path / relative_path
+            _reject_scaffold_symlink(native_path, current)
+            if not current.exists():
+                next_hashes.pop(relative, None)
+            elif _sha256(current) == recorded_hash:
+                current.unlink()
+                next_hashes.pop(relative, None)
+                removed.append(current)
+            else:
+                conflicted.append(current)
+
+    _write_native_scaffold_metadata(
+        native_path,
+        target=target,
+        files=next_hashes,
+        pending_conflicts=tuple(str(path.relative_to(native_path)) for path in conflicted),
+    )
+    return NativeScaffoldUpgradeResult(
+        path=native_path,
+        updated_files=tuple(updated),
+        added_files=tuple(added),
+        removed_files=tuple(removed),
+        conflicted_files=tuple(conflicted),
+        candidate_dir=candidate_dir,
+    )
 
 
 def default_native_project_dir(app_dir: str | Path, target: str) -> Path:
@@ -95,6 +243,82 @@ def _ensure_empty_or_force(path: Path, *, force: bool) -> None:
     if path.is_dir() and not any(path.iterdir()):
         return
     raise FileExistsError(f"{path} already exists; pass --force to replace it")
+
+
+def _scaffold_file_hashes(root: Path) -> dict[str, str]:
+    ignored_roots = {NATIVE_SCAFFOLD_METADATA, NATIVE_SCAFFOLD_UPDATES}
+    return {
+        str(path.relative_to(root)): _sha256(path)
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and path.relative_to(root).parts[0] not in ignored_roots
+    }
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write_native_scaffold_metadata(
+    native_path: Path,
+    *,
+    target: str,
+    files: dict[str, str],
+    pending_conflicts: tuple[str, ...],
+) -> None:
+    payload = {
+        "schema_version": 1,
+        "target": target,
+        "luvatrix_version": _luvatrix_version(),
+        "files": dict(sorted(files.items())),
+        "pending_conflicts": list(sorted(pending_conflicts)),
+    }
+    (native_path / NATIVE_SCAFFOLD_METADATA).write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _read_native_scaffold_metadata(path: Path, *, target: str) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"invalid native scaffold metadata: {path}") from exc
+    if payload.get("schema_version") != 1 or payload.get("target") != target:
+        raise RuntimeError(f"native scaffold metadata does not match target {target!r}: {path}")
+    files = payload.get("files")
+    if not isinstance(files, dict) or not all(isinstance(key, str) and isinstance(value, str) for key, value in files.items()):
+        raise RuntimeError(f"native scaffold metadata has invalid file hashes: {path}")
+    for relative in files:
+        _safe_scaffold_relative_path(relative)
+    return payload
+
+
+def _safe_scaffold_relative_path(value: str) -> Path:
+    path = Path(value)
+    if path.is_absolute() or not path.parts or ".." in path.parts:
+        raise RuntimeError(f"unsafe native scaffold metadata path: {value!r}")
+    return path
+
+
+def _reject_scaffold_symlink(root: Path, path: Path) -> None:
+    try:
+        relative = path.relative_to(root)
+    except ValueError as exc:
+        raise RuntimeError(f"native scaffold path escapes project: {path}") from exc
+    current = root
+    if current.is_symlink():
+        raise RuntimeError(f"native scaffold path contains symlink: {current}")
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            raise RuntimeError(f"native scaffold path contains symlink: {current}")
+
+
+def _luvatrix_version() -> str:
+    try:
+        return metadata.version("luvatrix")
+    except metadata.PackageNotFoundError:
+        return "source"
 
 
 def _default_platform_support(template: str) -> tuple[str, ...]:
