@@ -57,6 +57,26 @@ def test_promotions_have_a_deterministic_security_gate() -> None:
         assert scanner in workflow.lower()
 
 
+def test_pypi_publish_uses_trusted_publishing_with_attestations() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "publish-pypi.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "id-token: write" in workflow
+    assert "attestations: true" in workflow
+    assert "PYPI_API_TOKEN" not in workflow
+    assert "password:" not in workflow
+    assert "persist-credentials: false" in workflow
+    for mutable_ref in (
+        "actions/checkout@v4",
+        "astral-sh/setup-uv@v5",
+        "actions/upload-artifact@v4",
+        "actions/download-artifact@v4",
+        "pypa/gh-action-pypi-publish@release/v1",
+    ):
+        assert mutable_ref not in workflow
+
+
 def test_agent_security_review_has_a_provider_neutral_contract() -> None:
     schema = (
         ROOT / ".github" / "security" / "agent-review-output.schema.json"

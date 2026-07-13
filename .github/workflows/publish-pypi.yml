@@ -20,9 +20,11 @@ jobs:
       publish: ${{ steps.release.outputs.publish }}
       version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
 
       - name: Check PyPI version
         id: release
@@ -61,7 +63,7 @@ jobs:
 
       - name: Upload distributions
         if: steps.release.outputs.publish == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: python-package-distributions
           path: dist/
@@ -75,24 +77,15 @@ jobs:
       name: pypi
       url: https://pypi.org/project/luvatrix/${{ needs.build.outputs.version }}/
     permissions:
-      contents: read
+      id-token: write
     steps:
       - name: Download distributions
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-package-distributions
           path: dist/
 
-      - name: Check PyPI token secret
-        env:
-          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        run: |
-          if [ -z "$PYPI_API_TOKEN" ]; then
-            echo "::error::Missing PYPI_API_TOKEN repository secret for PyPI publishing."
-            exit 1
-          fi
-
       - name: Publish distributions
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          attestations: true
