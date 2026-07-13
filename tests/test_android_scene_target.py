@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import unittest
 
-from luvatrix_core.core.scene_graph import CircleNode, ClearNode, SceneFrame, ShaderRectNode, TextNode
+from luvatrix_core.core.scene_graph import CircleNode, ClearNode, RectNode, SceneFrame, ShaderRectNode, TextNode
 from luvatrix_core.platform.android.scene_target import AndroidNativeSceneTarget
 
 
@@ -25,6 +25,15 @@ class _Presenter:
 
     def presentScene(self, payload: str, revision: int, width: int, height: int, presentation_mode: str = "") -> None:
         self.calls.append((payload, revision, width, height, presentation_mode))
+
+
+class _DeltaPresenter(_Presenter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.transform_calls = []
+
+    def presentSceneTransform(self, revision: int, content_offset_x: float, content_offset_y: float) -> None:
+        self.transform_calls.append((revision, content_offset_x, content_offset_y))
 
 
 class AndroidNativeSceneTargetTests(unittest.TestCase):
@@ -86,6 +95,89 @@ class AndroidNativeSceneTargetTests(unittest.TestCase):
         self.assertEqual(payload[0]["content_offset_x"], 4.5)
         self.assertEqual(payload[0]["content_offset_y"], -12.25)
 
+    def test_retained_offset_revision_uses_transform_only_present(self) -> None:
+        presenter = _DeltaPresenter()
+        target = AndroidNativeSceneTarget(presenter)
+        target.start()
+        nodes = (ClearNode((0, 0, 0, 255)), RectNode(1, 2, 30, 40, (1, 2, 3, 255)))
+        first = SceneFrame(1, 100, 200, 100, 200, ts_ns=1, nodes=nodes, retained=True)
+        transformed = SceneFrame(
+            2,
+            100,
+            200,
+            100,
+            200,
+            ts_ns=2,
+            nodes=nodes,
+            content_offset_x=4.5,
+            content_offset_y=17.25,
+            retained=True,
+        )
+
+        target.present_scene(first)
+        target.present_scene(transformed)
+
+        self.assertEqual(len(presenter.calls), 1)
+        self.assertEqual(presenter.transform_calls, [(2, 4.5, 17.25)])
+        self.assertEqual(target.consume_telemetry()["transform_commits"], 1)
+
+    def test_retained_geometry_change_uses_full_scene_present(self) -> None:
+        presenter = _DeltaPresenter()
+        target = AndroidNativeSceneTarget(presenter)
+        target.start()
+        target.present_scene(
+            SceneFrame(
+                1,
+                100,
+                200,
+                100,
+                200,
+                ts_ns=1,
+                nodes=(RectNode(0, 0, 10, 10, (255, 255, 255, 255)),),
+                retained=True,
+            )
+        )
+        target.present_scene(
+            SceneFrame(
+                2,
+                100,
+                200,
+                100,
+                200,
+                ts_ns=2,
+                nodes=(RectNode(0, 0, 20, 10, (255, 255, 255, 255)),),
+                retained=True,
+            )
+        )
+
+        self.assertEqual(len(presenter.calls), 2)
+        self.assertEqual(presenter.transform_calls, [])
+
+    def test_offset_revision_falls_back_for_presenter_without_transform_api(self) -> None:
+        presenter = _Presenter()
+        target = AndroidNativeSceneTarget(presenter)
+        target.start()
+        nodes = (RectNode(0, 0, 10, 10, (255, 255, 255, 255)),)
+        target.present_scene(SceneFrame(1, 100, 200, 100, 200, ts_ns=1, nodes=nodes, retained=True))
+        target.present_scene(
+            SceneFrame(2, 100, 200, 100, 200, ts_ns=2, nodes=nodes, content_offset_y=8, retained=True)
+        )
+
+        self.assertEqual(len(presenter.calls), 2)
+
+    def test_non_retained_offset_revision_uses_full_scene_present(self) -> None:
+        presenter = _DeltaPresenter()
+        target = AndroidNativeSceneTarget(presenter)
+        target.start()
+        nodes = (RectNode(0, 0, 10, 10, (255, 255, 255, 255)),)
+        target.present_scene(SceneFrame(1, 100, 200, 100, 200, ts_ns=1, nodes=nodes))
+        target.present_scene(
+            SceneFrame(2, 100, 200, 100, 200, ts_ns=2, nodes=nodes, content_offset_y=8)
+        )
+
+        self.assertEqual(len(presenter.calls), 2)
+        self.assertEqual(presenter.transform_calls, [])
+
     def test_native_renderer_applies_serialized_content_offset(self) -> None:
         for source in ANDROID_CPP_RENDERERS:
             with self.subTest(source=source):
@@ -105,6 +197,21 @@ class AndroidNativeSceneTargetTests(unittest.TestCase):
                 self.assertIn('node.optDouble("x", 0.0) - contentOffsetX', text)
                 self.assertIn('node.optDouble("cx", 0.0) - contentOffsetX', text)
                 self.assertIn('node.optDouble("y", 0.0) - contentOffsetY', text)
+
+    def test_native_android_bridge_exposes_transform_only_scene_present(self) -> None:
+        for source in ANDROID_KOTLIN_VIEWS:
+            with self.subTest(source=source):
+                text = source.read_text(encoding="utf-8")
+                self.assertIn("fun presentSceneTransform(", text)
+                self.assertIn("NativeVulkan.presentSceneTransform(", text)
+                self.assertIn("retainedSceneJson", text)
+        for source in ANDROID_CPP_RENDERERS:
+            with self.subTest(source=source):
+                text = source.read_text(encoding="utf-8")
+                self.assertIn("NativeVulkan_presentSceneTransform", text)
+                self.assertIn("g_retained_scene.content_offset_x", text)
+                self.assertIn("const auto nodes = parse_node_objects(json);", text)
+                self.assertEqual(text.count("parse_node_objects(json)"), 1)
 
     def test_present_scene_requires_start(self) -> None:
         target = AndroidNativeSceneTarget(_Presenter())
