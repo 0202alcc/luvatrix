@@ -99,10 +99,13 @@ def upgrade_native_project(
     native_path = Path(out) if out is not None else default_native_project_dir(app_path, target)
     if not native_path.is_dir():
         raise FileNotFoundError(f"native project not found: {native_path}")
+    _reject_scaffold_symlink(native_path, native_path)
 
     metadata_path = native_path / NATIVE_SCAFFOLD_METADATA
     version = _luvatrix_version()
     candidate_dir = native_path / NATIVE_SCAFFOLD_UPDATES / version
+    _reject_scaffold_symlink(native_path, metadata_path)
+    _reject_scaffold_symlink(native_path, candidate_dir)
     template_root = resources.files("luvatrix_core").joinpath("templates", "native", target)
     with resources.as_file(template_root) as source:
         latest = _scaffold_file_hashes(source)
@@ -118,6 +121,7 @@ def upgrade_native_project(
             for relative, digest in sorted(latest.items()):
                 relative_path = _safe_scaffold_relative_path(relative)
                 current = native_path / relative_path
+                _reject_scaffold_symlink(native_path, current)
                 if current.is_file() and _sha256(current) == digest:
                     adopted_files[relative] = digest
                     continue
@@ -155,6 +159,7 @@ def upgrade_native_project(
         for relative, latest_hash in sorted(latest.items()):
             relative_path = _safe_scaffold_relative_path(relative)
             current = native_path / relative_path
+            _reject_scaffold_symlink(native_path, current)
             template_file = source / relative_path
             if not current.exists():
                 current.parent.mkdir(parents=True, exist_ok=True)
@@ -181,6 +186,7 @@ def upgrade_native_project(
                 continue
             relative_path = _safe_scaffold_relative_path(relative)
             current = native_path / relative_path
+            _reject_scaffold_symlink(native_path, current)
             if not current.exists():
                 next_hashes.pop(relative, None)
             elif _sha256(current) == recorded_hash:
@@ -292,6 +298,20 @@ def _safe_scaffold_relative_path(value: str) -> Path:
     if path.is_absolute() or not path.parts or ".." in path.parts:
         raise RuntimeError(f"unsafe native scaffold metadata path: {value!r}")
     return path
+
+
+def _reject_scaffold_symlink(root: Path, path: Path) -> None:
+    try:
+        relative = path.relative_to(root)
+    except ValueError as exc:
+        raise RuntimeError(f"native scaffold path escapes project: {path}") from exc
+    current = root
+    if current.is_symlink():
+        raise RuntimeError(f"native scaffold path contains symlink: {current}")
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            raise RuntimeError(f"native scaffold path contains symlink: {current}")
 
 
 def _luvatrix_version() -> str:

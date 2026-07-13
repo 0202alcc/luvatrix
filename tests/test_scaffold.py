@@ -133,6 +133,29 @@ class ScaffoldTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "unsafe"):
                 upgrade_native_project(app, target="android", out=out)
 
+    def test_upgrade_native_rejects_managed_symlink_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            app = root / "app"
+            app.mkdir()
+            out = app / "android"
+            init_native_project(app, target="android", out=out)
+            managed = out / "settings.gradle.kts"
+            outside = root / "outside.gradle.kts"
+            old = b"// prior generated template\n"
+            outside.write_bytes(old)
+            managed.unlink()
+            managed.symlink_to(outside)
+            metadata_path = out / ".luvatrix-scaffold.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["files"]["settings.gradle.kts"] = hashlib.sha256(old).hexdigest()
+            metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+            with self.assertRaisesRegex(RuntimeError, "symlink"):
+                upgrade_native_project(app, target="android", out=out)
+
+            self.assertEqual(outside.read_bytes(), old)
+
     def test_init_native_ios_copies_template(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             app = Path(td) / "app"
