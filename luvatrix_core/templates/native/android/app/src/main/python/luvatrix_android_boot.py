@@ -23,6 +23,7 @@ _FRAME_COUNT = 0
 _ANDROID_VIEW = None
 _RUNTIME_LOCK = threading.Lock()
 _RUNTIME_RUNNING = False
+_RUNTIME_VIEW_GENERATION = 0
 
 
 class _AndroidViewPresenter:
@@ -135,20 +136,27 @@ def run_headless_ticks(ticks: int = 5) -> str:
 
 
 def run_app_vulkan(view=None) -> str:
-    global _ANDROID_VIEW, _RUNTIME_RUNNING
-    if view is not None:
-        _ANDROID_VIEW = view
-        _ANDROID_PRESENTER.bind(view)
+    global _ANDROID_VIEW, _RUNTIME_RUNNING, _RUNTIME_VIEW_GENERATION
     with _RUNTIME_LOCK:
+        if view is not None:
+            _ANDROID_VIEW = view
+            _ANDROID_PRESENTER.bind(view)
+            _RUNTIME_VIEW_GENERATION += 1
+        owner_generation = _RUNTIME_VIEW_GENERATION
         if _RUNTIME_RUNNING:
             return _mark("luvatrix visual reattached")
         _RUNTIME_RUNNING = True
     try:
-        configure_android_tls()
-        import_probe()
-        result = _run_visual_runtime(_ANDROID_PRESENTER if view is not None else None)
-        _log(f"luvatrix visual ticks={result.ticks_run} frames={result.frames_presented}")
-        return _mark("luvatrix visual ok")
+        while True:
+            configure_android_tls()
+            import_probe()
+            result = _run_visual_runtime(_ANDROID_PRESENTER if view is not None else None)
+            _log(f"luvatrix visual ticks={result.ticks_run} frames={result.frames_presented}")
+            with _RUNTIME_LOCK:
+                if owner_generation == _RUNTIME_VIEW_GENERATION:
+                    return _mark("luvatrix visual ok")
+                owner_generation = _RUNTIME_VIEW_GENERATION
+            _log("restarting visual runtime for replacement Android view")
     except Exception as exc:
         _log(f"luvatrix run_app_vulkan failed: {type(exc).__name__}: {exc}")
         raise
