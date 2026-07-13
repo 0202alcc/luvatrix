@@ -300,6 +300,11 @@ struct CameraPushConstants {
 
 std::mutex g_mutex;
 VulkanState g_vk;
+ParsedScene g_retained_scene;
+bool g_retained_scene_available = false;
+int g_retained_scene_revision = 0;
+int g_retained_scene_width = 1;
+int g_retained_scene_height = 1;
 std::string g_downsample_filter = "natural";
 uint32_t g_downsample_taps = 5;
 float g_downsample_strength = 0.15f;
@@ -552,9 +557,10 @@ std::vector<std::string> parse_node_objects(const std::string& json) {
 ParsedScene parse_scene(const std::string& json) {
     ParsedScene scene;
     scene.background = parse_scene_background(json);
+    const auto nodes = parse_node_objects(json);
 
     // Look for meta node to extract scene-wide rendering state.
-    for (const auto& node : parse_node_objects(json)) {
+    for (const auto& node : nodes) {
         std::string type = parse_type(node);
         if (type == "meta") {
             std::string presentation_mode_from_json = parse_string_key(node, "presentation_mode");
@@ -564,7 +570,7 @@ ParsedScene parse_scene(const std::string& json) {
         }
     }
 
-    for (const auto& node : parse_node_objects(json)) {
+    for (const auto& node : nodes) {
         std::string type = parse_type(node);
         if (type == "clear") {
             scene.background = parse_color_array(node, "color", scene.background);
@@ -5989,9 +5995,6 @@ Java_com_luvatrix_app_NativeVulkan_presentScene(
     std::string payload(raw);
     env->ReleaseStringUTFChars(sceneJson, raw);
 
-    std::lock_guard<std::mutex> lock(g_mutex);
-    g_vk.desired_width = std::max(1, static_cast<int>(width));
-    g_vk.desired_height = std::max(1, static_cast<int>(height));
     ParsedScene scene = parse_scene(payload);
     // Extract presentation mode from JNI parameter if provided, fallback to parsing from scene JSON
     if (presentationMode != nullptr) {
@@ -6001,7 +6004,15 @@ Java_com_luvatrix_app_NativeVulkan_presentScene(
             env->ReleaseStringUTFChars(presentationMode, modeRaw);
         }
     }
-    bool ok = render_scene_pixels(g_vk, scene, width, height);
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_vk.desired_width = std::max(1, static_cast<int>(width));
+    g_vk.desired_height = std::max(1, static_cast<int>(height));
+    g_retained_scene = std::move(scene);
+    g_retained_scene_available = true;
+    g_retained_scene_revision = static_cast<int>(revision);
+    g_retained_scene_width = std::max(1, static_cast<int>(width));
+    g_retained_scene_height = std::max(1, static_cast<int>(height));
+    bool ok = render_scene_pixels(g_vk, g_retained_scene, width, height);
     if (ok && revision % 120 == 0) {
         LVX_LOGI(
             "luvatrix vulkan scene revision=%d size=%dx%d nodes=%d rects=%zu circles=%zu text=%zu rgba=%d,%d,%d,%d",
@@ -6009,15 +6020,38 @@ Java_com_luvatrix_app_NativeVulkan_presentScene(
             width,
             height,
             count_nodes(payload),
-            scene.rects.size(),
-            scene.circles.size(),
-            scene.texts.size(),
-            scene.background.r,
-            scene.background.g,
-            scene.background.b,
-            scene.background.a
+            g_retained_scene.rects.size(),
+            g_retained_scene.circles.size(),
+            g_retained_scene.texts.size(),
+            g_retained_scene.background.r,
+            g_retained_scene.background.g,
+            g_retained_scene.background.b,
+            g_retained_scene.background.a
         );
     }
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_luvatrix_app_NativeVulkan_presentSceneTransform(
+    JNIEnv *,
+    jobject,
+    jint revision,
+    jdouble contentOffsetX,
+    jdouble contentOffsetY
+) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (!g_retained_scene_available) return JNI_FALSE;
+    if (static_cast<int>(revision) <= g_retained_scene_revision) return JNI_TRUE;
+    g_retained_scene_revision = static_cast<int>(revision);
+    g_retained_scene.content_offset_x = static_cast<double>(contentOffsetX);
+    g_retained_scene.content_offset_y = static_cast<double>(contentOffsetY);
+    bool ok = render_scene_pixels(
+        g_vk,
+        g_retained_scene,
+        g_retained_scene_width,
+        g_retained_scene_height
+    );
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 
