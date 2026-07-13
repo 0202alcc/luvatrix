@@ -67,6 +67,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     private var refreshHintMode: String = "60"
     private var refreshLastError: String = ""
     private var refreshProbeLogged: Boolean = false
+    private val bootstrapFrameGate = BootstrapFrameGate()
     private val cameraBridge = CameraBridge(context)
     private val inputEvents = ConcurrentLinkedQueue<String>()
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -382,6 +383,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
 
     fun presentRgba(rgba: ByteArray, revision: Int, width: Int, height: Int) {
         AndroidLaunchTelemetry.mark("first_app_frame_submitted")
+        bootstrapFrameGate.markAppFramePresented()
         overlayView.post {
             bootstrapMessage = null
             if (frameBitmap == null || frameBitmapWidth != width || frameBitmapHeight != height) {
@@ -585,6 +587,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
 
     fun presentScene(sceneJson: String, revision: Int, logicalWidth: Int, logicalHeight: Int, presentationMode: String = "") {
         AndroidLaunchTelemetry.mark("first_app_frame_submitted")
+        bootstrapFrameGate.markAppFramePresented()
         var nativeBackground = false
         try {
             nativeBackground = NativeVulkan.presentScene(sceneJson, revision, logicalWidth, logicalHeight, presentationMode)
@@ -608,6 +611,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     fun presentSceneTransform(revision: Int, contentOffsetX: Double, contentOffsetY: Double) {
+        bootstrapFrameGate.markAppFramePresented()
         var nativeBackground = false
         try {
             nativeBackground = NativeVulkan.presentSceneTransform(revision, contentOffsetX, contentOffsetY)
@@ -787,6 +791,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
 
     private fun setBootstrapFrame(color: Int) {
         overlayView.post {
+            if (!bootstrapFrameGate.shouldPresentBootstrap()) return@post
             overlayMode = OverlayMode.Bootstrap
             overlaySceneJson = null
             retainedSceneJson = null

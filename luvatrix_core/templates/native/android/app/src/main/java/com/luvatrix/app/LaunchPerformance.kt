@@ -21,6 +21,16 @@ internal object AndroidLaunchTelemetry {
     fun snapshot(): Map<String, Long> = timeline.snapshot()
 }
 
+internal class BootstrapFrameGate {
+    @Volatile private var appFramePresented = false
+
+    fun markAppFramePresented() {
+        appFramePresented = true
+    }
+
+    fun shouldPresentBootstrap(): Boolean = !appFramePresented
+}
+
 internal class BackgroundStartupRunner(
     private val schedule: ((() -> Unit) -> Unit) = { task ->
         Thread(task, "luvatrix-python-startup").apply { isDaemon = true }.start()

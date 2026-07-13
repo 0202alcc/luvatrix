@@ -37,4 +37,14 @@ class LaunchTimelineTest {
         scheduled!!.invoke()
         assertTrue(ran)
     }
+
+    @Test
+    fun bootstrapCannotReplaceAnAppFrame() {
+        val gate = BootstrapFrameGate()
+
+        assertTrue(gate.shouldPresentBootstrap())
+        gate.markAppFramePresented()
+
+        assertFalse(gate.shouldPresentBootstrap())
+    }
 }
