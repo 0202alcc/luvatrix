@@ -616,9 +616,16 @@ def _paint_view(view, frames: int) -> None:
 
 def _app_dir() -> Path:
     config = _launch_config()
-    configured = (_ROOT / str(config.get("app_dir", "luvatrix_app"))).resolve()
-    if (configured / "app.toml").exists() and (configured / "app_main.py").exists():
+    configured_name = str(config.get("app_dir", "luvatrix_app"))
+    configured = (_ROOT / configured_name).resolve()
+    if (configured / "app.toml").exists() and any(
+        (configured / name).exists() for name in ("app_main.py", "app_main.pyc")
+    ):
         return configured
+
+    materialized_configured = _materialize_configured_app(configured_name)
+    if materialized_configured is not None:
+        return materialized_configured
 
     source = str(config.get("source_app_dir", "") or "")
     if source:
@@ -652,7 +659,10 @@ def _app_dir() -> Path:
 
 
 def _import_configured_app_main() -> None:
-    app_main = _app_dir() / "app_main.py"
+    app_dir = _app_dir()
+    app_main = app_dir / "app_main.py"
+    if not app_main.exists():
+        app_main = app_dir / "app_main.pyc"
     module_name = "luvatrix_configured_app_main"
     spec = importlib.util.spec_from_file_location(module_name, app_main)
     if spec is None or spec.loader is None:
@@ -664,6 +674,20 @@ def _import_configured_app_main() -> None:
     except Exception:
         sys.modules.pop(module_name, None)
         raise
+
+
+def _materialize_configured_app(package_name: str) -> Path | None:
+    try:
+        from importlib import resources
+
+        package = importlib.import_module(package_name)
+        package_root = resources.files(package)
+        app_toml = package_root.joinpath("app.toml").read_text(encoding="utf-8")
+        app_main = package_root.joinpath("app_main.pyc").read_bytes()
+    except Exception:
+        return None
+
+    return _write_materialized_bytecode_app(package_name, app_toml, app_main)
 
 
 def _materialize_packaged_app(source_app_dir: str = "") -> Path | None:
@@ -701,6 +725,16 @@ def _write_materialized_app(package_name: str, app_toml: str, app_main: str) -> 
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "app.toml").write_text(app_toml, encoding="utf-8")
     (dest / "app_main.py").write_text(app_main, encoding="utf-8")
+    (dest / "app_main.pyc").unlink(missing_ok=True)
+    return dest
+
+
+def _write_materialized_bytecode_app(package_name: str, app_toml: str, app_main: bytes) -> Path:
+    dest = Path(tempfile.gettempdir()) / f"luvatrix_{package_name.replace('.', '_')}"
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "app.toml").write_text(app_toml, encoding="utf-8")
+    (dest / "app_main.pyc").write_bytes(app_main)
+    (dest / "app_main.py").unlink(missing_ok=True)
     return dest
 
 

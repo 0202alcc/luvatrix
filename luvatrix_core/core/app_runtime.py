@@ -1582,6 +1582,8 @@ def _load_module_from_app_dir(app_dir: Path, module_name: str):
     rel_parts = module_name.split(".")
     module_path = app_dir.joinpath(*rel_parts).with_suffix(".py")
     if not module_path.exists():
+        module_path = module_path.with_suffix(".pyc")
+    if not module_path.exists():
         raise ValueError(f"entrypoint module file not found: {module_name}")
     unique_name = f"luvatrix_app_{abs(hash((str(app_dir), module_name)))}"
     spec = importlib.util.spec_from_file_location(unique_name, module_path)

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import py_compile
+import sys
 import tempfile
 import threading
 import unittest
@@ -109,6 +111,35 @@ class AndroidBootstrapTests(unittest.TestCase):
         owner.join(1.0)
         self.assertFalse(owner.is_alive())
         self.assertEqual(calls, ["first-view", "replacement-view"])
+
+    def test_configured_android_package_materializes_bytecode_without_source_wrapper(self) -> None:
+        boot = _load_boot_module()
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            package = root / "compiled_app"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "app.toml").write_text('app_id = "compiled"\n', encoding="utf-8")
+            source = package / "app_main.py"
+            source.write_text("def create(): return object()\n", encoding="utf-8")
+            py_compile.compile(str(source), cfile=str(package / "app_main.pyc"), doraise=True)
+            source.unlink()
+            (root / "luvatrix_launch_config.json").write_text(
+                '{"app_dir": "compiled_app"}\n',
+                encoding="utf-8",
+            )
+            old_root = boot._ROOT
+            sys.path.insert(0, str(root))
+            try:
+                boot._ROOT = root
+                materialized = boot._app_dir()
+            finally:
+                boot._ROOT = old_root
+                sys.path.remove(str(root))
+                sys.modules.pop("compiled_app", None)
+
+            self.assertTrue((materialized / "app_main.pyc").exists())
+            self.assertFalse((materialized / "app_main.py").exists())
 
     def test_default_frame_rates_are_two_x_refresh_for_app_and_refresh_for_present(self) -> None:
         boot = _load_boot_module()
