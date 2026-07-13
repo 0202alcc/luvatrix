@@ -75,6 +75,7 @@ class UnifiedRuntime:
         self._active_provider = active_provider
         self._app_loop_rate = _RollingRate()
         self._app_loop_ticks = 0
+        self._frames_presented = 0
         self._scene_buffer = SceneGraphBuffer() if scene_target is not None and render_mode in ("auto", "scene") else None
         if render_mode == "scene" and scene_target is None:
             raise ValueError("render_mode='scene' requires a scene_target")
@@ -123,6 +124,7 @@ class UnifiedRuntime:
             "app_loop_fps": self._app_loop_rate.rate,
             "app_loop_ticks": int(self._app_loop_ticks),
             "app_active": int(self._is_active()),
+            "frames_presented": int(self._frames_presented),
             "scene_deduplicated_submissions": (
                 int(self._scene_buffer.deduplicated_submissions) if self._scene_buffer is not None else 0
             ),
@@ -259,6 +261,7 @@ class UnifiedRuntime:
                     matrix_tick = self._display_runtime.run_once(timeout=display_timeout)
                     if matrix_tick is not None:
                         frames_presented += 1
+                        self._frames_presented = frames_presented
                 sleep_for = rate.compute_sleep(
                     loop_started_at=now,
                     loop_finished_at=time.perf_counter(),
@@ -288,6 +291,7 @@ class UnifiedRuntime:
                         active_target.stop()
         if self._scene_display_runtime is not None:
             frames_presented = self._scene_display_runtime.frames_presented
+            self._frames_presented = frames_presented
         return UnifiedRunResult(
             ticks_run=ticks_run,
             frames_presented=frames_presented,

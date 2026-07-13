@@ -137,6 +137,22 @@ class _FakeUIRenderer:
 
 
 class AppRuntimeTests(unittest.TestCase):
+    def test_app_context_reports_first_presented_frame_from_runtime_telemetry(self) -> None:
+        from luvatrix_core.core.app_runtime import AppContext
+
+        frames_presented = 0
+        ctx = AppContext(
+            matrix=WindowMatrix(1, 1),
+            hdi=_FakeHDI(),  # type: ignore[arg-type]
+            sensor_manager=_FakeSensor(),  # type: ignore[arg-type]
+            granted_capabilities={"window.write"},
+            runtime_telemetry_provider=lambda: {"frames_presented": frames_presented},
+        )
+
+        self.assertFalse(ctx.has_presented_frame())
+        frames_presented = 1
+        self.assertTrue(ctx.has_presented_frame())
+
     def test_manifest_parses_platform_support_and_variants(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

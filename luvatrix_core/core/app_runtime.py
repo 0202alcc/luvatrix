@@ -445,6 +445,13 @@ class AppContext:
         payload = self.runtime_telemetry_provider()
         return payload if isinstance(payload, dict) else {}
 
+    def has_presented_frame(self) -> bool:
+        """Return whether the runtime has successfully presented at least one frame."""
+        try:
+            return int(self.runtime_telemetry().get("frames_presented", 0)) > 0
+        except (TypeError, ValueError):
+            return False
+
     def begin_scene_frame(
         self,
         *,
