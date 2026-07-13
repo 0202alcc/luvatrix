@@ -1,5 +1,7 @@
 include README.md
 include LICENSE
+include luvatrix_core/_accel_native.c
+include luvatrix_core/_accel_native.pyx
 recursive-include luvatrix_core/platform/web/runtime_assets *
 recursive-include luvatrix_core/platform/web/python_shim *
 recursive-include luvatrix_core/templates/native *

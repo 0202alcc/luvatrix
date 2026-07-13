@@ -57,7 +57,13 @@ jobs:
 
       - name: Build distributions
         if: steps.release.outputs.publish == 'true'
-        run: uv build
+        run: |
+          uv build
+          uvx --from cibuildwheel==4.1.0 cibuildwheel --platform android --output-dir dist
+        env:
+          CIBW_BUILD: "cp314-android_arm64_v8a cp314-android_x86_64"
+          CIBW_ARCHS_ANDROID: "arm64_v8a x86_64"
+          CIBW_ENVIRONMENT_ANDROID: "LUVATRIX_BUILD_ACCEL=1"
 
       - name: Upload distributions
         if: steps.release.outputs.publish == 'true'
