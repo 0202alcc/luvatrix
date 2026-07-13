@@ -88,6 +88,118 @@ class _CriticalEnergySafety:
 
 
 class UnifiedRuntimeTests(unittest.TestCase):
+    def test_optional_sensor_polling_starts_after_first_presented_frame_when_deferred(self) -> None:
+        events: list[str] = []
+
+        class _OrderedSensors(_FakeSensorManager):
+            def start(self) -> None:
+                events.append("sensors-started")
+                super().start()
+
+        class _OrderedTarget(_RecordingTarget):
+            def present_frame(self, frame: DisplayFrame) -> None:
+                events.append("frame-presented")
+                super().present_frame(frame)
+
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            (app_dir / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "test.deferred-sensors"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'required_capabilities = ["window.write"]',
+                        'optional_capabilities = ["sensor.thermal"]',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (app_dir / "app_main.py").write_text(
+                "\n".join(
+                    [
+                        "from luvatrix_core import accel",
+                        "from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch",
+                        "class App:",
+                        "    def init(self, ctx): pass",
+                        "    def loop(self, ctx, dt):",
+                        "        frame = accel.from_sequence([255, 255, 255, 255], (1, 1, 4))",
+                        "        ctx.submit_write_batch(WriteBatch([FullRewrite(frame)]))",
+                        "    def stop(self, ctx): pass",
+                        "def create(): return App()",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            sensors = _OrderedSensors()
+            runtime = UnifiedRuntime(
+                matrix=WindowMatrix(height=1, width=1),
+                target=_OrderedTarget(),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=sensors,
+                capability_decider=lambda _cap: True,
+            )
+
+            runtime.run_app(
+                app_dir,
+                max_ticks=2,
+                target_fps=1000,
+                defer_optional_sensor_polling_until_first_frame=True,
+            )
+
+        self.assertEqual(events[:2], ["frame-presented", "sensors-started"])
+        self.assertEqual(sensors.started, 1)
+
+    def test_required_sensor_polling_is_not_deferred_past_app_init(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            (app_dir / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "test.required-sensors"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'required_capabilities = ["window.write", "sensor.thermal"]',
+                        "optional_capabilities = []",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (app_dir / "app_main.py").write_text(
+                "\n".join(
+                    [
+                        "class App:",
+                        "    def init(self, ctx):",
+                        "        assert ctx.sensor_manager._thread_started_for_test()",
+                        "    def loop(self, ctx, dt): pass",
+                        "    def stop(self, ctx): pass",
+                        "def create(): return App()",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            class _RequiredSensors(_FakeSensorManager):
+                def _thread_started_for_test(self) -> bool:
+                    return self.started > 0
+
+            sensors = _RequiredSensors()
+            runtime = UnifiedRuntime(
+                matrix=WindowMatrix(height=1, width=1),
+                target=_RecordingTarget(),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=sensors,
+                capability_decider=lambda _cap: True,
+            )
+
+            runtime.run_app(
+                app_dir,
+                max_ticks=1,
+                target_fps=1000,
+                defer_optional_sensor_polling_until_first_frame=True,
+            )
+
+        self.assertEqual(sensors.started, 1)
     def test_origin_refs_toggle_setter_forces_full_invalidation(self) -> None:
         class _Lifecycle:
             def __init__(self) -> None:

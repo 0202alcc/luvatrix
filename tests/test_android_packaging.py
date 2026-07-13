@@ -33,9 +33,10 @@ class AndroidPackagingTests(unittest.TestCase):
         for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
             activity = (root / "app/src/main/java/com/luvatrix/app/MainActivity.kt").read_text(encoding="utf-8")
 
-            self.assertIn('pythonModule.callAttr("run_app_vulkan", luvatrixView)', activity)
+            self.assertIn("startupRunner.start(", activity)
+            self.assertIn('module.callAttr("run_app_vulkan", luvatrixView)', activity)
             self.assertIn("override fun onDestroy()", activity)
-            self.assertIn('pythonModule.callAttr("detach_android_view", luvatrixView)', activity)
+            self.assertIn('module.callAttr("detach_android_view", luvatrixView)', activity)
 
     def test_android_bootstrap_has_process_scoped_rebindable_presenter(self) -> None:
         for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
