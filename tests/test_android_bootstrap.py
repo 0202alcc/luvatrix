@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 
 
@@ -19,6 +20,96 @@ def _load_boot_module():
 
 
 class AndroidBootstrapTests(unittest.TestCase):
+    def test_android_presenter_replays_latest_matrix_frame_when_view_rebinds(self) -> None:
+        boot = _load_boot_module()
+
+        class _View:
+            def __init__(self) -> None:
+                self.frames: list[tuple[bytes, int, int, int]] = []
+
+            def presentRgba(self, rgba: bytes, revision: int, width: int, height: int) -> None:
+                self.frames.append((rgba, revision, width, height))
+
+        first = _View()
+        second = _View()
+        presenter = boot._AndroidViewPresenter()
+        presenter.bind(first)
+        presenter.presentRgba(b"rgba", 7, 1, 1)
+        presenter.unbind(first)
+        presenter.bind(second)
+
+        self.assertEqual(first.frames, [(b"rgba", 7, 1, 1)])
+        self.assertEqual(second.frames, [(b"rgba", 7, 1, 1)])
+
+    def test_android_presenter_replays_latest_scene_when_view_rebinds(self) -> None:
+        boot = _load_boot_module()
+
+        class _View:
+            def __init__(self) -> None:
+                self.scenes: list[tuple[str, int, int, int, str]] = []
+
+            def presentScene(self, payload: str, revision: int, width: int, height: int, mode: str) -> None:
+                self.scenes.append((payload, revision, width, height, mode))
+
+        first = _View()
+        second = _View()
+        presenter = boot._AndroidViewPresenter()
+        presenter.bind(first)
+        presenter.presentScene("[]", 11, 393, 852, "retained")
+        presenter.unbind(first)
+        presenter.bind(second)
+
+        expected = [("[]", 11, 393, 852, "retained")]
+        self.assertEqual(first.scenes, expected)
+        self.assertEqual(second.scenes, expected)
+
+    def test_run_app_vulkan_rebinds_without_starting_duplicate_runtime(self) -> None:
+        boot = _load_boot_module()
+        calls: list[object] = []
+        boot.configure_android_tls = lambda: ""
+        boot.import_probe = lambda: ""
+        boot._RUNTIME_RUNNING = True
+        boot._ANDROID_PRESENTER.bind = calls.append
+
+        result = boot.run_app_vulkan("replacement-view")
+
+        self.assertEqual(result, "luvatrix visual reattached")
+        self.assertEqual(calls, ["replacement-view"])
+
+    def test_runtime_restarts_when_rebound_while_previous_owner_exits(self) -> None:
+        boot = _load_boot_module()
+        first_started = threading.Event()
+        release_first = threading.Event()
+        second_started = threading.Event()
+        release_second = threading.Event()
+        calls: list[object] = []
+        boot.configure_android_tls = lambda: ""
+        boot.import_probe = lambda: ""
+
+        def run_runtime(presenter):
+            calls.append(presenter.current_view())
+            if len(calls) == 1:
+                first_started.set()
+                self.assertTrue(release_first.wait(1.0))
+            else:
+                second_started.set()
+                self.assertTrue(release_second.wait(1.0))
+            return type("Result", (), {"ticks_run": 1, "frames_presented": 1})()
+
+        boot._run_visual_runtime = run_runtime
+        owner = threading.Thread(target=boot.run_app_vulkan, args=("first-view",))
+        owner.start()
+        self.assertTrue(first_started.wait(1.0))
+
+        self.assertEqual(boot.run_app_vulkan("replacement-view"), "luvatrix visual reattached")
+        release_first.set()
+
+        self.assertTrue(second_started.wait(1.0))
+        release_second.set()
+        owner.join(1.0)
+        self.assertFalse(owner.is_alive())
+        self.assertEqual(calls, ["first-view", "replacement-view"])
+
     def test_default_frame_rates_are_two_x_refresh_for_app_and_refresh_for_present(self) -> None:
         boot = _load_boot_module()
 
