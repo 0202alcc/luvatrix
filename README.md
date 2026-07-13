@@ -76,6 +76,20 @@ luvatrix init-native . --target android --out android
 luvatrix init-native . --target ios --out ios
 ```
 
+Initialized native projects include per-file scaffold provenance. Upgrade untouched
+template files while preserving app customizations with:
+
+```bash
+luvatrix upgrade-native . --target android --out android
+```
+
+For native projects created before provenance tracking, run once with `--adopt`.
+Customized files are preserved and current-template candidates are written under
+`.luvatrix-scaffold-updates/` for review.
+
+Measured release improvements and their raw trial data are indexed in
+[`docs/performance/`](docs/performance/README.md).
+
 Then run with the app-owned native project:
 
 ```bash
