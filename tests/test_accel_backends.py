@@ -96,6 +96,30 @@ class AccelBackendTests(unittest.TestCase):
 
         self.assertEqual(_flat_values(frame), [60, 70, 80, 255])
 
+    def test_pure_alpha_blit_clamps_rounding_at_uint8_upper_bound(self) -> None:
+        from luvatrix_core import accel
+
+        destination = accel._PureArray(bytearray([255, 255, 255, 128]), (1, 1, 4))
+        source = accel._PureArray(bytearray([254, 254, 254, 1]), (1, 1, 4))
+        previous = accel._native_accel
+        accel._native_accel = None
+        try:
+            accel._alpha_blit_pure(
+                destination,
+                source,
+                None,
+                destination_x0=0,
+                destination_y0=0,
+                source_x0=0,
+                source_y0=0,
+                copy_width=1,
+                copy_height=1,
+            )
+        finally:
+            accel._native_accel = previous
+
+        self.assertEqual(list(destination._data), [255, 255, 255, 128])
+
     def test_accel_imports_when_torch_is_unavailable(self) -> None:
         code = r'''
 import builtins
@@ -250,6 +274,48 @@ def pixel(frame, y, x):
     return tuple(frame._data[start:start + 4])
 assert pixel(rounded, 1, 2) == (255, 250, 232, 255), pixel(rounded, 1, 2)
 assert pixel(rounded, 4, 3) == (65, 105, 225, 255), pixel(rounded, 4, 3)
+'''
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
+    def test_pure_alpha_blit_dispatches_to_optional_native_accelerator(self) -> None:
+        code = r'''
+import builtins
+import sys
+import types
+
+real_import = builtins.__import__
+def blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "torch" or name.startswith("torch.") or name == "numpy" or name.startswith("numpy."):
+        raise ImportError("blocked numeric backend for native dispatch test")
+    return real_import(name, globals, locals, fromlist, level)
+builtins.__import__ = blocked_import
+
+calls = []
+native = types.ModuleType("luvatrix_core._accel_native")
+def alpha_blit_rgba_u8(destination, destination_width, source, source_width, mask,
+                       mask_width, mask_channels, destination_x0, destination_y0,
+                       source_x0, source_y0, copy_width, copy_height):
+    calls.append((destination_width, source_width, copy_width, copy_height))
+    destination[:4] = bytes([60, 70, 80, 255])
+native.alpha_blit_rgba_u8 = alpha_blit_rgba_u8
+native.blend_solid_mask_rgba_u8 = lambda *args: None
+sys.modules["luvatrix_core._accel_native"] = native
+
+from luvatrix_core import accel
+assert accel.BACKEND == "pure", accel.BACKEND
+assert accel.NATIVE_ACCEL_AVAILABLE
+frame = accel.from_sequence([10, 20, 30, 255], (1, 1, 4))
+tile = accel.from_sequence([110, 120, 130, 128], (1, 1, 4))
+accel.alpha_blit(frame, tile, x=0, y=0)
+assert calls == [(1, 1, 1, 1)], calls
+assert list(frame._data) == [60, 70, 80, 255], list(frame._data)
 '''
         result = subprocess.run(
             [sys.executable, "-c", code],

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "luvatrix"
-version = "0.2.3"
+version = "0.2.4"
 description = "Luvatrix runtime and plotting toolkit"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
   "numpy>=2.4.2",
-  "Pillow>=10.3.0",
+  "Pillow>=12.3.0",
 ]
 
 [project.optional-dependencies]
@@ -79,6 +79,9 @@ include = ["luvatrix*", "luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
   "runtime_assets/runtime/package.json",
   "python_shim/luvatrix/*.py",
 ]
+
+[tool.setuptools.exclude-package-data]
+"luvatrix_core" = ["_accel_native.c", "_accel_native.pyx"]
 
 [tool.uv.sources]
 coinbasetraderbot = { path = "../CoinbaseTraderBot", editable = true }

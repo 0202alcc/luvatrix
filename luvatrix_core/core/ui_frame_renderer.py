@@ -1159,28 +1159,8 @@ class MatrixUIFrameRenderer:
         mask_data = getattr(mask, "_data", None)
         if mask_data is None:
             return
-        for my in range(h):
-            fy = int(y) + my
-            if fy < 0 or fy >= frame_h:
-                continue
-            for mx in range(w):
-                fx = int(x) + mx
-                if fx < 0 or fx >= frame_w:
-                    continue
-                coverage = int(mask_data[my * w + mx])
-                if coverage <= 0:
-                    continue
-                src_a = (coverage / 255.0) * (float(color[3]) / 255.0)
-                base = (fy * frame_w + fx) * 4
-                dst_a = self._frame._data[base + 3] / 255.0
-                out_a = src_a + dst_a * (1.0 - src_a)
-                safe = out_a if out_a > 1e-6 else 1.0
-                for ci in range(3):
-                    dst = float(self._frame._data[base + ci])
-                    src = float(color[ci])
-                    out = (src * src_a + dst * dst_a * (1.0 - src_a)) / safe
-                    self._frame._data[base + ci] = max(0, min(255, int(round(out))))
-                self._frame._data[base + 3] = max(0, min(255, int(round(out_a * 255.0))))
+        _ = frame_h, frame_w, h, w, mask_data
+        accel.blend_solid_mask_rgba_pure(self._frame, mask, x=int(x), y=int(y), color=color)
 
 
 def _env_flag(name: str, default: bool) -> bool:

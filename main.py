@@ -324,6 +324,16 @@ def main() -> None:
     init_native.add_argument("--out", type=Path, default=None, help="Native project directory to create")
     init_native.add_argument("--force", action="store_true", help="Replace an existing native project directory.")
 
+    upgrade_native = subparsers.add_parser("upgrade-native", help="Safely update an app-owned native scaffold")
+    upgrade_native.add_argument("app_dir", type=Path, help="Path to the app directory")
+    upgrade_native.add_argument("--target", choices=["android", "ios"], required=True)
+    upgrade_native.add_argument("--out", type=Path, default=None, help="Existing native project directory")
+    upgrade_native.add_argument(
+        "--adopt",
+        action="store_true",
+        help="Record provenance for a legacy scaffold without overwriting customized files.",
+    )
+
     args = parser.parse_args()
 
     if args.command == "build-web":
@@ -391,6 +401,29 @@ def main() -> None:
             force=args.force,
         )
         print(f"[luvatrix] Created {args.target} native project at {result.path}")
+        return
+
+    if args.command == "upgrade-native":
+        from luvatrix_core.scaffold import upgrade_native_project
+
+        result = upgrade_native_project(
+            args.app_dir,
+            target=args.target,
+            out=args.out,
+            adopt=args.adopt,
+        )
+        if result.adopted:
+            print(f"[luvatrix] Adopted {args.target} native project at {result.path}")
+            if result.conflicted_files:
+                print(f"[luvatrix] Review legacy-scaffold candidates at {result.candidate_dir}")
+        else:
+            print(
+                f"[luvatrix] Updated {args.target} native project at {result.path}: "
+                f"updated={len(result.updated_files)} added={len(result.added_files)} "
+                f"removed={len(result.removed_files)} conflicts={len(result.conflicted_files)}"
+            )
+            if result.conflicted_files:
+                print(f"[luvatrix] Review customized-file candidates at {result.candidate_dir}")
         return
 
     if args.command == "run-app":
