@@ -22,6 +22,16 @@ def _load_boot_module():
 
 
 class AndroidBootstrapTests(unittest.TestCase):
+    def test_loading_android_boot_does_not_mutate_process_import_paths(self) -> None:
+        android_python_root = str(BOOT.parent)
+        previous = list(sys.path)
+        sys.path[:] = [entry for entry in sys.path if entry != android_python_root]
+        try:
+            _load_boot_module()
+            self.assertNotIn(android_python_root, sys.path)
+        finally:
+            sys.path[:] = previous
+
     def test_android_presenter_replays_latest_matrix_frame_when_view_rebinds(self) -> None:
         boot = _load_boot_module()
 
@@ -77,6 +87,22 @@ class AndroidBootstrapTests(unittest.TestCase):
 
         self.assertEqual(result, "luvatrix visual reattached")
         self.assertEqual(calls, ["replacement-view"])
+
+    def test_run_app_vulkan_does_not_execute_import_probe_before_normal_launch(self) -> None:
+        boot = _load_boot_module()
+        boot.configure_android_tls = lambda: ""
+
+        def unexpected_probe() -> str:
+            raise AssertionError("normal launch must not execute app_main through import_probe")
+
+        boot.import_probe = unexpected_probe
+        boot._run_visual_runtime = lambda _presenter: type(
+            "Result",
+            (),
+            {"ticks_run": 1, "frames_presented": 1},
+        )()
+
+        self.assertEqual(boot.run_app_vulkan("view"), "luvatrix visual ok")
 
     def test_runtime_restarts_when_rebound_while_previous_owner_exits(self) -> None:
         boot = _load_boot_module()

@@ -336,6 +336,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     fun presentRgba(rgba: ByteArray, revision: Int, width: Int, height: Int) {
+        AndroidLaunchTelemetry.mark("first_app_frame_submitted")
         overlayView.post {
             bootstrapMessage = null
             if (frameBitmap == null || frameBitmapWidth != width || frameBitmapHeight != height) {
@@ -538,6 +539,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     fun presentScene(sceneJson: String, revision: Int, logicalWidth: Int, logicalHeight: Int, presentationMode: String = "") {
+        AndroidLaunchTelemetry.mark("first_app_frame_submitted")
         var nativeBackground = false
         try {
             nativeBackground = NativeVulkan.presentScene(sceneJson, revision, logicalWidth, logicalHeight, presentationMode)
@@ -749,6 +751,14 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         }
     }
 
+    fun launchTelemetryJson(): String {
+        val payload = JSONObject()
+        for ((name, elapsedNs) in AndroidLaunchTelemetry.snapshot()) {
+            payload.put(name, elapsedNs)
+        }
+        return payload.toString()
+    }
+
     fun showRuntimeError(message: String) {
         overlayView.post {
             bootstrapMessage = message.take(320)
@@ -813,6 +823,11 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     private inner class SceneOverlayView(context: Context) : View(context) {
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
+            if (overlayMode == OverlayMode.Bootstrap) {
+                AndroidLaunchTelemetry.mark("bootstrap_frame_drawn")
+            } else {
+                AndroidLaunchTelemetry.mark("first_app_frame_drawn")
+            }
             when (overlayMode) {
                 OverlayMode.Bootstrap -> {
                     val message = bootstrapMessage ?: return
