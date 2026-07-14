@@ -75,6 +75,15 @@ class AndroidPackagingTests(unittest.TestCase):
             self.assertIn("def detach_android_view", boot)
             self.assertIn("_RUNTIME_RUNNING", boot)
 
+    def test_android_template_matches_optimized_python_startup_contract(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")
+
+            self.assertIn('name="luvatrix-android-tls"', boot)
+            self.assertIn("before_lifecycle_init=wait_for_tls", boot)
+            self.assertIn("defer_hdi_polling_until_first_frame=True", boot)
+            self.assertNotIn("def _app_manifest_render_mode", boot)
+
     def test_android_bootstrap_prefers_chaquopy_bytecode_without_source_wrapper(self) -> None:
         for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
             boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")

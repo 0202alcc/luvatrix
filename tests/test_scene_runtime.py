@@ -84,6 +84,54 @@ class _FakeSensorManager(SensorManagerThread):
 
 
 class SceneRuntimeTests(unittest.TestCase):
+    def test_auto_mode_honors_manifest_matrix_preference(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            (app_dir / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "test.matrix.preferred"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'required_capabilities = ["window.write"]',
+                        "optional_capabilities = []",
+                        "[render]",
+                        'preferred = "matrix"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (app_dir / "app_main.py").write_text(
+                "from luvatrix_core import accel\n"
+                "from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch\n"
+                "class App:\n"
+                "    def init(self, ctx): pass\n"
+                "    def loop(self, ctx, dt):\n"
+                "        frame = accel.from_sequence([255, 255, 255, 255], (1, 1, 4))\n"
+                "        ctx.submit_write_batch(WriteBatch([FullRewrite(frame)]))\n"
+                "    def stop(self, ctx): pass\n"
+                "def create(): return App()\n",
+                encoding="utf-8",
+            )
+            matrix_target = _RecordingMatrixTarget()
+            scene_target = _RecordingSceneTarget()
+            runtime = UnifiedRuntime(
+                matrix=WindowMatrix(height=1, width=1),
+                target=matrix_target,
+                scene_target=scene_target,
+                render_mode="auto",
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=_FakeSensorManager(),
+                capability_decider=lambda _cap: True,
+            )
+
+            result = runtime.run_app(app_dir, max_ticks=1, target_fps=1000)
+
+        self.assertEqual(matrix_target.started, 1)
+        self.assertEqual(scene_target.started, 0)
+        self.assertEqual(len(matrix_target.presented), 1)
+        self.assertEqual(result.frames_presented, 1)
+
     def test_scene_mode_routes_scene_frames_to_scene_target(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             app_dir = Path(td)

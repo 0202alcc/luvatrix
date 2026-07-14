@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import threading
 import unittest
+from unittest.mock import patch
 
 import torch
 
+from luvatrix_core import accel
 from luvatrix_core.perf.copy_telemetry import begin_copy_telemetry_frame, snapshot_copy_telemetry
 from luvatrix_core.core.window_matrix import (
     FullRewrite,
@@ -23,11 +25,53 @@ from luvatrix_core.core.window_matrix import (
 class WindowMatrixProtocolTests(unittest.TestCase):
     def test_init_uses_canonical_shape_dtype(self) -> None:
         matrix = WindowMatrix(height=3, width=4)
+        self.assertTrue(matrix.is_materialized)
         snap = matrix.read_snapshot()
         self.assertEqual(tuple(snap.shape), (3, 4, 4))
         self.assertEqual(snap.dtype, torch.uint8)
         self.assertTrue(torch.all(snap[:, :, 3] == 255))
         self.assertEqual(matrix.pending_call_blit_count(), 0)
+
+    def test_lazy_init_defers_storage_until_snapshot_read(self) -> None:
+        matrix = WindowMatrix(
+            height=3,
+            width=4,
+            background=(7, 11, 13, 17),
+            lazy=True,
+        )
+
+        self.assertEqual((matrix.height, matrix.width), (3, 4))
+        self.assertEqual(matrix.revision, 0)
+        self.assertEqual(matrix.pending_call_blit_count(), 0)
+        self.assertFalse(matrix.is_materialized)
+
+        snap = matrix.read_snapshot()
+
+        self.assertTrue(matrix.is_materialized)
+        self.assertEqual(tuple(snap.shape), (3, 4, 4))
+        self.assertEqual(snap.dtype, torch.uint8)
+        self.assertTrue(torch.all(snap == torch.tensor([7, 11, 13, 17], dtype=torch.uint8)))
+        snap[0, 0, 0] = 99
+        self.assertEqual(int(matrix.read_snapshot()[0, 0, 0].item()), 7)
+
+    def test_lazy_full_rewrite_skips_unused_background_allocation(self) -> None:
+        payload = torch.tensor(
+            [
+                [[1, 2, 3, 4], [5, 6, 7, 8]],
+                [[9, 10, 11, 12], [13, 14, 15, 16]],
+            ],
+            dtype=torch.uint8,
+        )
+        with patch(
+            "luvatrix_core.core.window_matrix.accel.filled_rgba",
+            wraps=accel.filled_rgba,
+        ) as fill:
+            matrix = WindowMatrix(height=2, width=2, lazy=True)
+            matrix.submit_write_batch(WriteBatch([FullRewrite(payload)]))
+
+        fill.assert_not_called()
+        self.assertTrue(matrix.is_materialized)
+        self.assertTrue(torch.equal(matrix.read_snapshot(), payload))
 
     def test_full_rewrite_emits_call_blit(self) -> None:
         matrix = WindowMatrix(height=2, width=2)

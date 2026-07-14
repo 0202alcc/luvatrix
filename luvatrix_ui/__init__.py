@@ -1,205 +1,122 @@
 """First-party UI contracts and components for Luvatrix."""
 
-from .component_schema import (
-    BoundingBox,
-    ComponentBase,
-    CoordinatePoint,
-    CoordinateTransformer,
-    DisplayableArea,
-    parse_coordinate_notation,
-)
-from .controls.button import ButtonModel, ButtonState
-from .controls.interaction import HDIPressEvent, PressPhase, parse_hdi_press_event
-from .controls.stained_glass_button import (
-    StainedGlassButtonComponent,
-    StainedGlassButtonRenderBatch,
-    StainedGlassButtonRenderCommand,
-    StainedGlassButtonRenderer,
-)
-from .controls.svg_component import SVGComponent
-from .controls.svg_renderer import SVGRenderBatch, SVGRenderCommand, SVGRenderer
-try:
-    from .planning import (
-        AgileRenderConfig,
-        AgileTaskCard,
-        GanttRenderConfig,
-        PlanningExportBundle,
-        PlanningInteractionState,
-        PlanningTimeline,
-        TimelineMilestone,
-        ValidationReport,
-        attach_dependency_defaults,
-        apply_task_filters,
-        apply_week_viewport,
-        build_discord_payload,
-        build_m011_task_cards,
-        clamp_week_window,
-        export_planning_bundle,
-        load_timeline_model,
-        milestone_clickthrough_map,
-        pan_week_window,
-        planning_timeline_schema,
-        render_agile_board_ascii,
-        render_agile_board_markdown,
-        render_gantt_ascii,
-        require_valid_planning_suite,
-        timeline_from_dict,
-        validate_dependency_integrity,
-        validate_planning_suite,
-        validate_render_consistency,
-        zoom_week_window,
-    )
-except ImportError:
-    AgileRenderConfig = AgileTaskCard = GanttRenderConfig = PlanningExportBundle = None
-    PlanningInteractionState = PlanningTimeline = TimelineMilestone = ValidationReport = None
-    attach_dependency_defaults = apply_task_filters = apply_week_viewport = None
-    build_discord_payload = build_m011_task_cards = clamp_week_window = None
-    export_planning_bundle = load_timeline_model = milestone_clickthrough_map = None
-    pan_week_window = planning_timeline_schema = render_agile_board_ascii = None
-    render_agile_board_markdown = render_gantt_ascii = require_valid_planning_suite = None
-    timeline_from_dict = validate_dependency_integrity = validate_planning_suite = None
-    validate_render_consistency = zoom_week_window = None
-try:
-    from .style.theme import ThemeTokens, validate_theme_tokens
-except ImportError:
-    ThemeTokens = None
-    validate_theme_tokens = None
-try:
-    from .table import TableColumn, TableComponent, TableRenderStyle, TableState
-except ImportError:
-    TableColumn = TableComponent = TableRenderStyle = TableState = None
-from .text.component import TextComponent
-from .text.renderer import (
-    FontSpec,
-    TextAppearance,
-    TextLayoutMetrics,
-    TextMeasureRequest,
-    TextRenderBatch,
-    TextRenderCommand,
-    TextRenderer,
-    TextSizeSpec,
-)
-try:
-    from .ui_ir import (
-        ComponentSemantics,
-        ComponentTransform,
-        CoordinateFrameSpec,
-        Insets,
-        InteractionBinding,
-        MatrixSpec,
-        UIIRAsset,
-        UIIRComponent,
-        UIIRPage,
-        default_ui_ir_page_schema,
-        validate_ui_ir_payload,
-    )
-except ImportError:
-    ComponentSemantics = ComponentTransform = CoordinateFrameSpec = Insets = None
-    InteractionBinding = MatrixSpec = UIIRAsset = UIIRComponent = UIIRPage = None
-    default_ui_ir_page_schema = validate_ui_ir_payload = None
-try:
-    from .planes_protocol import (
-        SUPPORTED_HDI_HOOKS,
-        PlanesAppMetadata,
-        PlanesValidationError,
-        compile_planes_to_ui_ir,
-        resolve_web_metadata,
-        validate_planes_payload,
-    )
-except ImportError:
-    SUPPORTED_HDI_HOOKS = None
-    PlanesAppMetadata = PlanesValidationError = None
-    compile_planes_to_ui_ir = resolve_web_metadata = validate_planes_payload = None
-try:
-    from .planes_runtime import (
-        EventHandler,
-        PlaneApp,
-        load_plane_app,
-    )
-except ImportError:
-    EventHandler = PlaneApp = load_plane_app = None
+from importlib import import_module
 
-__all__ = [
-    "BoundingBox",
-    "AgileRenderConfig",
-    "AgileTaskCard",
-    "ButtonModel",
-    "ButtonState",
-    "ComponentBase",
-    "CoordinatePoint",
-    "CoordinateTransformer",
-    "DisplayableArea",
-    "FontSpec",
-    "GanttRenderConfig",
-    "HDIPressEvent",
-    "PlanningExportBundle",
-    "PlanningInteractionState",
-    "PlanningTimeline",
-    "PressPhase",
-    "StainedGlassButtonComponent",
-    "StainedGlassButtonRenderBatch",
-    "StainedGlassButtonRenderCommand",
-    "StainedGlassButtonRenderer",
-    "SVGComponent",
-    "SVGRenderBatch",
-    "SVGRenderCommand",
-    "SVGRenderer",
-    "TextAppearance",
-    "TableColumn",
-    "TableComponent",
-    "TableRenderStyle",
-    "TableState",
-    "TextComponent",
-    "TextLayoutMetrics",
-    "TextMeasureRequest",
-    "TextRenderBatch",
-    "TextRenderCommand",
-    "TextRenderer",
-    "TextSizeSpec",
-    "ThemeTokens",
-    "TimelineMilestone",
-    "ValidationReport",
-    "UIIRAsset",
-    "UIIRComponent",
-    "UIIRPage",
-    "ComponentSemantics",
-    "ComponentTransform",
-    "CoordinateFrameSpec",
-    "InteractionBinding",
-    "Insets",
-    "MatrixSpec",
-    "attach_dependency_defaults",
-    "apply_task_filters",
-    "apply_week_viewport",
-    "build_discord_payload",
-    "build_m011_task_cards",
-    "clamp_week_window",
-    "default_ui_ir_page_schema",
-    "export_planning_bundle",
-    "load_timeline_model",
-    "milestone_clickthrough_map",
-    "pan_week_window",
-    "planning_timeline_schema",
-    "parse_coordinate_notation",
-    "parse_hdi_press_event",
-    "render_agile_board_ascii",
-    "render_agile_board_markdown",
-    "render_gantt_ascii",
-    "require_valid_planning_suite",
-    "timeline_from_dict",
-    "validate_dependency_integrity",
-    "validate_planning_suite",
-    "validate_render_consistency",
-    "validate_ui_ir_payload",
-    "validate_theme_tokens",
-    "zoom_week_window",
-    "SUPPORTED_HDI_HOOKS",
-    "PlanesAppMetadata",
-    "PlanesValidationError",
-    "compile_planes_to_ui_ir",
-    "resolve_web_metadata",
-    "validate_planes_payload",
-    "EventHandler",
-    "PlaneApp",
-    "load_plane_app",
-]
+
+_LAZY_EXPORTS = {
+    "BoundingBox": (".component_schema", "BoundingBox"),
+    "ComponentBase": (".component_schema", "ComponentBase"),
+    "CoordinatePoint": (".component_schema", "CoordinatePoint"),
+    "CoordinateTransformer": (".component_schema", "CoordinateTransformer"),
+    "DisplayableArea": (".component_schema", "DisplayableArea"),
+    "parse_coordinate_notation": (".component_schema", "parse_coordinate_notation"),
+    "ButtonModel": (".controls.button", "ButtonModel"),
+    "ButtonState": (".controls.button", "ButtonState"),
+    "HDIPressEvent": (".controls.interaction", "HDIPressEvent"),
+    "PressPhase": (".controls.interaction", "PressPhase"),
+    "parse_hdi_press_event": (".controls.interaction", "parse_hdi_press_event"),
+    "StainedGlassButtonComponent": (".controls.stained_glass_button", "StainedGlassButtonComponent"),
+    "StainedGlassButtonRenderBatch": (
+        ".controls.stained_glass_button",
+        "StainedGlassButtonRenderBatch",
+    ),
+    "StainedGlassButtonRenderCommand": (
+        ".controls.stained_glass_button",
+        "StainedGlassButtonRenderCommand",
+    ),
+    "StainedGlassButtonRenderer": (".controls.stained_glass_button", "StainedGlassButtonRenderer"),
+    "SVGComponent": (".controls.svg_component", "SVGComponent"),
+    "SVGRenderBatch": (".controls.svg_renderer", "SVGRenderBatch"),
+    "SVGRenderCommand": (".controls.svg_renderer", "SVGRenderCommand"),
+    "SVGRenderer": (".controls.svg_renderer", "SVGRenderer"),
+    "AgileRenderConfig": (".planning", "AgileRenderConfig"),
+    "AgileTaskCard": (".planning", "AgileTaskCard"),
+    "GanttRenderConfig": (".planning", "GanttRenderConfig"),
+    "PlanningExportBundle": (".planning", "PlanningExportBundle"),
+    "PlanningInteractionState": (".planning", "PlanningInteractionState"),
+    "PlanningTimeline": (".planning", "PlanningTimeline"),
+    "TimelineMilestone": (".planning", "TimelineMilestone"),
+    "ValidationReport": (".planning", "ValidationReport"),
+    "attach_dependency_defaults": (".planning", "attach_dependency_defaults"),
+    "apply_task_filters": (".planning", "apply_task_filters"),
+    "apply_week_viewport": (".planning", "apply_week_viewport"),
+    "build_discord_payload": (".planning", "build_discord_payload"),
+    "build_m011_task_cards": (".planning", "build_m011_task_cards"),
+    "clamp_week_window": (".planning", "clamp_week_window"),
+    "export_planning_bundle": (".planning", "export_planning_bundle"),
+    "load_timeline_model": (".planning", "load_timeline_model"),
+    "milestone_clickthrough_map": (".planning", "milestone_clickthrough_map"),
+    "pan_week_window": (".planning", "pan_week_window"),
+    "planning_timeline_schema": (".planning", "planning_timeline_schema"),
+    "render_agile_board_ascii": (".planning", "render_agile_board_ascii"),
+    "render_agile_board_markdown": (".planning", "render_agile_board_markdown"),
+    "render_gantt_ascii": (".planning", "render_gantt_ascii"),
+    "require_valid_planning_suite": (".planning", "require_valid_planning_suite"),
+    "timeline_from_dict": (".planning", "timeline_from_dict"),
+    "validate_dependency_integrity": (".planning", "validate_dependency_integrity"),
+    "validate_planning_suite": (".planning", "validate_planning_suite"),
+    "validate_render_consistency": (".planning", "validate_render_consistency"),
+    "zoom_week_window": (".planning", "zoom_week_window"),
+    "ThemeTokens": (".style.theme", "ThemeTokens"),
+    "validate_theme_tokens": (".style.theme", "validate_theme_tokens"),
+    "TableColumn": (".table", "TableColumn"),
+    "TableComponent": (".table", "TableComponent"),
+    "TableRenderStyle": (".table", "TableRenderStyle"),
+    "TableState": (".table", "TableState"),
+    "TextComponent": (".text.component", "TextComponent"),
+    "FontSpec": (".text.renderer", "FontSpec"),
+    "TextAppearance": (".text.renderer", "TextAppearance"),
+    "TextLayoutMetrics": (".text.renderer", "TextLayoutMetrics"),
+    "TextMeasureRequest": (".text.renderer", "TextMeasureRequest"),
+    "TextRenderBatch": (".text.renderer", "TextRenderBatch"),
+    "TextRenderCommand": (".text.renderer", "TextRenderCommand"),
+    "TextRenderer": (".text.renderer", "TextRenderer"),
+    "TextSizeSpec": (".text.renderer", "TextSizeSpec"),
+    "ComponentSemantics": (".ui_ir", "ComponentSemantics"),
+    "ComponentTransform": (".ui_ir", "ComponentTransform"),
+    "CoordinateFrameSpec": (".ui_ir", "CoordinateFrameSpec"),
+    "Insets": (".ui_ir", "Insets"),
+    "InteractionBinding": (".ui_ir", "InteractionBinding"),
+    "MatrixSpec": (".ui_ir", "MatrixSpec"),
+    "UIIRAsset": (".ui_ir", "UIIRAsset"),
+    "UIIRComponent": (".ui_ir", "UIIRComponent"),
+    "UIIRPage": (".ui_ir", "UIIRPage"),
+    "default_ui_ir_page_schema": (".ui_ir", "default_ui_ir_page_schema"),
+    "validate_ui_ir_payload": (".ui_ir", "validate_ui_ir_payload"),
+    "SUPPORTED_HDI_HOOKS": (".planes_protocol", "SUPPORTED_HDI_HOOKS"),
+    "PlanesAppMetadata": (".planes_protocol", "PlanesAppMetadata"),
+    "PlanesValidationError": (".planes_protocol", "PlanesValidationError"),
+    "compile_planes_to_ui_ir": (".planes_protocol", "compile_planes_to_ui_ir"),
+    "resolve_web_metadata": (".planes_protocol", "resolve_web_metadata"),
+    "validate_planes_payload": (".planes_protocol", "validate_planes_payload"),
+    "EventHandler": (".planes_runtime", "EventHandler"),
+    "PlaneApp": (".planes_runtime", "PlaneApp"),
+    "load_plane_app": (".planes_runtime", "load_plane_app"),
+}
+
+_OPTIONAL_EXPORTS = {
+    name
+    for name, (module_name, _) in _LAZY_EXPORTS.items()
+    if module_name.startswith((".planning", ".style", ".table", ".ui_ir", ".planes"))
+}
+
+__all__ = list(_LAZY_EXPORTS)
+
+
+def __getattr__(name: str) -> object:
+    target = _LAZY_EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attribute_name = target
+    try:
+        value = getattr(import_module(module_name, __name__), attribute_name)
+    except ImportError:
+        if name not in _OPTIONAL_EXPORTS:
+            raise
+        value = None
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | _LAZY_EXPORTS.keys())
