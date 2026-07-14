@@ -24,7 +24,9 @@ class AndroidPackagingTests(unittest.TestCase):
             "app/src/main/cpp/luvatrix_camera_preview.frag",
             "app/src/main/cpp/luvatrix_camera_preview_shaders.h",
             "app/src/main/java/com/luvatrix/app/CameraBridge.kt",
+            "app/src/main/java/com/luvatrix/app/LuvatrixApplication.kt",
             "app/src/main/java/com/luvatrix/app/MainActivity.kt",
+            "app/src/main/java/com/luvatrix/app/StartupResources.kt",
             "app/src/main/python/luvatrix_android_boot.py",
         ):
             self.assertTrue((ANDROID / rel).exists(), rel)
@@ -33,10 +35,37 @@ class AndroidPackagingTests(unittest.TestCase):
         for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
             activity = (root / "app/src/main/java/com/luvatrix/app/MainActivity.kt").read_text(encoding="utf-8")
 
-            self.assertIn("startupRunner.start(", activity)
+            self.assertIn("app.pythonStartup.whenReady(", activity)
             self.assertIn('module.callAttr("run_app_vulkan", luvatrixView)', activity)
             self.assertIn("override fun onDestroy()", activity)
             self.assertIn('module.callAttr("detach_android_view", luvatrixView)', activity)
+
+    def test_android_bootstrap_sources_and_tests_match_native_template(self) -> None:
+        template = ROOT / "luvatrix_core/templates/native/android"
+        for rel in (
+            "app/src/main/AndroidManifest.xml",
+            "app/src/main/java/com/luvatrix/app/LaunchPerformance.kt",
+            "app/src/main/java/com/luvatrix/app/LuvatrixApplication.kt",
+            "app/src/main/java/com/luvatrix/app/MainActivity.kt",
+            "app/src/main/java/com/luvatrix/app/NativeVulkan.kt",
+            "app/src/main/java/com/luvatrix/app/StartupResources.kt",
+            "app/src/test/java/com/luvatrix/app/BootstrapStateTest.kt",
+            "app/src/test/java/com/luvatrix/app/LaunchTimelineTest.kt",
+        ):
+            project_file = ANDROID / rel
+            template_file = template / rel
+            self.assertTrue(project_file.exists(), rel)
+            self.assertTrue(template_file.exists(), rel)
+            self.assertEqual(project_file.read_bytes(), template_file.read_bytes(), rel)
+
+        for root in (ANDROID, template):
+            bridge = (root / "app/src/main/java/com/luvatrix/app/CameraBridge.kt").read_text(encoding="utf-8")
+            view = (root / "app/src/main/java/com/luvatrix/app/LuvatrixVulkanView.kt").read_text(encoding="utf-8")
+            self.assertIn("private val cameraManagerDelegate = lazy", bridge)
+            self.assertIn("SynchronizedLazyResource { CameraBridge(context) }", view)
+            self.assertIn("SceneReplayCoordinator()", view)
+            self.assertIn("sceneReplayCoordinator.surfaceAttached(generation)", view)
+            self.assertIn("presentNativeSceneLocked(replay)", view)
 
     def test_android_bootstrap_has_process_scoped_rebindable_presenter(self) -> None:
         for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):

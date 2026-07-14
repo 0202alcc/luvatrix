@@ -6,13 +6,10 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import com.chaquo.python.PyObject
-import com.chaquo.python.Python
-import com.chaquo.python.android.AndroidPlatform
 
 class MainActivity : Activity() {
     private lateinit var luvatrixView: LuvatrixVulkanView
-    private var pythonModule: PyObject? = null
-    private val startupRunner = BackgroundStartupRunner()
+    @Volatile private var pythonModule: PyObject? = null
     @Volatile private var destroyed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,20 +22,13 @@ class MainActivity : Activity() {
         val presentFps = 60
         luvatrixView.applyLowLatencyMode(presentFps * 2, presentFps)
         val importProbe = intent.getBooleanExtra("luvatrix_import_probe", false)
-        startupRunner.start(
-            task = {
-                AndroidLaunchTelemetry.mark("python_start_begin")
-                Log.i(TAG, "starting Python runtime")
-                if (!Python.isStarted()) {
-                    Python.start(AndroidPlatform(this))
-                }
-                AndroidLaunchTelemetry.mark("python_start_end")
-                Log.i(TAG, "loading luvatrix_android_boot")
-                val module = Python.getInstance().getModule("luvatrix_android_boot")
+        val app = application as LuvatrixApplication
+        app.pythonStartup.whenReady(
+            executor = app.runtimeExecutor,
+            onReady = ready@ { module ->
                 pythonModule = module
                 pythonBridge = PythonBridge(module)
-                AndroidLaunchTelemetry.mark("boot_module_loaded")
-                if (destroyed) return@start
+                if (destroyed) return@ready
                 Log.i(TAG, "starting Luvatrix visual runtime importProbe=$importProbe")
                 AndroidLaunchTelemetry.mark("runtime_call_begin")
                 if (importProbe) {
