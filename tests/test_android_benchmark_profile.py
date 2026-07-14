@@ -76,3 +76,15 @@ def test_android_performance_runbook_separates_host_and_device_gates() -> None:
     assert "./gradlew :benchmark:connectedBenchmarkReleaseAndroidTest" in runbook
     assert "./gradlew :app:generateBaselineProfile" in runbook
     assert "physical device" in runbook
+
+
+def test_generated_profiles_cover_luvatrix_and_chaquopy_startup() -> None:
+    profile_dir = ANDROID / "app/src/release/generated/baselineProfiles"
+    baseline = (profile_dir / "baseline-prof.txt").read_text(encoding="utf-8")
+    startup = (profile_dir / "startup-prof.txt").read_text(encoding="utf-8")
+
+    for profile in (baseline, startup):
+        assert "Lcom/luvatrix/app/MainActivity;" in profile
+        assert "Lcom/luvatrix/app/LuvatrixVulkanView;" in profile
+        assert "Lcom/chaquo/python/Python;" in profile
+        assert "Lcom/chaquo/python/android/AndroidPlatform;" in profile

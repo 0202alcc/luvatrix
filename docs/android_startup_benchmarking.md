@@ -50,7 +50,13 @@ cd android
 ```
 
 The Baseline Profile Gradle plugin copies the generated rules into
-`app/src/release/generated/baselineProfiles/`. Review and commit the generated
-profile when startup code changes, then rebuild the release artifact so the
-profile is packaged. A generated profile is device- and code-path-derived; do
-not replace it with hand-written rules.
+`app/src/release/generated/baselineProfiles/`. The checked-in profile was
+generated on the API 35 `Luvatrix_API_35` emulator. Regenerate and review it
+when startup code changes, then rebuild the release artifact so the profile is
+packaged. A generated profile is device- and code-path-derived; do not replace
+it with hand-written rules.
+
+AndroidX Benchmark 1.4.1 can fail profile collection on API 36 with `Process
+com.luvatrix.app never flushed profiles`. Until that platform/library
+combination is fixed upstream, use the API 35 emulator for reproducible profile
+generation. API 36 remains suitable for ordinary app and macrobenchmark runs.
