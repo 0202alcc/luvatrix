@@ -5,8 +5,6 @@ import sys
 import tempfile
 import unittest
 
-import torch
-
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
 from luvatrix_core.core.energy_safety import EnergySafetyDecision
 from luvatrix_core.core.sensor_manager import SensorManagerThread, SensorSample
@@ -71,6 +69,18 @@ class _RecordingTarget(RenderTarget):
         return False
 
 
+class _RecordingHDI(HDIThread):
+    def __init__(self, events: list[str]) -> None:
+        super().__init__(source=_NoopHDISource())
+        self._events = events
+
+    def start(self) -> None:
+        self._events.append("hdi-started")
+
+    def stop(self) -> None:
+        self._events.append("hdi-stopped")
+
+
 class _CriticalEnergySafety:
     def __init__(self) -> None:
         self.calls = 0
@@ -88,6 +98,94 @@ class _CriticalEnergySafety:
 
 
 class UnifiedRuntimeTests(unittest.TestCase):
+    def test_required_hdi_polling_is_not_deferred_past_first_frame(self) -> None:
+        events: list[str] = []
+
+        class _OrderedTarget(_RecordingTarget):
+            def present_frame(self, frame: DisplayFrame) -> None:
+                events.append("frame-presented")
+                super().present_frame(frame)
+
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            (app_dir / "app.toml").write_text(
+                'app_id = "test.required-hdi"\nprotocol_version = "1"\nentrypoint = "app_main:create"\n'
+                'required_capabilities = ["window.write", "hdi.touch"]\noptional_capabilities = []\n',
+                encoding="utf-8",
+            )
+            (app_dir / "app_main.py").write_text(
+                "from luvatrix_core import accel\n"
+                "from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch\n"
+                "class App:\n"
+                "    def init(self, ctx): pass\n"
+                "    def loop(self, ctx, dt):\n"
+                "        frame = accel.from_sequence([255, 255, 255, 255], (1, 1, 4))\n"
+                "        ctx.submit_write_batch(WriteBatch([FullRewrite(frame)]))\n"
+                "    def stop(self, ctx): pass\n"
+                "def create(): return App()\n",
+                encoding="utf-8",
+            )
+            runtime = UnifiedRuntime(
+                matrix=WindowMatrix(height=1, width=1),
+                target=_OrderedTarget(),
+                hdi=_RecordingHDI(events),
+                sensor_manager=_FakeSensorManager(),
+                capability_decider=lambda _cap: True,
+            )
+
+            runtime.run_app(
+                app_dir,
+                max_ticks=1,
+                target_fps=1000,
+                defer_hdi_polling_until_first_frame=True,
+            )
+
+        self.assertEqual(events[:2], ["hdi-started", "frame-presented"])
+
+    def test_hdi_polling_starts_after_first_presented_frame_when_deferred(self) -> None:
+        events: list[str] = []
+
+        class _OrderedTarget(_RecordingTarget):
+            def present_frame(self, frame: DisplayFrame) -> None:
+                events.append("frame-presented")
+                super().present_frame(frame)
+
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            (app_dir / "app.toml").write_text(
+                'app_id = "test.deferred-hdi"\nprotocol_version = "1"\nentrypoint = "app_main:create"\n'
+                'required_capabilities = ["window.write"]\noptional_capabilities = []\n',
+                encoding="utf-8",
+            )
+            (app_dir / "app_main.py").write_text(
+                "from luvatrix_core import accel\n"
+                "from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch\n"
+                "class App:\n"
+                "    def init(self, ctx): pass\n"
+                "    def loop(self, ctx, dt):\n"
+                "        frame = accel.from_sequence([255, 255, 255, 255], (1, 1, 4))\n"
+                "        ctx.submit_write_batch(WriteBatch([FullRewrite(frame)]))\n"
+                "    def stop(self, ctx): pass\n"
+                "def create(): return App()\n",
+                encoding="utf-8",
+            )
+            runtime = UnifiedRuntime(
+                matrix=WindowMatrix(height=1, width=1),
+                target=_OrderedTarget(),
+                hdi=_RecordingHDI(events),
+                sensor_manager=_FakeSensorManager(),
+                capability_decider=lambda _cap: True,
+            )
+
+            runtime.run_app(
+                app_dir,
+                max_ticks=2,
+                target_fps=1000,
+                defer_hdi_polling_until_first_frame=True,
+            )
+
+        self.assertEqual(events[:2], ["frame-presented", "hdi-started"])
+
     def test_optional_sensor_polling_starts_after_first_presented_frame_when_deferred(self) -> None:
         events: list[str] = []
 

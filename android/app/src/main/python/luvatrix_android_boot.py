@@ -10,7 +10,6 @@ import sys
 import tempfile
 import threading
 import time
-import tomllib
 from urllib.parse import urlparse
 
 
@@ -103,7 +102,7 @@ def run_headless_ticks(ticks: int = 5) -> str:
     from luvatrix_core.core.sensor_manager import SensorManagerThread
     from luvatrix_core.core.unified_runtime import UnifiedRuntime
     from luvatrix_core.core.window_matrix import WindowMatrix
-    from luvatrix_core.platform.android.hdi_source import AndroidHDISource, clear_android_input_events
+    from luvatrix_core.platform.android.hdi_source import AndroidHDISource
     from luvatrix_core.targets.base import RenderTarget
 
     class _Target(RenderTarget):
@@ -144,8 +143,32 @@ def run_app_vulkan(view=None) -> str:
         _RUNTIME_RUNNING = True
     try:
         while True:
-            configure_android_tls()
-            result = _run_visual_runtime(_ANDROID_PRESENTER if view is not None else None)
+            tls_done = threading.Event()
+            tls_error: list[Exception] = []
+
+            def configure_tls_in_background() -> None:
+                try:
+                    configure_android_tls()
+                except Exception as exc:  # noqa: BLE001
+                    tls_error.append(exc)
+                finally:
+                    tls_done.set()
+
+            threading.Thread(
+                target=configure_tls_in_background,
+                name="luvatrix-android-tls",
+                daemon=True,
+            ).start()
+
+            def wait_for_tls() -> None:
+                tls_done.wait()
+                if tls_error:
+                    raise tls_error[0]
+
+            result = _run_visual_runtime(
+                _ANDROID_PRESENTER if view is not None else None,
+                before_lifecycle_init=wait_for_tls,
+            )
             _log(f"luvatrix visual ticks={result.ticks_run} frames={result.frames_presented}")
             with _RUNTIME_LOCK:
                 if owner_generation == _RUNTIME_VIEW_GENERATION:
@@ -424,7 +447,7 @@ def full_suite_emulator_acceptance(view=None) -> str:
     return _mark("luvatrix full_suite emulator ok")
 
 
-def _run_visual_runtime(view):
+def _run_visual_runtime(view, *, before_lifecycle_init=None):
     global _FRAME_COUNT, _ANDROID_VIEW
 
     from luvatrix_core.core.hdi_thread import HDIThread
@@ -494,6 +517,8 @@ def _run_visual_runtime(view):
         max_ticks=None if view is not None else 60,
         target_fps=target_fps,
         present_fps=present_fps,
+        before_lifecycle_init=before_lifecycle_init,
+        defer_hdi_polling_until_first_frame=True,
         defer_optional_sensor_polling_until_first_frame=True,
     )
     if view is not None:
@@ -615,25 +640,8 @@ def _launch_config() -> dict[str, object]:
 
 
 def _runtime_render_mode(config: dict[str, object], *, app_dir: Path | None = None) -> str:
-    render_mode = str(config.get("render_mode") or "auto")
-    if render_mode != "auto":
-        return render_mode
-    return _app_manifest_render_mode(app_dir=app_dir) or render_mode
-
-
-def _app_manifest_render_mode(*, app_dir: Path | None = None) -> str | None:
-    try:
-        resolved_app_dir = app_dir if app_dir is not None else _app_dir()
-        raw = tomllib.loads((resolved_app_dir / "app.toml").read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    render = raw.get("render")
-    if not isinstance(render, dict):
-        return None
-    preferred = str(render.get("preferred") or "").strip()
-    if preferred in ("auto", "matrix", "scene"):
-        return preferred
-    return None
+    del app_dir
+    return str(config.get("render_mode") or "auto")
 
 
 def _paint_view(view, frames: int) -> None:
