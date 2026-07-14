@@ -252,7 +252,11 @@ class UnifiedRuntime:
             while max_ticks is None or tick_idx < max_ticks:
                 for active_target in active_targets:
                     active_target.pump_events()
-                if self._scene_display_runtime is not None and self._scene_display_runtime.last_error is not None:
+                if (
+                    scene_present_loop_started
+                    and self._scene_display_runtime is not None
+                    and self._scene_display_runtime.last_error is not None
+                ):
                     raise self._scene_display_runtime.last_error
                 if any(bool(active_target.should_close()) for active_target in active_targets):
                     stopped_by_target_close = True
@@ -281,7 +285,7 @@ class UnifiedRuntime:
                 self._app_loop_rate.mark()
                 ticks_run += 1
                 tick_idx += 1
-                if self._scene_display_runtime is None and rate.should_present(now):
+                if not scene_present_loop_started and rate.should_present(now):
                     matrix_tick = self._display_runtime.run_once(timeout=display_timeout)
                     if matrix_tick is not None:
                         frames_presented += 1
@@ -289,7 +293,7 @@ class UnifiedRuntime:
                 if not sensor_manager_started:
                     scene_frames = (
                         self._scene_display_runtime.frames_presented
-                        if self._scene_display_runtime is not None
+                        if scene_present_loop_started and self._scene_display_runtime is not None
                         else 0
                     )
                     if frames_presented > 0 or scene_frames > 0 or time.perf_counter() >= deferred_sensor_deadline:
@@ -298,7 +302,7 @@ class UnifiedRuntime:
                 if not hdi_started:
                     scene_frames = (
                         self._scene_display_runtime.frames_presented
-                        if self._scene_display_runtime is not None
+                        if scene_present_loop_started and self._scene_display_runtime is not None
                         else 0
                     )
                     if frames_presented > 0 or scene_frames > 0 or time.perf_counter() >= deferred_hdi_deadline:
@@ -332,7 +336,7 @@ class UnifiedRuntime:
                             self._scene_display_runtime.run_once(timeout=0.0, repeat_latest=True)
                     for active_target in reversed(active_targets):
                         active_target.stop()
-        if self._scene_display_runtime is not None:
+        if scene_present_loop_started and self._scene_display_runtime is not None:
             frames_presented = self._scene_display_runtime.frames_presented
             self._frames_presented = frames_presented
         return UnifiedRunResult(

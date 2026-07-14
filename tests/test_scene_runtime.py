@@ -125,10 +125,12 @@ class SceneRuntimeTests(unittest.TestCase):
                 capability_decider=lambda _cap: True,
             )
 
-            runtime.run_app(app_dir, max_ticks=1, target_fps=1000)
+            result = runtime.run_app(app_dir, max_ticks=1, target_fps=1000)
 
         self.assertEqual(matrix_target.started, 1)
         self.assertEqual(scene_target.started, 0)
+        self.assertEqual(len(matrix_target.presented), 1)
+        self.assertEqual(result.frames_presented, 1)
 
     def test_scene_mode_routes_scene_frames_to_scene_target(self) -> None:
         with tempfile.TemporaryDirectory() as td:
