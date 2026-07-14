@@ -3,30 +3,32 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
-from importlib import resources
+from importlib import import_module, resources
 import importlib.util
 import math
 import platform
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from luvatrix_core.core.app_runtime import (
-    APP_PROTOCOL_VERSION,
-    AppContext,
-    AppLifecycle,
-    AppManifest,
-    AppRuntime,
-    AppUIRenderer,
-    AppVariant,
-    AppWebConfig,
-    ResolvedAppVariant,
-)
-from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
-from luvatrix_core.core.interaction_work import InteractionAwareWorkScheduler
-from luvatrix_core.core.sensor_manager import SensorManagerThread, SensorSample
-from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch, WindowMatrix
-from luvatrix_core import accel
+from luvatrix_core.core.protocol_governance import CURRENT_PROTOCOL_VERSION
 from luvatrix_ui.text.wrapping import TextWrapping, layout_text, prepare_text
+
+if TYPE_CHECKING:
+    from luvatrix_core.core.app_runtime import (
+        AppContext,
+        AppLifecycle,
+        AppManifest,
+        AppRuntime,
+        AppUIRenderer,
+        AppVariant,
+        AppWebConfig,
+        ResolvedAppVariant,
+    )
+    from luvatrix_core.core.hdi_thread import HDIEvent
+    from luvatrix_core.core.sensor_manager import SensorSample
+
+
+APP_PROTOCOL_VERSION = CURRENT_PROTOCOL_VERSION
 
 PLATFORM_MACOS = "macos"
 PLATFORM_IOS = "ios"
@@ -1353,6 +1355,8 @@ def draw_rounded_rect_to_matrix(
     antialias: bool = True,
 ):
     """Source-over rasterize a rounded rectangle into an RGBA matrix."""
+    from luvatrix_core import accel
+
     width = int(width)
     height = int(height)
     if width <= 0 or height <= 0:
@@ -1508,6 +1512,8 @@ class MatrixFrame(AbstractContextManager["MatrixFrame"]):
         self._frame = None
 
     def __enter__(self) -> "MatrixFrame":
+        from luvatrix_core import accel
+
         snap = self._ctx.read_matrix_snapshot()
         h, w, _ = snap.shape
         self._frame = accel.zeros((h, w, 4))
@@ -1516,6 +1522,8 @@ class MatrixFrame(AbstractContextManager["MatrixFrame"]):
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
         if exc_type is None and self._frame is not None:
+            from luvatrix_core.core.window_matrix import FullRewrite, WriteBatch
+
             self._ctx.submit_write_batch(WriteBatch([FullRewrite(self._frame, take_ownership=True)]))
         return False
 
@@ -1785,6 +1793,11 @@ def validate_app_install(
 
 
 def _manifest_runtime(*, host_os: str | None = None, host_arch: str | None = None) -> AppRuntime:
+    from luvatrix_core.core.app_runtime import AppRuntime
+    from luvatrix_core.core.hdi_thread import HDIThread
+    from luvatrix_core.core.sensor_manager import SensorManagerThread
+    from luvatrix_core.core.window_matrix import WindowMatrix
+
     return AppRuntime(
         matrix=WindowMatrix(1, 1),
         hdi=HDIThread(source=_NoopHDISource()),
@@ -1833,6 +1846,36 @@ def _normalize_host_os(value: str) -> str:
     if normalized not in aliases:
         raise ValueError(f"unsupported os identifier: {value}")
     return aliases[normalized]
+
+
+_LAZY_EXPORTS = {
+    "AppContext": ("luvatrix_core.core.app_runtime", "AppContext"),
+    "AppLifecycle": ("luvatrix_core.core.app_runtime", "AppLifecycle"),
+    "AppManifest": ("luvatrix_core.core.app_runtime", "AppManifest"),
+    "AppRuntime": ("luvatrix_core.core.app_runtime", "AppRuntime"),
+    "AppUIRenderer": ("luvatrix_core.core.app_runtime", "AppUIRenderer"),
+    "AppVariant": ("luvatrix_core.core.app_runtime", "AppVariant"),
+    "AppWebConfig": ("luvatrix_core.core.app_runtime", "AppWebConfig"),
+    "ResolvedAppVariant": ("luvatrix_core.core.app_runtime", "ResolvedAppVariant"),
+    "InteractionAwareWorkScheduler": (
+        "luvatrix_core.core.interaction_work",
+        "InteractionAwareWorkScheduler",
+    ),
+}
+
+
+def __getattr__(name: str) -> object:
+    target = _LAZY_EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attribute_name = target
+    value = getattr(import_module(module_name), attribute_name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | _LAZY_EXPORTS.keys())
 
 
 __all__ = [
