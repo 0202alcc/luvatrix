@@ -3,7 +3,8 @@
 The `android/benchmark` module measures launches of
 `com.luvatrix.app.MainActivity` and generates the Baseline Profile consumed by
 the app. It is a test-only, self-instrumenting module and is never packaged in
-the application.
+the application. `luvatrix init-native` copies the same module, generated
+profiles, and release configuration into each scaffolded Android project.
 
 ## Host-only checks
 
@@ -19,6 +20,28 @@ cd android
 
 Baseline Profile generation is deliberately not attached to ordinary assemble
 tasks. Release and CI builds therefore do not wait for a device.
+
+Release builds use R8 minification and optimization. Android's
+[Startup Profile guidance](https://developer.android.com/topic/performance/startupprofiles/dex-layout-optimizations)
+requires this for DEX layout optimization; a non-minified D8 build can emit
+`Startup class not found` while compiling dependency and app DEX inputs in
+separate tasks. The Luvatrix release rules preserve public
+`LuvatrixVulkanView` method names because Python invokes them dynamically
+through Chaquopy. Chaquopy supplies its own consumer rules, and Android's
+optimized defaults preserve JNI methods.
+
+Confirm that the optimized release builds without missing-profile warnings and
+contains the binary Baseline Profile:
+
+```bash
+cd android
+./gradlew :app:assembleRelease
+unzip -l app/build/outputs/apk/release/app-release-unsigned.apk \
+  | grep assets/dexopt/baseline.prof
+```
+
+The release artifact is unsigned. Signing remains the responsibility of the
+app's release pipeline.
 
 ## Startup measurements
 

@@ -6,6 +6,27 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ANDROID = ROOT / "android"
 BENCHMARK = ANDROID / "benchmark"
+ANDROID_TEMPLATE = ROOT / "luvatrix_core/templates/native/android"
+
+
+def test_android_template_mirrors_startup_benchmark_support() -> None:
+    mirrored_files = (
+        "build.gradle.kts",
+        "settings.gradle.kts",
+        "app/build.gradle.kts",
+        "app/proguard-rules.pro",
+        "benchmark/build.gradle.kts",
+        "benchmark/src/main/java/com/luvatrix/benchmark/BaselineProfileGenerator.kt",
+        "benchmark/src/main/java/com/luvatrix/benchmark/StartupBenchmark.kt",
+        "benchmark/src/main/java/com/luvatrix/benchmark/StartupJourney.kt",
+        "app/src/release/generated/baselineProfiles/baseline-prof.txt",
+        "app/src/release/generated/baselineProfiles/startup-prof.txt",
+    )
+
+    for relative_path in mirrored_files:
+        assert (ANDROID_TEMPLATE / relative_path).read_bytes() == (
+            ANDROID / relative_path
+        ).read_bytes()
 
 
 def test_android_project_wires_baseline_profile_producer() -> None:
@@ -20,6 +41,9 @@ def test_android_project_wires_baseline_profile_producer() -> None:
     assert 'baselineProfile(project(":benchmark"))' in app_build
     assert 'implementation("androidx.profileinstaller:profileinstaller:1.4.1")' in app_build
     assert "automaticGenerationDuringBuild = false" in app_build
+    assert "isMinifyEnabled = true" in app_build
+    assert 'getDefaultProguardFile("proguard-android-optimize.txt")' in app_build
+    assert '"proguard-rules.pro"' in app_build
 
 
 def test_benchmark_module_is_device_isolated_and_targets_the_app() -> None:

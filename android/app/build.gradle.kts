@@ -34,6 +34,16 @@ android {
             path = file("src/main/cpp/CMakeLists.txt")
         }
     }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
+    }
 }
 
 kotlin {
