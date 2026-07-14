@@ -46,6 +46,12 @@ class AndroidPackagingTests(unittest.TestCase):
             self.assertIn("def detach_android_view", boot)
             self.assertIn("_RUNTIME_RUNNING", boot)
 
+    def test_android_template_defers_scene_matrix_storage(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")
+
+            self.assertIn('lazy=render_mode == "scene"', boot)
+
     def test_android_bootstrap_prefers_chaquopy_bytecode_without_source_wrapper(self) -> None:
         for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
             boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")

@@ -103,7 +103,7 @@ def run_headless_ticks(ticks: int = 5) -> str:
     from luvatrix_core.core.sensor_manager import SensorManagerThread
     from luvatrix_core.core.unified_runtime import UnifiedRuntime
     from luvatrix_core.core.window_matrix import WindowMatrix
-    from luvatrix_core.platform.android.hdi_source import AndroidHDISource, clear_android_input_events
+    from luvatrix_core.platform.android.hdi_source import AndroidHDISource
     from luvatrix_core.targets.base import RenderTarget
 
     class _Target(RenderTarget):
@@ -439,7 +439,11 @@ def _run_visual_runtime(view):
     target = AndroidVulkanTarget(AndroidVulkanBridge(view)) if view is not None else _CountingTarget()
     scene_target = AndroidNativeSceneTarget(view) if view is not None and render_mode in ("auto", "scene") else None
     runtime = UnifiedRuntime(
-        matrix=WindowMatrix(height=matrix_height, width=matrix_width),
+        matrix=WindowMatrix(
+            height=matrix_height,
+            width=matrix_width,
+            lazy=render_mode == "scene",
+        ),
         target=target,
         hdi=HDIThread(
             source=AndroidHDISource(view, logical_width=float(width), logical_height=float(height)),
