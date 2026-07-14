@@ -20,6 +20,12 @@ SPEC.loader.exec_module(BOOT)
 
 
 class AndroidBootConfigTests(unittest.TestCase):
+    def test_auto_render_mode_is_left_for_unified_runtime_to_resolve(self) -> None:
+        with patch.object(BOOT, "_app_dir") as app_dir:
+            self.assertEqual(BOOT._runtime_render_mode({"render_mode": "auto"}), "auto")
+
+        app_dir.assert_not_called()
+
     def test_configured_synced_app_wins_over_stale_full_suite_package(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

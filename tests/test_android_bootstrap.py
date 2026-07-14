@@ -7,9 +7,22 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 
 BOOT = Path(__file__).resolve().parents[1] / "android" / "app" / "src" / "main" / "python" / "luvatrix_android_boot.py"
+TEMPLATE_BOOT = (
+    Path(__file__).resolve().parents[1]
+    / "luvatrix_core"
+    / "templates"
+    / "native"
+    / "android"
+    / "app"
+    / "src"
+    / "main"
+    / "python"
+    / "luvatrix_android_boot.py"
+)
 
 
 def _load_boot_module():
@@ -22,6 +35,12 @@ def _load_boot_module():
 
 
 class AndroidBootstrapTests(unittest.TestCase):
+    def test_android_template_defers_scene_matrix_storage(self) -> None:
+        for boot_path in (BOOT, TEMPLATE_BOOT):
+            boot_source = boot_path.read_text(encoding="utf-8")
+
+            self.assertIn('lazy=render_mode == "scene"', boot_source)
+
     def test_loading_android_boot_does_not_mutate_process_import_paths(self) -> None:
         android_python_root = str(BOOT.parent)
         previous = list(sys.path)
@@ -96,13 +115,42 @@ class AndroidBootstrapTests(unittest.TestCase):
             raise AssertionError("normal launch must not execute app_main through import_probe")
 
         boot.import_probe = unexpected_probe
-        boot._run_visual_runtime = lambda _presenter: type(
-            "Result",
-            (),
-            {"ticks_run": 1, "frames_presented": 1},
-        )()
+        def run_runtime(_presenter, *, before_lifecycle_init):
+            before_lifecycle_init()
+            return type("Result", (), {"ticks_run": 1, "frames_presented": 1})()
+
+        boot._run_visual_runtime = run_runtime
 
         self.assertEqual(boot.run_app_vulkan("view"), "luvatrix visual ok")
+
+    def test_run_app_vulkan_overlaps_tls_setup_and_joins_before_lifecycle_init(self) -> None:
+        boot = _load_boot_module()
+        tls_started = threading.Event()
+        release_tls = threading.Event()
+        lifecycle_ready = threading.Event()
+
+        def configure_tls() -> str:
+            tls_started.set()
+            self.assertTrue(release_tls.wait(1.0))
+            return "/app/cacert.pem"
+
+        def run_runtime(_presenter, *, before_lifecycle_init):
+            self.assertTrue(tls_started.wait(1.0))
+            lifecycle_ready.set()
+            before_lifecycle_init()
+            return type("Result", (), {"ticks_run": 1, "frames_presented": 1})()
+
+        boot.configure_android_tls = configure_tls
+        boot._run_visual_runtime = run_runtime
+        owner = threading.Thread(target=boot.run_app_vulkan, args=("view",))
+        owner.start()
+
+        self.assertTrue(lifecycle_ready.wait(1.0))
+        self.assertTrue(owner.is_alive())
+        release_tls.set()
+        owner.join(1.0)
+
+        self.assertFalse(owner.is_alive())
 
     def test_runtime_restarts_when_rebound_while_previous_owner_exits(self) -> None:
         boot = _load_boot_module()
@@ -114,7 +162,8 @@ class AndroidBootstrapTests(unittest.TestCase):
         boot.configure_android_tls = lambda: ""
         boot.import_probe = lambda: ""
 
-        def run_runtime(presenter):
+        def run_runtime(presenter, *, before_lifecycle_init):
+            before_lifecycle_init()
             calls.append(presenter.current_view())
             if len(calls) == 1:
                 first_started.set()
@@ -195,7 +244,7 @@ class AndroidBootstrapTests(unittest.TestCase):
 
         self.assertEqual(boot._runtime_render_mode({"render_mode": "scene"}), "scene")
 
-    def test_runtime_render_mode_reads_manifest_when_config_is_auto(self) -> None:
+    def test_runtime_render_mode_leaves_manifest_resolution_to_unified_runtime(self) -> None:
         boot = _load_boot_module()
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -212,9 +261,47 @@ class AndroidBootstrapTests(unittest.TestCase):
             old_root = boot._ROOT
             try:
                 boot._ROOT = root
-                self.assertEqual(boot._runtime_render_mode({"render_mode": "auto"}), "matrix")
+                self.assertEqual(boot._runtime_render_mode({"render_mode": "auto"}), "auto")
             finally:
                 boot._ROOT = old_root
+
+    def test_visual_runtime_only_defers_matrix_for_resolved_scene_mode(self) -> None:
+        boot = _load_boot_module()
+        constructed: list[tuple[str, object]] = []
+
+        class _UnifiedRuntime:
+            def __init__(self, *, matrix, render_mode, **_kwargs) -> None:
+                constructed.append((render_mode, matrix))
+
+            def run_app(self, *_args, **_kwargs):
+                return type("Result", (), {"ticks_run": 1, "frames_presented": 0})()
+
+        class _Dependency:
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+        with (
+            patch("luvatrix_core.core.unified_runtime.UnifiedRuntime", _UnifiedRuntime),
+            patch("luvatrix_core.core.hdi_thread.HDIThread", _Dependency),
+            patch("luvatrix_core.core.sensor_manager.SensorManagerThread", _Dependency),
+            patch("luvatrix_core.platform.android.hdi_source.AndroidHDISource", _Dependency),
+            patch("luvatrix_core.platform.android.hdi_source.clear_android_input_events"),
+            patch("luvatrix_core.platform.android.sensors.make_android_sensor_providers", return_value={}),
+        ):
+            boot._app_dir = lambda _config=None: Path("/tmp/luvatrix-scene-test")
+            boot._runtime_dimensions = lambda _view, _config: (393, 852)
+            boot._runtime_frame_rates = lambda _view, _config: (120, 60)
+            for render_mode in ("scene", "matrix", "auto"):
+                boot._launch_config = lambda mode=render_mode: {
+                    "render_mode": mode,
+                    "low_latency_mode": False,
+                }
+                boot._run_visual_runtime(None)
+
+        matrices = {render_mode: matrix for render_mode, matrix in constructed}
+        self.assertFalse(matrices["scene"].is_materialized)
+        self.assertTrue(matrices["matrix"].is_materialized)
+        self.assertTrue(matrices["auto"].is_materialized)
 
     def test_camera_app_defaults_to_120_present_even_when_display_reports_60(self) -> None:
         boot = _load_boot_module()

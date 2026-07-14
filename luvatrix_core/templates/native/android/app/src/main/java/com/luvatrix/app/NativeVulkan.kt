@@ -8,6 +8,8 @@ object NativeVulkan {
         System.loadLibrary("luvatrix_vulkan_renderer")
     }
 
+    fun ensureLoaded() = Unit
+
     external fun probeVulkan(): Int
 
     external fun setSurface(surface: Surface?)

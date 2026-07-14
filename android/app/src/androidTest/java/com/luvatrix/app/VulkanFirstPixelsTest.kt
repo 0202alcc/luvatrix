@@ -15,6 +15,6 @@ class VulkanFirstPixelsTest {
 
     @Test
     fun vulkanSceneHookIsCallable() {
-        assertTrue(!NativeVulkan.presentScene("""[{"type":"clear","color":[0,0,0,255]}]""", 1, 10, 10))
+        assertTrue(!NativeVulkan.presentScene("""[{"type":"clear","color":[0,0,0,255]}]""", 1, 10, 10, ""))
     }
 }
