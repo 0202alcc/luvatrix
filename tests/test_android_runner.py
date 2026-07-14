@@ -97,6 +97,22 @@ class AndroidRunnerTests(unittest.TestCase):
             self.assertIn('"native_width": 393', text)
             self.assertIn('"native_height": 852', text)
 
+    def test_write_launch_config_resolves_auto_mode_from_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td)
+            app = project / "example"
+            app.mkdir()
+            (app / "app.toml").write_text(
+                '[render]\npreferred = "scene"\n',
+                encoding="utf-8",
+            )
+
+            path = write_android_launch_config(app, project_dir=project, render_mode="auto")
+
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(data["render_mode"], "scene")
+
+
     def test_parse_android_wm_display_values(self) -> None:
         self.assertEqual(_parse_wm_size("Physical size: 1080x2400\n"), (1080, 2400))
         self.assertEqual(_parse_wm_size("Physical size: 1080x2400\nOverride size: 720x1600\n"), (720, 1600))
