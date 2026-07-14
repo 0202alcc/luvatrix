@@ -117,6 +117,9 @@ def test_generated_profiles_cover_luvatrix_and_chaquopy_startup() -> None:
 
     for profile in (baseline, startup):
         assert "Lcom/luvatrix/app/MainActivity;" in profile
+        assert "Lcom/luvatrix/app/LuvatrixApplication;" in profile
         assert "Lcom/luvatrix/app/LuvatrixVulkanView;" in profile
+        assert "Lcom/luvatrix/app/SceneReplayCoordinator;" in profile
+        assert "Lcom/luvatrix/app/SharedStartup;" in profile
         assert "Lcom/chaquo/python/Python;" in profile
         assert "Lcom/chaquo/python/android/AndroidPlatform;" in profile
