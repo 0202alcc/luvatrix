@@ -48,6 +48,11 @@ class ScaffoldTests(unittest.TestCase):
             self.assertEqual(result.path, out)
             self.assertTrue((out / "settings.gradle.kts").exists())
             self.assertTrue((out / "app" / "src" / "main" / "python" / "luvatrix_android_boot.py").exists())
+            java_root = out / "app" / "src" / "main" / "java" / "com" / "luvatrix" / "app"
+            self.assertTrue((java_root / "LuvatrixApplication.kt").exists())
+            self.assertTrue((java_root / "StartupResources.kt").exists())
+            manifest = (out / "app" / "src" / "main" / "AndroidManifest.xml").read_text(encoding="utf-8")
+            self.assertIn('android:name=".LuvatrixApplication"', manifest)
             self.assertFalse((out / "app" / "src" / "main" / "python" / "luvatrix_core").exists())
             gitignore = (out / ".gitignore").read_text(encoding="utf-8")
             self.assertIn("app/src/main/assets/luvatrix_launch_config.json", gitignore)

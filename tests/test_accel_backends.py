@@ -15,6 +15,18 @@ def _flat_values(x):
 
 
 class AccelBackendTests(unittest.TestCase):
+    def test_filled_rgba_returns_canonical_isolated_storage_on_active_backend(self) -> None:
+        from luvatrix_core import accel
+
+        first = accel.filled_rgba(2, 3, (7, 11, 13, 17))
+        second = accel.filled_rgba(2, 3, (7, 11, 13, 17))
+
+        self.assertEqual(tuple(first.shape), (2, 3, 4))
+        self.assertTrue(accel.is_uint8(first))
+        self.assertEqual(_flat_values(first), [7, 11, 13, 17] * 6)
+        first[0, 0, 0] = 99
+        self.assertEqual(_flat_values(second), [7, 11, 13, 17] * 6)
+
     def test_blit_places_and_clips_tile_on_active_backend(self) -> None:
         from luvatrix_core import accel
 
@@ -139,6 +151,43 @@ if accel.BACKEND == "numpy":
     accel.alpha_blit(rgba, overlay, x=0, y=0)
     assert rgba.reshape(-1).tolist() == [60, 70, 80, 255], rgba
 assert PresentationMode.STRETCH.value == "stretch"
+'''
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
+    def test_filled_rgba_preserves_shape_dtype_and_copy_isolation_in_pure_backend(self) -> None:
+        code = r'''
+import builtins
+real_import = builtins.__import__
+def blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "torch" or name.startswith("torch.") or name == "numpy" or name.startswith("numpy."):
+        raise ImportError("blocked numeric backend for pure accel test")
+    return real_import(name, globals, locals, fromlist, level)
+builtins.__import__ = blocked_import
+from luvatrix_core import accel
+assert accel.BACKEND == "pure", accel.BACKEND
+first = accel.filled_rgba(2, 3, (7, 11, 13, 17))
+second = accel.filled_rgba(2, 3, (7, 11, 13, 17))
+assert first.shape == (2, 3, 4), first.shape
+assert first.dtype == "uint8", first.dtype
+assert list(first._data) == [7, 11, 13, 17] * 6, list(first._data)
+first._data[0] = 99
+assert list(second._data) == [7, 11, 13, 17] * 6, list(second._data)
+
+from luvatrix_core.core.window_matrix import WindowMatrix
+matrix = WindowMatrix(2, 3, background=(19, 23, 29, 31), lazy=True)
+assert not matrix.is_materialized
+snapshot = matrix.read_snapshot()
+assert matrix.is_materialized
+assert snapshot.shape == (2, 3, 4), snapshot.shape
+assert snapshot.dtype == "uint8", snapshot.dtype
+assert list(snapshot._data) == [19, 23, 29, 31] * 6, list(snapshot._data)
 '''
         result = subprocess.run(
             [sys.executable, "-c", code],

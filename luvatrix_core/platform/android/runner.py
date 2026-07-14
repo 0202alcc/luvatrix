@@ -86,12 +86,14 @@ def write_android_launch_config(
     _ensure_android_generated_gitignore(project)
     dest = project / "app" / "src" / "main" / "assets" / "luvatrix_launch_config.json"
     dest.parent.mkdir(parents=True, exist_ok=True)
-    display = _read_app_display_config(app_dir)
+    manifest = _read_app_manifest(app_dir)
+    display = _read_app_display_config(manifest)
+    resolved_render_mode = _resolve_manifest_render_mode(render_mode, manifest)
     data = {
         "app_dir": "luvatrix_app",
         "source_app_dir": str(app_dir),
         "render_scale": float(render_scale),
-        "render_mode": render_mode,
+        "render_mode": resolved_render_mode,
         "target_fps": target_fps,
         "present_fps": present_fps,
         "low_latency_mode": bool(low_latency_mode),
@@ -126,12 +128,15 @@ def _ensure_android_generated_gitignore(project_dir: Path) -> Path:
     return gitignore
 
 
-def _read_app_display_config(app_dir: Path) -> dict[str, int]:
-    manifest = app_dir / "app.toml"
+def _read_app_manifest(app_dir: Path) -> dict[str, object]:
     try:
-        raw = tomllib.loads(manifest.read_text(encoding="utf-8"))
+        raw = tomllib.loads((app_dir / "app.toml").read_text(encoding="utf-8"))
     except Exception:
         return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _read_app_display_config(raw: dict[str, object]) -> dict[str, int]:
     display = raw.get("display")
     if not isinstance(display, dict):
         return {}
@@ -144,6 +149,16 @@ def _read_app_display_config(app_dir: Path) -> dict[str, int]:
         if value > 0:
             out[dest_key] = value
     return out
+
+
+def _resolve_manifest_render_mode(requested: str, raw: dict[str, object]) -> str:
+    if requested != "auto":
+        return requested
+    render = raw.get("render")
+    if not isinstance(render, dict):
+        return requested
+    preferred = str(render.get("preferred") or "").strip()
+    return preferred if preferred in ("matrix", "scene") else requested
 
 
 def _android_device_logical_display_config(*, device_id: str | None = None) -> dict[str, int]:

@@ -87,13 +87,26 @@ class CallBlitEvent:
 
 
 class WindowMatrix:
-    """Canonical RGBA255 matrix with atomic write-batch commits."""
+    """Canonical RGBA255 matrix with atomic write-batch commits.
 
-    def __init__(self, height: int, width: int, background: tuple[int, int, int, int] = (0, 0, 0, 255)) -> None:
+    ``lazy=True`` keeps dimensions and event state available for scene-only
+    runtimes without allocating RGBA storage. The first matrix read or write
+    materializes storage; a first full rewrite directly becomes that storage.
+    """
+
+    def __init__(
+        self,
+        height: int,
+        width: int,
+        background: tuple[int, int, int, int] = (0, 0, 0, 255),
+        *,
+        lazy: bool = False,
+    ) -> None:
         if height <= 0 or width <= 0:
             raise ValueError("height and width must be > 0")
         self.height = height
         self.width = width
+        self._background = tuple(background)
         self._write_lock = threading.Lock()
         self._event_lock = threading.Lock()
         self._event_cv = threading.Condition(self._event_lock)
@@ -103,20 +116,26 @@ class WindowMatrix:
         self._revision_snapshot_enabled = os.getenv("LUVATRIX_ENABLE_REVISIONED_SNAPSHOT", "0").strip() == "1"
         self._revision_snapshot: object | None = None
         self._revision_snapshot_revision = 0
-        bg = accel.from_sequence(list(background), (1, 1, 4))
-        self._matrix = accel.broadcast_to_clone(bg, (height, width, 4))
-        if self._revision_snapshot_enabled:
-            self._revision_snapshot = accel.clone(self._matrix)
+        self._matrix: object | None = None
+        if not lazy:
+            self._materialize_locked()
 
     @property
     def revision(self) -> int:
         return self._revision
 
+    @property
+    def is_materialized(self) -> bool:
+        """Whether the RGBA backing store has been allocated."""
+        with self._write_lock:
+            return self._matrix is not None
+
     def read_snapshot(self) -> object:
         """Safe read view for external consumers."""
         with self._write_lock:
+            matrix = self._materialize_locked()
             started = time.perf_counter_ns()
-            out = accel.clone(self._matrix)
+            out = accel.clone(matrix)
             add_copy_telemetry(
                 copy_count=1,
                 copy_bytes=accel.numel(out),
@@ -129,6 +148,7 @@ class WindowMatrix:
         with self._write_lock:
             if not self._revision_snapshot_enabled:
                 return None
+            self._materialize_locked()
             if self._revision_snapshot is None:
                 return None
             if int(revision) != int(self._revision_snapshot_revision):
@@ -137,7 +157,19 @@ class WindowMatrix:
 
     def _unsafe_matrix_view(self) -> object:
         """Internal-only no-copy handle."""
-        return self._matrix
+        with self._write_lock:
+            return self._materialize_locked()
+
+    def _materialize_locked(self) -> object:
+        matrix = self._matrix
+        if matrix is not None:
+            return matrix
+        matrix = accel.filled_rgba(self.height, self.width, self._background)
+        self._matrix = matrix
+        if self._revision_snapshot_enabled:
+            self._revision_snapshot = accel.clone(matrix)
+            self._revision_snapshot_revision = int(self._revision)
+        return matrix
 
     def submit_write_batch(self, batch: WriteBatch) -> CallBlitEvent:
         if not batch.operations:
@@ -154,10 +186,10 @@ class WindowMatrix:
                 )
             elif self._is_localized_commit_batch(batch.operations):
                 prepared, offending_pixels = self._prepare_localized_ops(batch.operations)
-                self._apply_prepared_localized_ops(prepared)
+                self._apply_prepared_localized_ops(self._materialize_locked(), prepared)
             else:
                 stage_started = time.perf_counter_ns()
-                staged = accel.clone(self._matrix)
+                staged = accel.clone(self._materialize_locked())
                 add_copy_telemetry(
                     copy_count=1,
                     copy_bytes=accel.numel(staged),
@@ -299,21 +331,27 @@ class WindowMatrix:
             raise TypeError(f"Unsupported localized write op: {type(op)!r}")
         return prepared, offending_pixels
 
-    def _apply_prepared_localized_ops(self, prepared: list[tuple[str, int, int, int, int, object]]) -> None:
+    def _apply_prepared_localized_ops(
+        self,
+        matrix: object,
+        prepared: list[tuple[str, int, int, int, int, object]],
+    ) -> None:
         for kind, x, y, width, height, payload in prepared:
             if kind == "column":
-                self._matrix[:, x, :] = payload
+                matrix[:, x, :] = payload
                 continue
             if kind == "row":
-                self._matrix[y, :, :] = payload
+                matrix[y, :, :] = payload
                 continue
             if kind == "rect":
-                self._matrix[y : y + height, x : x + width, :] = payload
+                matrix[y : y + height, x : x + width, :] = payload
                 continue
             raise RuntimeError(f"Unsupported prepared localized write kind: {kind}")
 
     def _refresh_revision_snapshot(self) -> None:
         if not self._revision_snapshot_enabled:
+            return
+        if self._matrix is None:
             return
         started = time.perf_counter_ns()
         self._revision_snapshot = accel.clone(self._matrix)
