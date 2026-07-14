@@ -11,6 +11,18 @@ from unittest.mock import patch
 
 
 BOOT = Path(__file__).resolve().parents[1] / "android" / "app" / "src" / "main" / "python" / "luvatrix_android_boot.py"
+TEMPLATE_BOOT = (
+    Path(__file__).resolve().parents[1]
+    / "luvatrix_core"
+    / "templates"
+    / "native"
+    / "android"
+    / "app"
+    / "src"
+    / "main"
+    / "python"
+    / "luvatrix_android_boot.py"
+)
 
 
 def _load_boot_module():
@@ -23,6 +35,12 @@ def _load_boot_module():
 
 
 class AndroidBootstrapTests(unittest.TestCase):
+    def test_android_template_defers_scene_matrix_storage(self) -> None:
+        for boot_path in (BOOT, TEMPLATE_BOOT):
+            boot_source = boot_path.read_text(encoding="utf-8")
+
+            self.assertIn('lazy=render_mode == "scene"', boot_source)
+
     def test_loading_android_boot_does_not_mutate_process_import_paths(self) -> None:
         android_python_root = str(BOOT.parent)
         previous = list(sys.path)
