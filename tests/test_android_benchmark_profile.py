@@ -29,6 +29,14 @@ def test_android_template_mirrors_startup_benchmark_support() -> None:
         ).read_bytes()
 
 
+def test_profiled_release_build_has_explicit_gradle_memory_budget() -> None:
+    expected = "org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8"
+
+    for project in (ANDROID, ANDROID_TEMPLATE):
+        properties = (project / "gradle.properties").read_text(encoding="utf-8")
+        assert expected in properties
+
+
 def test_android_project_wires_baseline_profile_producer() -> None:
     settings = (ANDROID / "settings.gradle.kts").read_text(encoding="utf-8")
     root_build = (ANDROID / "build.gradle.kts").read_text(encoding="utf-8")
