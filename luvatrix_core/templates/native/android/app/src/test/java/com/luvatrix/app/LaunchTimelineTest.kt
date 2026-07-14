@@ -2,8 +2,10 @@ package com.luvatrix.app
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.Executor
 
 class LaunchTimelineTest {
     @Test
@@ -36,5 +38,57 @@ class LaunchTimelineTest {
         assertTrue(scheduled != null)
         scheduled!!.invoke()
         assertTrue(ran)
+    }
+
+    @Test
+    fun sharedStartupBeginsImmediatelyAndPublishesOneFuture() {
+        val scheduled = mutableListOf<Runnable>()
+        val executor = Executor { task -> scheduled += task }
+        var starts = 0
+        val observed = mutableListOf<String>()
+
+        val startup = SharedStartup(executor) {
+            starts += 1
+            "python-module"
+        }
+        startup.whenReady(executor, observed::add) { throw it }
+        startup.whenReady(executor, observed::add) { throw it }
+
+        assertEquals(1, scheduled.size)
+        assertEquals(0, starts)
+        assertSame(startup.future, startup.future)
+
+        scheduled.removeAt(0).run()
+        assertEquals(2, scheduled.size)
+        scheduled.removeAt(0).run()
+        scheduled.removeAt(0).run()
+
+        assertEquals(1, starts)
+        assertEquals(listOf("python-module", "python-module"), observed)
+        assertEquals("python-module", startup.future.getNow(null))
+    }
+
+    @Test
+    fun readyCallbacksStayAsynchronousAndKeepTheOriginalFailure() {
+        val scheduled = mutableListOf<Runnable>()
+        val executor = Executor { task -> scheduled += task }
+        val expected = IllegalStateException("CPython failed")
+        val startup = SharedStartup<String>(executor) { throw expected }
+        var observed: Throwable? = null
+
+        startup.whenReady(
+            executor = executor,
+            onReady = { throw AssertionError("startup should have failed") },
+            onFailure = { observed = it },
+        )
+
+        assertEquals(1, scheduled.size)
+        scheduled.removeAt(0).run()
+        assertEquals(1, scheduled.size)
+        assertTrue(observed == null)
+
+        scheduled.removeAt(0).run()
+
+        assertSame(expected, observed)
     }
 }

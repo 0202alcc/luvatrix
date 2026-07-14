@@ -3,6 +3,7 @@ package com.luvatrix.app
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONObject
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -10,14 +11,32 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class CameraBridgeTest {
     @Test
+    fun viewDoesNotCreateCameraBridgeUntilCameraApiIsUsed() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val view = LuvatrixVulkanView(context)
+
+        assertFalse(view.isCameraBridgeInitializedForTest())
+        view.stopCameraPreview()
+        assertFalse(view.isCameraBridgeInitializedForTest())
+
+        view.cameraTelemetryJson()
+        assertTrue(view.isCameraBridgeInitializedForTest())
+    }
+
+    @Test
     fun bridgeTelemetryIsCallableWithoutPreview() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val bridge = CameraBridge(context)
+
+        assertFalse(bridge.isCameraManagerInitializedForTest())
+        assertFalse(bridge.isProcessingExecutorInitializedForTest())
         val telemetry = JSONObject(bridge.telemetryJson())
 
         assertTrue(telemetry.has("status"))
         assertTrue(telemetry.has("permission"))
-        assertTrue(telemetry.has("raw_sensor_supported"))
+        assertTrue(telemetry.has("camera.capabilities.raw"))
+        assertTrue(bridge.isCameraManagerInitializedForTest())
+        assertFalse(bridge.isProcessingExecutorInitializedForTest())
     }
 
     @Test

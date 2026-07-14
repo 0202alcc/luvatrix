@@ -266,6 +266,12 @@ def _single_roll_shift(shifts) -> int:
     return int(shifts)
 
 
+def filled_rgba(height: int, width: int, rgba: tuple[int, int, int, int]):
+    """Allocate isolated uint8 RGBA storage filled with one color."""
+    pixel = from_sequence(list(rgba), (1, 1, 4))
+    return broadcast_to_clone(pixel, (int(height), int(width), 4))
+
+
 def _normalize_roll_specs(shifts, dims, ndim: int) -> tuple[tuple[int, int], ...]:
     if isinstance(dims, int):
         axes = (dims,)
@@ -921,10 +927,8 @@ else:
 
     def broadcast_to_clone(x: _PureArray, shape: tuple[int, ...]) -> _PureArray:
         H, W, C = shape
-        src = bytes(x._data[:C])
-        data = bytearray(H * W * C)
-        for i in range(H * W):
-            data[i * C:(i + 1) * C] = src
+        pixel_bytes = C * _pure_item_size(x)
+        data = x._data[:pixel_bytes] * (H * W)
         return _PureArray(data, shape, x.dtype)
 
     def roll(x: _PureArray, shifts, dims=None) -> _PureArray:
