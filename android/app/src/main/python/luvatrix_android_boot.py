@@ -469,7 +469,11 @@ def _run_visual_runtime(view):
     target = AndroidVulkanTarget(AndroidVulkanBridge(view)) if view is not None else _CountingTarget()
     scene_target = AndroidNativeSceneTarget(view) if view is not None and render_mode in ("auto", "scene") else None
     runtime = UnifiedRuntime(
-        matrix=WindowMatrix(height=matrix_height, width=matrix_width),
+        matrix=WindowMatrix(
+            height=matrix_height,
+            width=matrix_width,
+            lazy=render_mode == "scene",
+        ),
         target=target,
         hdi=HDIThread(
             source=AndroidHDISource(view, logical_width=float(width), logical_height=float(height)),
