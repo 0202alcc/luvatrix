@@ -68,7 +68,10 @@ class CameraBridge(private val context: Context) {
         val RAW_FOCUS_STEPS_DIOPTERS = listOf(0.0f, 0.5f, 1.0f, 2.0f, 4.0f, 8.0f, 12.0f)
     }
 
-    private val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+    private val cameraManagerDelegate = lazy {
+        context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+    }
+    private val cameraManager by cameraManagerDelegate
     private val streams = LinkedHashMap<String, CameraStream>()
     private val telemetryLock = Any()
     private var handlerThread: HandlerThread? = null

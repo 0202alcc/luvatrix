@@ -68,7 +68,9 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     private var refreshLastError: String = ""
     private var refreshProbeLogged: Boolean = false
     private val application = LuvatrixApplication.from(context)
-    private val cameraBridgeDelegate = lazy(LazyThreadSafetyMode.NONE) { CameraBridge(context) }
+    private val cameraBridgeResource = SynchronizedLazyResource { CameraBridge(context) }
+    private val sceneReplayCoordinator = SceneReplayCoordinator()
+    private val nativePresentationLock = Any()
     private val nativeSurfaceLock = Any()
     private var nativeSurface: Surface? = null
     private var nativeSurfaceGeneration: Long = 0L
@@ -178,25 +180,27 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     override fun surfaceCreated(holder: SurfaceHolder) {
         setBootstrapFrame(Color.rgb(12, 84, 140))
         updateNativeSurface(holder.surface)
+        restoreLatestScene()
         applyFrameRateHint()
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         setBootstrapFrame(Color.rgb(22, 98, 160))
         updateNativeSurface(holder.surface)
+        restoreLatestScene()
         applyFrameRateHint()
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
-        if (cameraBridgeDelegate.isInitialized()) {
-            cameraBridgeDelegate.value.stopPreview()
+        if (cameraBridgeResource.isInitialized()) {
+            cameraBridgeResource.get().stopPreview()
         }
         updateNativeSurface(null)
     }
 
-    private fun cameraBridge(): CameraBridge = cameraBridgeDelegate.value
+    private fun cameraBridge(): CameraBridge = cameraBridgeResource.get()
 
-    internal fun isCameraBridgeInitializedForTest(): Boolean = cameraBridgeDelegate.isInitialized()
+    internal fun isCameraBridgeInitializedForTest(): Boolean = cameraBridgeResource.isInitialized()
 
     private fun updateNativeSurface(surface: Surface?) {
         val generation = synchronized(nativeSurfaceLock) {
@@ -204,6 +208,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
             nativeSurfaceGeneration += 1L
             nativeSurfaceGeneration
         }
+        sceneReplayCoordinator.surfaceChanging(generation)
         if (application.nativeVulkanStartup.isSuccessful()) {
             application.executeNative { attachNativeSurface(surface, generation) }
         }
@@ -217,13 +222,61 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     private fun attachNativeSurface(surface: Surface?, generation: Long) {
-        val isCurrent = synchronized(nativeSurfaceLock) { generation == nativeSurfaceGeneration }
-        if (!isCurrent) return
-        try {
-            NativeVulkan.setSurface(surface)
-        } catch (exc: Throwable) {
-            Log.w("Luvatrix", "could not update native Vulkan surface; using Canvas fallback", exc)
+        var failure: Throwable? = null
+        var replayedScene: FullScenePresentation? = null
+        synchronized(nativePresentationLock) {
+            val isCurrent = synchronized(nativeSurfaceLock) { generation == nativeSurfaceGeneration }
+            if (!isCurrent) return
+            try {
+                NativeVulkan.setSurface(surface)
+                if (surface != null) {
+                    val replay = sceneReplayCoordinator.surfaceAttached(generation)
+                    if (replay != null) {
+                        presentNativeSceneLocked(replay)
+                        replayedScene = replay.scene
+                    }
+                }
+            } catch (exc: Throwable) {
+                failure = exc
+            }
         }
+        if (failure != null) {
+            Log.w("Luvatrix", "could not update native Vulkan surface; using Canvas fallback", failure)
+            restoreLatestScene()
+            return
+        }
+        replayedScene?.let { postSceneDisplay(it, countFrame = false) }
+    }
+
+    private fun presentNativeSceneLocked(request: SceneReplayRequest): Boolean {
+        if (!sceneReplayCoordinator.isCurrent(request)) return false
+        val accepted = try {
+            var presented = NativeVulkan.presentScene(
+                request.scene.sceneJson,
+                request.scene.revision,
+                request.scene.logicalWidth,
+                request.scene.logicalHeight,
+                request.scene.presentationMode,
+            )
+            val transform = request.transform
+            if (presented && transform != null) {
+                presented = NativeVulkan.presentSceneTransform(
+                    transform.revision,
+                    transform.contentOffsetX,
+                    transform.contentOffsetY,
+                )
+            }
+            presented
+        } catch (exc: Throwable) {
+            Log.w("Luvatrix", "native Vulkan scene replay unavailable; using Canvas fallback", exc)
+            false
+        }
+        return sceneReplayCoordinator.markPresented(request, accepted)
+    }
+
+    private fun restoreLatestScene() {
+        val scene = sceneReplayCoordinator.latestDisplayState()?.scene ?: return
+        postSceneDisplay(scene, countFrame = false)
     }
 
     fun startCameraPreview() {
@@ -259,7 +312,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     fun stopCameraPreview() {
-        if (cameraBridgeDelegate.isInitialized()) cameraBridgeDelegate.value.stopPreview()
+        if (cameraBridgeResource.isInitialized()) cameraBridgeResource.get().stopPreview()
     }
 
     fun setPrimaryCamera(cameraId: String) {
@@ -409,7 +462,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     fun onCameraPermissionResult(granted: Boolean) {
-        if (cameraBridgeDelegate.isInitialized()) cameraBridgeDelegate.value.onPermissionResult(granted)
+        if (cameraBridgeResource.isInitialized()) cameraBridgeResource.get().onPermissionResult(granted)
     }
 
     fun presentRgba(rgba: ByteArray, revision: Int, width: Int, height: Int) {
@@ -453,7 +506,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
             .put("refresh_hint_mode", refreshHintMode)
             .put("preferred_display_mode_id", (context as? Activity)?.window?.attributes?.preferredDisplayModeId ?: 0)
             .put("honored", requested > 0.0f && abs(actual - requested) <= 2.0f)
-            .put("camera_active", cameraBridgeDelegate.isInitialized() && cameraBridgeDelegate.value.isPreviewActive())
+            .put("camera_active", cameraBridgeResource.isInitialized() && cameraBridgeResource.get().isPreviewActive())
             .put("last_error", refreshLastError)
             .toString()
     }
@@ -617,49 +670,60 @@ class LuvatrixVulkanView @JvmOverloads constructor(
 
     fun presentScene(sceneJson: String, revision: Int, logicalWidth: Int, logicalHeight: Int, presentationMode: String = "") {
         AndroidLaunchTelemetry.mark("first_app_frame_submitted")
-        var nativeBackground = false
-        if (application.nativeVulkanStartup.isSuccessful()) {
-            try {
-                nativeBackground = NativeVulkan.presentScene(sceneJson, revision, logicalWidth, logicalHeight, presentationMode)
-            } catch (exc: Throwable) {
-                Log.w("Luvatrix", "native Vulkan scene presenter unavailable; using Canvas fallback", exc)
+        val scene = synchronized(nativePresentationLock) {
+            val retained = sceneReplayCoordinator.retainFullScene(
+                sceneJson,
+                revision,
+                logicalWidth,
+                logicalHeight,
+                presentationMode,
+            )
+            val request = sceneReplayCoordinator.presentationRequest(retained)
+            if (request != null) {
+                presentNativeSceneLocked(request)
             }
+            retained
         }
-        overlayView.post {
-            bootstrapMessage = null
-            overlayMode = OverlayMode.Scene
-            retainedSceneJson = sceneJson
-            overlaySceneJson = if (nativeBackground) null else sceneJson
-            overlayLogicalWidth = logicalWidth
-            overlayLogicalHeight = logicalHeight
-            overlayNativeBackground = nativeBackground
-            overlayContentOffsetX = null
-            overlayContentOffsetY = null
-            overlayView.setBackgroundColor(Color.TRANSPARENT)
-            overlayView.invalidate()
-            framesPresented += 1
-        }
+        postSceneDisplay(scene, countFrame = true)
     }
 
     fun presentSceneTransform(revision: Int, contentOffsetX: Double, contentOffsetY: Double) {
-        var nativeBackground = false
-        if (application.nativeVulkanStartup.isSuccessful()) {
-            try {
-                nativeBackground = NativeVulkan.presentSceneTransform(revision, contentOffsetX, contentOffsetY)
-            } catch (exc: Throwable) {
-                Log.w("Luvatrix", "native Vulkan scene transform unavailable; using Canvas fallback", exc)
+        var scene: FullScenePresentation? = null
+        synchronized(nativePresentationLock) {
+            val transform = sceneReplayCoordinator.retainTransform(revision, contentOffsetX, contentOffsetY)
+            if (transform != null) {
+                val request = sceneReplayCoordinator.transformRequest(transform)
+                if (request != null) {
+                    val accepted = try {
+                        NativeVulkan.presentSceneTransform(revision, contentOffsetX, contentOffsetY)
+                    } catch (exc: Throwable) {
+                        Log.w("Luvatrix", "native Vulkan scene transform unavailable; using Canvas fallback", exc)
+                        false
+                    }
+                    sceneReplayCoordinator.markTransformPresented(request, accepted)
+                }
+                scene = sceneReplayCoordinator.latestDisplayState()?.scene
             }
         }
+        val retainedScene = scene ?: return
+        postSceneDisplay(retainedScene, countFrame = true)
+    }
+
+    private fun postSceneDisplay(scene: FullScenePresentation, countFrame: Boolean) {
         overlayView.post {
+            val state = sceneReplayCoordinator.displayState(scene) ?: return@post
             bootstrapMessage = null
             overlayMode = OverlayMode.Scene
-            overlaySceneJson = if (nativeBackground) null else retainedSceneJson
-            overlayNativeBackground = nativeBackground
-            overlayContentOffsetX = contentOffsetX
-            overlayContentOffsetY = contentOffsetY
+            retainedSceneJson = state.scene.sceneJson
+            overlaySceneJson = if (state.nativeBackground) null else state.scene.sceneJson
+            overlayLogicalWidth = state.scene.logicalWidth
+            overlayLogicalHeight = state.scene.logicalHeight
+            overlayNativeBackground = state.nativeBackground
+            overlayContentOffsetX = state.transform?.contentOffsetX
+            overlayContentOffsetY = state.transform?.contentOffsetY
             overlayView.setBackgroundColor(Color.TRANSPARENT)
             overlayView.invalidate()
-            framesPresented += 1
+            if (countFrame) framesPresented += 1
         }
     }
 
