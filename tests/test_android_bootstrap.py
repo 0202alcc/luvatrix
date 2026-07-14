@@ -96,13 +96,42 @@ class AndroidBootstrapTests(unittest.TestCase):
             raise AssertionError("normal launch must not execute app_main through import_probe")
 
         boot.import_probe = unexpected_probe
-        boot._run_visual_runtime = lambda _presenter: type(
-            "Result",
-            (),
-            {"ticks_run": 1, "frames_presented": 1},
-        )()
+        def run_runtime(_presenter, *, before_lifecycle_init):
+            before_lifecycle_init()
+            return type("Result", (), {"ticks_run": 1, "frames_presented": 1})()
+
+        boot._run_visual_runtime = run_runtime
 
         self.assertEqual(boot.run_app_vulkan("view"), "luvatrix visual ok")
+
+    def test_run_app_vulkan_overlaps_tls_setup_and_joins_before_lifecycle_init(self) -> None:
+        boot = _load_boot_module()
+        tls_started = threading.Event()
+        release_tls = threading.Event()
+        lifecycle_ready = threading.Event()
+
+        def configure_tls() -> str:
+            tls_started.set()
+            self.assertTrue(release_tls.wait(1.0))
+            return "/app/cacert.pem"
+
+        def run_runtime(_presenter, *, before_lifecycle_init):
+            self.assertTrue(tls_started.wait(1.0))
+            lifecycle_ready.set()
+            before_lifecycle_init()
+            return type("Result", (), {"ticks_run": 1, "frames_presented": 1})()
+
+        boot.configure_android_tls = configure_tls
+        boot._run_visual_runtime = run_runtime
+        owner = threading.Thread(target=boot.run_app_vulkan, args=("view",))
+        owner.start()
+
+        self.assertTrue(lifecycle_ready.wait(1.0))
+        self.assertTrue(owner.is_alive())
+        release_tls.set()
+        owner.join(1.0)
+
+        self.assertFalse(owner.is_alive())
 
     def test_runtime_restarts_when_rebound_while_previous_owner_exits(self) -> None:
         boot = _load_boot_module()
@@ -114,7 +143,8 @@ class AndroidBootstrapTests(unittest.TestCase):
         boot.configure_android_tls = lambda: ""
         boot.import_probe = lambda: ""
 
-        def run_runtime(presenter):
+        def run_runtime(presenter, *, before_lifecycle_init):
+            before_lifecycle_init()
             calls.append(presenter.current_view())
             if len(calls) == 1:
                 first_started.set()
@@ -195,7 +225,7 @@ class AndroidBootstrapTests(unittest.TestCase):
 
         self.assertEqual(boot._runtime_render_mode({"render_mode": "scene"}), "scene")
 
-    def test_runtime_render_mode_reads_manifest_when_config_is_auto(self) -> None:
+    def test_runtime_render_mode_leaves_manifest_resolution_to_unified_runtime(self) -> None:
         boot = _load_boot_module()
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -212,7 +242,7 @@ class AndroidBootstrapTests(unittest.TestCase):
             old_root = boot._ROOT
             try:
                 boot._ROOT = root
-                self.assertEqual(boot._runtime_render_mode({"render_mode": "auto"}), "matrix")
+                self.assertEqual(boot._runtime_render_mode({"render_mode": "auto"}), "auto")
             finally:
                 boot._ROOT = old_root
 

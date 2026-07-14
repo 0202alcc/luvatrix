@@ -166,6 +166,8 @@ class UnifiedRuntime:
         present_fps: int | None = None,
         display_timeout: float = 0.0,
         on_targets_started: "Callable[[], None] | None" = None,
+        before_lifecycle_init: "Callable[[], None] | None" = None,
+        defer_hdi_polling_until_first_frame: bool = False,
         defer_optional_sensor_polling_until_first_frame: bool = False,
     ) -> UnifiedRunResult:
         if max_ticks is not None and max_ticks <= 0:
@@ -173,6 +175,12 @@ class UnifiedRuntime:
         rate = FrameRateController(target_fps=target_fps, present_fps=present_fps)
         app_path = Path(app_dir).resolve()
         manifest = self._app_runtime.load_manifest(app_path)
+        effective_render_mode = self._render_mode
+        if effective_render_mode == "auto":
+            if manifest.render_preferred == "matrix":
+                effective_render_mode = "matrix"
+            elif manifest.render_preferred == "scene" and self._scene_target is not None:
+                effective_render_mode = "scene"
         debug_policy_profile = self._app_runtime.resolve_debug_policy_profile(manifest)
         granted = self._app_runtime.resolve_capabilities(manifest)
         ctx = self._app_runtime.build_context(granted_capabilities=granted, manifest=manifest)
@@ -196,9 +204,9 @@ class UnifiedRuntime:
         stopped_by_energy_safety = False
         started = False
         active_targets: list[object] = []
-        if self._scene_target is not None and self._render_mode in ("auto", "scene"):
+        if self._scene_target is not None and effective_render_mode in ("auto", "scene"):
             active_targets.append(self._scene_target)
-        if self._render_mode == "matrix" or (self._render_mode == "auto" and self._scene_target is None):
+        if effective_render_mode == "matrix" or (effective_render_mode == "auto" and self._scene_target is None):
             active_targets.append(self._target)
         self._configure_target_debug_menu(
             manifest.app_id,
@@ -218,7 +226,12 @@ class UnifiedRuntime:
                 repeat_latest=False,
             )
             scene_present_loop_started = True
-        ctx.hdi.start()
+        required_hdi_capability = any(
+            capability.startswith("hdi.") for capability in manifest.required_capabilities
+        )
+        hdi_started = not (defer_hdi_polling_until_first_frame and not required_hdi_capability)
+        if hdi_started:
+            ctx.hdi.start()
         required_sensor_capability = any(
             capability.startswith("sensor.") for capability in manifest.required_capabilities
         )
@@ -228,9 +241,12 @@ class UnifiedRuntime:
         if sensor_manager_started:
             ctx.sensor_manager.start()
         deferred_sensor_deadline = time.perf_counter() + 0.1
+        deferred_hdi_deadline = time.perf_counter() + 0.1
         last = time.perf_counter()
         was_active = self._is_active()
         try:
+            if before_lifecycle_init is not None:
+                before_lifecycle_init()
             lifecycle.init(ctx)
             tick_idx = 0
             while max_ticks is None or tick_idx < max_ticks:
@@ -266,7 +282,6 @@ class UnifiedRuntime:
                 ticks_run += 1
                 tick_idx += 1
                 if self._scene_display_runtime is None and rate.should_present(now):
-                    tick = None
                     matrix_tick = self._display_runtime.run_once(timeout=display_timeout)
                     if matrix_tick is not None:
                         frames_presented += 1
@@ -280,6 +295,15 @@ class UnifiedRuntime:
                     if frames_presented > 0 or scene_frames > 0 or time.perf_counter() >= deferred_sensor_deadline:
                         ctx.sensor_manager.start()
                         sensor_manager_started = True
+                if not hdi_started:
+                    scene_frames = (
+                        self._scene_display_runtime.frames_presented
+                        if self._scene_display_runtime is not None
+                        else 0
+                    )
+                    if frames_presented > 0 or scene_frames > 0 or time.perf_counter() >= deferred_hdi_deadline:
+                        ctx.hdi.start()
+                        hdi_started = True
                 sleep_for = rate.compute_sleep(
                     loop_started_at=now,
                     loop_finished_at=time.perf_counter(),
@@ -298,7 +322,8 @@ class UnifiedRuntime:
             try:
                 lifecycle.stop(ctx)
             finally:
-                ctx.hdi.stop()
+                if hdi_started:
+                    ctx.hdi.stop()
                 ctx.sensor_manager.stop()
                 if started:
                     if scene_present_loop_started and self._scene_display_runtime is not None:
