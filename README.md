@@ -147,6 +147,7 @@ from luvatrix.auth import (
     GoogleOAuthConfig,
     GoogleSignInController,
     PlatformGoogleAuthSession,
+    SecureAuthorizationRequestStore,
     SecureTokenStore,
 )
 from luvatrix.auth.ui import GoogleSignInButton
@@ -161,6 +162,12 @@ class MyApp(App):
             delete_secret=my_native_bridge.delete_secret,
             key="google-account",
         )
+        pending_store = SecureAuthorizationRequestStore(
+            read_secret=my_native_bridge.read_secret,
+            write_secret=my_native_bridge.write_secret,
+            delete_secret=my_native_bridge.delete_secret,
+            key="google-pending-authorization",
+        )
         oauth = GoogleOAuthClient(
             GoogleOAuthConfig(
                 client_id="YOUR_CLIENT_ID.apps.googleusercontent.com",
@@ -173,6 +180,7 @@ class MyApp(App):
             oauth,
             session=session,
             invalidate=self.invalidate,
+            pending_authorization_store=pending_store,
         )
         self.google_button = GoogleSignInButton(self.google)
 
@@ -185,7 +193,9 @@ class MyApp(App):
             self.google_button.render(frame, x=24, y=24, width=220, height=44)
 ```
 
-The native callback handler calls `session.deliver_callback(callback_url)`.
+The native callback handler calls `controller.deliver_callback(callback_url)`.
+With a `pending_authorization_store`, this restores the short-lived PKCE request
+after mobile process recreation and rejects callbacks older than ten minutes.
 Android bridges should open a Custom Tab and back `SecureTokenStore` with
 Android Keystore. iOS bridges should use `ASWebAuthenticationSession` and
 Keychain. `InMemoryTokenStore` remains available for tests, but production apps

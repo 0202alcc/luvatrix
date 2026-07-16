@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import json
+import math
 from threading import RLock
+import time
 from typing import Callable, Mapping, Protocol
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
@@ -144,6 +146,101 @@ class SecureTokenStore:
         self._delete_secret(self._key)
 
 
+@dataclass(frozen=True)
+class PendingGoogleAuthorization:
+    """A short-lived PKCE request saved while the system browser is open."""
+
+    request: GoogleAuthorizationRequest
+    redirect_uri: str
+    created_at: float
+
+
+class AuthorizationRequestStore(Protocol):
+    """Persistence boundary for a pending OAuth request."""
+
+    def load(self) -> PendingGoogleAuthorization | None: ...
+
+    def save(
+        self,
+        request: GoogleAuthorizationRequest,
+        *,
+        redirect_uri: str,
+        created_at: float,
+    ) -> None: ...
+
+    def clear(self) -> None: ...
+
+
+class SecureAuthorizationRequestStore:
+    """Persist pending Google PKCE state using platform secure storage."""
+
+    def __init__(
+        self,
+        *,
+        read_secret: Callable[[str], str | None],
+        write_secret: Callable[[str, str], None],
+        delete_secret: Callable[[str], None],
+        key: str,
+    ) -> None:
+        if not key.strip():
+            raise ValueError("secure authorization request store key is required")
+        self._read_secret = read_secret
+        self._write_secret = write_secret
+        self._delete_secret = delete_secret
+        self._key = key
+
+    def load(self) -> PendingGoogleAuthorization | None:
+        encoded = self._read_secret(self._key)
+        if encoded is None:
+            return None
+        try:
+            payload = json.loads(encoded)
+            if not isinstance(payload, dict):
+                raise ValueError
+            created_at = float(payload["created_at"])
+            if not math.isfinite(created_at):
+                raise ValueError
+            request = GoogleAuthorizationRequest(
+                url=str(payload["url"]),
+                state=str(payload["state"]),
+                code_verifier=str(payload["code_verifier"]),
+            )
+            redirect_uri = str(payload["redirect_uri"])
+            if not all((request.url, request.state, request.code_verifier, redirect_uri)):
+                raise ValueError
+            return PendingGoogleAuthorization(request, redirect_uri, created_at)
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise GoogleAuthError("The securely stored Google authorization request is invalid") from exc
+
+    def save(
+        self,
+        request: GoogleAuthorizationRequest,
+        *,
+        redirect_uri: str,
+        created_at: float,
+    ) -> None:
+        timestamp = float(created_at)
+        if not math.isfinite(timestamp):
+            raise ValueError("authorization request timestamp must be finite")
+        self._write_secret(
+            self._key,
+            json.dumps(
+                {
+                    "url": request.url,
+                    "state": request.state,
+                    "code_verifier": request.code_verifier,
+                    "redirect_uri": redirect_uri,
+                    "created_at": timestamp,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+        )
+
+    def clear(self) -> None:
+        self._delete_secret(self._key)
+
+
 ProfileFetcher = Callable[[GoogleOAuthToken], Mapping[str, object]]
 
 
@@ -157,6 +254,9 @@ class GoogleSignInController:
         session: GoogleAuthSession,
         fetch_profile: ProfileFetcher | None = None,
         invalidate: Callable[[], None] | None = None,
+        pending_authorization_store: AuthorizationRequestStore | None = None,
+        authorization_max_age_seconds: float = 600.0,
+        clock: Callable[[], float] = time.time,
     ) -> None:
         if "openid" not in oauth.config.scopes:
             raise ValueError("GoogleSignInController requires the 'openid' OAuth scope")
@@ -164,6 +264,12 @@ class GoogleSignInController:
         self.session = session
         self._fetch_profile = fetch_profile or _fetch_google_profile
         self._invalidate = invalidate
+        max_age = float(authorization_max_age_seconds)
+        if not math.isfinite(max_age) or max_age <= 0:
+            raise ValueError("authorization_max_age_seconds must be finite and positive")
+        self._pending_authorization_store = pending_authorization_store
+        self._authorization_max_age_seconds = max_age
+        self._clock = clock
         self._lock = RLock()
         self.state = GoogleSignInState.IDLE
         self.token: GoogleOAuthToken | None = None
@@ -198,8 +304,15 @@ class GoogleSignInController:
             self._authorization = self.oauth.start_authorization()
             authorization_url = self._authorization.url
             self.state = GoogleSignInState.OPENING
+            authorization = self._authorization
         self._notify()
         try:
+            if self._pending_authorization_store is not None:
+                self._pending_authorization_store.save(
+                    authorization,
+                    redirect_uri=self.oauth.config.redirect_uri,
+                    created_at=self._clock(),
+                )
             self.session.open(authorization_url, self.handle_callback)
         except Exception as exc:
             self._fail("Could not open the Google sign-in session", exc)
@@ -208,6 +321,41 @@ class GoogleSignInController:
             if self.state is GoogleSignInState.OPENING:
                 self.state = GoogleSignInState.WAITING
         self._notify()
+
+    def deliver_callback(self, callback_url: str) -> bool:
+        """Deliver a native callback, restoring saved PKCE state after process death."""
+        session_delivery = getattr(self.session, "deliver_callback", None)
+        if callable(session_delivery) and session_delivery(callback_url):
+            return True
+        with self._lock:
+            authorization_active = self._authorization is not None and self.busy
+        if authorization_active:
+            self.handle_callback(callback_url)
+            return True
+        store = self._pending_authorization_store
+        if store is None:
+            return False
+        try:
+            pending = store.load()
+            if pending is None:
+                return False
+            if pending.redirect_uri != self.oauth.config.redirect_uri:
+                raise GoogleAuthError("Saved Google sign-in request used a different redirect URI")
+            age = self._clock() - pending.created_at
+            if not math.isfinite(age) or age < 0 or age > self._authorization_max_age_seconds:
+                raise GoogleAuthError("Saved Google sign-in request expired")
+        except GoogleAuthError as exc:
+            self._fail(str(exc), exc)
+            return False
+        except Exception as exc:
+            self._fail("Saved Google sign-in request could not be restored", exc)
+            return False
+        with self._lock:
+            self._authorization = pending.request
+            self.error = None
+            self.state = GoogleSignInState.WAITING
+        self.handle_callback(callback_url)
+        return True
 
     def handle_callback(self, callback_url: str | None) -> None:
         if callback_url is None:
@@ -249,6 +397,7 @@ class GoogleSignInController:
             self.error = None
             self._authorization = None
             self.state = GoogleSignInState.SIGNED_IN
+        self._clear_pending_authorization()
         self._notify()
 
     def restore(self) -> GoogleOAuthToken | None:
@@ -278,6 +427,7 @@ class GoogleSignInController:
 
     def sign_out(self) -> None:
         self.oauth.token_store.clear()
+        self._clear_pending_authorization()
         with self._lock:
             self.token = None
             self.profile = None
@@ -296,6 +446,7 @@ class GoogleSignInController:
             self.error = None
             self._authorization = None
             self.state = GoogleSignInState.CANCELLED
+        self._clear_pending_authorization()
         self._notify()
 
     def _fail(self, message: str, cause: Exception | None = None) -> None:
@@ -306,7 +457,16 @@ class GoogleSignInController:
             self.error = error
             self._authorization = None
             self.state = GoogleSignInState.FAILED
+        self._clear_pending_authorization()
         self._notify()
+
+    def _clear_pending_authorization(self) -> None:
+        if self._pending_authorization_store is None:
+            return
+        try:
+            self._pending_authorization_store.clear()
+        except Exception:
+            pass
 
     def _notify(self) -> None:
         if self._invalidate is not None:

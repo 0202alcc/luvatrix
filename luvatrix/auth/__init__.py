@@ -16,11 +16,14 @@ from .google import (
     TokenStore,
 )
 from .sign_in import (
+    AuthorizationRequestStore,
     GoogleAuthSession,
     GoogleProfile,
     GoogleSignInController,
     GoogleSignInState,
     PlatformGoogleAuthSession,
+    PendingGoogleAuthorization,
+    SecureAuthorizationRequestStore,
     SecureTokenStore,
 )
 
@@ -34,11 +37,14 @@ __all__ = [
     "GoogleOAuthClient",
     "GoogleOAuthConfig",
     "GoogleOAuthToken",
+    "AuthorizationRequestStore",
     "GoogleAuthSession",
     "GoogleProfile",
     "GoogleSignInController",
     "GoogleSignInState",
     "PlatformGoogleAuthSession",
+    "PendingGoogleAuthorization",
+    "SecureAuthorizationRequestStore",
     "SecureTokenStore",
     "InMemoryTokenStore",
     "TokenStore",

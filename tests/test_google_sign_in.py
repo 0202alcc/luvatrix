@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from luvatrix.auth import (
+    GoogleAuthorizationRequest,
     GoogleAuthError,
     GoogleOAuthClient,
     GoogleOAuthConfig,
@@ -11,6 +12,7 @@ from luvatrix.auth import (
     GoogleSignInState,
     InMemoryTokenStore,
     PlatformGoogleAuthSession,
+    SecureAuthorizationRequestStore,
     SecureTokenStore,
 )
 from luvatrix.auth.ui import GoogleSignInButton
@@ -174,6 +176,112 @@ def test_platform_session_cancel_notifies_controller_callback() -> None:
 
     assert callbacks == [None]
     assert not session.active
+
+
+def test_secure_authorization_request_store_round_trips_pkce_state() -> None:
+    values: dict[str, str] = {}
+    store = SecureAuthorizationRequestStore(
+        read_secret=lambda key: values.get(key),
+        write_secret=lambda key, value: values.__setitem__(key, value),
+        delete_secret=lambda key: values.pop(key, None),
+        key="google-pending-auth",
+    )
+    request = GoogleAuthorizationRequest(
+        url="https://accounts.example/auth?state=state-one",
+        state="state-one",
+        code_verifier="pkce-verifier",
+    )
+
+    store.save(request, redirect_uri="com.example.app:/oauth2redirect", created_at=123.0)
+
+    pending = store.load()
+    assert pending is not None
+    assert pending.request == request
+    assert pending.redirect_uri == "com.example.app:/oauth2redirect"
+    assert pending.created_at == 123.0
+    store.clear()
+    assert store.load() is None
+
+
+def test_controller_resumes_saved_authorization_after_process_recreation() -> None:
+    values: dict[str, str] = {}
+
+    def authorization_store() -> SecureAuthorizationRequestStore:
+        return SecureAuthorizationRequestStore(
+            read_secret=lambda key: values.get(key),
+            write_secret=lambda key, value: values.__setitem__(key, value),
+            delete_secret=lambda key: values.pop(key, None),
+            key="google-pending-auth",
+        )
+
+    first_session = PlatformGoogleAuthSession(open_browser=lambda _url: None)
+    first = GoogleSignInController(
+        _oauth(),
+        session=first_session,
+        pending_authorization_store=authorization_store(),
+        clock=lambda: 100.0,
+    )
+    first.sign_in()
+    pending_state = first.pending_state
+    pending_request = authorization_store().load()
+    assert pending_request is not None
+
+    exchanges: list[dict[str, str]] = []
+    oauth = GoogleOAuthClient(
+        GoogleOAuthConfig("client-id", "com.example.app:/oauth2redirect", ("openid", "email", "profile")),
+        post_form=lambda _url, payload: exchanges.append(payload) or {
+            "access_token": "access-token",
+            "refresh_token": "refresh-token",
+            "expires_in": 3600,
+        },
+        clock=lambda: 101.0,
+    )
+    resumed = GoogleSignInController(
+        oauth,
+        session=PlatformGoogleAuthSession(open_browser=lambda _url: None),
+        pending_authorization_store=authorization_store(),
+        fetch_profile=lambda _token: {"sub": "user-1", "email": "person@example.com"},
+        clock=lambda: 101.0,
+    )
+
+    assert resumed.deliver_callback(
+        f"com.example.app:/oauth2redirect?code=auth-code&state={pending_state}"
+    )
+
+    assert resumed.state is GoogleSignInState.SIGNED_IN
+    assert exchanges[0]["code_verifier"] == pending_request.request.code_verifier
+    assert authorization_store().load() is None
+
+
+def test_controller_rejects_expired_saved_authorization() -> None:
+    values: dict[str, str] = {}
+    store = SecureAuthorizationRequestStore(
+        read_secret=lambda key: values.get(key),
+        write_secret=lambda key, value: values.__setitem__(key, value),
+        delete_secret=lambda key: values.pop(key, None),
+        key="google-pending-auth",
+    )
+    store.save(
+        GoogleAuthorizationRequest("https://accounts.example/auth", "old-state", "old-verifier"),
+        redirect_uri="com.example.app:/oauth2redirect",
+        created_at=100.0,
+    )
+    controller = GoogleSignInController(
+        _oauth(),
+        session=PlatformGoogleAuthSession(open_browser=lambda _url: None),
+        pending_authorization_store=store,
+        authorization_max_age_seconds=600.0,
+        clock=lambda: 701.0,
+    )
+
+    assert not controller.deliver_callback(
+        "com.example.app:/oauth2redirect?code=auth-code&state=old-state"
+    )
+
+    assert controller.state is GoogleSignInState.FAILED
+    assert controller.error is not None
+    assert "expired" in str(controller.error).lower()
+    assert store.load() is None
 
 
 def test_secure_token_store_round_trips_without_exposing_storage_policy() -> None:
