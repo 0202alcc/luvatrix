@@ -336,6 +336,35 @@ class AndroidRunnerTests(unittest.TestCase):
             self.assertTrue((py_root / "examples" / "app" / "_luvatrix_bundle.py").exists())
             self.assertTrue((py_root / "luvatrix_launch_config.json").exists())
 
+    def test_installed_runner_does_not_shadow_wheel_packages(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            project = root / "android"
+            app = root / "app"
+            app.mkdir()
+            (app / "app.toml").write_text('app_id = "x"\n', encoding="utf-8")
+            (app / "app_main.py").write_text(
+                "from luvatrix.app import App\n"
+                "from luvatrix_ui import TextWrapping\n"
+                "def create(): pass\n",
+                encoding="utf-8",
+            )
+            stale = project / "app" / "src" / "main" / "python"
+            for package in ("luvatrix", "luvatrix_core", "luvatrix_ui"):
+                (stale / package).mkdir(parents=True)
+
+            with (
+                patch("luvatrix_core.platform.android.runner._running_from_source_checkout", return_value=False),
+                patch("luvatrix_core.platform.android.runner.sync_android_accelerator_wheels", return_value=()),
+            ):
+                sync_android_python_assets(app, project_dir=project)
+
+            py_root = project / "app" / "src" / "main" / "python"
+            self.assertFalse((py_root / "luvatrix").exists())
+            self.assertFalse((py_root / "luvatrix_core").exists())
+            self.assertFalse((py_root / "luvatrix_ui").exists())
+            self.assertTrue((py_root / "luvatrix_app" / "app_main.py").exists())
+
     def test_sync_android_python_assets_ignores_app_owned_native_project(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             app = Path(td) / "app"

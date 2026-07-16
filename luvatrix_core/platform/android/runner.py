@@ -326,7 +326,11 @@ def sync_android_python_assets(app_dir: Path, *, project_dir: Path) -> None:
     app_ignore = _make_android_app_ignore(project)
 
     all_pkg_names = ("luvatrix", "luvatrix_core", "luvatrix_ui", "luvatrix_plot")
-    pkg_names = _android_python_packages_for_app(app_dir, exclude_dirs=(project,))
+    pkg_names = (
+        _android_python_packages_for_app(app_dir, exclude_dirs=(project,))
+        if _running_from_source_checkout()
+        else ()
+    )
     for stale_pkg in set(all_pkg_names) - set(pkg_names):
         stale_dst = py_dst / stale_pkg
         if stale_dst.exists():
