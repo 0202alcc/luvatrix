@@ -31,6 +31,9 @@
 #include <unistd.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_android.h>
+#if defined(__ARM_NEON)
+#include <arm_neon.h>
+#endif
 
 #include "luvatrix_camera_preview_shaders.h"
 
@@ -45,6 +48,20 @@ struct Rgba {
     int b = 0;
     int a = 255;
 };
+
+void rgba_to_bgra_in_place(uint8_t* bytes, size_t pixel_count) {
+    size_t index = 0;
+#if defined(__ARM_NEON)
+    for (; index + 16u <= pixel_count; index += 16u) {
+        uint8x16x4_t channels = vld4q_u8(bytes + index * 4u);
+        std::swap(channels.val[0], channels.val[2]);
+        vst4q_u8(bytes + index * 4u, channels);
+    }
+#endif
+    for (; index < pixel_count; ++index) {
+        std::swap(bytes[index * 4u], bytes[index * 4u + 2u]);
+    }
+}
 
 struct CirclePrimitive {
     double cx = 0.0;
@@ -142,6 +159,7 @@ struct VulkanState {
     VkDescriptorSet overlay_descriptor_set = VK_NULL_HANDLE;
     int overlay_width = 0;
     int overlay_height = 0;
+    bool overlay_uploaded = false;
     std::string overlay_cache_key;
     VkRenderPass camera_intermediate_render_pass = VK_NULL_HANDLE;
     VkFramebuffer camera_intermediate_framebuffer = VK_NULL_HANDLE;
@@ -752,6 +770,7 @@ void destroy_preview_base_resources(VulkanState& vk) {
     vk.overlay_descriptor_set = VK_NULL_HANDLE;
     vk.overlay_width = 0;
     vk.overlay_height = 0;
+    vk.overlay_uploaded = false;
     vk.overlay_cache_key.clear();
     vk.preview_base_ready = false;
 }
@@ -2389,6 +2408,7 @@ bool ensure_overlay_texture(VulkanState& vk, int width, int height) {
         vk.overlay_memory = VK_NULL_HANDLE;
     }
     vk.overlay_descriptor_set = VK_NULL_HANDLE;
+    vk.overlay_uploaded = false;
     if (!create_image_2d(vk, width, height, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, vk.overlay_image, vk.overlay_memory)) {
         return false;
     }
@@ -2417,7 +2437,6 @@ bool ensure_overlay_texture(VulkanState& vk, int width, int height) {
 }
 
 bool upload_overlay_texture(VulkanState& vk, const std::vector<uint32_t>& pixels, int width, int height) {
-    bool had_matching_image = vk.overlay_image != VK_NULL_HANDLE && vk.overlay_width == width && vk.overlay_height == height;
     if (!ensure_overlay_texture(vk, width, height)) return false;
     VkDeviceSize byte_count = static_cast<VkDeviceSize>(pixels.size() * sizeof(uint32_t));
     if (!ensure_staging_buffer(vk, byte_count)) return false;
@@ -2430,7 +2449,7 @@ bool upload_overlay_texture(VulkanState& vk, const std::vector<uint32_t>& pixels
     vkResetCommandBuffer(cmd, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) return false;
-    VkImageLayout old_layout = had_matching_image ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout old_layout = vk.overlay_uploaded ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
     image_barrier(cmd, vk.overlay_image, old_layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     VkBufferImageCopy region{};
     region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -2444,7 +2463,49 @@ bool upload_overlay_texture(VulkanState& vk, const std::vector<uint32_t>& pixels
     submit.pCommandBuffers = &cmd;
     if (vkQueueSubmit(vk.queue, 1, &submit, VK_NULL_HANDLE) != VK_SUCCESS) return false;
     vkQueueWaitIdle(vk.queue);
+    vk.overlay_uploaded = true;
     return true;
+}
+
+bool prepare_overlay_texture_upload(
+    VulkanState& vk,
+    const std::vector<uint32_t>& pixels,
+    int width,
+    int height
+) {
+    if (!ensure_overlay_texture(vk, width, height)) return false;
+    VkDeviceSize byte_count = static_cast<VkDeviceSize>(pixels.size() * sizeof(uint32_t));
+    if (!ensure_staging_buffer(vk, byte_count)) return false;
+    void* mapped = nullptr;
+    if (vkMapMemory(vk.device, vk.staging_memory, 0, byte_count, 0, &mapped) != VK_SUCCESS) return false;
+    std::memcpy(mapped, pixels.data(), static_cast<size_t>(byte_count));
+    vkUnmapMemory(vk.device, vk.staging_memory);
+    return true;
+}
+
+void record_overlay_texture_upload(VulkanState& vk, VkCommandBuffer cmd, int width, int height) {
+    VkImageLayout old_layout = vk.overlay_uploaded
+        ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        : VK_IMAGE_LAYOUT_UNDEFINED;
+    image_barrier(cmd, vk.overlay_image, old_layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VkBufferImageCopy region{};
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.layerCount = 1;
+    region.imageExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
+    vkCmdCopyBufferToImage(
+        cmd,
+        vk.staging_buffer,
+        vk.overlay_image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &region
+    );
+    image_barrier(
+        cmd,
+        vk.overlay_image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    );
 }
 
 bool ensure_camera_intermediate_render_pass(VulkanState& vk) {
@@ -3036,6 +3097,101 @@ bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_
     vk.current_frame_slot = (frame_slot + 1) % static_cast<uint32_t>(vk.preview_frames.size());
     vk.frame_counter += 1;
     return pr == VK_SUCCESS || pr == VK_SUBOPTIMAL_KHR;
+}
+
+bool render_rgba_matrix(
+    VulkanState& vk,
+    const std::vector<uint32_t>& pixels,
+    int source_width,
+    int source_height
+) {
+    if (source_width <= 0 || source_height <= 0) return false;
+    if (pixels.size() != static_cast<size_t>(source_width) * static_cast<size_t>(source_height)) return false;
+    if (!ensure_vulkan(vk) || vk.preview_frames.empty()) return false;
+    if (!ensure_preview_base_resources(vk)) return false;
+
+    // The matrix presenter reuses one staging buffer. Waiting on its previous
+    // submission protects that buffer without stalling the entire Vulkan queue.
+    uint32_t frame_slot = 0;
+    VulkanState::PreviewFrameSync& frame_sync = vk.preview_frames[frame_slot];
+    if (!wait_fence_for_preview(vk, frame_sync.in_flight, nullptr, false)) return false;
+    if (!prepare_overlay_texture_upload(vk, pixels, source_width, source_height)) return false;
+
+    uint32_t image_index = 0;
+    VkResult acquire = vkAcquireNextImageKHR(
+        vk.device,
+        vk.swapchain,
+        UINT64_MAX,
+        frame_sync.image_available,
+        VK_NULL_HANDLE,
+        &image_index
+    );
+    if (acquire == VK_ERROR_OUT_OF_DATE_KHR || acquire == VK_SUBOPTIMAL_KHR) {
+        destroy_swapchain(vk);
+        return create_swapchain(vk) && create_render_resources(vk) &&
+            render_rgba_matrix(vk, pixels, source_width, source_height);
+    }
+    if (acquire != VK_SUCCESS) return false;
+    if (image_index < vk.images_in_flight.size() && vk.images_in_flight[image_index] != VK_NULL_HANDLE) {
+        if (!wait_fence_for_preview(vk, vk.images_in_flight[image_index], nullptr, false)) return false;
+    }
+    if (image_index < vk.images_in_flight.size()) {
+        vk.images_in_flight[image_index] = frame_sync.in_flight;
+    }
+
+    VkCommandBuffer cmd = vk.command_buffers[image_index];
+    vkResetCommandBuffer(cmd, 0);
+    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) return false;
+    record_overlay_texture_upload(vk, cmd, source_width, source_height);
+    VkClearValue clear{};
+    clear.color.float32[3] = 1.0f;
+    VkRenderPassBeginInfo render_pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+    render_pass.renderPass = vk.render_pass;
+    render_pass.framebuffer = vk.framebuffers[image_index];
+    render_pass.renderArea.offset = {0, 0};
+    render_pass.renderArea.extent = vk.extent;
+    render_pass.clearValueCount = 1;
+    render_pass.pClearValues = &clear;
+    vkCmdBeginRenderPass(cmd, &render_pass, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.overlay_pipeline);
+    vkCmdBindDescriptorSets(
+        cmd,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vk.overlay_pipeline_layout,
+        0,
+        1,
+        &vk.overlay_descriptor_set,
+        0,
+        nullptr
+    );
+    vkCmdDraw(cmd, 3, 1, 0, 0);
+    vkCmdEndRenderPass(cmd);
+    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) return false;
+
+    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    submit.waitSemaphoreCount = 1;
+    submit.pWaitSemaphores = &frame_sync.image_available;
+    submit.pWaitDstStageMask = &wait_stage;
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &cmd;
+    submit.signalSemaphoreCount = 1;
+    submit.pSignalSemaphores = &frame_sync.render_finished;
+    if (vkResetFences(vk.device, 1, &frame_sync.in_flight) != VK_SUCCESS) return false;
+    if (vkQueueSubmit(vk.queue, 1, &submit, frame_sync.in_flight) != VK_SUCCESS) return false;
+    vk.overlay_uploaded = true;
+
+    VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+    present.waitSemaphoreCount = 1;
+    present.pWaitSemaphores = &frame_sync.render_finished;
+    present.swapchainCount = 1;
+    present.pSwapchains = &vk.swapchain;
+    present.pImageIndices = &image_index;
+    VkResult result = vkQueuePresentKHR(vk.queue, &present);
+    vk.current_frame_slot = frame_slot;
+    vk.frame_counter += 1;
+    return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
 }
 
 bool render_clear(VulkanState& vk, Rgba color) {
@@ -5978,6 +6134,52 @@ Java_com_luvatrix_app_NativeVulkan_setBitmapGlyphTable(JNIEnv *env, jobject, jst
         g_bitmap_font.advance
     );
     return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_luvatrix_app_NativeVulkan_presentRgba(
+    JNIEnv *env,
+    jobject,
+    jbyteArray rgba,
+    jint revision,
+    jint width,
+    jint height
+) {
+    if (rgba == nullptr || width <= 0 || height <= 0) return JNI_FALSE;
+    size_t pixel_count = static_cast<size_t>(width) * static_cast<size_t>(height);
+    if (pixel_count > std::numeric_limits<size_t>::max() / 4u) return JNI_FALSE;
+    size_t byte_count = pixel_count * 4u;
+    if (byte_count > static_cast<size_t>(std::numeric_limits<jsize>::max())) return JNI_FALSE;
+    if (env->GetArrayLength(rgba) != static_cast<jsize>(byte_count)) return JNI_FALSE;
+
+    std::vector<uint32_t> pixels(pixel_count);
+    env->GetByteArrayRegion(
+        rgba,
+        0,
+        static_cast<jsize>(byte_count),
+        reinterpret_cast<jbyte*>(pixels.data())
+    );
+    if (env->ExceptionCheck()) return JNI_FALSE;
+    rgba_to_bgra_in_place(reinterpret_cast<uint8_t*>(pixels.data()), pixel_count);
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    bool presented = render_rgba_matrix(
+        g_vk,
+        pixels,
+        static_cast<int>(width),
+        static_cast<int>(height)
+    );
+    if (presented && revision % 120 == 0) {
+        LVX_LOGI(
+            "luvatrix vulkan rgba revision=%d source=%dx%d display=%ux%u",
+            revision,
+            width,
+            height,
+            g_vk.extent.width,
+            g_vk.extent.height
+        );
+    }
+    return presented ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
