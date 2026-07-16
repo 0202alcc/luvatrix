@@ -17,8 +17,10 @@ from luvatrix_core.platform.android.runner import (
     _parse_wm_density,
     _parse_wm_size,
     _resolve_android_project,
+    _run_android,
     build_android_debug_apk,
     force_stop_android_app,
+    prepare_android_accelerator_wheels,
     sync_android_python_assets,
     write_android_launch_config,
 )
@@ -33,6 +35,53 @@ def subprocess_result(stdout: str):
 
 
 class AndroidRunnerTests(unittest.TestCase):
+    def test_run_android_prepares_accelerator_before_assets_and_gradle(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            app = root / "app"
+            project = root / "android"
+            apk = project / "app-debug.apk"
+            app.mkdir()
+            project.mkdir()
+            apk.write_bytes(b"apk")
+            calls: list[str] = []
+
+            with (
+                patch("luvatrix_core.platform.android.runner._resolve_android_project", return_value=project),
+                patch("luvatrix_core.platform.android.runner.write_android_launch_config"),
+                patch(
+                    "luvatrix_core.platform.android.runner.prepare_android_accelerator_wheels",
+                    side_effect=lambda _project: calls.append("accelerator"),
+                ),
+                patch(
+                    "luvatrix_core.platform.android.runner.sync_android_python_assets",
+                    side_effect=lambda *_args, **_kwargs: calls.append("assets"),
+                ),
+                patch(
+                    "luvatrix_core.platform.android.runner.build_android_debug_apk",
+                    side_effect=lambda _project: calls.append("gradle") or apk,
+                ),
+                patch("luvatrix_core.platform.android.runner.shutil.which", return_value="adb"),
+                patch("luvatrix_core.platform.android.runner._adb_prefix", return_value=["adb"]),
+                patch("luvatrix_core.platform.android.runner.force_stop_android_app"),
+                patch("luvatrix_core.platform.android.runner.launch_android_app"),
+                patch("luvatrix_core.platform.android.runner.subprocess.run"),
+            ):
+                _run_android(
+                    app,
+                    device_id="serial",
+                    package_name="com.example.app",
+                    native_project_dir=project,
+                    import_probe=False,
+                    render_scale=1.0,
+                    render_mode="matrix",
+                    target_fps=None,
+                    present_fps=None,
+                    low_latency_mode=True,
+                )
+
+            self.assertEqual(calls[:3], ["accelerator", "assets", "gradle"])
+
     def test_write_launch_config(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             project = Path(td)

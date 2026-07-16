@@ -60,6 +60,9 @@ def test_android_accelerator_downloads_verified_wheels_and_writes_requirement() 
         assert len(synced) == 2
         assert all(path.read_bytes() in wheel_payloads.values() for path in synced)
         assert (project / "app" / "luvatrix-android-accel.txt").read_text() == f"luvatrix=={version}\n"
+        fingerprint = (project / "app" / "luvatrix-android-accel.sha256").read_text()
+        assert f"version={version}" in fingerprint
+        assert all(entry["filename"] in fingerprint for entry in files)
 
 
 def test_android_accelerator_rejects_incomplete_abi_set() -> None:
@@ -159,3 +162,7 @@ def test_android_gradle_installs_synced_accelerator_without_dependencies() -> No
         assert "luvatrix-android-accel.txt" in build
         assert "--find-links" in build
         assert "--no-deps" in build
+        assert "luvatrix-android-accel.sha256" in build
+        assert "installDebugPythonRequirements" in build
+        assert "inputs.file(acceleratorFingerprint)" in build
+        assert ".optional()" in build

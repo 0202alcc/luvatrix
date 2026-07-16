@@ -23,6 +23,7 @@ from luvatrix_core.scaffold import resolve_native_project_dir
 DEFAULT_ANDROID_PACKAGE = "com.luvatrix.app"
 ANDROID_GENERATED_GITIGNORE_RULES = (
     "app/luvatrix-android-accel.txt",
+    "app/luvatrix-android-accel.sha256",
     "app/wheels/",
     "app/.cxx/",
     "app/build/",
@@ -295,6 +296,7 @@ def _run_android(
         present_fps=present_fps,
         low_latency_mode=low_latency_mode,
     )
+    prepare_android_accelerator_wheels(project)
     sync_android_python_assets(app_dir, project_dir=project)
     apk = build_android_debug_apk(project)
     adb = shutil.which("adb")
@@ -348,15 +350,22 @@ def sync_android_python_assets(app_dir: Path, *, project_dir: Path) -> None:
     config = project / "app" / "src" / "main" / "assets" / "luvatrix_launch_config.json"
     if config.exists():
         shutil.copy2(config, py_dst / "luvatrix_launch_config.json")
+    print(f"[android] synced Python assets for {app_dir}")
+
+
+def prepare_android_accelerator_wheels(project_dir: Path) -> tuple[Path, ...]:
+    """Prepare native wheels before Gradle resolves Python requirements."""
+    project = project_dir.resolve()
     accelerator_mode = os.getenv("LUVATRIX_ANDROID_ACCEL_DOWNLOAD", "auto").strip().lower()
-    should_sync_accelerator = accelerator_mode == "on" or (
+    should_sync = accelerator_mode == "on" or (
         accelerator_mode == "auto" and not _running_from_source_checkout()
     )
-    if (project / "app" / "build.gradle.kts").is_file() and should_sync_accelerator:
-        synced = sync_android_accelerator_wheels(project, version=__version__)
-        if synced:
-            print(f"[android] synced {len(synced)} native accelerator wheels")
-    print(f"[android] synced Python assets for {app_dir}")
+    if not (project / "app" / "build.gradle.kts").is_file() or not should_sync:
+        return ()
+    synced = sync_android_accelerator_wheels(project, version=__version__)
+    if synced:
+        print(f"[android] synced {len(synced)} native accelerator wheels", flush=True)
+    return synced
 
 
 def sync_android_accelerator_wheels(project_dir: Path, *, version: str) -> tuple[Path, ...]:
@@ -365,6 +374,8 @@ def sync_android_accelerator_wheels(project_dir: Path, *, version: str) -> tuple
     app_dir = project / "app"
     requirement = app_dir / "luvatrix-android-accel.txt"
     cached = _cached_android_accelerator_wheels(app_dir, version=version)
+    if cached:
+        _write_android_accelerator_fingerprint(app_dir, cached, version=version)
     try:
         with urllib.request.urlopen(
             f"https://pypi.org/pypi/luvatrix/{version}/json",
@@ -423,7 +434,30 @@ def sync_android_accelerator_wheels(project_dir: Path, *, version: str) -> tuple
         temporary.replace(destination)
 
     requirement.write_text(f"luvatrix=={version}\n", encoding="utf-8")
+    _write_android_accelerator_fingerprint(app_dir, synced, version=version)
     return tuple(synced)
+
+
+def _write_android_accelerator_fingerprint(
+    app_dir: Path,
+    wheels: Iterable[Path],
+    *,
+    version: str,
+) -> Path:
+    fingerprint = app_dir / "luvatrix-android-accel.sha256"
+    lines = [f"version={version}"]
+    for wheel in sorted((Path(path) for path in wheels), key=lambda path: path.name):
+        lines.append(f"{wheel.name}={hashlib.sha256(wheel.read_bytes()).hexdigest()}")
+    content = "\n".join(lines) + "\n"
+    try:
+        if fingerprint.read_text(encoding="utf-8") == content:
+            return fingerprint
+    except OSError:
+        pass
+    temporary = fingerprint.with_suffix(fingerprint.suffix + ".tmp")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.replace(fingerprint)
+    return fingerprint
 
 
 def _cached_android_accelerator_wheels(app_dir: Path, *, version: str) -> tuple[Path, ...]:
