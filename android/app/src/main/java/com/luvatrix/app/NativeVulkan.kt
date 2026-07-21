@@ -20,6 +20,8 @@ object NativeVulkan {
 
     external fun presentScene(sceneJson: String, revision: Int, width: Int, height: Int, presentationMode: String): Boolean
 
+    external fun presentSceneBinary(scenePacket: ByteArray, revision: Int, width: Int, height: Int, presentationMode: String): Boolean
+
     external fun presentSceneTransform(revision: Int, contentOffsetX: Double, contentOffsetY: Double): Boolean
 
     external fun setCameraPreviewEnabled(enabled: Boolean)

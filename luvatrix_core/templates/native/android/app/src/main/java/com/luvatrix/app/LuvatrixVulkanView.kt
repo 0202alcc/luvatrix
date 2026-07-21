@@ -25,6 +25,7 @@ import android.widget.FrameLayout
 import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -250,8 +251,16 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     private fun presentNativeSceneLocked(request: SceneReplayRequest): Boolean {
         if (!sceneReplayCoordinator.isCurrent(request)) return false
         val accepted = try {
-            var presented = NativeVulkan.presentScene(
-                request.scene.sceneJson,
+            var presented = request.scene.scenePacket?.let { packet ->
+                NativeVulkan.presentSceneBinary(
+                    packet,
+                    request.scene.revision,
+                    request.scene.logicalWidth,
+                    request.scene.logicalHeight,
+                    request.scene.presentationMode,
+                )
+            } ?: NativeVulkan.presentScene(
+                requireNotNull(request.scene.sceneJson),
                 request.scene.revision,
                 request.scene.logicalWidth,
                 request.scene.logicalHeight,
@@ -675,6 +684,25 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         postSceneDisplay(scene, countFrame = true)
     }
 
+    fun presentSceneBinary(scenePacket: ByteArray, revision: Int, logicalWidth: Int, logicalHeight: Int, presentationMode: String = "") {
+        AndroidLaunchTelemetry.mark("first_app_frame_submitted")
+        val scene = synchronized(nativePresentationLock) {
+            val retained = sceneReplayCoordinator.retainBinaryScene(
+                scenePacket,
+                revision,
+                logicalWidth,
+                logicalHeight,
+                presentationMode,
+            )
+            val request = sceneReplayCoordinator.presentationRequest(retained)
+            if (request != null) {
+                presentNativeSceneLocked(request)
+            }
+            retained
+        }
+        postSceneDisplay(scene, countFrame = true)
+    }
+
     fun presentSceneTransform(revision: Int, contentOffsetX: Double, contentOffsetY: Double) {
         var scene: FullScenePresentation? = null
         synchronized(nativePresentationLock) {
@@ -702,8 +730,9 @@ class LuvatrixVulkanView @JvmOverloads constructor(
             val state = sceneReplayCoordinator.displayState(scene) ?: return@post
             bootstrapMessage = null
             overlayMode = OverlayMode.Scene
-            retainedSceneJson = state.scene.sceneJson
-            overlaySceneJson = if (state.nativeBackground) null else state.scene.sceneJson
+            val fallbackJson = if (state.nativeBackground) null else sceneCanvasJson(state.scene)
+            retainedSceneJson = fallbackJson
+            overlaySceneJson = fallbackJson
             overlayLogicalWidth = state.scene.logicalWidth
             overlayLogicalHeight = state.scene.logicalHeight
             overlayNativeBackground = state.nativeBackground
@@ -802,6 +831,73 @@ class LuvatrixVulkanView @JvmOverloads constructor(
                 }
             }
         }
+    }
+
+    private fun sceneCanvasJson(scene: FullScenePresentation): String? {
+        scene.sceneJson?.let { return it }
+        return scene.scenePacket?.let(::scenePacketToJson)
+    }
+
+    private fun scenePacketToJson(packet: ByteArray): String? {
+        return try {
+        val input = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN)
+        if (input.remaining() < 23) return null
+        val magic = ByteArray(4)
+        input.get(magic)
+        if (!magic.contentEquals(byteArrayOf('L'.code.toByte(), 'V'.code.toByte(), 'X'.code.toByte(), 'S'.code.toByte()))) return null
+        if (input.get().toInt() != 1) return null
+        val nodeCount = input.short.toInt() and 0xffff
+        val contentOffsetX = input.double
+        val contentOffsetY = input.double
+        val nodes = JSONArray()
+        repeat(nodeCount) {
+            when (input.get().toInt() and 0xff) {
+                1 -> nodes.put(JSONObject().put("type", "meta").put("content_offset_x", contentOffsetX).put("content_offset_y", contentOffsetY))
+                2 -> nodes.put(JSONObject().put("type", "clear").put("color", packetColor(input)))
+                3 -> {
+                    val node = JSONObject()
+                        .put("type", "shader_rect")
+                        .put("x", input.double).put("y", input.double)
+                        .put("w", input.double).put("h", input.double)
+                    val shader = if ((input.get().toInt() and 0xff) == 1) "full_suite_background" else "solid"
+                    node.put("shader", shader).put("color", packetColor(input))
+                    val uniformCount = input.short.toInt() and 0xffff
+                    val uniforms = JSONArray()
+                    repeat(uniformCount) { uniforms.put(input.double) }
+                    nodes.put(node.put("uniforms", uniforms))
+                }
+                4 -> nodes.put(
+                    JSONObject().put("type", "rect")
+                        .put("x", input.double).put("y", input.double)
+                        .put("w", input.double).put("h", input.double)
+                        .put("color", packetColor(input)),
+                )
+                5 -> {
+                    val node = JSONObject().put("type", "circle")
+                        .put("cx", input.double).put("cy", input.double)
+                        .put("r", input.double).put("stroke_width", input.double)
+                    nodes.put(node.put("fill", packetColor(input)).put("stroke", packetColor(input)))
+                }
+                6 -> {
+                    val node = JSONObject().put("type", "text")
+                        .put("x", input.double).put("y", input.double).put("size", input.double)
+                        .put("color", packetColor(input))
+                    val textSize = input.short.toInt() and 0xffff
+                    val text = ByteArray(textSize)
+                    input.get(text)
+                    nodes.put(node.put("text", String(text, Charsets.UTF_8)))
+                }
+                else -> return null
+            }
+        }
+        nodes.toString()
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun packetColor(input: ByteBuffer): JSONArray = JSONArray().apply {
+        repeat(4) { put(input.get().toInt() and 0xff) }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {

@@ -628,6 +628,108 @@ ParsedScene parse_scene(const std::string& json) {
     return scene;
 }
 
+class BinarySceneReader {
+public:
+    BinarySceneReader(const uint8_t* data, size_t size) : cursor_(data), end_(data + size) {}
+
+    bool read_u8(uint8_t& value) {
+        if (cursor_ >= end_) return false;
+        value = *cursor_++;
+        return true;
+    }
+
+    bool read_u16(uint16_t& value) {
+        if (static_cast<size_t>(end_ - cursor_) < 2) return false;
+        value = static_cast<uint16_t>(cursor_[0]) | (static_cast<uint16_t>(cursor_[1]) << 8U);
+        cursor_ += 2;
+        return true;
+    }
+
+    bool read_double(double& value) {
+        if (static_cast<size_t>(end_ - cursor_) < sizeof(value)) return false;
+        std::memcpy(&value, cursor_, sizeof(value));
+        cursor_ += sizeof(value);
+        return std::isfinite(value);
+    }
+
+    bool read_color(Rgba& value) {
+        uint8_t r = 0, g = 0, b = 0, a = 0;
+        if (!read_u8(r) || !read_u8(g) || !read_u8(b) || !read_u8(a)) return false;
+        value = Rgba{static_cast<int>(r), static_cast<int>(g), static_cast<int>(b), static_cast<int>(a)};
+        return true;
+    }
+
+    bool read_string(uint16_t size, std::string& value) {
+        if (static_cast<size_t>(end_ - cursor_) < size) return false;
+        value.assign(reinterpret_cast<const char*>(cursor_), size);
+        cursor_ += size;
+        return true;
+    }
+
+private:
+    const uint8_t* cursor_;
+    const uint8_t* end_;
+};
+
+bool parse_scene_binary(const uint8_t* data, size_t size, ParsedScene& scene) {
+    constexpr char kMagic[] = "LVXS";
+    if (data == nullptr || size < 23 || std::memcmp(data, kMagic, 4) != 0) return false;
+    BinarySceneReader reader(data + 4, size - 4);
+    uint8_t version = 0;
+    uint16_t node_count = 0;
+    ParsedScene parsed;
+    if (!reader.read_u8(version) || version != 1 || !reader.read_u16(node_count) ||
+        !reader.read_double(parsed.content_offset_x) || !reader.read_double(parsed.content_offset_y)) {
+        return false;
+    }
+    for (uint16_t index = 0; index < node_count; ++index) {
+        uint8_t type = 0;
+        if (!reader.read_u8(type)) return false;
+        if (type == 1) {
+            continue;
+        }
+        if (type == 2) {
+            if (!reader.read_color(parsed.background)) return false;
+        } else if (type == 3) {
+            double x = 0.0, y = 0.0, width = 0.0, height = 0.0;
+            uint8_t shader = 0;
+            Rgba color;
+            uint16_t uniform_count = 0;
+            if (!reader.read_double(x) || !reader.read_double(y) || !reader.read_double(width) || !reader.read_double(height) ||
+                !reader.read_u8(shader) || !reader.read_color(color) || !reader.read_u16(uniform_count)) return false;
+            std::vector<double> uniforms(uniform_count);
+            for (double& uniform : uniforms) if (!reader.read_double(uniform)) return false;
+            if (shader == 1) {
+                parsed.background = color;
+                parsed.has_rainbow_background = true;
+                if (!uniforms.empty()) parsed.background_t = uniforms[0];
+                if (uniforms.size() > 1) parsed.background_rotation = uniforms[1];
+                if (uniforms.size() > 2) parsed.background_scroll_y = uniforms[2];
+            }
+        } else if (type == 4) {
+            RectPrimitive rect;
+            if (!reader.read_double(rect.x) || !reader.read_double(rect.y) || !reader.read_double(rect.width) ||
+                !reader.read_double(rect.height) || !reader.read_color(rect.color)) return false;
+            parsed.rects.push_back(rect);
+        } else if (type == 5) {
+            CirclePrimitive circle;
+            if (!reader.read_double(circle.cx) || !reader.read_double(circle.cy) || !reader.read_double(circle.radius) ||
+                !reader.read_double(circle.stroke_width) || !reader.read_color(circle.fill) || !reader.read_color(circle.stroke)) return false;
+            parsed.circles.push_back(circle);
+        } else if (type == 6) {
+            TextPrimitive text;
+            uint16_t text_size = 0;
+            if (!reader.read_double(text.x) || !reader.read_double(text.y) || !reader.read_double(text.size) ||
+                !reader.read_color(text.color) || !reader.read_u16(text_size) || !reader.read_string(text_size, text.text)) return false;
+            parsed.texts.push_back(std::move(text));
+        } else {
+            return false;
+        }
+    }
+    scene = std::move(parsed);
+    return true;
+}
+
 void destroy_imported_camera_preview_entry(VulkanState& vk, ImportedCameraPreview& entry) {
     if (vk.device != VK_NULL_HANDLE) {
         if (entry.pipeline != VK_NULL_HANDLE) {
@@ -6254,6 +6356,59 @@ Java_com_luvatrix_app_NativeVulkan_presentScene(
             width,
             height,
             count_nodes(payload),
+            g_retained_scene.rects.size(),
+            g_retained_scene.circles.size(),
+            g_retained_scene.texts.size(),
+            g_retained_scene.background.r,
+            g_retained_scene.background.g,
+            g_retained_scene.background.b,
+            g_retained_scene.background.a
+        );
+    }
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_luvatrix_app_NativeVulkan_presentSceneBinary(
+    JNIEnv *env,
+    jobject,
+    jbyteArray scenePacket,
+    jint revision,
+    jint width,
+    jint height,
+    jstring presentationMode
+) {
+    if (scenePacket == nullptr) return JNI_FALSE;
+    const jsize packet_size = env->GetArrayLength(scenePacket);
+    if (packet_size <= 0) return JNI_FALSE;
+    jbyte* raw = env->GetByteArrayElements(scenePacket, nullptr);
+    if (raw == nullptr) return JNI_FALSE;
+    ParsedScene scene;
+    const bool parsed = parse_scene_binary(reinterpret_cast<const uint8_t*>(raw), static_cast<size_t>(packet_size), scene);
+    env->ReleaseByteArrayElements(scenePacket, raw, JNI_ABORT);
+    if (!parsed) return JNI_FALSE;
+    if (presentationMode != nullptr) {
+        const char* mode_raw = env->GetStringUTFChars(presentationMode, nullptr);
+        if (mode_raw != nullptr) {
+            scene.presentation_mode = std::string(mode_raw);
+            env->ReleaseStringUTFChars(presentationMode, mode_raw);
+        }
+    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_vk.desired_width = std::max(1, static_cast<int>(width));
+    g_vk.desired_height = std::max(1, static_cast<int>(height));
+    g_retained_scene = std::move(scene);
+    g_retained_scene_available = true;
+    g_retained_scene_revision = static_cast<int>(revision);
+    g_retained_scene_width = std::max(1, static_cast<int>(width));
+    g_retained_scene_height = std::max(1, static_cast<int>(height));
+    const bool ok = render_scene_pixels(g_vk, g_retained_scene, width, height);
+    if (ok && revision % 120 == 0) {
+        LVX_LOGI(
+            "luvatrix vulkan binary scene revision=%d size=%dx%d rects=%zu circles=%zu text=%zu rgba=%d,%d,%d,%d",
+            revision,
+            width,
+            height,
             g_retained_scene.rects.size(),
             g_retained_scene.circles.size(),
             g_retained_scene.texts.size(),
