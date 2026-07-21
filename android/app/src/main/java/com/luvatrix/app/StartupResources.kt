@@ -9,7 +9,8 @@ internal class SynchronizedLazyResource<T>(initializer: () -> T) {
 }
 
 internal data class FullScenePresentation(
-    val sceneJson: String,
+    val sceneJson: String?,
+    val scenePacket: ByteArray?,
     val revision: Int,
     val logicalWidth: Int,
     val logicalHeight: Int,
@@ -63,6 +64,31 @@ internal class SceneReplayCoordinator {
         nextSceneGeneration += 1L
         FullScenePresentation(
             sceneJson = sceneJson,
+            scenePacket = null,
+            revision = revision,
+            logicalWidth = logicalWidth,
+            logicalHeight = logicalHeight,
+            presentationMode = presentationMode,
+            generation = nextSceneGeneration,
+        ).also {
+            latestScene = it
+            latestTransform = null
+            nativeSceneGeneration = null
+            nativeTransformGeneration = null
+        }
+    }
+
+    fun retainBinaryScene(
+        scenePacket: ByteArray,
+        revision: Int,
+        logicalWidth: Int,
+        logicalHeight: Int,
+        presentationMode: String,
+    ): FullScenePresentation = synchronized(lock) {
+        nextSceneGeneration += 1L
+        FullScenePresentation(
+            sceneJson = null,
+            scenePacket = scenePacket.copyOf(),
             revision = revision,
             logicalWidth = logicalWidth,
             logicalHeight = logicalHeight,

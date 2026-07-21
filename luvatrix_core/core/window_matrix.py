@@ -84,6 +84,8 @@ class CallBlitEvent:
     event_id: int
     revision: int
     ts_ns: int
+    # ``None`` denotes a global rewrite or transform that invalidates all pixels.
+    dirty_rect: tuple[int, int, int, int] | None = None
 
 
 class WindowMatrix:
@@ -176,6 +178,7 @@ class WindowMatrix:
             raise ValueError("write batch must include at least one operation")
 
         with self._write_lock:
+            dirty_rect = _dirty_rect_for_operations(batch.operations, self.width, self.height)
             offending_pixels = 0
             if len(batch.operations) == 1 and isinstance(batch.operations[0], FullRewrite):
                 op = batch.operations[0]
@@ -212,6 +215,7 @@ class WindowMatrix:
                 event_id=self._next_event_id,
                 revision=self._revision,
                 ts_ns=time.time_ns(),
+                dirty_rect=dirty_rect,
             )
             self._next_event_id += 1
 
@@ -375,6 +379,49 @@ def _validate_rect(x: int, y: int, width: int, height: int, matrix_width: int, m
         raise ValueError("rect x/y must be >= 0")
     if x + width > matrix_width or y + height > matrix_height:
         raise ValueError("rect exceeds matrix bounds")
+
+
+def _dirty_rect_for_operations(
+    operations: list[WriteOp],
+    matrix_width: int,
+    matrix_height: int,
+) -> tuple[int, int, int, int] | None:
+    """Return the affected pixel bounds, or ``None`` when every pixel changed."""
+    rect: tuple[int, int, int, int] | None = (0, 0, 0, 0)
+    for operation in operations:
+        if isinstance(operation, (FullRewrite, ShiftFrame, Multiply)):
+            return None
+        if isinstance(operation, ReplaceRect):
+            candidate = (operation.x, operation.y, operation.width, operation.height)
+        elif isinstance(operation, ReplaceColumn):
+            candidate = (operation.index, 0, 1, matrix_height)
+        elif isinstance(operation, PushColumn):
+            candidate = (operation.index, 0, matrix_width - operation.index, matrix_height)
+        elif isinstance(operation, ReplaceRow):
+            candidate = (0, operation.index, matrix_width, 1)
+        elif isinstance(operation, PushRow):
+            candidate = (0, operation.index, matrix_width, matrix_height - operation.index)
+        else:
+            return None
+        rect = _union_dirty_rect(rect, candidate)
+    return rect
+
+
+def _union_dirty_rect(
+    first: tuple[int, int, int, int] | None,
+    second: tuple[int, int, int, int] | None,
+) -> tuple[int, int, int, int] | None:
+    if first is None or second is None:
+        return None
+    if first[2] == 0 or first[3] == 0:
+        return second
+    if second[2] == 0 or second[3] == 0:
+        return first
+    left = min(first[0], second[0])
+    top = min(first[1], second[1])
+    right = max(first[0] + first[2], second[0] + second[2])
+    bottom = max(first[1] + first[3], second[1] + second[3])
+    return (left, top, right - left, bottom - top)
 
 
 def _coerce_float32(value: object, expected_shape: tuple[int, ...], label: str) -> object:

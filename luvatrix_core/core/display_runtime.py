@@ -31,6 +31,7 @@ class DisplayRuntime:
         self._target_started = False
         self._last_error: Exception | None = None
         self._last_copy_telemetry: dict[str, int] = {}
+        self._last_presented_revision: int | None = None
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -79,17 +80,22 @@ class DisplayRuntime:
             return None
 
         # Coalesce queued blits to newest revision so frame data and revision stay aligned.
+        dirty_rect = event.dirty_rect
         while True:
             newer = self._matrix.pop_call_blit(timeout=None)
             if newer is None:
                 break
+            dirty_rect = _union_dirty_rects(dirty_rect, newer.dirty_rect)
             event = newer
 
         snapshot = self._matrix.read_revision_snapshot(event.revision)
         if snapshot is None:
             snapshot = self._matrix.read_snapshot()
-        frame = _build_frame(snapshot=snapshot, revision=event.revision)
+        if self._last_presented_revision is None:
+            dirty_rect = None
+        frame = _build_frame(snapshot=snapshot, revision=event.revision, dirty_rect=dirty_rect)
         self._target.present_frame(frame)
+        self._last_presented_revision = event.revision
         self._last_copy_telemetry = snapshot_copy_telemetry()
         return RenderTick(event=event, frame=frame)
 
@@ -122,7 +128,11 @@ class DisplayRuntime:
         return dict(self._last_copy_telemetry)
 
 
-def _build_frame(snapshot: object, revision: int) -> DisplayFrame:
+def _build_frame(
+    snapshot: object,
+    revision: int,
+    dirty_rect: tuple[int, int, int, int] | None = None,
+) -> DisplayFrame:
     if snapshot.ndim != 3 or snapshot.shape[2] != 4:
         raise ValueError(f"invalid snapshot shape: {tuple(snapshot.shape)}")
     if not accel.is_uint8(snapshot):
@@ -133,4 +143,18 @@ def _build_frame(snapshot: object, revision: int) -> DisplayFrame:
         width=int(width),
         height=int(height),
         rgba=snapshot,
+        dirty_rect=dirty_rect,
     )
+
+
+def _union_dirty_rects(
+    first: tuple[int, int, int, int] | None,
+    second: tuple[int, int, int, int] | None,
+) -> tuple[int, int, int, int] | None:
+    if first is None or second is None:
+        return None
+    left = min(first[0], second[0])
+    top = min(first[1], second[1])
+    right = max(first[0] + first[2], second[0] + second[2])
+    bottom = max(first[1] + first[3], second[1] + second[3])
+    return (left, top, right - left, bottom - top)
