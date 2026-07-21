@@ -138,6 +138,9 @@ struct VulkanState {
         VkSemaphore image_available = VK_NULL_HANDLE;
         VkSemaphore render_finished = VK_NULL_HANDLE;
         VkFence in_flight = VK_NULL_HANDLE;
+        VkBuffer staging_buffer = VK_NULL_HANDLE;
+        VkDeviceMemory staging_memory = VK_NULL_HANDLE;
+        VkDeviceSize staging_capacity = 0;
     };
     std::vector<PreviewFrameSync> preview_frames;
     std::vector<VkFence> images_in_flight;
@@ -812,6 +815,8 @@ void destroy_vulkan(VulkanState& vk) {
             if (frame.image_available != VK_NULL_HANDLE) vkDestroySemaphore(vk.device, frame.image_available, nullptr);
             if (frame.render_finished != VK_NULL_HANDLE) vkDestroySemaphore(vk.device, frame.render_finished, nullptr);
             if (frame.in_flight != VK_NULL_HANDLE) vkDestroyFence(vk.device, frame.in_flight, nullptr);
+            if (frame.staging_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, frame.staging_buffer, nullptr);
+            if (frame.staging_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, frame.staging_memory, nullptr);
         }
         vk.preview_frames.clear();
         if (vk.staging_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, vk.staging_buffer, nullptr);
@@ -2148,6 +2153,36 @@ bool ensure_staging_buffer(VulkanState& vk, VkDeviceSize size) {
     return true;
 }
 
+// Each presentation slot owns its upload buffer. The slot fence is waited before
+// this helper is called, so resizing or rewriting the buffer cannot race the GPU.
+bool ensure_frame_staging_buffer(VulkanState& vk, VulkanState::PreviewFrameSync& frame, VkDeviceSize size) {
+    if (frame.staging_buffer != VK_NULL_HANDLE && frame.staging_capacity >= size) return true;
+    if (frame.staging_buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vk.device, frame.staging_buffer, nullptr);
+        frame.staging_buffer = VK_NULL_HANDLE;
+    }
+    if (frame.staging_memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vk.device, frame.staging_memory, nullptr);
+        frame.staging_memory = VK_NULL_HANDLE;
+    }
+    VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bci.size = size;
+    bci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (vkCreateBuffer(vk.device, &bci, nullptr, &frame.staging_buffer) != VK_SUCCESS) return false;
+    VkMemoryRequirements req{};
+    vkGetBufferMemoryRequirements(vk.device, frame.staging_buffer, &req);
+    uint32_t memory_type = find_memory_type(vk, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    if (memory_type == std::numeric_limits<uint32_t>::max()) return false;
+    VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    alloc.allocationSize = req.size;
+    alloc.memoryTypeIndex = memory_type;
+    if (vkAllocateMemory(vk.device, &alloc, nullptr, &frame.staging_memory) != VK_SUCCESS) return false;
+    if (vkBindBufferMemory(vk.device, frame.staging_buffer, frame.staging_memory, 0) != VK_SUCCESS) return false;
+    frame.staging_capacity = size;
+    return true;
+}
+
 void image_barrier(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout) {
     VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
     barrier.oldLayout = old_layout;
@@ -3034,16 +3069,15 @@ bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_
     auto pixels = rasterize_scene_pixels(scene, width, height, logical_width, logical_height);
     convert_bgra_pixels_for_swapchain(pixels, vk.swapchain_format);
     VkDeviceSize byte_count = static_cast<VkDeviceSize>(pixels.size() * sizeof(uint32_t));
-    if (!ensure_staging_buffer(vk, byte_count)) return false;
-    void* mapped = nullptr;
-    if (vkMapMemory(vk.device, vk.staging_memory, 0, byte_count, 0, &mapped) != VK_SUCCESS) return false;
-    std::memcpy(mapped, pixels.data(), static_cast<size_t>(byte_count));
-    vkUnmapMemory(vk.device, vk.staging_memory);
-
     if (vk.preview_frames.empty()) return false;
     uint32_t frame_slot = static_cast<uint32_t>(vk.frame_counter % vk.preview_frames.size());
     VulkanState::PreviewFrameSync& frame_sync = vk.preview_frames[frame_slot];
     if (!wait_fence_for_preview(vk, frame_sync.in_flight, nullptr, false)) return false;
+    if (!ensure_frame_staging_buffer(vk, frame_sync, byte_count)) return false;
+    void* mapped = nullptr;
+    if (vkMapMemory(vk.device, frame_sync.staging_memory, 0, byte_count, 0, &mapped) != VK_SUCCESS) return false;
+    std::memcpy(mapped, pixels.data(), static_cast<size_t>(byte_count));
+    vkUnmapMemory(vk.device, frame_sync.staging_memory);
     uint32_t image_index = 0;
     VkResult acquire = vkAcquireNextImageKHR(vk.device, vk.swapchain, UINT64_MAX, frame_sync.image_available, VK_NULL_HANDLE, &image_index);
     if (acquire == VK_ERROR_OUT_OF_DATE_KHR || acquire == VK_SUBOPTIMAL_KHR) {
@@ -3072,7 +3106,7 @@ bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_
     region.imageSubresource.layerCount = 1;
     region.imageOffset = {0, 0, 0};
     region.imageExtent = {vk.extent.width, vk.extent.height, 1};
-    vkCmdCopyBufferToImage(cmd, vk.staging_buffer, vk.images[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    vkCmdCopyBufferToImage(cmd, frame_sync.staging_buffer, vk.images[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
     image_barrier(cmd, vk.images[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
     if (vkEndCommandBuffer(cmd) != VK_SUCCESS) return false;
     VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -3093,7 +3127,6 @@ bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_
     present.pSwapchains = &vk.swapchain;
     present.pImageIndices = &image_index;
     VkResult pr = vkQueuePresentKHR(vk.queue, &present);
-    vkQueueWaitIdle(vk.queue);
     vk.current_frame_slot = (frame_slot + 1) % static_cast<uint32_t>(vk.preview_frames.size());
     vk.frame_counter += 1;
     return pr == VK_SUCCESS || pr == VK_SUBOPTIMAL_KHR;
@@ -3250,7 +3283,6 @@ bool render_clear(VulkanState& vk, Rgba color) {
     present.pSwapchains = &vk.swapchain;
     present.pImageIndices = &image_index;
     VkResult pr = vkQueuePresentKHR(vk.queue, &present);
-    vkQueueWaitIdle(vk.queue);
     vk.current_frame_slot = (frame_slot + 1) % static_cast<uint32_t>(vk.preview_frames.size());
     vk.frame_counter += 1;
     return pr == VK_SUCCESS || pr == VK_SUBOPTIMAL_KHR;
