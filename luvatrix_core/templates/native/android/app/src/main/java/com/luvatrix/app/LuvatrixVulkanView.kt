@@ -49,6 +49,8 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     private var frameBitmap: android.graphics.Bitmap? = null
     private var frameBitmapWidth: Int = 0
     private var frameBitmapHeight: Int = 0
+    private val rgbaFrameMailbox = LatestFrameMailbox<RgbaPresentation>()
+    @Volatile private var nativeRgbaActive = false
     private var overlaySceneJson: String? = null
     private var retainedSceneJson: String? = null
     private var overlayLogicalWidth: Int = 1
@@ -420,22 +422,55 @@ class LuvatrixVulkanView @JvmOverloads constructor(
 
     fun presentRgba(rgba: ByteArray, revision: Int, width: Int, height: Int) {
         AndroidLaunchTelemetry.mark("first_app_frame_submitted")
-        overlayView.post {
-            bootstrapMessage = null
-            if (frameBitmap == null || frameBitmapWidth != width || frameBitmapHeight != height) {
-                frameBitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
-                frameBitmapWidth = width
-                frameBitmapHeight = height
-            }
-            val bitmap = frameBitmap ?: return@post
-            bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(rgba))
-            overlayMode = OverlayMode.Bitmap
-            overlaySceneJson = null
-            retainedSceneJson = null
-            overlayView.setBackgroundColor(Color.TRANSPARENT)
-            overlayView.invalidate()
-            framesPresented += 1
+        val nativePresented = try {
+            NativeVulkan.presentRgba(rgba, revision, width, height)
+        } catch (exc: Throwable) {
+            Log.w("Luvatrix", "native RGBA presentation unavailable", exc)
+            false
         }
+        if (nativePresented) {
+            if (!nativeRgbaActive) {
+                nativeRgbaActive = true
+                overlayView.post {
+                    overlayMode = OverlayMode.Native
+                    overlaySceneJson = null
+                    retainedSceneJson = null
+                    overlayView.setBackgroundColor(Color.TRANSPARENT)
+                    overlayView.invalidate()
+                }
+            }
+            framesPresented += 1
+            return
+        }
+        nativeRgbaActive = false
+        if (!rgbaFrameMailbox.offer(RgbaPresentation(rgba, revision, width, height))) return
+        overlayView.post { presentLatestRgba() }
+    }
+
+    private fun presentLatestRgba() {
+        val presentation = rgbaFrameMailbox.take() ?: return
+        bootstrapMessage = null
+        if (
+            frameBitmap == null ||
+            frameBitmapWidth != presentation.width ||
+            frameBitmapHeight != presentation.height
+        ) {
+            frameBitmap = android.graphics.Bitmap.createBitmap(
+                presentation.width,
+                presentation.height,
+                android.graphics.Bitmap.Config.ARGB_8888,
+            )
+            frameBitmapWidth = presentation.width
+            frameBitmapHeight = presentation.height
+        }
+        val bitmap = frameBitmap ?: return
+        bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(presentation.rgba))
+        overlayMode = OverlayMode.Bitmap
+        overlaySceneJson = null
+        retainedSceneJson = null
+        overlayView.setBackgroundColor(Color.TRANSPARENT)
+        overlayView.invalidate()
+        framesPresented += 1
     }
 
     fun displayRefreshRateHz(): Float {
@@ -913,8 +948,16 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     private enum class OverlayMode {
         Bootstrap,
         Bitmap,
+        Native,
         Scene,
     }
+
+    private data class RgbaPresentation(
+        val rgba: ByteArray,
+        val revision: Int,
+        val width: Int,
+        val height: Int,
+    )
 
     companion object {
         const val CAMERA_PERMISSION_REQUEST = 4201
@@ -946,6 +989,7 @@ class LuvatrixVulkanView @JvmOverloads constructor(
                     }
                 }
                 OverlayMode.Bitmap -> frameBitmap?.let { canvas.drawBitmap(it, null, canvas.clipBounds, matrixPaint) }
+                OverlayMode.Native -> Unit
                 OverlayMode.Scene -> {
                     val scene = overlaySceneJson ?: return
                     drawSceneCanvas(
