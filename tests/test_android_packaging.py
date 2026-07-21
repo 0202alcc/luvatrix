@@ -680,10 +680,20 @@ class AndroidPackagingTests(unittest.TestCase):
         self.assertIn("frame_sync.image_available", native_cpp)
         self.assertIn("frame_sync.render_finished", native_cpp)
         self.assertIn("frame_sync.in_flight", native_cpp)
+        self.assertIn("VkBuffer staging_buffer = VK_NULL_HANDLE;", native_cpp)
+        self.assertIn("VkDeviceMemory staging_memory = VK_NULL_HANDLE;", native_cpp)
+        self.assertIn("VkDeviceSize staging_capacity = 0;", native_cpp)
+        self.assertIn("bool ensure_frame_staging_buffer", native_cpp)
+        self.assertIn("ensure_frame_staging_buffer(vk, frame_sync, byte_count)", native_cpp)
+        self.assertIn("frame_sync.staging_buffer", native_cpp)
         self.assertIn("vkQueueSubmit(vk.queue, 1, &submit, frame_sync.in_flight)", native_cpp)
         gpu_preview_body = native_cpp.split("bool render_scene_gpu_preview", 1)[1].split("bool render_scene_pixels", 1)[0]
         self.assertNotIn("vkQueueWaitIdle(vk.queue);", gpu_preview_body)
         self.assertNotIn("wait_all_preview_frame_fences", gpu_preview_body)
+        scene_pixels_body = native_cpp.split("bool render_scene_pixels", 1)[1].split("bool render_clear", 1)[0]
+        self.assertNotIn("vkQueueWaitIdle(vk.queue);", scene_pixels_body)
+        clear_body = native_cpp.split("bool render_clear", 1)[1].split("bool render_scene_", 1)[0]
+        self.assertNotIn("vkQueueWaitIdle(vk.queue);", clear_body)
         self.assertLess(
             gpu_preview_body.find("vk.camera_intermediate_descriptor_set"),
             gpu_preview_body.find("&vk.overlay_descriptor_set"),
