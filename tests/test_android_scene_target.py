@@ -237,6 +237,39 @@ class AndroidNativeSceneTargetTests(unittest.TestCase):
                 self.assertIn("shifted.y -= scene.content_offset_y;", text)
                 self.assertIn('key += "/offset="', text)
 
+    def test_native_overlay_cache_key_tracks_every_rasterized_primitive_field(self) -> None:
+        for source in ANDROID_CPP_RENDERERS:
+            with self.subTest(source=source):
+                text = source.read_text(encoding="utf-8")
+                cache_key_body = text.split("std::string overlay_cache_key_for_scene", 1)[1].split(
+                    "\nbool import_latest_hardware_buffer_for_preview", 1
+                )[0]
+
+                for field in (
+                    "scene.background",
+                    "scene.has_rainbow_background",
+                    "scene.background_t",
+                    "scene.background_rotation",
+                    "scene.background_scroll_y",
+                    "rect.x",
+                    "rect.y",
+                    "rect.width",
+                    "rect.height",
+                    "rect.color",
+                    "circle.cx",
+                    "circle.cy",
+                    "circle.radius",
+                    "circle.stroke_width",
+                    "circle.fill",
+                    "circle.stroke",
+                    "text.x",
+                    "text.y",
+                    "text.size",
+                    "text.color",
+                    "text.text",
+                ):
+                    self.assertIn(field, cache_key_body)
+
     def test_canvas_fallback_applies_serialized_content_offset(self) -> None:
         for source in ANDROID_KOTLIN_VIEWS:
             with self.subTest(source=source):

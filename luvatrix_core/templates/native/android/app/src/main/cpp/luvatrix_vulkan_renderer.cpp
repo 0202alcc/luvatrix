@@ -3046,10 +3046,45 @@ CameraPushConstants camera_push_constants(const ImportedCameraPreview& camera, c
 std::string overlay_cache_key_for_scene(const ParsedScene& scene, int width, int height, int logical_width, int logical_height) {
     std::string key = std::to_string(width) + "x" + std::to_string(height) + "/" +
         std::to_string(logical_width) + "x" + std::to_string(logical_height) + "/";
+    auto append_number = [&key](double value) {
+        key += std::to_string(value);
+        key.push_back(',');
+    };
+    auto append_color = [&key](const Rgba& color) {
+        key += std::to_string(color.r) + "," + std::to_string(color.g) + "," +
+            std::to_string(color.b) + "," + std::to_string(color.a) + ";";
+    };
+    key += "background=";
+    append_color(scene.background);
+    key += "rainbow=" + std::to_string(scene.has_rainbow_background) + ",";
+    append_number(scene.background_t);
+    append_number(scene.background_rotation);
+    append_number(scene.background_scroll_y);
     key += std::to_string(scene.rects.size()) + "," + std::to_string(scene.circles.size()) + "," + std::to_string(scene.texts.size());
     key += "/offset=" + std::to_string(scene.content_offset_x) + "," + std::to_string(scene.content_offset_y);
+    for (const auto& rect : scene.rects) {
+        key += "|rect=";
+        append_number(rect.x);
+        append_number(rect.y);
+        append_number(rect.width);
+        append_number(rect.height);
+        append_color(rect.color);
+    }
+    for (const auto& circle : scene.circles) {
+        key += "|circle=";
+        append_number(circle.cx);
+        append_number(circle.cy);
+        append_number(circle.radius);
+        append_number(circle.stroke_width);
+        append_color(circle.fill);
+        append_color(circle.stroke);
+    }
     for (const auto& text : scene.texts) {
-        key += "|" + text.text + "@" + std::to_string(static_cast<int>(text.x)) + "," + std::to_string(static_cast<int>(text.y));
+        key += "|text=" + std::to_string(text.text.size()) + ":" + text.text + "@";
+        append_number(text.x);
+        append_number(text.y);
+        append_number(text.size);
+        append_color(text.color);
     }
     return key;
 }
