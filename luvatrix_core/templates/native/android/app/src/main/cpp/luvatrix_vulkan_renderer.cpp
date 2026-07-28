@@ -182,6 +182,9 @@ struct VulkanState {
     VkImageView overlay_view = VK_NULL_HANDLE;
     VkSampler overlay_sampler = VK_NULL_HANDLE;
     VkDescriptorSet overlay_descriptor_set = VK_NULL_HANDLE;
+    std::vector<uint32_t> cpu_scene_pixels;
+    int cpu_scene_width = 0;
+    int cpu_scene_height = 0;
     int overlay_width = 0;
     int overlay_height = 0;
     bool overlay_uploaded = false;
@@ -1892,6 +1895,48 @@ std::vector<uint32_t> rasterize_scene_without_gpu_primitives(const ParsedScene& 
     return rasterize_scene_pixels_impl(scene, width, height, logical_width, logical_height, true, false, false, false);
 }
 
+struct PixelBounds {
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+};
+
+std::optional<PixelBounds> changed_pixel_bounds(
+    const std::vector<uint32_t>& previous,
+    const std::vector<uint32_t>& current,
+    int width,
+    int height
+) {
+    if (width <= 0 || height <= 0 || current.size() != static_cast<size_t>(width) * static_cast<size_t>(height)) return std::nullopt;
+    if (previous.size() != current.size()) return PixelBounds{0, 0, width, height};
+    int min_x = width;
+    int min_y = height;
+    int max_x = -1;
+    int max_y = -1;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const size_t index = static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x);
+            if (previous[index] == current[index]) continue;
+            min_x = std::min(min_x, x);
+            min_y = std::min(min_y, y);
+            max_x = std::max(max_x, x);
+            max_y = std::max(max_y, y);
+        }
+    }
+    if (max_x < min_x || max_y < min_y) return std::nullopt;
+    return PixelBounds{min_x, min_y, max_x - min_x + 1, max_y - min_y + 1};
+}
+
+std::vector<uint32_t> copy_pixel_bounds(const std::vector<uint32_t>& pixels, int source_width, const PixelBounds& bounds) {
+    std::vector<uint32_t> result(static_cast<size_t>(bounds.width) * static_cast<size_t>(bounds.height));
+    for (int y = 0; y < bounds.height; ++y) {
+        const uint32_t* source = pixels.data() + static_cast<size_t>(bounds.y + y) * static_cast<size_t>(source_width) + static_cast<size_t>(bounds.x);
+        std::memcpy(result.data() + static_cast<size_t>(y) * static_cast<size_t>(bounds.width), source, static_cast<size_t>(bounds.width) * sizeof(uint32_t));
+    }
+    return result;
+}
+
 uint32_t find_memory_type(VulkanState& vk, uint32_t bits, VkMemoryPropertyFlags flags) {
     VkPhysicalDeviceMemoryProperties props{};
     vkGetPhysicalDeviceMemoryProperties(vk.physical, &props);
@@ -1902,6 +1947,7 @@ uint32_t find_memory_type(VulkanState& vk, uint32_t bits, VkMemoryPropertyFlags 
 }
 
 bool ensure_preview_base_resources(VulkanState& vk);
+bool render_rgba_matrix_region(VulkanState& vk, const std::vector<uint32_t>& pixels, int source_width, int source_height, int destination_x, int destination_y, int upload_width, int upload_height);
 bool ensure_preview_descriptor_pool(VulkanState& vk);
 bool allocate_texture_descriptor_set(VulkanState& vk, VkDescriptorSetLayout layout, VkDescriptorSet& set);
 void image_barrier(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout);
@@ -3655,69 +3701,19 @@ bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_
     int width = static_cast<int>(vk.extent.width);
     int height = static_cast<int>(vk.extent.height);
     auto pixels = rasterize_scene_pixels(scene, width, height, logical_width, logical_height);
-    convert_bgra_pixels_for_swapchain(pixels, vk.swapchain_format);
-    VkDeviceSize byte_count = static_cast<VkDeviceSize>(pixels.size() * sizeof(uint32_t));
-    if (vk.preview_frames.empty()) return false;
-    uint32_t frame_slot = static_cast<uint32_t>(vk.frame_counter % vk.preview_frames.size());
-    VulkanState::PreviewFrameSync& frame_sync = vk.preview_frames[frame_slot];
-    if (!wait_fence_for_preview(vk, frame_sync.in_flight, nullptr, false)) return false;
-    if (!ensure_frame_staging_buffer(vk, frame_sync, byte_count)) return false;
-    void* mapped = nullptr;
-    if (vkMapMemory(vk.device, frame_sync.staging_memory, 0, byte_count, 0, &mapped) != VK_SUCCESS) return false;
-    std::memcpy(mapped, pixels.data(), static_cast<size_t>(byte_count));
-    vkUnmapMemory(vk.device, frame_sync.staging_memory);
-    uint32_t image_index = 0;
-    VkResult acquire = vkAcquireNextImageKHR(vk.device, vk.swapchain, UINT64_MAX, frame_sync.image_available, VK_NULL_HANDLE, &image_index);
-    if (acquire == VK_ERROR_OUT_OF_DATE_KHR || acquire == VK_SUBOPTIMAL_KHR) {
-        destroy_swapchain(vk);
-        return create_swapchain(vk) && create_render_resources(vk) && render_scene_pixels(vk, scene, logical_width, logical_height);
+    const bool size_changed = vk.cpu_scene_width != width || vk.cpu_scene_height != height;
+    const auto dirty = size_changed || !vk.overlay_uploaded
+        ? std::optional<PixelBounds>(PixelBounds{0, 0, width, height})
+        : changed_pixel_bounds(vk.cpu_scene_pixels, pixels, width, height);
+    if (!dirty.has_value()) return true;
+    const auto dirty_pixels = copy_pixel_bounds(pixels, width, *dirty);
+    const bool rendered = render_rgba_matrix_region(vk, dirty_pixels, width, height, dirty->x, dirty->y, dirty->width, dirty->height);
+    if (rendered) {
+        vk.cpu_scene_pixels = std::move(pixels);
+        vk.cpu_scene_width = width;
+        vk.cpu_scene_height = height;
     }
-    if (acquire != VK_SUCCESS) return false;
-    if (image_index < vk.images_in_flight.size() && vk.images_in_flight[image_index] != VK_NULL_HANDLE) {
-        if (!wait_fence_for_preview(vk, vk.images_in_flight[image_index], nullptr, false)) return false;
-    }
-    if (image_index < vk.images_in_flight.size()) {
-        vk.images_in_flight[image_index] = frame_sync.in_flight;
-    }
-    VkCommandBuffer cmd = vk.command_buffers[image_index];
-    vkResetCommandBuffer(cmd, 0);
-    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) return false;
-    image_barrier(cmd, vk.images[image_index], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    VkBufferImageCopy region{};
-    region.bufferOffset = 0;
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.mipLevel = 0;
-    region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = 1;
-    region.imageOffset = {0, 0, 0};
-    region.imageExtent = {vk.extent.width, vk.extent.height, 1};
-    vkCmdCopyBufferToImage(cmd, frame_sync.staging_buffer, vk.images[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-    image_barrier(cmd, vk.images[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) return false;
-    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    submit.waitSemaphoreCount = 1;
-    submit.pWaitSemaphores = &frame_sync.image_available;
-    submit.pWaitDstStageMask = &wait_stage;
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &cmd;
-    submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores = &frame_sync.render_finished;
-    if (vkResetFences(vk.device, 1, &frame_sync.in_flight) != VK_SUCCESS) return false;
-    if (vkQueueSubmit(vk.queue, 1, &submit, frame_sync.in_flight) != VK_SUCCESS) return false;
-    VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
-    present.waitSemaphoreCount = 1;
-    present.pWaitSemaphores = &frame_sync.render_finished;
-    present.swapchainCount = 1;
-    present.pSwapchains = &vk.swapchain;
-    present.pImageIndices = &image_index;
-    VkResult pr = vkQueuePresentKHR(vk.queue, &present);
-    vk.current_frame_slot = (frame_slot + 1) % static_cast<uint32_t>(vk.preview_frames.size());
-    vk.frame_counter += 1;
-    return pr == VK_SUCCESS || pr == VK_SUBOPTIMAL_KHR;
+    return rendered;
 }
 
 bool render_rgba_matrix_region(

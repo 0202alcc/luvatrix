@@ -270,6 +270,14 @@ class AndroidNativeSceneTargetTests(unittest.TestCase):
                 ):
                     self.assertIn(field, cache_key_body)
 
+    def test_native_scene_fallback_uploads_only_changed_pixel_bounds(self) -> None:
+        for source in ANDROID_CPP_RENDERERS:
+            with self.subTest(source=source):
+                text = source.read_text(encoding="utf-8")
+                self.assertIn("cpu_scene_pixels", text)
+                self.assertIn("changed_pixel_bounds", text)
+                self.assertIn("render_rgba_matrix_region(vk, dirty_pixels", text)
+
     def test_canvas_fallback_applies_serialized_content_offset(self) -> None:
         for source in ANDROID_KOTLIN_VIEWS:
             with self.subTest(source=source):
