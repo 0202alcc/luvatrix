@@ -2109,6 +2109,12 @@ bool import_hardware_buffer_preview_entry(
         error = "no command buffer available for HardwareBuffer image transition";
         return false;
     }
+    if (!vk.images_in_flight.empty() && vk.images_in_flight[0] != VK_NULL_HANDLE &&
+        !wait_fence_for_preview(vk, vk.images_in_flight[0], &g_gpu_preview.image_fence_waits, false)) {
+        cleanup_imported_hardware_preview(vk, image_view, sampler, conversion, memory, image);
+        error = "failed to wait for HardwareBuffer transition command buffer";
+        return false;
+    }
     vkResetCommandBuffer(transition_cmd, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     if (vkBeginCommandBuffer(transition_cmd, &begin) != VK_SUCCESS) {
@@ -2122,15 +2128,29 @@ bool import_hardware_buffer_preview_entry(
         error = "failed to end HardwareBuffer transition command";
         return false;
     }
+    VkFenceCreateInfo transition_fence_info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    VkFence transition_fence = VK_NULL_HANDLE;
+    if (vkCreateFence(vk.device, &transition_fence_info, nullptr, &transition_fence) != VK_SUCCESS) {
+        cleanup_imported_hardware_preview(vk, image_view, sampler, conversion, memory, image);
+        error = "failed to create HardwareBuffer transition fence";
+        return false;
+    }
     VkSubmitInfo transition_submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     transition_submit.commandBufferCount = 1;
     transition_submit.pCommandBuffers = &transition_cmd;
-    if (vkQueueSubmit(vk.queue, 1, &transition_submit, VK_NULL_HANDLE) != VK_SUCCESS) {
+    if (vkQueueSubmit(vk.queue, 1, &transition_submit, transition_fence) != VK_SUCCESS) {
+        vkDestroyFence(vk.device, transition_fence, nullptr);
         cleanup_imported_hardware_preview(vk, image_view, sampler, conversion, memory, image);
         error = "failed to submit HardwareBuffer transition";
         return false;
     }
-    vkQueueWaitIdle(vk.queue);
+    VkResult transition_wait = vkWaitForFences(vk.device, 1, &transition_fence, VK_TRUE, UINT64_MAX);
+    vkDestroyFence(vk.device, transition_fence, nullptr);
+    if (transition_wait != VK_SUCCESS) {
+        cleanup_imported_hardware_preview(vk, image_view, sampler, conversion, memory, image);
+        error = "failed to wait for HardwareBuffer transition fence";
+        return false;
+    }
 
     VkDescriptorSetLayout descriptor_layout = VK_NULL_HANDLE;
     if (!create_texture_descriptor_set_layout(vk, &sampler, descriptor_layout)) {
@@ -2564,54 +2584,24 @@ bool ensure_overlay_texture(VulkanState& vk, int width, int height) {
     return true;
 }
 
-bool upload_overlay_texture(VulkanState& vk, const std::vector<uint32_t>& pixels, int width, int height) {
-    if (!ensure_overlay_texture(vk, width, height)) return false;
-    VkDeviceSize byte_count = static_cast<VkDeviceSize>(pixels.size() * sizeof(uint32_t));
-    if (!ensure_staging_buffer(vk, byte_count)) return false;
-    void* mapped = nullptr;
-    if (vkMapMemory(vk.device, vk.staging_memory, 0, byte_count, 0, &mapped) != VK_SUCCESS) return false;
-    std::memcpy(mapped, pixels.data(), static_cast<size_t>(byte_count));
-    vkUnmapMemory(vk.device, vk.staging_memory);
-    VkCommandBuffer cmd = vk.command_buffers.empty() ? VK_NULL_HANDLE : vk.command_buffers[0];
-    if (cmd == VK_NULL_HANDLE) return false;
-    vkResetCommandBuffer(cmd, 0);
-    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) return false;
-    VkImageLayout old_layout = vk.overlay_uploaded ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
-    image_barrier(cmd, vk.overlay_image, old_layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    VkBufferImageCopy region{};
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.layerCount = 1;
-    region.imageExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
-    vkCmdCopyBufferToImage(cmd, vk.staging_buffer, vk.overlay_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-    image_barrier(cmd, vk.overlay_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) return false;
-    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &cmd;
-    if (vkQueueSubmit(vk.queue, 1, &submit, VK_NULL_HANDLE) != VK_SUCCESS) return false;
-    vkQueueWaitIdle(vk.queue);
-    vk.overlay_uploaded = true;
-    return true;
-}
-
 bool prepare_overlay_texture_upload(
     VulkanState& vk,
+    VulkanState::PreviewFrameSync& frame_sync,
     const std::vector<uint32_t>& pixels,
     int width,
     int height
 ) {
     if (!ensure_overlay_texture(vk, width, height)) return false;
     VkDeviceSize byte_count = static_cast<VkDeviceSize>(pixels.size() * sizeof(uint32_t));
-    if (!ensure_staging_buffer(vk, byte_count)) return false;
+    if (!ensure_frame_staging_buffer(vk, frame_sync, byte_count)) return false;
     void* mapped = nullptr;
-    if (vkMapMemory(vk.device, vk.staging_memory, 0, byte_count, 0, &mapped) != VK_SUCCESS) return false;
+    if (vkMapMemory(vk.device, frame_sync.staging_memory, 0, byte_count, 0, &mapped) != VK_SUCCESS) return false;
     std::memcpy(mapped, pixels.data(), static_cast<size_t>(byte_count));
     vkUnmapMemory(vk.device, vk.staging_memory);
     return true;
 }
 
-void record_overlay_texture_upload(VulkanState& vk, VkCommandBuffer cmd, int width, int height) {
+void record_overlay_texture_upload(VulkanState& vk, VkCommandBuffer cmd, VkBuffer staging_buffer, int width, int height) {
     VkImageLayout old_layout = vk.overlay_uploaded
         ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         : VK_IMAGE_LAYOUT_UNDEFINED;
@@ -2622,7 +2612,7 @@ void record_overlay_texture_upload(VulkanState& vk, VkCommandBuffer cmd, int wid
     region.imageExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
     vkCmdCopyBufferToImage(
         cmd,
-        vk.staging_buffer,
+        staging_buffer,
         vk.overlay_image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         1,
@@ -2932,15 +2922,17 @@ bool render_scene_gpu_preview(VulkanState& vk, const ParsedScene& scene, int log
         return false;
     }
     std::string overlay_key = overlay_cache_key_for_scene(scene, width, height, logical_width, logical_height);
+    bool overlay_upload_required = false;
     if (vk.overlay_descriptor_set != VK_NULL_HANDLE && vk.overlay_cache_key == overlay_key) {
         g_gpu_preview.overlay_cache_hits += 1;
     } else {
         auto overlay = rasterize_overlay_pixels(scene, width, height, logical_width, logical_height);
-        if (!upload_overlay_texture(vk, overlay, width, height)) {
+        if (!prepare_overlay_texture_upload(vk, frame_sync, overlay, width, height)) {
             error = "failed to upload HUD overlay texture";
             return false;
         }
         vk.overlay_cache_key = std::move(overlay_key);
+        overlay_upload_required = true;
         g_gpu_preview.overlay_uploads += 1;
     }
 
@@ -2973,6 +2965,11 @@ bool render_scene_gpu_preview(VulkanState& vk, const ParsedScene& scene, int log
     if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) {
         error = "failed to begin GPU preview command buffer";
         return false;
+    }
+    if (overlay_upload_required) {
+        // The upload is recorded in this frame's command buffer so its staging
+        // allocation remains protected by frame_sync.in_flight.
+        record_overlay_texture_upload(vk, cmd, frame_sync.staging_buffer, width, height);
     }
 
     bool update_intermediate = !vk.camera_intermediate_ready ||
@@ -3240,7 +3237,7 @@ bool render_rgba_matrix(
     uint32_t frame_slot = 0;
     VulkanState::PreviewFrameSync& frame_sync = vk.preview_frames[frame_slot];
     if (!wait_fence_for_preview(vk, frame_sync.in_flight, nullptr, false)) return false;
-    if (!prepare_overlay_texture_upload(vk, pixels, source_width, source_height)) return false;
+    if (!prepare_overlay_texture_upload(vk, frame_sync, pixels, source_width, source_height)) return false;
 
     uint32_t image_index = 0;
     VkResult acquire = vkAcquireNextImageKHR(
@@ -3268,7 +3265,7 @@ bool render_rgba_matrix(
     vkResetCommandBuffer(cmd, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) return false;
-    record_overlay_texture_upload(vk, cmd, source_width, source_height);
+    record_overlay_texture_upload(vk, cmd, frame_sync.staging_buffer, source_width, source_height);
     VkClearValue clear{};
     clear.color.float32[3] = 1.0f;
     VkRenderPassBeginInfo render_pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
