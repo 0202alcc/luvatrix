@@ -55,11 +55,37 @@ def test_android_accelerator_downloads_verified_wheels_and_writes_requirement() 
         side_effect=open_url,
     ):
         project = Path(td)
+        stale_pip_output = project / "app" / "build" / "python" / "pip" / "debug"
+        stale_pip_output.mkdir(parents=True)
+        (stale_pip_output / "universal-wheel.txt").write_text("stale", encoding="utf-8")
         synced = sync_android_accelerator_wheels(project, version=version)
 
         assert len(synced) == 2
         assert all(path.read_bytes() in wheel_payloads.values() for path in synced)
         assert (project / "app" / "luvatrix-android-accel.txt").read_text() == f"luvatrix=={version}\n"
+        assert not stale_pip_output.exists()
+        lock = json.loads(
+            (project / "app" / "luvatrix-android-accel.lock.json").read_text(encoding="utf-8")
+        )
+        assert lock == {
+            "schema_version": 1,
+            "version": version,
+            "wheels": [
+                {
+                    "filename": path.name,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+                for path in synced
+            ],
+        }
+
+        stable_pip_output = project / "app" / "build" / "python" / "pip" / "debug"
+        stable_pip_output.mkdir(parents=True)
+        sentinel = stable_pip_output / "native-wheel.txt"
+        sentinel.write_text("current", encoding="utf-8")
+
+        assert sync_android_accelerator_wheels(project, version=version) == synced
+        assert sentinel.read_text(encoding="utf-8") == "current"
 
 
 def test_android_accelerator_rejects_incomplete_abi_set() -> None:
@@ -143,6 +169,40 @@ def test_android_accelerator_preserves_cache_when_refresh_fails_partway() -> Non
             path.resolve() for path in cached
         )
         assert all(path.read_bytes() == old_payload for path in cached)
+
+
+def test_android_accelerator_invalidates_requirements_when_wheel_bytes_change() -> None:
+    version = "9.8.7"
+    payload = {"value": b"old-wheel"}
+
+    def open_url(url, timeout=20):
+        _ = timeout
+        if str(url).endswith(f"/{version}/json"):
+            files = [
+                {
+                    "filename": f"luvatrix-{version}-cp314-cp314-android_26_{abi}.whl",
+                    "url": f"https://files.example/{abi}.whl",
+                    "digests": {"sha256": hashlib.sha256(payload["value"]).hexdigest()},
+                }
+                for abi in ("arm64_v8a", "x86_64")
+            ]
+            return _Response(json.dumps({"urls": files}).encode())
+        return _Response(payload["value"])
+
+    with tempfile.TemporaryDirectory() as td, patch(
+        "luvatrix_core.platform.android.runner.urllib.request.urlopen",
+        side_effect=open_url,
+    ):
+        project = Path(td)
+        sync_android_accelerator_wheels(project, version=version)
+        pip_output = project / "app" / "build" / "python" / "pip" / "debug"
+        pip_output.mkdir(parents=True)
+        payload["value"] = b"new-wheel"
+
+        synced = sync_android_accelerator_wheels(project, version=version)
+
+        assert not pip_output.exists()
+        assert all(path.read_bytes() == payload["value"] for path in synced)
 
 
 def test_release_workflow_builds_cp314_android_accelerator_wheels() -> None:

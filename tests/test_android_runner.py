@@ -74,6 +74,7 @@ class AndroidRunnerTests(unittest.TestCase):
 
             text = (project / ".gitignore").read_text(encoding="utf-8")
             self.assertIn("custom.log", text)
+            self.assertIn("app/luvatrix-android-accel.lock.json", text)
             self.assertIn("app/.cxx/", text)
             self.assertIn("app/build/", text)
             self.assertIn("app/src/main/assets/luvatrix_launch_config.json", text)
