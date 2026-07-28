@@ -31,6 +31,17 @@ class AndroidPackagingTests(unittest.TestCase):
         ):
             self.assertTrue((ANDROID / rel).exists(), rel)
 
+    def test_android_native_renderer_batches_rect_primitives_on_gpu(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            native_cpp = (root / "app/src/main/cpp/luvatrix_vulkan_renderer.cpp").read_text(encoding="utf-8")
+            shader_header = root / "app/src/main/cpp/luvatrix_primitive_batch_shaders.h"
+
+            self.assertTrue(shader_header.exists())
+            self.assertIn("GpuRectInstance", native_cpp)
+            self.assertIn("ensure_rect_batch_resources", native_cpp)
+            self.assertIn("vkCmdDraw(cmd, 6,", native_cpp)
+            self.assertIn("render_scene_gpu_rect_batch", native_cpp)
+
     def test_android_activity_reattaches_and_detaches_process_runtime(self) -> None:
         for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
             activity = (root / "app/src/main/java/com/luvatrix/app/MainActivity.kt").read_text(encoding="utf-8")
