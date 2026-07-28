@@ -18,6 +18,17 @@ object NativeVulkan {
 
     external fun presentRgba(rgba: ByteArray, revision: Int, width: Int, height: Int): Boolean
 
+    external fun presentRgbaRegion(
+        rgba: ByteArray,
+        revision: Int,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+    ): Boolean
+
     external fun presentScene(sceneJson: String, revision: Int, width: Int, height: Int, presentationMode: String): Boolean
 
     external fun presentSceneBinary(scenePacket: ByteArray, revision: Int, width: Int, height: Int, presentationMode: String): Boolean
