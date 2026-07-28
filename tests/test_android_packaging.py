@@ -57,6 +57,20 @@ class AndroidPackagingTests(unittest.TestCase):
             self.assertIn("vec2 vLocal", vertex_shader)
             self.assertIn("fwidth(distance_to_center)", fragment_shader)
 
+    def test_android_native_renderer_batches_text_from_a_packed_glyph_atlas(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            native_cpp = (root / "app/src/main/cpp/luvatrix_vulkan_renderer.cpp").read_text(encoding="utf-8")
+            vertex_shader = (root / "app/src/main/cpp/luvatrix_glyph_batch.vert").read_text(encoding="utf-8")
+            fragment_shader = (root / "app/src/main/cpp/luvatrix_glyph_batch.frag").read_text(encoding="utf-8")
+            self.assertIn("GpuGlyphInstance", native_cpp)
+            self.assertIn("glyph_atlas_buffer", native_cpp)
+            self.assertIn("ensure_glyph_atlas_buffer", native_cpp)
+            self.assertIn("append_gpu_glyph_instances", native_cpp)
+            self.assertIn("draw_gpu_glyphs", native_cpp)
+            self.assertIn("glyph_atlas_revision", native_cpp)
+            self.assertIn("GlyphInstances", vertex_shader)
+            self.assertIn("GlyphAtlas", fragment_shader)
+
     def test_android_frame_upload_unmaps_its_own_staging_memory(self) -> None:
         for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
             native_cpp = (root / "app/src/main/cpp/luvatrix_vulkan_renderer.cpp").read_text(encoding="utf-8")
