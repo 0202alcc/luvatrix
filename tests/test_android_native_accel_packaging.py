@@ -153,6 +153,15 @@ def test_release_workflow_builds_cp314_android_accelerator_wheels() -> None:
     assert "LUVATRIX_BUILD_ACCEL" in workflow
 
 
+def test_release_workflow_publishes_through_pypi_trusted_publisher() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "publish-pypi.yml").read_text(encoding="utf-8")
+    publish_job = workflow.split("  publish:\n", 1)[1]
+
+    assert "id-token: write" in publish_job
+    assert "PYPI_API_TOKEN" not in publish_job
+    assert "pypa/gh-action-pypi-publish@release/v1" in publish_job
+
+
 def test_android_gradle_installs_synced_accelerator_without_dependencies() -> None:
     for root in (ROOT / "android", ROOT / "luvatrix_core" / "templates" / "native" / "android"):
         build = (root / "app" / "build.gradle.kts").read_text(encoding="utf-8")
