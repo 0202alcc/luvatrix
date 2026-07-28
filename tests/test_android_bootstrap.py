@@ -35,6 +35,25 @@ def _load_boot_module():
 
 
 class AndroidBootstrapTests(unittest.TestCase):
+    def test_android_render_activity_uses_window_focus_and_visibility(self) -> None:
+        boot = _load_boot_module()
+
+        class _View:
+            def __init__(self, *, focused: bool, visibility: int) -> None:
+                self.focused = focused
+                self.visibility = visibility
+
+            def hasWindowFocus(self) -> bool:
+                return self.focused
+
+            def getWindowVisibility(self) -> int:
+                return self.visibility
+
+        self.assertTrue(boot._android_view_is_render_active(None))
+        self.assertTrue(boot._android_view_is_render_active(_View(focused=True, visibility=0)))
+        self.assertFalse(boot._android_view_is_render_active(_View(focused=False, visibility=0)))
+        self.assertFalse(boot._android_view_is_render_active(_View(focused=True, visibility=4)))
+
     def test_android_template_defers_scene_matrix_storage(self) -> None:
         for boot_path in (BOOT, TEMPLATE_BOOT):
             boot_source = boot_path.read_text(encoding="utf-8")

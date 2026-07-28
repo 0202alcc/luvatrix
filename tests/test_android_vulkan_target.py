@@ -15,7 +15,40 @@ class _Presenter:
         self.calls.append((rgba, revision, width, height))
 
 
+class _RegionPresenter(_Presenter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.region_calls = []
+
+    def present_rgba_region(
+        self,
+        rgba,
+        revision: int,
+        source_width: int,
+        source_height: int,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+    ) -> None:
+        self.region_calls.append((rgba, revision, source_width, source_height, x, y, width, height))
+
+
 class AndroidVulkanTargetTests(unittest.TestCase):
+    def test_present_frame_forwards_only_dirty_region_when_presenter_supports_it(self) -> None:
+        presenter = _RegionPresenter()
+        target = AndroidVulkanTarget(AndroidVulkanBridge(presenter))
+        target.start()
+        rgba = accel.from_sequence(list(range(16)), (2, 2, 4))
+
+        target.present_frame(
+            DisplayFrame(revision=7, width=2, height=2, rgba=rgba, dirty_rect=(1, 0, 1, 2))
+        )
+
+        self.assertEqual(presenter.calls, [])
+        self.assertEqual(presenter.region_calls[0][1:], (7, 2, 2, 1, 0, 1, 2))
+        self.assertEqual(presenter.region_calls[0][0], bytes([4, 5, 6, 7, 12, 13, 14, 15]))
+
     def test_present_frame_requires_start(self) -> None:
         target = AndroidVulkanTarget(AndroidVulkanBridge(_Presenter()))
         frame = DisplayFrame(revision=1, width=2, height=2, rgba=accel.zeros((2, 2, 4)))

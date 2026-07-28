@@ -12,6 +12,10 @@ class AndroidVulkanBridge:
 
     presenter: object
 
+    def supports_rgba_region(self) -> bool:
+        method = getattr(self.presenter, "presentRgbaRegion", None) or getattr(self.presenter, "present_rgba_region", None)
+        return callable(method)
+
     def present_rgba(self, rgba: object, revision: int, width: int, height: int) -> None:
         method = getattr(self.presenter, "presentRgba", None) or getattr(self.presenter, "present_rgba", None)
         if not callable(method):
@@ -24,6 +28,29 @@ class AndroidVulkanBridge:
         else:
             payload = bytes(contiguous)
         method(payload, int(revision), int(width), int(height))
+
+    def present_rgba_region(
+        self,
+        rgba: object,
+        revision: int,
+        source_width: int,
+        source_height: int,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+    ) -> None:
+        method = getattr(self.presenter, "presentRgbaRegion", None) or getattr(self.presenter, "present_rgba_region", None)
+        if not callable(method):
+            raise RuntimeError("Android Vulkan bridge must expose presentRgbaRegion/present_rgba_region")
+        contiguous = accel.to_contiguous_numpy(rgba)
+        if hasattr(contiguous, "tobytes"):
+            payload = contiguous.tobytes()
+        elif hasattr(contiguous, "_data"):
+            payload = bytes(contiguous._data)
+        else:
+            payload = bytes(contiguous)
+        method(payload, int(revision), int(source_width), int(source_height), int(x), int(y), int(width), int(height))
 
 
 class AndroidVulkanTarget(RenderTarget):
@@ -45,6 +72,22 @@ class AndroidVulkanTarget(RenderTarget):
         shape = getattr(frame.rgba, "shape", None)
         if tuple(shape or ()) != (frame.height, frame.width, 4):
             raise ValueError(f"rgba shape must be {(frame.height, frame.width, 4)}, got {shape!r}")
-        self._bridge.present_rgba(frame.rgba, frame.revision, frame.width, frame.height)
+        dirty_rect = frame.dirty_rect
+        if dirty_rect is not None and self._bridge.supports_rgba_region():
+            x, y, width, height = (int(value) for value in dirty_rect)
+            if width <= 0 or height <= 0 or x < 0 or y < 0 or x + width > frame.width or y + height > frame.height:
+                raise ValueError(f"dirty_rect {dirty_rect!r} exceeds frame bounds")
+            self._bridge.present_rgba_region(
+                frame.rgba[y : y + height, x : x + width, :],
+                frame.revision,
+                frame.width,
+                frame.height,
+                x,
+                y,
+                width,
+                height,
+            )
+        else:
+            self._bridge.present_rgba(frame.rgba, frame.revision, frame.width, frame.height)
         self.frames_presented += 1
         self.last_revision = int(frame.revision)

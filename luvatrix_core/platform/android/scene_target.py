@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import struct
 import time
 
 from luvatrix_core.core.scene_graph import (
@@ -43,7 +44,12 @@ class AndroidNativeSceneTarget:
         if not self._started:
             raise RuntimeError("AndroidNativeSceneTarget.present_scene called before start")
         method = getattr(self.presenter, "presentScene", None) or getattr(self.presenter, "present_scene", None)
-        if not callable(method):
+        binary_method = getattr(self.presenter, "presentSceneBinary", None) or getattr(
+            self.presenter,
+            "present_scene_binary",
+            None,
+        )
+        if not callable(method) and not callable(binary_method):
             raise RuntimeError("Android native scene presenter must expose presentScene/present_scene")
         started = time.perf_counter_ns()
         transform_method = getattr(self.presenter, "presentSceneTransform", None) or getattr(
@@ -60,15 +66,26 @@ class AndroidNativeSceneTarget:
                 float(frame.content_offset_y),
             )
         else:
-            payload = json.dumps(_scene_payload(frame), separators=(",", ":"))
+            if callable(binary_method):
+                payload = _scene_packet(frame)
+                binary_method(
+                    payload,
+                    int(frame.revision),
+                    int(frame.logical_width),
+                    int(frame.logical_height),
+                    str(frame.presentation_mode or ""),
+                )
+            else:
+                assert callable(method)
+                payload = json.dumps(_scene_payload(frame), separators=(",", ":"))
+                method(
+                    payload,
+                    int(frame.revision),
+                    int(frame.logical_width),
+                    int(frame.logical_height),
+                    str(frame.presentation_mode or ""),
+                )
             encode_ns = time.perf_counter_ns() - started
-            method(
-                payload,
-                int(frame.revision),
-                int(frame.logical_width),
-                int(frame.logical_height),
-                str(frame.presentation_mode or ""),
-            )
         present_ns = time.perf_counter_ns() - started
         self.frames_presented += 1
         self.last_revision = int(frame.revision)
@@ -148,6 +165,61 @@ def _scene_payload(frame: SceneFrame) -> list[dict[str, object]]:
                 }
             )
     return out
+
+
+def _scene_packet(frame: SceneFrame) -> bytes:
+    """Encode native Android scene primitives without JSON or JNI UTF conversion.
+
+    The packet starts with ``LVXS`` and version 1, followed by a counted sequence
+    of primitive records.  It is intentionally little-endian and self-contained
+    so the Kotlin fallback can defer decoding until native presentation fails.
+    """
+
+    records = [bytearray([1])]  # meta; offsets reside in the header.
+    for node in frame.nodes:
+        if isinstance(node, ClearNode):
+            records.append(bytearray([2, *node.color_rgba]))
+        elif isinstance(node, ShaderRectNode):
+            shader = 1 if node.shader == "full_suite_background" else 0
+            uniforms = tuple(float(value) for value in node.uniforms)
+            record = bytearray([3])
+            record.extend(struct.pack("<4dB4BH", node.x, node.y, node.width, node.height, shader, *node.color_rgba, len(uniforms)))
+            if uniforms:
+                record.extend(struct.pack(f"<{len(uniforms)}d", *uniforms))
+            records.append(record)
+        elif isinstance(node, RectNode):
+            records.append(bytearray([4]) + struct.pack("<4d4B", node.x, node.y, node.width, node.height, *node.color_rgba))
+        elif isinstance(node, CircleNode):
+            records.append(
+                bytearray([5])
+                + struct.pack(
+                    "<4d8B",
+                    node.cx,
+                    node.cy,
+                    node.radius,
+                    node.stroke_width,
+                    *node.fill_rgba,
+                    *node.stroke_rgba,
+                )
+            )
+        elif isinstance(node, TextNode):
+            text = node.text.encode("utf-8")
+            if len(text) > 65535:
+                continue
+            records.append(
+                bytearray([6])
+                + struct.pack("<3d4BH", node.x, node.y, node.font_size_px, *node.color_rgba, len(text))
+                + text
+            )
+    header = struct.pack(
+        "<4sBHdd",
+        b"LVXS",
+        1,
+        len(records),
+        float(frame.content_offset_x),
+        float(frame.content_offset_y),
+    )
+    return header + b"".join(records)
 
 
 def _is_content_offset_only(previous: SceneFrame | None, incoming: SceneFrame) -> bool:

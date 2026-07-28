@@ -447,6 +447,29 @@ def full_suite_emulator_acceptance(view=None) -> str:
     return _mark("luvatrix full_suite emulator ok")
 
 
+def _android_view_is_render_active(view) -> bool:
+    """Return whether the Android view is visible and able to receive frames.
+
+    The native runtime is intentionally fail-open for bridge errors, matching the
+    core runtime's active-provider contract. A missing view is the headless case.
+    """
+    if view is None:
+        return True
+    try:
+        custom = getattr(view, "isRenderActive", None) or getattr(view, "is_render_active", None)
+        if callable(custom):
+            return bool(custom())
+        focused = getattr(view, "hasWindowFocus", None) or getattr(view, "has_window_focus", None)
+        if callable(focused) and not bool(focused()):
+            return False
+        visibility = getattr(view, "getWindowVisibility", None) or getattr(view, "get_window_visibility", None)
+        if callable(visibility) and int(visibility()) != 0:  # View.VISIBLE
+            return False
+    except Exception:
+        return True
+    return True
+
+
 def _run_visual_runtime(view, *, before_lifecycle_init=None):
     global _FRAME_COUNT, _ANDROID_VIEW
 
@@ -510,6 +533,7 @@ def _run_visual_runtime(view, *, before_lifecycle_init=None):
         logical_height_px=float(height),
         scene_target=scene_target,
         render_mode=render_mode,
+        active_provider=lambda: _android_view_is_render_active(view),
     )
     _log(f"luvatrix configured app_dir={app_dir}")
     result = runtime.run_app(

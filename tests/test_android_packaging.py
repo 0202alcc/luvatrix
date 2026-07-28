@@ -31,6 +31,27 @@ class AndroidPackagingTests(unittest.TestCase):
         ):
             self.assertTrue((ANDROID / rel).exists(), rel)
 
+    def test_android_native_renderer_batches_rect_primitives_on_gpu(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            native_cpp = (root / "app/src/main/cpp/luvatrix_vulkan_renderer.cpp").read_text(encoding="utf-8")
+            shader_header = root / "app/src/main/cpp/luvatrix_primitive_batch_shaders.h"
+
+            self.assertTrue(shader_header.exists())
+            self.assertIn("GpuRectInstance", native_cpp)
+            self.assertIn("ensure_rect_batch_resources", native_cpp)
+            self.assertIn("vkCmdDraw(cmd, 6,", native_cpp)
+            self.assertIn("render_scene_gpu_rect_batch", native_cpp)
+
+    def test_android_frame_upload_unmaps_its_own_staging_memory(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            native_cpp = (root / "app/src/main/cpp/luvatrix_vulkan_renderer.cpp").read_text(encoding="utf-8")
+            frame_upload_body = native_cpp.split("bool prepare_overlay_texture_upload", 1)[1].split(
+                "\nvoid record_overlay_texture_upload", 1
+            )[0]
+
+            self.assertIn("vkUnmapMemory(vk.device, frame_sync.staging_memory)", frame_upload_body)
+            self.assertNotIn("vkUnmapMemory(vk.device, vk.staging_memory)", frame_upload_body)
+
     def test_android_activity_reattaches_and_detaches_process_runtime(self) -> None:
         for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
             activity = (root / "app/src/main/java/com/luvatrix/app/MainActivity.kt").read_text(encoding="utf-8")
@@ -680,10 +701,26 @@ class AndroidPackagingTests(unittest.TestCase):
         self.assertIn("frame_sync.image_available", native_cpp)
         self.assertIn("frame_sync.render_finished", native_cpp)
         self.assertIn("frame_sync.in_flight", native_cpp)
+        self.assertIn("VkBuffer staging_buffer = VK_NULL_HANDLE;", native_cpp)
+        self.assertIn("VkDeviceMemory staging_memory = VK_NULL_HANDLE;", native_cpp)
+        self.assertIn("VkDeviceSize staging_capacity = 0;", native_cpp)
+        self.assertIn("bool ensure_frame_staging_buffer", native_cpp)
+        self.assertIn("ensure_frame_staging_buffer(vk, frame_sync, byte_count)", native_cpp)
+        self.assertIn("frame_sync.staging_buffer", native_cpp)
+        frame_upload_body = native_cpp.split("bool prepare_overlay_texture_upload", 1)[1].split(
+            "\nvoid record_overlay_texture_upload", 1
+        )[0]
+        self.assertIn("vkUnmapMemory(vk.device, frame_sync.staging_memory)", frame_upload_body)
+        self.assertNotIn("vkUnmapMemory(vk.device, vk.staging_memory)", frame_upload_body)
         self.assertIn("vkQueueSubmit(vk.queue, 1, &submit, frame_sync.in_flight)", native_cpp)
         gpu_preview_body = native_cpp.split("bool render_scene_gpu_preview", 1)[1].split("bool render_scene_pixels", 1)[0]
         self.assertNotIn("vkQueueWaitIdle(vk.queue);", gpu_preview_body)
         self.assertNotIn("wait_all_preview_frame_fences", gpu_preview_body)
+        scene_pixels_body = native_cpp.split("bool render_scene_pixels", 1)[1].split("bool render_clear", 1)[0]
+        self.assertNotIn("vkQueueWaitIdle(vk.queue);", scene_pixels_body)
+        clear_body = native_cpp.split("bool render_clear", 1)[1].split("bool render_scene_", 1)[0]
+        self.assertNotIn("vkQueueWaitIdle(vk.queue);", clear_body)
+        self.assertNotIn("vkQueueWaitIdle(vk.queue);", native_cpp)
         self.assertLess(
             gpu_preview_body.find("vk.camera_intermediate_descriptor_set"),
             gpu_preview_body.find("&vk.overlay_descriptor_set"),

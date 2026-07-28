@@ -31,8 +31,12 @@
 #include <unistd.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_android.h>
+#if defined(__ARM_NEON)
+#include <arm_neon.h>
+#endif
 
 #include "luvatrix_camera_preview_shaders.h"
+#include "luvatrix_primitive_batch_shaders.h"
 
 #define LVX_LOGI(...) __android_log_print(ANDROID_LOG_INFO, "Luvatrix", __VA_ARGS__)
 #define LVX_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "Luvatrix", __VA_ARGS__)
@@ -45,6 +49,20 @@ struct Rgba {
     int b = 0;
     int a = 255;
 };
+
+void rgba_to_bgra_in_place(uint8_t* bytes, size_t pixel_count) {
+    size_t index = 0;
+#if defined(__ARM_NEON)
+    for (; index + 16u <= pixel_count; index += 16u) {
+        uint8x16x4_t channels = vld4q_u8(bytes + index * 4u);
+        std::swap(channels.val[0], channels.val[2]);
+        vst4q_u8(bytes + index * 4u, channels);
+    }
+#endif
+    for (; index < pixel_count; ++index) {
+        std::swap(bytes[index * 4u], bytes[index * 4u + 2u]);
+    }
+}
 
 struct CirclePrimitive {
     double cx = 0.0;
@@ -61,6 +79,17 @@ struct RectPrimitive {
     double width = 0.0;
     double height = 0.0;
     Rgba color;
+};
+
+struct GpuRectInstance {
+    float x = 0.0f;
+    float y = 0.0f;
+    float width = 0.0f;
+    float height = 0.0f;
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+    float a = 1.0f;
 };
 
 struct TextPrimitive {
@@ -121,6 +150,9 @@ struct VulkanState {
         VkSemaphore image_available = VK_NULL_HANDLE;
         VkSemaphore render_finished = VK_NULL_HANDLE;
         VkFence in_flight = VK_NULL_HANDLE;
+        VkBuffer staging_buffer = VK_NULL_HANDLE;
+        VkDeviceMemory staging_memory = VK_NULL_HANDLE;
+        VkDeviceSize staging_capacity = 0;
     };
     std::vector<PreviewFrameSync> preview_frames;
     std::vector<VkFence> images_in_flight;
@@ -135,6 +167,15 @@ struct VulkanState {
     VkPipeline overlay_pipeline = VK_NULL_HANDLE;
     VkShaderModule fullscreen_vertex_shader = VK_NULL_HANDLE;
     VkShaderModule overlay_fragment_shader = VK_NULL_HANDLE;
+    VkDescriptorSetLayout rect_batch_descriptor_set_layout = VK_NULL_HANDLE;
+    VkDescriptorSet rect_batch_descriptor_set = VK_NULL_HANDLE;
+    VkPipelineLayout rect_batch_pipeline_layout = VK_NULL_HANDLE;
+    VkPipeline rect_batch_pipeline = VK_NULL_HANDLE;
+    VkShaderModule rect_batch_vertex_shader = VK_NULL_HANDLE;
+    VkShaderModule rect_batch_fragment_shader = VK_NULL_HANDLE;
+    VkBuffer rect_batch_instance_buffer = VK_NULL_HANDLE;
+    VkDeviceMemory rect_batch_instance_memory = VK_NULL_HANDLE;
+    VkDeviceSize rect_batch_instance_capacity = 0;
     VkImage overlay_image = VK_NULL_HANDLE;
     VkDeviceMemory overlay_memory = VK_NULL_HANDLE;
     VkImageView overlay_view = VK_NULL_HANDLE;
@@ -142,6 +183,7 @@ struct VulkanState {
     VkDescriptorSet overlay_descriptor_set = VK_NULL_HANDLE;
     int overlay_width = 0;
     int overlay_height = 0;
+    bool overlay_uploaded = false;
     std::string overlay_cache_key;
     VkRenderPass camera_intermediate_render_pass = VK_NULL_HANDLE;
     VkFramebuffer camera_intermediate_framebuffer = VK_NULL_HANDLE;
@@ -607,6 +649,108 @@ ParsedScene parse_scene(const std::string& json) {
     return scene;
 }
 
+class BinarySceneReader {
+public:
+    BinarySceneReader(const uint8_t* data, size_t size) : cursor_(data), end_(data + size) {}
+
+    bool read_u8(uint8_t& value) {
+        if (cursor_ >= end_) return false;
+        value = *cursor_++;
+        return true;
+    }
+
+    bool read_u16(uint16_t& value) {
+        if (static_cast<size_t>(end_ - cursor_) < 2) return false;
+        value = static_cast<uint16_t>(cursor_[0]) | (static_cast<uint16_t>(cursor_[1]) << 8U);
+        cursor_ += 2;
+        return true;
+    }
+
+    bool read_double(double& value) {
+        if (static_cast<size_t>(end_ - cursor_) < sizeof(value)) return false;
+        std::memcpy(&value, cursor_, sizeof(value));
+        cursor_ += sizeof(value);
+        return std::isfinite(value);
+    }
+
+    bool read_color(Rgba& value) {
+        uint8_t r = 0, g = 0, b = 0, a = 0;
+        if (!read_u8(r) || !read_u8(g) || !read_u8(b) || !read_u8(a)) return false;
+        value = Rgba{static_cast<int>(r), static_cast<int>(g), static_cast<int>(b), static_cast<int>(a)};
+        return true;
+    }
+
+    bool read_string(uint16_t size, std::string& value) {
+        if (static_cast<size_t>(end_ - cursor_) < size) return false;
+        value.assign(reinterpret_cast<const char*>(cursor_), size);
+        cursor_ += size;
+        return true;
+    }
+
+private:
+    const uint8_t* cursor_;
+    const uint8_t* end_;
+};
+
+bool parse_scene_binary(const uint8_t* data, size_t size, ParsedScene& scene) {
+    constexpr char kMagic[] = "LVXS";
+    if (data == nullptr || size < 23 || std::memcmp(data, kMagic, 4) != 0) return false;
+    BinarySceneReader reader(data + 4, size - 4);
+    uint8_t version = 0;
+    uint16_t node_count = 0;
+    ParsedScene parsed;
+    if (!reader.read_u8(version) || version != 1 || !reader.read_u16(node_count) ||
+        !reader.read_double(parsed.content_offset_x) || !reader.read_double(parsed.content_offset_y)) {
+        return false;
+    }
+    for (uint16_t index = 0; index < node_count; ++index) {
+        uint8_t type = 0;
+        if (!reader.read_u8(type)) return false;
+        if (type == 1) {
+            continue;
+        }
+        if (type == 2) {
+            if (!reader.read_color(parsed.background)) return false;
+        } else if (type == 3) {
+            double x = 0.0, y = 0.0, width = 0.0, height = 0.0;
+            uint8_t shader = 0;
+            Rgba color;
+            uint16_t uniform_count = 0;
+            if (!reader.read_double(x) || !reader.read_double(y) || !reader.read_double(width) || !reader.read_double(height) ||
+                !reader.read_u8(shader) || !reader.read_color(color) || !reader.read_u16(uniform_count)) return false;
+            std::vector<double> uniforms(uniform_count);
+            for (double& uniform : uniforms) if (!reader.read_double(uniform)) return false;
+            if (shader == 1) {
+                parsed.background = color;
+                parsed.has_rainbow_background = true;
+                if (!uniforms.empty()) parsed.background_t = uniforms[0];
+                if (uniforms.size() > 1) parsed.background_rotation = uniforms[1];
+                if (uniforms.size() > 2) parsed.background_scroll_y = uniforms[2];
+            }
+        } else if (type == 4) {
+            RectPrimitive rect;
+            if (!reader.read_double(rect.x) || !reader.read_double(rect.y) || !reader.read_double(rect.width) ||
+                !reader.read_double(rect.height) || !reader.read_color(rect.color)) return false;
+            parsed.rects.push_back(rect);
+        } else if (type == 5) {
+            CirclePrimitive circle;
+            if (!reader.read_double(circle.cx) || !reader.read_double(circle.cy) || !reader.read_double(circle.radius) ||
+                !reader.read_double(circle.stroke_width) || !reader.read_color(circle.fill) || !reader.read_color(circle.stroke)) return false;
+            parsed.circles.push_back(circle);
+        } else if (type == 6) {
+            TextPrimitive text;
+            uint16_t text_size = 0;
+            if (!reader.read_double(text.x) || !reader.read_double(text.y) || !reader.read_double(text.size) ||
+                !reader.read_color(text.color) || !reader.read_u16(text_size) || !reader.read_string(text_size, text.text)) return false;
+            parsed.texts.push_back(std::move(text));
+        } else {
+            return false;
+        }
+    }
+    scene = std::move(parsed);
+    return true;
+}
+
 void destroy_imported_camera_preview_entry(VulkanState& vk, ImportedCameraPreview& entry) {
     if (vk.device != VK_NULL_HANDLE) {
         if (entry.pipeline != VK_NULL_HANDLE) {
@@ -709,6 +853,34 @@ void destroy_preview_base_resources(VulkanState& vk) {
     if (vk.device == VK_NULL_HANDLE) return;
     destroy_imported_camera_preview(vk);
     destroy_camera_intermediate_resources(vk);
+    if (vk.rect_batch_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(vk.device, vk.rect_batch_pipeline, nullptr);
+        vk.rect_batch_pipeline = VK_NULL_HANDLE;
+    }
+    if (vk.rect_batch_pipeline_layout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(vk.device, vk.rect_batch_pipeline_layout, nullptr);
+        vk.rect_batch_pipeline_layout = VK_NULL_HANDLE;
+    }
+    if (vk.rect_batch_descriptor_set_layout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(vk.device, vk.rect_batch_descriptor_set_layout, nullptr);
+        vk.rect_batch_descriptor_set_layout = VK_NULL_HANDLE;
+    }
+    if (vk.rect_batch_vertex_shader != VK_NULL_HANDLE) {
+        vkDestroyShaderModule(vk.device, vk.rect_batch_vertex_shader, nullptr);
+        vk.rect_batch_vertex_shader = VK_NULL_HANDLE;
+    }
+    if (vk.rect_batch_fragment_shader != VK_NULL_HANDLE) {
+        vkDestroyShaderModule(vk.device, vk.rect_batch_fragment_shader, nullptr);
+        vk.rect_batch_fragment_shader = VK_NULL_HANDLE;
+    }
+    if (vk.rect_batch_instance_buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vk.device, vk.rect_batch_instance_buffer, nullptr);
+        vk.rect_batch_instance_buffer = VK_NULL_HANDLE;
+    }
+    if (vk.rect_batch_instance_memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vk.device, vk.rect_batch_instance_memory, nullptr);
+        vk.rect_batch_instance_memory = VK_NULL_HANDLE;
+    }
     if (vk.overlay_pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(vk.device, vk.overlay_pipeline, nullptr);
         vk.overlay_pipeline = VK_NULL_HANDLE;
@@ -750,8 +922,11 @@ void destroy_preview_base_resources(VulkanState& vk) {
         vk.preview_descriptor_pool = VK_NULL_HANDLE;
     }
     vk.overlay_descriptor_set = VK_NULL_HANDLE;
+    vk.rect_batch_descriptor_set = VK_NULL_HANDLE;
+    vk.rect_batch_instance_capacity = 0;
     vk.overlay_width = 0;
     vk.overlay_height = 0;
+    vk.overlay_uploaded = false;
     vk.overlay_cache_key.clear();
     vk.preview_base_ready = false;
 }
@@ -793,6 +968,8 @@ void destroy_vulkan(VulkanState& vk) {
             if (frame.image_available != VK_NULL_HANDLE) vkDestroySemaphore(vk.device, frame.image_available, nullptr);
             if (frame.render_finished != VK_NULL_HANDLE) vkDestroySemaphore(vk.device, frame.render_finished, nullptr);
             if (frame.in_flight != VK_NULL_HANDLE) vkDestroyFence(vk.device, frame.in_flight, nullptr);
+            if (frame.staging_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, frame.staging_buffer, nullptr);
+            if (frame.staging_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, frame.staging_memory, nullptr);
         }
         vk.preview_frames.clear();
         if (vk.staging_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, vk.staging_buffer, nullptr);
@@ -1650,7 +1827,8 @@ std::vector<uint32_t> rasterize_scene_pixels_impl(
     int logical_width,
     int logical_height,
     bool include_cpu_camera_background,
-    bool transparent_background
+    bool transparent_background,
+    bool include_rects
 ) {
     bool use_camera_background = include_cpu_camera_background && g_camera_primary.preview_enabled && g_camera_primary.has_frame;
     std::vector<uint32_t> pixels;
@@ -1665,11 +1843,13 @@ std::vector<uint32_t> rasterize_scene_pixels_impl(
     draw_secondary_inset(pixels, width, height);
     double scale_x = static_cast<double>(width) / static_cast<double>(std::max(1, logical_width));
     double scale_y = static_cast<double>(height) / static_cast<double>(std::max(1, logical_height));
-    for (const auto& rect : scene.rects) {
-        RectPrimitive shifted = rect;
-        shifted.x -= scene.content_offset_x;
-        shifted.y -= scene.content_offset_y;
-        draw_rect_pixels(pixels, width, height, scale_x, scale_y, shifted);
+    if (include_rects) {
+        for (const auto& rect : scene.rects) {
+            RectPrimitive shifted = rect;
+            shifted.x -= scene.content_offset_x;
+            shifted.y -= scene.content_offset_y;
+            draw_rect_pixels(pixels, width, height, scale_x, scale_y, shifted);
+        }
     }
     for (const auto& circle : scene.circles) {
         CirclePrimitive shifted = circle;
@@ -1687,11 +1867,15 @@ std::vector<uint32_t> rasterize_scene_pixels_impl(
 }
 
 std::vector<uint32_t> rasterize_scene_pixels(const ParsedScene& scene, int width, int height, int logical_width, int logical_height) {
-    return rasterize_scene_pixels_impl(scene, width, height, logical_width, logical_height, true, false);
+    return rasterize_scene_pixels_impl(scene, width, height, logical_width, logical_height, true, false, true);
 }
 
 std::vector<uint32_t> rasterize_overlay_pixels(const ParsedScene& scene, int width, int height, int logical_width, int logical_height) {
-    return rasterize_scene_pixels_impl(scene, width, height, logical_width, logical_height, false, true);
+    return rasterize_scene_pixels_impl(scene, width, height, logical_width, logical_height, false, true, true);
+}
+
+std::vector<uint32_t> rasterize_scene_without_rects(const ParsedScene& scene, int width, int height, int logical_width, int logical_height) {
+    return rasterize_scene_pixels_impl(scene, width, height, logical_width, logical_height, true, false, false);
 }
 
 uint32_t find_memory_type(VulkanState& vk, uint32_t bits, VkMemoryPropertyFlags flags) {
@@ -1704,6 +1888,8 @@ uint32_t find_memory_type(VulkanState& vk, uint32_t bits, VkMemoryPropertyFlags 
 }
 
 bool ensure_preview_base_resources(VulkanState& vk);
+bool ensure_preview_descriptor_pool(VulkanState& vk);
+bool allocate_texture_descriptor_set(VulkanState& vk, VkDescriptorSetLayout layout, VkDescriptorSet& set);
 void image_barrier(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout);
 bool create_texture_descriptor_set_layout(VulkanState& vk, const VkSampler* immutable_sampler, VkDescriptorSetLayout& layout);
 void update_texture_descriptor(VulkanState& vk, VkDescriptorSet set, VkImageView view, VkSampler sampler);
@@ -1992,6 +2178,12 @@ bool import_hardware_buffer_preview_entry(
         error = "no command buffer available for HardwareBuffer image transition";
         return false;
     }
+    if (!vk.images_in_flight.empty() && vk.images_in_flight[0] != VK_NULL_HANDLE &&
+        !wait_fence_for_preview(vk, vk.images_in_flight[0], &g_gpu_preview.image_fence_waits, false)) {
+        cleanup_imported_hardware_preview(vk, image_view, sampler, conversion, memory, image);
+        error = "failed to wait for HardwareBuffer transition command buffer";
+        return false;
+    }
     vkResetCommandBuffer(transition_cmd, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     if (vkBeginCommandBuffer(transition_cmd, &begin) != VK_SUCCESS) {
@@ -2005,15 +2197,29 @@ bool import_hardware_buffer_preview_entry(
         error = "failed to end HardwareBuffer transition command";
         return false;
     }
+    VkFenceCreateInfo transition_fence_info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    VkFence transition_fence = VK_NULL_HANDLE;
+    if (vkCreateFence(vk.device, &transition_fence_info, nullptr, &transition_fence) != VK_SUCCESS) {
+        cleanup_imported_hardware_preview(vk, image_view, sampler, conversion, memory, image);
+        error = "failed to create HardwareBuffer transition fence";
+        return false;
+    }
     VkSubmitInfo transition_submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     transition_submit.commandBufferCount = 1;
     transition_submit.pCommandBuffers = &transition_cmd;
-    if (vkQueueSubmit(vk.queue, 1, &transition_submit, VK_NULL_HANDLE) != VK_SUCCESS) {
+    if (vkQueueSubmit(vk.queue, 1, &transition_submit, transition_fence) != VK_SUCCESS) {
+        vkDestroyFence(vk.device, transition_fence, nullptr);
         cleanup_imported_hardware_preview(vk, image_view, sampler, conversion, memory, image);
         error = "failed to submit HardwareBuffer transition";
         return false;
     }
-    vkQueueWaitIdle(vk.queue);
+    VkResult transition_wait = vkWaitForFences(vk.device, 1, &transition_fence, VK_TRUE, UINT64_MAX);
+    vkDestroyFence(vk.device, transition_fence, nullptr);
+    if (transition_wait != VK_SUCCESS) {
+        cleanup_imported_hardware_preview(vk, image_view, sampler, conversion, memory, image);
+        error = "failed to wait for HardwareBuffer transition fence";
+        return false;
+    }
 
     VkDescriptorSetLayout descriptor_layout = VK_NULL_HANDLE;
     if (!create_texture_descriptor_set_layout(vk, &sampler, descriptor_layout)) {
@@ -2101,6 +2307,142 @@ bool import_hardware_buffer_preview_entry(
     return true;
 }
 
+VkShaderModule create_shader_module_bytes(VulkanState& vk, const uint8_t* bytes, size_t byte_count) {
+    if (bytes == nullptr || byte_count == 0 || byte_count % sizeof(uint32_t) != 0) return VK_NULL_HANDLE;
+    VkShaderModuleCreateInfo info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    info.codeSize = byte_count;
+    info.pCode = reinterpret_cast<const uint32_t*>(bytes);
+    VkShaderModule module = VK_NULL_HANDLE;
+    if (vkCreateShaderModule(vk.device, &info, nullptr, &module) != VK_SUCCESS) return VK_NULL_HANDLE;
+    return module;
+}
+
+bool ensure_rect_batch_instance_buffer(VulkanState& vk, VkDeviceSize size) {
+    if (vk.rect_batch_instance_buffer != VK_NULL_HANDLE && vk.rect_batch_instance_capacity >= size) return true;
+    if (vk.rect_batch_instance_buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vk.device, vk.rect_batch_instance_buffer, nullptr);
+        vk.rect_batch_instance_buffer = VK_NULL_HANDLE;
+    }
+    if (vk.rect_batch_instance_memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vk.device, vk.rect_batch_instance_memory, nullptr);
+        vk.rect_batch_instance_memory = VK_NULL_HANDLE;
+    }
+    VkBufferCreateInfo buffer_info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    buffer_info.size = size;
+    buffer_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (vkCreateBuffer(vk.device, &buffer_info, nullptr, &vk.rect_batch_instance_buffer) != VK_SUCCESS) return false;
+    VkMemoryRequirements requirements{};
+    vkGetBufferMemoryRequirements(vk.device, vk.rect_batch_instance_buffer, &requirements);
+    uint32_t memory_type = find_memory_type(
+        vk,
+        requirements.memoryTypeBits,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+    if (memory_type == std::numeric_limits<uint32_t>::max()) return false;
+    VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocation.allocationSize = requirements.size;
+    allocation.memoryTypeIndex = memory_type;
+    if (vkAllocateMemory(vk.device, &allocation, nullptr, &vk.rect_batch_instance_memory) != VK_SUCCESS) return false;
+    if (vkBindBufferMemory(vk.device, vk.rect_batch_instance_buffer, vk.rect_batch_instance_memory, 0) != VK_SUCCESS) return false;
+    vk.rect_batch_instance_capacity = size;
+    VkDescriptorBufferInfo descriptor{};
+    descriptor.buffer = vk.rect_batch_instance_buffer;
+    descriptor.offset = 0;
+    descriptor.range = VK_WHOLE_SIZE;
+    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    write.dstSet = vk.rect_batch_descriptor_set;
+    write.dstBinding = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    write.pBufferInfo = &descriptor;
+    vkUpdateDescriptorSets(vk.device, 1, &write, 0, nullptr);
+    return true;
+}
+
+bool ensure_rect_batch_resources(VulkanState& vk) {
+    if (!ensure_preview_descriptor_pool(vk)) return false;
+    if (vk.rect_batch_vertex_shader == VK_NULL_HANDLE) {
+        vk.rect_batch_vertex_shader = create_shader_module_bytes(vk, kRectBatchVertSpv, kRectBatchVertSpv_len);
+        if (vk.rect_batch_vertex_shader == VK_NULL_HANDLE) return false;
+    }
+    if (vk.rect_batch_fragment_shader == VK_NULL_HANDLE) {
+        vk.rect_batch_fragment_shader = create_shader_module_bytes(vk, kRectBatchFragSpv, kRectBatchFragSpv_len);
+        if (vk.rect_batch_fragment_shader == VK_NULL_HANDLE) return false;
+    }
+    if (vk.rect_batch_descriptor_set_layout == VK_NULL_HANDLE) {
+        VkDescriptorSetLayoutBinding binding{};
+        binding.binding = 0;
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        binding.descriptorCount = 1;
+        binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        layout_info.bindingCount = 1;
+        layout_info.pBindings = &binding;
+        if (vkCreateDescriptorSetLayout(vk.device, &layout_info, nullptr, &vk.rect_batch_descriptor_set_layout) != VK_SUCCESS) return false;
+    }
+    if (vk.rect_batch_descriptor_set == VK_NULL_HANDLE &&
+        !allocate_texture_descriptor_set(vk, vk.rect_batch_descriptor_set_layout, vk.rect_batch_descriptor_set)) return false;
+    if (vk.rect_batch_pipeline != VK_NULL_HANDLE) return true;
+
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vk.rect_batch_vertex_shader;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = vk.rect_batch_fragment_shader;
+    stages[1].pName = "main";
+    VkPipelineLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    layout_info.setLayoutCount = 1;
+    layout_info.pSetLayouts = &vk.rect_batch_descriptor_set_layout;
+    if (vkCreatePipelineLayout(vk.device, &layout_info, nullptr, &vk.rect_batch_pipeline_layout) != VK_SUCCESS) return false;
+    VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    VkViewport viewport{0.0f, 0.0f, static_cast<float>(vk.extent.width), static_cast<float>(vk.extent.height), 0.0f, 1.0f};
+    VkRect2D scissor{};
+    scissor.extent = vk.extent;
+    VkPipelineViewportStateCreateInfo viewport_state{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+    viewport_state.viewportCount = 1;
+    viewport_state.pViewports = &viewport;
+    viewport_state.scissorCount = 1;
+    viewport_state.pScissors = &scissor;
+    VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+    raster.polygonMode = VK_POLYGON_MODE_FILL;
+    raster.cullMode = VK_CULL_MODE_NONE;
+    raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster.lineWidth = 1.0f;
+    VkPipelineMultisampleStateCreateInfo multisample{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    VkPipelineColorBlendAttachmentState blend{};
+    blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    blend.blendEnable = VK_TRUE;
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blend.colorBlendOp = VK_BLEND_OP_ADD;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blend.alphaBlendOp = VK_BLEND_OP_ADD;
+    VkPipelineColorBlendStateCreateInfo blend_state{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+    blend_state.attachmentCount = 1;
+    blend_state.pAttachments = &blend;
+    VkGraphicsPipelineCreateInfo pipeline_info{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+    pipeline_info.stageCount = 2;
+    pipeline_info.pStages = stages;
+    pipeline_info.pVertexInputState = &vertex_input;
+    pipeline_info.pInputAssemblyState = &assembly;
+    pipeline_info.pViewportState = &viewport_state;
+    pipeline_info.pRasterizationState = &raster;
+    pipeline_info.pMultisampleState = &multisample;
+    pipeline_info.pColorBlendState = &blend_state;
+    pipeline_info.layout = vk.rect_batch_pipeline_layout;
+    pipeline_info.renderPass = vk.render_pass;
+    if (vkCreateGraphicsPipelines(vk.device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &vk.rect_batch_pipeline) != VK_SUCCESS) return false;
+    return true;
+}
+
 bool ensure_staging_buffer(VulkanState& vk, VkDeviceSize size) {
     if (vk.staging_buffer != VK_NULL_HANDLE && vk.staging_capacity >= size) return true;
     if (vk.staging_buffer != VK_NULL_HANDLE) {
@@ -2126,6 +2468,36 @@ bool ensure_staging_buffer(VulkanState& vk, VkDeviceSize size) {
     if (vkAllocateMemory(vk.device, &alloc, nullptr, &vk.staging_memory) != VK_SUCCESS) return false;
     if (vkBindBufferMemory(vk.device, vk.staging_buffer, vk.staging_memory, 0) != VK_SUCCESS) return false;
     vk.staging_capacity = size;
+    return true;
+}
+
+// Each presentation slot owns its upload buffer. The slot fence is waited before
+// this helper is called, so resizing or rewriting the buffer cannot race the GPU.
+bool ensure_frame_staging_buffer(VulkanState& vk, VulkanState::PreviewFrameSync& frame, VkDeviceSize size) {
+    if (frame.staging_buffer != VK_NULL_HANDLE && frame.staging_capacity >= size) return true;
+    if (frame.staging_buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vk.device, frame.staging_buffer, nullptr);
+        frame.staging_buffer = VK_NULL_HANDLE;
+    }
+    if (frame.staging_memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vk.device, frame.staging_memory, nullptr);
+        frame.staging_memory = VK_NULL_HANDLE;
+    }
+    VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bci.size = size;
+    bci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (vkCreateBuffer(vk.device, &bci, nullptr, &frame.staging_buffer) != VK_SUCCESS) return false;
+    VkMemoryRequirements req{};
+    vkGetBufferMemoryRequirements(vk.device, frame.staging_buffer, &req);
+    uint32_t memory_type = find_memory_type(vk, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    if (memory_type == std::numeric_limits<uint32_t>::max()) return false;
+    VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    alloc.allocationSize = req.size;
+    alloc.memoryTypeIndex = memory_type;
+    if (vkAllocateMemory(vk.device, &alloc, nullptr, &frame.staging_memory) != VK_SUCCESS) return false;
+    if (vkBindBufferMemory(vk.device, frame.staging_buffer, frame.staging_memory, 0) != VK_SUCCESS) return false;
+    frame.staging_capacity = size;
     return true;
 }
 
@@ -2186,13 +2558,15 @@ VkShaderModule create_shader_module(VulkanState& vk, const uint32_t* words, size
 
 bool ensure_preview_descriptor_pool(VulkanState& vk) {
     if (vk.preview_descriptor_pool != VK_NULL_HANDLE) return true;
-    VkDescriptorPoolSize size{};
-    size.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    size.descriptorCount = 16;
+    VkDescriptorPoolSize sizes[2]{};
+    sizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    sizes[0].descriptorCount = 16;
+    sizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    sizes[1].descriptorCount = 1;
     VkDescriptorPoolCreateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     info.maxSets = 16;
-    info.poolSizeCount = 1;
-    info.pPoolSizes = &size;
+    info.poolSizeCount = 2;
+    info.pPoolSizes = sizes;
     return vkCreateDescriptorPool(vk.device, &info, nullptr, &vk.preview_descriptor_pool) == VK_SUCCESS;
 }
 
@@ -2389,6 +2763,7 @@ bool ensure_overlay_texture(VulkanState& vk, int width, int height) {
         vk.overlay_memory = VK_NULL_HANDLE;
     }
     vk.overlay_descriptor_set = VK_NULL_HANDLE;
+    vk.overlay_uploaded = false;
     if (!create_image_2d(vk, width, height, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, vk.overlay_image, vk.overlay_memory)) {
         return false;
     }
@@ -2416,35 +2791,74 @@ bool ensure_overlay_texture(VulkanState& vk, int width, int height) {
     return true;
 }
 
-bool upload_overlay_texture(VulkanState& vk, const std::vector<uint32_t>& pixels, int width, int height) {
-    bool had_matching_image = vk.overlay_image != VK_NULL_HANDLE && vk.overlay_width == width && vk.overlay_height == height;
+bool prepare_overlay_texture_upload(
+    VulkanState& vk,
+    VulkanState::PreviewFrameSync& frame_sync,
+    const std::vector<uint32_t>& pixels,
+    int width,
+    int height
+) {
     if (!ensure_overlay_texture(vk, width, height)) return false;
     VkDeviceSize byte_count = static_cast<VkDeviceSize>(pixels.size() * sizeof(uint32_t));
-    if (!ensure_staging_buffer(vk, byte_count)) return false;
+    if (!ensure_frame_staging_buffer(vk, frame_sync, byte_count)) return false;
     void* mapped = nullptr;
-    if (vkMapMemory(vk.device, vk.staging_memory, 0, byte_count, 0, &mapped) != VK_SUCCESS) return false;
+    if (vkMapMemory(vk.device, frame_sync.staging_memory, 0, byte_count, 0, &mapped) != VK_SUCCESS) return false;
     std::memcpy(mapped, pixels.data(), static_cast<size_t>(byte_count));
-    vkUnmapMemory(vk.device, vk.staging_memory);
-    VkCommandBuffer cmd = vk.command_buffers.empty() ? VK_NULL_HANDLE : vk.command_buffers[0];
-    if (cmd == VK_NULL_HANDLE) return false;
-    vkResetCommandBuffer(cmd, 0);
-    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) return false;
-    VkImageLayout old_layout = had_matching_image ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+    vkUnmapMemory(vk.device, frame_sync.staging_memory);
+    return true;
+}
+
+void record_overlay_texture_upload(
+    VulkanState& vk,
+    VkCommandBuffer cmd,
+    VkBuffer staging_buffer,
+    int width,
+    int height,
+    int destination_x = 0,
+    int destination_y = 0
+) {
+    VkImageLayout old_layout = vk.overlay_uploaded
+        ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        : VK_IMAGE_LAYOUT_UNDEFINED;
+    image_barrier(cmd, vk.overlay_image, old_layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VkBufferImageCopy region{};
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = {destination_x, destination_y, 0};
+    region.imageExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
+    vkCmdCopyBufferToImage(
+        cmd,
+        staging_buffer,
+        vk.overlay_image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &region
+    );
+    image_barrier(
+        cmd,
+        vk.overlay_image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    );
+}
+
+void record_overlay_texture_upload_from_buffer(
+    VulkanState& vk,
+    VkCommandBuffer cmd,
+    VkBuffer staging_buffer,
+    int width,
+    int height
+) {
+    VkImageLayout old_layout = vk.overlay_uploaded
+        ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        : VK_IMAGE_LAYOUT_UNDEFINED;
     image_barrier(cmd, vk.overlay_image, old_layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     VkBufferImageCopy region{};
     region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     region.imageSubresource.layerCount = 1;
     region.imageExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
-    vkCmdCopyBufferToImage(cmd, vk.staging_buffer, vk.overlay_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    vkCmdCopyBufferToImage(cmd, staging_buffer, vk.overlay_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
     image_barrier(cmd, vk.overlay_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) return false;
-    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &cmd;
-    if (vkQueueSubmit(vk.queue, 1, &submit, VK_NULL_HANDLE) != VK_SUCCESS) return false;
-    vkQueueWaitIdle(vk.queue);
-    return true;
 }
 
 bool ensure_camera_intermediate_render_pass(VulkanState& vk) {
@@ -2744,15 +3158,17 @@ bool render_scene_gpu_preview(VulkanState& vk, const ParsedScene& scene, int log
         return false;
     }
     std::string overlay_key = overlay_cache_key_for_scene(scene, width, height, logical_width, logical_height);
+    bool overlay_upload_required = false;
     if (vk.overlay_descriptor_set != VK_NULL_HANDLE && vk.overlay_cache_key == overlay_key) {
         g_gpu_preview.overlay_cache_hits += 1;
     } else {
         auto overlay = rasterize_overlay_pixels(scene, width, height, logical_width, logical_height);
-        if (!upload_overlay_texture(vk, overlay, width, height)) {
+        if (!prepare_overlay_texture_upload(vk, frame_sync, overlay, width, height)) {
             error = "failed to upload HUD overlay texture";
             return false;
         }
         vk.overlay_cache_key = std::move(overlay_key);
+        overlay_upload_required = true;
         g_gpu_preview.overlay_uploads += 1;
     }
 
@@ -2785,6 +3201,11 @@ bool render_scene_gpu_preview(VulkanState& vk, const ParsedScene& scene, int log
     if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) {
         error = "failed to begin GPU preview command buffer";
         return false;
+    }
+    if (overlay_upload_required) {
+        // The upload is recorded in this frame's command buffer so its staging
+        // allocation remains protected by frame_sync.in_flight.
+        record_overlay_texture_upload(vk, cmd, frame_sync.staging_buffer, width, height);
     }
 
     bool update_intermediate = !vk.camera_intermediate_ready ||
@@ -2950,6 +3371,105 @@ bool render_scene_gpu_preview(VulkanState& vk, const ParsedScene& scene, int log
     return true;
 }
 
+bool render_scene_gpu_rect_batch(VulkanState& vk, const ParsedScene& scene, int logical_width, int logical_height) {
+    if (scene.rects.empty() || logical_width <= 0 || logical_height <= 0 || !ensure_preview_base_resources(vk)) return false;
+    std::vector<GpuRectInstance> instances;
+    instances.reserve(scene.rects.size());
+    for (const auto& rect : scene.rects) {
+        const double x = rect.x - scene.content_offset_x;
+        const double y = rect.y - scene.content_offset_y;
+        if (rect.width <= 0.0 || rect.height <= 0.0 || x < 0.0 || y < 0.0 ||
+            x + rect.width > logical_width || y + rect.height > logical_height) {
+            return false;
+        }
+        instances.push_back({
+            static_cast<float>(x / logical_width),
+            static_cast<float>(y / logical_height),
+            static_cast<float>(rect.width / logical_width),
+            static_cast<float>(rect.height / logical_height),
+            static_cast<float>(rect.color.r / 255.0),
+            static_cast<float>(rect.color.g / 255.0),
+            static_cast<float>(rect.color.b / 255.0),
+            static_cast<float>(rect.color.a / 255.0),
+        });
+    }
+    if (!ensure_rect_batch_resources(vk) || vk.preview_frames.empty()) return false;
+    uint32_t frame_slot = static_cast<uint32_t>(vk.frame_counter % vk.preview_frames.size());
+    VulkanState::PreviewFrameSync& frame_sync = vk.preview_frames[frame_slot];
+    if (!wait_fence_for_preview(vk, frame_sync.in_flight, nullptr, false)) return false;
+    VkDeviceSize instance_bytes = static_cast<VkDeviceSize>(instances.size() * sizeof(GpuRectInstance));
+    if (!ensure_rect_batch_instance_buffer(vk, instance_bytes)) return false;
+    void* mapped_instances = nullptr;
+    if (vkMapMemory(vk.device, vk.rect_batch_instance_memory, 0, instance_bytes, 0, &mapped_instances) != VK_SUCCESS) return false;
+    std::memcpy(mapped_instances, instances.data(), static_cast<size_t>(instance_bytes));
+    vkUnmapMemory(vk.device, vk.rect_batch_instance_memory);
+
+    const int width = static_cast<int>(vk.extent.width);
+    const int height = static_cast<int>(vk.extent.height);
+    auto base_pixels = rasterize_scene_without_rects(scene, width, height, logical_width, logical_height);
+    VkDeviceSize base_bytes = static_cast<VkDeviceSize>(base_pixels.size() * sizeof(uint32_t));
+    if (!ensure_overlay_texture(vk, width, height) || !ensure_frame_staging_buffer(vk, frame_sync, base_bytes)) return false;
+    void* mapped_base = nullptr;
+    if (vkMapMemory(vk.device, frame_sync.staging_memory, 0, base_bytes, 0, &mapped_base) != VK_SUCCESS) return false;
+    std::memcpy(mapped_base, base_pixels.data(), static_cast<size_t>(base_bytes));
+    vkUnmapMemory(vk.device, frame_sync.staging_memory);
+
+    uint32_t image_index = 0;
+    VkResult acquire = vkAcquireNextImageKHR(vk.device, vk.swapchain, UINT64_MAX, frame_sync.image_available, VK_NULL_HANDLE, &image_index);
+    if (acquire == VK_ERROR_OUT_OF_DATE_KHR || acquire == VK_SUBOPTIMAL_KHR) {
+        destroy_swapchain(vk);
+        return create_swapchain(vk) && create_render_resources(vk) && render_scene_gpu_rect_batch(vk, scene, logical_width, logical_height);
+    }
+    if (acquire != VK_SUCCESS) return false;
+    if (image_index < vk.images_in_flight.size() && vk.images_in_flight[image_index] != VK_NULL_HANDLE &&
+        !wait_fence_for_preview(vk, vk.images_in_flight[image_index], nullptr, false)) return false;
+    if (image_index < vk.images_in_flight.size()) vk.images_in_flight[image_index] = frame_sync.in_flight;
+    VkCommandBuffer cmd = vk.command_buffers[image_index];
+    vkResetCommandBuffer(cmd, 0);
+    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) return false;
+    record_overlay_texture_upload_from_buffer(vk, cmd, frame_sync.staging_buffer, width, height);
+    VkClearValue clear{};
+    clear.color.float32[3] = 1.0f;
+    VkRenderPassBeginInfo render_pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+    render_pass.renderPass = vk.render_pass;
+    render_pass.framebuffer = vk.framebuffers[image_index];
+    render_pass.renderArea.extent = vk.extent;
+    render_pass.clearValueCount = 1;
+    render_pass.pClearValues = &clear;
+    vkCmdBeginRenderPass(cmd, &render_pass, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.overlay_pipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.overlay_pipeline_layout, 0, 1, &vk.overlay_descriptor_set, 0, nullptr);
+    vkCmdDraw(cmd, 3, 1, 0, 0);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.rect_batch_pipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.rect_batch_pipeline_layout, 0, 1, &vk.rect_batch_descriptor_set, 0, nullptr);
+    vkCmdDraw(cmd, 6, static_cast<uint32_t>(instances.size()), 0, 0);
+    vkCmdEndRenderPass(cmd);
+    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) return false;
+    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    submit.waitSemaphoreCount = 1;
+    submit.pWaitSemaphores = &frame_sync.image_available;
+    submit.pWaitDstStageMask = &wait_stage;
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &cmd;
+    submit.signalSemaphoreCount = 1;
+    submit.pSignalSemaphores = &frame_sync.render_finished;
+    if (vkResetFences(vk.device, 1, &frame_sync.in_flight) != VK_SUCCESS ||
+        vkQueueSubmit(vk.queue, 1, &submit, frame_sync.in_flight) != VK_SUCCESS) return false;
+    vk.overlay_uploaded = true;
+    VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+    present.waitSemaphoreCount = 1;
+    present.pWaitSemaphores = &frame_sync.render_finished;
+    present.swapchainCount = 1;
+    present.pSwapchains = &vk.swapchain;
+    present.pImageIndices = &image_index;
+    VkResult result = vkQueuePresentKHR(vk.queue, &present);
+    vk.current_frame_slot = (frame_slot + 1) % static_cast<uint32_t>(vk.preview_frames.size());
+    vk.frame_counter += 1;
+    return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
+}
+
 bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_width, int logical_height) {
     if (!ensure_vulkan(vk)) return false;
     ImportedCameraPreview* active_preview = active_imported_camera_preview();
@@ -2968,21 +3488,21 @@ bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_
         }
     }
     g_preview_gpu_ready = false;
+    if (!scene.rects.empty() && render_scene_gpu_rect_batch(vk, scene, logical_width, logical_height)) return true;
     int width = static_cast<int>(vk.extent.width);
     int height = static_cast<int>(vk.extent.height);
     auto pixels = rasterize_scene_pixels(scene, width, height, logical_width, logical_height);
     convert_bgra_pixels_for_swapchain(pixels, vk.swapchain_format);
     VkDeviceSize byte_count = static_cast<VkDeviceSize>(pixels.size() * sizeof(uint32_t));
-    if (!ensure_staging_buffer(vk, byte_count)) return false;
-    void* mapped = nullptr;
-    if (vkMapMemory(vk.device, vk.staging_memory, 0, byte_count, 0, &mapped) != VK_SUCCESS) return false;
-    std::memcpy(mapped, pixels.data(), static_cast<size_t>(byte_count));
-    vkUnmapMemory(vk.device, vk.staging_memory);
-
     if (vk.preview_frames.empty()) return false;
     uint32_t frame_slot = static_cast<uint32_t>(vk.frame_counter % vk.preview_frames.size());
     VulkanState::PreviewFrameSync& frame_sync = vk.preview_frames[frame_slot];
     if (!wait_fence_for_preview(vk, frame_sync.in_flight, nullptr, false)) return false;
+    if (!ensure_frame_staging_buffer(vk, frame_sync, byte_count)) return false;
+    void* mapped = nullptr;
+    if (vkMapMemory(vk.device, frame_sync.staging_memory, 0, byte_count, 0, &mapped) != VK_SUCCESS) return false;
+    std::memcpy(mapped, pixels.data(), static_cast<size_t>(byte_count));
+    vkUnmapMemory(vk.device, frame_sync.staging_memory);
     uint32_t image_index = 0;
     VkResult acquire = vkAcquireNextImageKHR(vk.device, vk.swapchain, UINT64_MAX, frame_sync.image_available, VK_NULL_HANDLE, &image_index);
     if (acquire == VK_ERROR_OUT_OF_DATE_KHR || acquire == VK_SUBOPTIMAL_KHR) {
@@ -3011,7 +3531,7 @@ bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_
     region.imageSubresource.layerCount = 1;
     region.imageOffset = {0, 0, 0};
     region.imageExtent = {vk.extent.width, vk.extent.height, 1};
-    vkCmdCopyBufferToImage(cmd, vk.staging_buffer, vk.images[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    vkCmdCopyBufferToImage(cmd, frame_sync.staging_buffer, vk.images[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
     image_barrier(cmd, vk.images[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
     if (vkEndCommandBuffer(cmd) != VK_SUCCESS) return false;
     VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -3032,10 +3552,128 @@ bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_
     present.pSwapchains = &vk.swapchain;
     present.pImageIndices = &image_index;
     VkResult pr = vkQueuePresentKHR(vk.queue, &present);
-    vkQueueWaitIdle(vk.queue);
     vk.current_frame_slot = (frame_slot + 1) % static_cast<uint32_t>(vk.preview_frames.size());
     vk.frame_counter += 1;
     return pr == VK_SUCCESS || pr == VK_SUBOPTIMAL_KHR;
+}
+
+bool render_rgba_matrix_region(
+    VulkanState& vk,
+    const std::vector<uint32_t>& pixels,
+    int source_width,
+    int source_height,
+    int destination_x,
+    int destination_y,
+    int upload_width,
+    int upload_height
+) {
+    if (source_width <= 0 || source_height <= 0 || upload_width <= 0 || upload_height <= 0) return false;
+    if (destination_x < 0 || destination_y < 0 || destination_x + upload_width > source_width || destination_y + upload_height > source_height) return false;
+    if (pixels.size() != static_cast<size_t>(upload_width) * static_cast<size_t>(upload_height)) return false;
+    if (!ensure_vulkan(vk) || vk.preview_frames.empty()) return false;
+    if (!ensure_preview_base_resources(vk)) return false;
+    if (!vk.overlay_uploaded && (destination_x != 0 || destination_y != 0 || upload_width != source_width || upload_height != source_height)) return false;
+
+    // The matrix presenter reuses one staging buffer. Waiting on its previous
+    // submission protects that buffer without stalling the entire Vulkan queue.
+    uint32_t frame_slot = 0;
+    VulkanState::PreviewFrameSync& frame_sync = vk.preview_frames[frame_slot];
+    if (!wait_fence_for_preview(vk, frame_sync.in_flight, nullptr, false)) return false;
+    if (!prepare_overlay_texture_upload(vk, frame_sync, pixels, source_width, source_height)) return false;
+
+    uint32_t image_index = 0;
+    VkResult acquire = vkAcquireNextImageKHR(
+        vk.device,
+        vk.swapchain,
+        UINT64_MAX,
+        frame_sync.image_available,
+        VK_NULL_HANDLE,
+        &image_index
+    );
+    if (acquire == VK_ERROR_OUT_OF_DATE_KHR || acquire == VK_SUBOPTIMAL_KHR) {
+        destroy_swapchain(vk);
+        return create_swapchain(vk) && create_render_resources(vk) &&
+            render_rgba_matrix_region(
+                vk,
+                pixels,
+                source_width,
+                source_height,
+                destination_x,
+                destination_y,
+                upload_width,
+                upload_height
+            );
+    }
+    if (acquire != VK_SUCCESS) return false;
+    if (image_index < vk.images_in_flight.size() && vk.images_in_flight[image_index] != VK_NULL_HANDLE) {
+        if (!wait_fence_for_preview(vk, vk.images_in_flight[image_index], nullptr, false)) return false;
+    }
+    if (image_index < vk.images_in_flight.size()) {
+        vk.images_in_flight[image_index] = frame_sync.in_flight;
+    }
+
+    VkCommandBuffer cmd = vk.command_buffers[image_index];
+    vkResetCommandBuffer(cmd, 0);
+    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) return false;
+    record_overlay_texture_upload(vk, cmd, frame_sync.staging_buffer, upload_width, upload_height, destination_x, destination_y);
+    VkClearValue clear{};
+    clear.color.float32[3] = 1.0f;
+    VkRenderPassBeginInfo render_pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+    render_pass.renderPass = vk.render_pass;
+    render_pass.framebuffer = vk.framebuffers[image_index];
+    render_pass.renderArea.offset = {0, 0};
+    render_pass.renderArea.extent = vk.extent;
+    render_pass.clearValueCount = 1;
+    render_pass.pClearValues = &clear;
+    vkCmdBeginRenderPass(cmd, &render_pass, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.overlay_pipeline);
+    vkCmdBindDescriptorSets(
+        cmd,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vk.overlay_pipeline_layout,
+        0,
+        1,
+        &vk.overlay_descriptor_set,
+        0,
+        nullptr
+    );
+    vkCmdDraw(cmd, 3, 1, 0, 0);
+    vkCmdEndRenderPass(cmd);
+    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) return false;
+
+    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    submit.waitSemaphoreCount = 1;
+    submit.pWaitSemaphores = &frame_sync.image_available;
+    submit.pWaitDstStageMask = &wait_stage;
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &cmd;
+    submit.signalSemaphoreCount = 1;
+    submit.pSignalSemaphores = &frame_sync.render_finished;
+    if (vkResetFences(vk.device, 1, &frame_sync.in_flight) != VK_SUCCESS) return false;
+    if (vkQueueSubmit(vk.queue, 1, &submit, frame_sync.in_flight) != VK_SUCCESS) return false;
+    vk.overlay_uploaded = true;
+
+    VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+    present.waitSemaphoreCount = 1;
+    present.pWaitSemaphores = &frame_sync.render_finished;
+    present.swapchainCount = 1;
+    present.pSwapchains = &vk.swapchain;
+    present.pImageIndices = &image_index;
+    VkResult result = vkQueuePresentKHR(vk.queue, &present);
+    vk.current_frame_slot = frame_slot;
+    vk.frame_counter += 1;
+    return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
+}
+
+bool render_rgba_matrix(
+    VulkanState& vk,
+    const std::vector<uint32_t>& pixels,
+    int source_width,
+    int source_height
+) {
+    return render_rgba_matrix_region(vk, pixels, source_width, source_height, 0, 0, source_width, source_height);
 }
 
 bool render_clear(VulkanState& vk, Rgba color) {
@@ -3094,7 +3732,6 @@ bool render_clear(VulkanState& vk, Rgba color) {
     present.pSwapchains = &vk.swapchain;
     present.pImageIndices = &image_index;
     VkResult pr = vkQueuePresentKHR(vk.queue, &present);
-    vkQueueWaitIdle(vk.queue);
     vk.current_frame_slot = (frame_slot + 1) % static_cast<uint32_t>(vk.preview_frames.size());
     vk.frame_counter += 1;
     return pr == VK_SUCCESS || pr == VK_SUBOPTIMAL_KHR;
@@ -5981,6 +6618,109 @@ Java_com_luvatrix_app_NativeVulkan_setBitmapGlyphTable(JNIEnv *env, jobject, jst
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
+Java_com_luvatrix_app_NativeVulkan_presentRgba(
+    JNIEnv *env,
+    jobject,
+    jbyteArray rgba,
+    jint revision,
+    jint width,
+    jint height
+) {
+    if (rgba == nullptr || width <= 0 || height <= 0) return JNI_FALSE;
+    size_t pixel_count = static_cast<size_t>(width) * static_cast<size_t>(height);
+    if (pixel_count > std::numeric_limits<size_t>::max() / 4u) return JNI_FALSE;
+    size_t byte_count = pixel_count * 4u;
+    if (byte_count > static_cast<size_t>(std::numeric_limits<jsize>::max())) return JNI_FALSE;
+    if (env->GetArrayLength(rgba) != static_cast<jsize>(byte_count)) return JNI_FALSE;
+
+    std::vector<uint32_t> pixels(pixel_count);
+    env->GetByteArrayRegion(
+        rgba,
+        0,
+        static_cast<jsize>(byte_count),
+        reinterpret_cast<jbyte*>(pixels.data())
+    );
+    if (env->ExceptionCheck()) return JNI_FALSE;
+    rgba_to_bgra_in_place(reinterpret_cast<uint8_t*>(pixels.data()), pixel_count);
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    bool presented = render_rgba_matrix(
+        g_vk,
+        pixels,
+        static_cast<int>(width),
+        static_cast<int>(height)
+    );
+    if (presented && revision % 120 == 0) {
+        LVX_LOGI(
+            "luvatrix vulkan rgba revision=%d source=%dx%d display=%ux%u",
+            revision,
+            width,
+            height,
+            g_vk.extent.width,
+            g_vk.extent.height
+        );
+    }
+    return presented ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_luvatrix_app_NativeVulkan_presentRgbaRegion(
+    JNIEnv *env,
+    jobject,
+    jbyteArray rgba,
+    jint revision,
+    jint source_width,
+    jint source_height,
+    jint x,
+    jint y,
+    jint width,
+    jint height
+) {
+    if (rgba == nullptr || source_width <= 0 || source_height <= 0 || width <= 0 || height <= 0) return JNI_FALSE;
+    if (x < 0 || y < 0 || x > source_width - width || y > source_height - height) return JNI_FALSE;
+    size_t pixel_count = static_cast<size_t>(width) * static_cast<size_t>(height);
+    if (pixel_count > std::numeric_limits<size_t>::max() / 4u) return JNI_FALSE;
+    size_t byte_count = pixel_count * 4u;
+    if (byte_count > static_cast<size_t>(std::numeric_limits<jsize>::max())) return JNI_FALSE;
+    if (env->GetArrayLength(rgba) != static_cast<jsize>(byte_count)) return JNI_FALSE;
+
+    std::vector<uint32_t> pixels(pixel_count);
+    env->GetByteArrayRegion(
+        rgba,
+        0,
+        static_cast<jsize>(byte_count),
+        reinterpret_cast<jbyte*>(pixels.data())
+    );
+    if (env->ExceptionCheck()) return JNI_FALSE;
+    rgba_to_bgra_in_place(reinterpret_cast<uint8_t*>(pixels.data()), pixel_count);
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    bool presented = render_rgba_matrix_region(
+        g_vk,
+        pixels,
+        static_cast<int>(source_width),
+        static_cast<int>(source_height),
+        static_cast<int>(x),
+        static_cast<int>(y),
+        static_cast<int>(width),
+        static_cast<int>(height)
+    );
+    if (presented && revision % 120 == 0) {
+        LVX_LOGI(
+            "luvatrix vulkan rgba region revision=%d source=%dx%d region=%d,%d %dx%d",
+            revision,
+            source_width,
+            source_height,
+            x,
+            y,
+            width,
+            height
+        );
+    }
+    return presented ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
 Java_com_luvatrix_app_NativeVulkan_presentScene(
     JNIEnv *env,
     jobject,
@@ -6020,6 +6760,59 @@ Java_com_luvatrix_app_NativeVulkan_presentScene(
             width,
             height,
             count_nodes(payload),
+            g_retained_scene.rects.size(),
+            g_retained_scene.circles.size(),
+            g_retained_scene.texts.size(),
+            g_retained_scene.background.r,
+            g_retained_scene.background.g,
+            g_retained_scene.background.b,
+            g_retained_scene.background.a
+        );
+    }
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_luvatrix_app_NativeVulkan_presentSceneBinary(
+    JNIEnv *env,
+    jobject,
+    jbyteArray scenePacket,
+    jint revision,
+    jint width,
+    jint height,
+    jstring presentationMode
+) {
+    if (scenePacket == nullptr) return JNI_FALSE;
+    const jsize packet_size = env->GetArrayLength(scenePacket);
+    if (packet_size <= 0) return JNI_FALSE;
+    jbyte* raw = env->GetByteArrayElements(scenePacket, nullptr);
+    if (raw == nullptr) return JNI_FALSE;
+    ParsedScene scene;
+    const bool parsed = parse_scene_binary(reinterpret_cast<const uint8_t*>(raw), static_cast<size_t>(packet_size), scene);
+    env->ReleaseByteArrayElements(scenePacket, raw, JNI_ABORT);
+    if (!parsed) return JNI_FALSE;
+    if (presentationMode != nullptr) {
+        const char* mode_raw = env->GetStringUTFChars(presentationMode, nullptr);
+        if (mode_raw != nullptr) {
+            scene.presentation_mode = std::string(mode_raw);
+            env->ReleaseStringUTFChars(presentationMode, mode_raw);
+        }
+    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_vk.desired_width = std::max(1, static_cast<int>(width));
+    g_vk.desired_height = std::max(1, static_cast<int>(height));
+    g_retained_scene = std::move(scene);
+    g_retained_scene_available = true;
+    g_retained_scene_revision = static_cast<int>(revision);
+    g_retained_scene_width = std::max(1, static_cast<int>(width));
+    g_retained_scene_height = std::max(1, static_cast<int>(height));
+    const bool ok = render_scene_pixels(g_vk, g_retained_scene, width, height);
+    if (ok && revision % 120 == 0) {
+        LVX_LOGI(
+            "luvatrix vulkan binary scene revision=%d size=%dx%d rects=%zu circles=%zu text=%zu rgba=%d,%d,%d,%d",
+            revision,
+            width,
+            height,
             g_retained_scene.rects.size(),
             g_retained_scene.circles.size(),
             g_retained_scene.texts.size(),

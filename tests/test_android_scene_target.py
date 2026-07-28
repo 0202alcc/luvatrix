@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import struct
 import unittest
 
 from luvatrix_core.core.scene_graph import CircleNode, ClearNode, RectNode, SceneFrame, ShaderRectNode, TextNode
@@ -36,7 +37,54 @@ class _DeltaPresenter(_Presenter):
         self.transform_calls.append((revision, content_offset_x, content_offset_y))
 
 
+class _BinaryPresenter(_DeltaPresenter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.binary_calls = []
+
+    def presentSceneBinary(
+        self,
+        payload: bytes,
+        revision: int,
+        width: int,
+        height: int,
+        presentation_mode: str = "",
+    ) -> None:
+        self.binary_calls.append((payload, revision, width, height, presentation_mode))
+
+
 class AndroidNativeSceneTargetTests(unittest.TestCase):
+    def test_present_scene_uses_versioned_binary_packet_when_supported(self) -> None:
+        presenter = _BinaryPresenter()
+        target = AndroidNativeSceneTarget(presenter)
+        target.start()
+        frame = SceneFrame(
+            revision=7,
+            logical_width=100,
+            logical_height=200,
+            display_width=100,
+            display_height=200,
+            ts_ns=1,
+            nodes=(
+                ClearNode((1, 2, 3, 255)),
+                RectNode(1, 2, 30, 40, (4, 5, 6, 255)),
+                CircleNode(10, 20, 5, fill_rgba=(7, 8, 9, 255)),
+                TextNode("hello", x=1, y=2, font_size_px=12, color_rgba=(10, 11, 12, 255)),
+            ),
+            content_offset_x=4.5,
+            content_offset_y=-12.25,
+        )
+
+        target.present_scene(frame)
+
+        self.assertEqual(presenter.calls, [])
+        payload, revision, width, height, mode = presenter.binary_calls[0]
+        self.assertEqual((revision, width, height, mode), (7, 100, 200, ""))
+        magic, version, node_count, offset_x, offset_y = struct.unpack_from("<4sBHdd", payload)
+        self.assertEqual((magic, version, node_count), (b"LVXS", 1, 5))
+        self.assertEqual((offset_x, offset_y), (4.5, -12.25))
+        self.assertEqual(payload[struct.calcsize("<4sBHdd")], 1)  # meta node
+
     def test_present_scene_serializes_supported_nodes(self) -> None:
         presenter = _Presenter()
         target = AndroidNativeSceneTarget(presenter)
@@ -212,6 +260,19 @@ class AndroidNativeSceneTargetTests(unittest.TestCase):
                 self.assertIn("g_retained_scene.content_offset_x", text)
                 self.assertIn("const auto nodes = parse_node_objects(json);", text)
                 self.assertEqual(text.count("parse_node_objects(json)"), 1)
+
+    def test_native_android_bridge_exposes_binary_scene_present(self) -> None:
+        for source in ANDROID_KOTLIN_VIEWS:
+            with self.subTest(source=source):
+                text = source.read_text(encoding="utf-8")
+                self.assertIn("fun presentSceneBinary(", text)
+                self.assertIn("NativeVulkan.presentSceneBinary(", text)
+        for source in ANDROID_CPP_RENDERERS:
+            with self.subTest(source=source):
+                text = source.read_text(encoding="utf-8")
+                self.assertIn("NativeVulkan_presentSceneBinary", text)
+                self.assertIn("parse_scene_binary", text)
+                self.assertIn("LVXS", text)
 
     def test_present_scene_requires_start(self) -> None:
         target = AndroidNativeSceneTarget(_Presenter())

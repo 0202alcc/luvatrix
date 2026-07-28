@@ -14,6 +14,9 @@ class DisplayFrame:
     width: int
     height: int
     rgba: torch.Tensor
+    # ``None`` means the target must replace its entire backing surface.
+    # Otherwise this is an (x, y, width, height) region within ``rgba``.
+    dirty_rect: tuple[int, int, int, int] | None = None
 
 
 class RenderTarget(ABC):

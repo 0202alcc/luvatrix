@@ -5,7 +5,7 @@ import unittest
 import torch
 
 from luvatrix_core.core.display_runtime import DisplayRuntime
-from luvatrix_core.core.window_matrix import FullRewrite, WindowMatrix, WriteBatch
+from luvatrix_core.core.window_matrix import FullRewrite, ReplaceRect, WindowMatrix, WriteBatch
 from luvatrix_core.targets.base import DisplayFrame
 from luvatrix_core.targets.vulkan_target import VulkanTarget
 from luvatrix_core.targets.web_target import WebTarget
@@ -57,7 +57,37 @@ class _CloseAwareTarget:
         return self.pumped >= 3
 
 
+class _FrameCaptureTarget:
+    def __init__(self) -> None:
+        self.frames: list[DisplayFrame] = []
+
+    def start(self) -> None:
+        return
+
+    def present_frame(self, frame: DisplayFrame) -> None:
+        self.frames.append(frame)
+
+    def stop(self) -> None:
+        return
+
+
 class DisplayRuntimeTests(unittest.TestCase):
+    def test_local_matrix_update_carries_dirty_region_after_initial_present(self) -> None:
+        matrix = WindowMatrix(height=4, width=5)
+        target = _FrameCaptureTarget()
+        runtime = DisplayRuntime(matrix=matrix, target=target)
+        matrix.submit_write_batch(WriteBatch([FullRewrite(torch.zeros((4, 5, 4), dtype=torch.uint8))]))
+        runtime.run_once(timeout=0.01)
+        matrix.submit_write_batch(
+            WriteBatch([ReplaceRect(x=1, y=2, width=3, height=1, rect_h_w_4=torch.ones((1, 3, 4), dtype=torch.uint8))])
+        )
+
+        tick = runtime.run_once(timeout=0.01)
+
+        assert tick is not None
+        self.assertIsNone(target.frames[0].dirty_rect)
+        self.assertEqual(tick.frame.dirty_rect, (1, 2, 3, 1))
+
     def test_run_once_presents_committed_frame(self) -> None:
         matrix = WindowMatrix(height=2, width=2)
         presenter = _FakePresenter()
