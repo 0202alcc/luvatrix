@@ -36,6 +36,7 @@
 #endif
 
 #include "luvatrix_camera_preview_shaders.h"
+#include "luvatrix_glyph_batch_shaders.h"
 #include "luvatrix_primitive_batch_shaders.h"
 
 #define LVX_LOGI(...) __android_log_print(ANDROID_LOG_INFO, "Luvatrix", __VA_ARGS__)
@@ -102,6 +103,21 @@ struct GpuPrimitiveInstance {
 
 using GpuRectInstance = GpuPrimitiveInstance;
 
+struct GpuGlyphInstance {
+    float x = 0.0f;
+    float y = 0.0f;
+    float width = 0.0f;
+    float height = 0.0f;
+    float color_r = 0.0f;
+    float color_g = 0.0f;
+    float color_b = 0.0f;
+    float color_a = 1.0f;
+    uint32_t glyph_index = 0;
+    uint32_t glyph_width = 5;
+    uint32_t glyph_height = 7;
+    uint32_t reserved = 0;
+};
+
 struct TextPrimitive {
     std::string text;
     double x = 0.0;
@@ -167,6 +183,10 @@ struct VulkanState {
         VkDeviceMemory primitive_instance_memory = VK_NULL_HANDLE;
         VkDeviceSize primitive_instance_capacity = 0;
         VkDescriptorSet primitive_descriptor_set = VK_NULL_HANDLE;
+        VkBuffer glyph_instance_buffer = VK_NULL_HANDLE;
+        VkDeviceMemory glyph_instance_memory = VK_NULL_HANDLE;
+        VkDeviceSize glyph_instance_capacity = 0;
+        VkDescriptorSet glyph_descriptor_set = VK_NULL_HANDLE;
     };
     std::vector<PreviewFrameSync> preview_frames;
     std::vector<VkFence> images_in_flight;
@@ -186,6 +206,14 @@ struct VulkanState {
     VkPipeline rect_batch_pipeline = VK_NULL_HANDLE;
     VkShaderModule rect_batch_vertex_shader = VK_NULL_HANDLE;
     VkShaderModule rect_batch_fragment_shader = VK_NULL_HANDLE;
+    VkDescriptorSetLayout glyph_batch_descriptor_set_layout = VK_NULL_HANDLE;
+    VkPipelineLayout glyph_batch_pipeline_layout = VK_NULL_HANDLE;
+    VkPipeline glyph_batch_pipeline = VK_NULL_HANDLE;
+    VkShaderModule glyph_batch_vertex_shader = VK_NULL_HANDLE;
+    VkShaderModule glyph_batch_fragment_shader = VK_NULL_HANDLE;
+    VkBuffer glyph_atlas_buffer = VK_NULL_HANDLE;
+    VkDeviceMemory glyph_atlas_memory = VK_NULL_HANDLE;
+    uint64_t glyph_atlas_revision = 0;
     VkImage overlay_image = VK_NULL_HANDLE;
     VkDeviceMemory overlay_memory = VK_NULL_HANDLE;
     VkImageView overlay_view = VK_NULL_HANDLE;
@@ -376,6 +404,7 @@ float g_blue_gain = 1.0f;
 float g_color_brightness = 0.0f;
 float g_color_contrast = 1.0f;
 BitmapFont g_bitmap_font;
+uint64_t g_bitmap_font_revision = 1;
 CameraYuvFrame g_camera_primary;
 CameraYuvFrame g_camera_secondary;
 CameraHardwareBufferFrame g_hardware_primary;
@@ -866,6 +895,16 @@ void destroy_preview_base_resources(VulkanState& vk) {
     if (vk.device == VK_NULL_HANDLE) return;
     destroy_imported_camera_preview(vk);
     destroy_camera_intermediate_resources(vk);
+    if (vk.glyph_batch_pipeline != VK_NULL_HANDLE) vkDestroyPipeline(vk.device, vk.glyph_batch_pipeline, nullptr);
+    if (vk.glyph_batch_pipeline_layout != VK_NULL_HANDLE) vkDestroyPipelineLayout(vk.device, vk.glyph_batch_pipeline_layout, nullptr);
+    if (vk.glyph_batch_descriptor_set_layout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(vk.device, vk.glyph_batch_descriptor_set_layout, nullptr);
+    if (vk.glyph_batch_vertex_shader != VK_NULL_HANDLE) vkDestroyShaderModule(vk.device, vk.glyph_batch_vertex_shader, nullptr);
+    if (vk.glyph_batch_fragment_shader != VK_NULL_HANDLE) vkDestroyShaderModule(vk.device, vk.glyph_batch_fragment_shader, nullptr);
+    vk.glyph_batch_pipeline = VK_NULL_HANDLE;
+    vk.glyph_batch_pipeline_layout = VK_NULL_HANDLE;
+    vk.glyph_batch_descriptor_set_layout = VK_NULL_HANDLE;
+    vk.glyph_batch_vertex_shader = VK_NULL_HANDLE;
+    vk.glyph_batch_fragment_shader = VK_NULL_HANDLE;
     if (vk.rect_batch_pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(vk.device, vk.rect_batch_pipeline, nullptr);
         vk.rect_batch_pipeline = VK_NULL_HANDLE;
@@ -927,7 +966,10 @@ void destroy_preview_base_resources(VulkanState& vk) {
         vk.preview_descriptor_pool = VK_NULL_HANDLE;
     }
     vk.overlay_descriptor_set = VK_NULL_HANDLE;
-    for (auto& frame : vk.preview_frames) frame.primitive_descriptor_set = VK_NULL_HANDLE;
+    for (auto& frame : vk.preview_frames) {
+        frame.primitive_descriptor_set = VK_NULL_HANDLE;
+        frame.glyph_descriptor_set = VK_NULL_HANDLE;
+    }
     vk.overlay_width = 0;
     vk.overlay_height = 0;
     vk.overlay_uploaded = false;
@@ -976,8 +1018,12 @@ void destroy_vulkan(VulkanState& vk) {
             if (frame.staging_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, frame.staging_memory, nullptr);
             if (frame.primitive_instance_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, frame.primitive_instance_buffer, nullptr);
             if (frame.primitive_instance_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, frame.primitive_instance_memory, nullptr);
+            if (frame.glyph_instance_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, frame.glyph_instance_buffer, nullptr);
+            if (frame.glyph_instance_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, frame.glyph_instance_memory, nullptr);
         }
         vk.preview_frames.clear();
+        if (vk.glyph_atlas_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, vk.glyph_atlas_buffer, nullptr);
+        if (vk.glyph_atlas_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, vk.glyph_atlas_memory, nullptr);
         if (vk.staging_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, vk.staging_buffer, nullptr);
         if (vk.staging_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, vk.staging_memory, nullptr);
         vkDestroyDevice(vk.device, nullptr);
@@ -1835,7 +1881,8 @@ std::vector<uint32_t> rasterize_scene_pixels_impl(
     bool include_cpu_camera_background,
     bool transparent_background,
     bool include_rects,
-    bool include_circles
+    bool include_circles,
+    bool include_text
 ) {
     bool use_camera_background = include_cpu_camera_background && g_camera_primary.preview_enabled && g_camera_primary.has_frame;
     std::vector<uint32_t> pixels;
@@ -1866,17 +1913,19 @@ std::vector<uint32_t> rasterize_scene_pixels_impl(
             draw_circle_pixels(pixels, width, height, scale_x, scale_y, shifted);
         }
     }
-    for (const auto& text : scene.texts) {
-        TextPrimitive shifted = text;
-        shifted.x -= scene.content_offset_x;
-        shifted.y -= scene.content_offset_y;
-        draw_text_pixels(pixels, width, height, scale_x, scale_y, shifted);
+    if (include_text) {
+        for (const auto& text : scene.texts) {
+            TextPrimitive shifted = text;
+            shifted.x -= scene.content_offset_x;
+            shifted.y -= scene.content_offset_y;
+            draw_text_pixels(pixels, width, height, scale_x, scale_y, shifted);
+        }
     }
     return pixels;
 }
 
 std::vector<uint32_t> rasterize_scene_pixels(const ParsedScene& scene, int width, int height, int logical_width, int logical_height) {
-    return rasterize_scene_pixels_impl(scene, width, height, logical_width, logical_height, true, false, true, true);
+    return rasterize_scene_pixels_impl(scene, width, height, logical_width, logical_height, true, false, true, true, true);
 }
 
 std::vector<uint32_t> rasterize_overlay_pixels(
@@ -1885,7 +1934,8 @@ std::vector<uint32_t> rasterize_overlay_pixels(
     int height,
     int logical_width,
     int logical_height,
-    bool include_gpu_primitives = true
+    bool include_gpu_primitives = true,
+    bool include_gpu_text = true
 ) {
     return rasterize_scene_pixels_impl(
         scene,
@@ -1896,12 +1946,13 @@ std::vector<uint32_t> rasterize_overlay_pixels(
         false,
         true,
         include_gpu_primitives,
-        include_gpu_primitives
+        include_gpu_primitives,
+        include_gpu_text
     );
 }
 
 std::vector<uint32_t> rasterize_scene_without_gpu_primitives(const ParsedScene& scene, int width, int height, int logical_width, int logical_height) {
-    return rasterize_scene_pixels_impl(scene, width, height, logical_width, logical_height, true, false, false, false);
+    return rasterize_scene_pixels_impl(scene, width, height, logical_width, logical_height, true, false, false, false, false);
 }
 
 struct PixelBounds {
@@ -1956,6 +2007,7 @@ uint32_t find_memory_type(VulkanState& vk, uint32_t bits, VkMemoryPropertyFlags 
 }
 
 bool ensure_preview_base_resources(VulkanState& vk);
+bool ensure_glyph_batch_resources(VulkanState& vk);
 bool render_rgba_matrix_region(VulkanState& vk, const std::vector<uint32_t>& pixels, int source_width, int source_height, int destination_x, int destination_y, int upload_width, int upload_height);
 bool ensure_preview_descriptor_pool(VulkanState& vk);
 bool allocate_texture_descriptor_set(VulkanState& vk, VkDescriptorSetLayout layout, VkDescriptorSet& set);
@@ -2439,6 +2491,48 @@ bool ensure_primitive_batch_instance_buffer(
     return true;
 }
 
+bool ensure_glyph_instance_buffer(VulkanState& vk, VulkanState::PreviewFrameSync& frame, VkDeviceSize size) {
+    if (frame.glyph_instance_buffer == VK_NULL_HANDLE || frame.glyph_instance_capacity < size) {
+        if (frame.glyph_instance_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, frame.glyph_instance_buffer, nullptr);
+        if (frame.glyph_instance_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, frame.glyph_instance_memory, nullptr);
+        frame.glyph_instance_buffer = VK_NULL_HANDLE;
+        frame.glyph_instance_memory = VK_NULL_HANDLE;
+        frame.glyph_instance_capacity = 0;
+        VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        info.size = size;
+        info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        if (vkCreateBuffer(vk.device, &info, nullptr, &frame.glyph_instance_buffer) != VK_SUCCESS) return false;
+        VkMemoryRequirements requirements{};
+        vkGetBufferMemoryRequirements(vk.device, frame.glyph_instance_buffer, &requirements);
+        uint32_t memory_type = find_memory_type(vk, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        if (memory_type == std::numeric_limits<uint32_t>::max()) return false;
+        VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        allocation.allocationSize = requirements.size;
+        allocation.memoryTypeIndex = memory_type;
+        if (vkAllocateMemory(vk.device, &allocation, nullptr, &frame.glyph_instance_memory) != VK_SUCCESS) return false;
+        if (vkBindBufferMemory(vk.device, frame.glyph_instance_buffer, frame.glyph_instance_memory, 0) != VK_SUCCESS) return false;
+        frame.glyph_instance_capacity = size;
+    }
+    if (frame.glyph_descriptor_set == VK_NULL_HANDLE && !allocate_texture_descriptor_set(vk, vk.glyph_batch_descriptor_set_layout, frame.glyph_descriptor_set)) return false;
+    VkDescriptorBufferInfo buffers[2]{};
+    buffers[0].buffer = frame.glyph_instance_buffer;
+    buffers[0].range = VK_WHOLE_SIZE;
+    buffers[1].buffer = vk.glyph_atlas_buffer;
+    buffers[1].range = VK_WHOLE_SIZE;
+    VkWriteDescriptorSet writes[2]{};
+    for (uint32_t binding = 0; binding < 2; ++binding) {
+        writes[binding].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[binding].dstSet = frame.glyph_descriptor_set;
+        writes[binding].dstBinding = binding;
+        writes[binding].descriptorCount = 1;
+        writes[binding].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        writes[binding].pBufferInfo = &buffers[binding];
+    }
+    vkUpdateDescriptorSets(vk.device, 2, writes, 0, nullptr);
+    return true;
+}
+
 bool ensure_rect_batch_resources(VulkanState& vk) {
     if (!ensure_preview_descriptor_pool(vk)) return false;
     if (vk.rect_batch_vertex_shader == VK_NULL_HANDLE) {
@@ -2518,6 +2612,124 @@ bool ensure_rect_batch_resources(VulkanState& vk) {
     pipeline_info.renderPass = vk.render_pass;
     if (vkCreateGraphicsPipelines(vk.device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &vk.rect_batch_pipeline) != VK_SUCCESS) return false;
     return true;
+}
+
+bool ensure_glyph_atlas_buffer(VulkanState& vk) {
+    constexpr size_t kGlyphCount = 128;
+    constexpr size_t kRowsPerGlyph = 64;
+    constexpr VkDeviceSize kAtlasBytes = static_cast<VkDeviceSize>(kGlyphCount * kRowsPerGlyph * sizeof(uint32_t));
+    if (vk.glyph_atlas_buffer == VK_NULL_HANDLE) {
+        VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        info.size = kAtlasBytes;
+        info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        if (vkCreateBuffer(vk.device, &info, nullptr, &vk.glyph_atlas_buffer) != VK_SUCCESS) return false;
+        VkMemoryRequirements requirements{};
+        vkGetBufferMemoryRequirements(vk.device, vk.glyph_atlas_buffer, &requirements);
+        uint32_t memory_type = find_memory_type(vk, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        if (memory_type == std::numeric_limits<uint32_t>::max()) return false;
+        VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        allocation.allocationSize = requirements.size;
+        allocation.memoryTypeIndex = memory_type;
+        if (vkAllocateMemory(vk.device, &allocation, nullptr, &vk.glyph_atlas_memory) != VK_SUCCESS) return false;
+        if (vkBindBufferMemory(vk.device, vk.glyph_atlas_buffer, vk.glyph_atlas_memory, 0) != VK_SUCCESS) return false;
+    }
+    if (vk.glyph_atlas_revision == g_bitmap_font_revision) return true;
+    if (!wait_all_preview_frame_fences(vk)) return false;
+    std::array<uint32_t, kGlyphCount * kRowsPerGlyph> atlas{};
+    for (size_t glyph_index = 0; glyph_index < kGlyphCount; ++glyph_index) {
+        GlyphBitmap glyph = glyph_bitmap(static_cast<char>(glyph_index));
+        for (int row = 0; row < glyph.height && row < static_cast<int>(kRowsPerGlyph) && row < static_cast<int>(glyph.rows.size()); ++row) {
+            atlas[glyph_index * kRowsPerGlyph + static_cast<size_t>(row)] = glyph.rows[static_cast<size_t>(row)];
+        }
+    }
+    void* mapped = nullptr;
+    if (vkMapMemory(vk.device, vk.glyph_atlas_memory, 0, kAtlasBytes, 0, &mapped) != VK_SUCCESS) return false;
+    std::memcpy(mapped, atlas.data(), static_cast<size_t>(kAtlasBytes));
+    vkUnmapMemory(vk.device, vk.glyph_atlas_memory);
+    vk.glyph_atlas_revision = g_bitmap_font_revision;
+    return true;
+}
+
+bool ensure_glyph_batch_resources(VulkanState& vk) {
+    if (!ensure_preview_descriptor_pool(vk) || !ensure_glyph_atlas_buffer(vk)) return false;
+    if (vk.glyph_batch_vertex_shader == VK_NULL_HANDLE) {
+        vk.glyph_batch_vertex_shader = create_shader_module_bytes(vk, kGlyphBatchVertSpv, kGlyphBatchVertSpv_len);
+        if (vk.glyph_batch_vertex_shader == VK_NULL_HANDLE) return false;
+    }
+    if (vk.glyph_batch_fragment_shader == VK_NULL_HANDLE) {
+        vk.glyph_batch_fragment_shader = create_shader_module_bytes(vk, kGlyphBatchFragSpv, kGlyphBatchFragSpv_len);
+        if (vk.glyph_batch_fragment_shader == VK_NULL_HANDLE) return false;
+    }
+    if (vk.glyph_batch_descriptor_set_layout == VK_NULL_HANDLE) {
+        std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
+        for (uint32_t binding = 0; binding < bindings.size(); ++binding) {
+            bindings[binding].binding = binding;
+            bindings[binding].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            bindings[binding].descriptorCount = 1;
+            bindings[binding].stageFlags = binding == 0 ? VK_SHADER_STAGE_VERTEX_BIT : VK_SHADER_STAGE_FRAGMENT_BIT;
+        }
+        VkDescriptorSetLayoutCreateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        info.bindingCount = static_cast<uint32_t>(bindings.size());
+        info.pBindings = bindings.data();
+        if (vkCreateDescriptorSetLayout(vk.device, &info, nullptr, &vk.glyph_batch_descriptor_set_layout) != VK_SUCCESS) return false;
+    }
+    if (vk.glyph_batch_pipeline != VK_NULL_HANDLE) return true;
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vk.glyph_batch_vertex_shader;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = vk.glyph_batch_fragment_shader;
+    stages[1].pName = "main";
+    VkPipelineLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    layout_info.setLayoutCount = 1;
+    layout_info.pSetLayouts = &vk.glyph_batch_descriptor_set_layout;
+    if (vkCreatePipelineLayout(vk.device, &layout_info, nullptr, &vk.glyph_batch_pipeline_layout) != VK_SUCCESS) return false;
+    VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    VkViewport viewport{0.0f, 0.0f, static_cast<float>(vk.extent.width), static_cast<float>(vk.extent.height), 0.0f, 1.0f};
+    VkRect2D scissor{};
+    scissor.extent = vk.extent;
+    VkPipelineViewportStateCreateInfo viewport_state{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+    viewport_state.viewportCount = 1;
+    viewport_state.pViewports = &viewport;
+    viewport_state.scissorCount = 1;
+    viewport_state.pScissors = &scissor;
+    VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+    raster.polygonMode = VK_POLYGON_MODE_FILL;
+    raster.cullMode = VK_CULL_MODE_NONE;
+    raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster.lineWidth = 1.0f;
+    VkPipelineMultisampleStateCreateInfo multisample{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    VkPipelineColorBlendAttachmentState blend{};
+    blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    blend.blendEnable = VK_TRUE;
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blend.colorBlendOp = VK_BLEND_OP_ADD;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blend.alphaBlendOp = VK_BLEND_OP_ADD;
+    VkPipelineColorBlendStateCreateInfo blend_state{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+    blend_state.attachmentCount = 1;
+    blend_state.pAttachments = &blend;
+    VkGraphicsPipelineCreateInfo pipeline_info{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+    pipeline_info.stageCount = 2;
+    pipeline_info.pStages = stages;
+    pipeline_info.pVertexInputState = &vertex_input;
+    pipeline_info.pInputAssemblyState = &assembly;
+    pipeline_info.pViewportState = &viewport_state;
+    pipeline_info.pRasterizationState = &raster;
+    pipeline_info.pMultisampleState = &multisample;
+    pipeline_info.pColorBlendState = &blend_state;
+    pipeline_info.layout = vk.glyph_batch_pipeline_layout;
+    pipeline_info.renderPass = vk.render_pass;
+    return vkCreateGraphicsPipelines(vk.device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &vk.glyph_batch_pipeline) == VK_SUCCESS;
 }
 
 bool ensure_staging_buffer(VulkanState& vk, VkDeviceSize size) {
@@ -2639,7 +2851,7 @@ bool ensure_preview_descriptor_pool(VulkanState& vk) {
     sizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     sizes[0].descriptorCount = 16;
     sizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    sizes[1].descriptorCount = kPreviewFramesInFlight;
+    sizes[1].descriptorCount = kPreviewFramesInFlight * 3;
     VkDescriptorPoolCreateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     info.maxSets = 16;
     info.poolSizeCount = 2;
@@ -3136,7 +3348,8 @@ std::string overlay_cache_key_for_scene(
     int height,
     int logical_width,
     int logical_height,
-    bool include_gpu_primitives = true
+    bool include_gpu_primitives = true,
+    bool include_gpu_text = true
 ) {
     std::string key = std::to_string(width) + "x" + std::to_string(height) + "/" +
         std::to_string(logical_width) + "x" + std::to_string(logical_height) + "/";
@@ -3177,12 +3390,14 @@ std::string overlay_cache_key_for_scene(
             append_color(circle.stroke);
         }
     }
-    for (const auto& text : scene.texts) {
-        key += "|text=" + std::to_string(text.text.size()) + ":" + text.text + "@";
-        append_number(text.x);
-        append_number(text.y);
-        append_number(text.size);
-        append_color(text.color);
+    if (include_gpu_text) {
+        for (const auto& text : scene.texts) {
+            key += "|text=" + std::to_string(text.text.size()) + ":" + text.text + "@";
+            append_number(text.x);
+            append_number(text.y);
+            append_number(text.size);
+            append_color(text.color);
+        }
     }
     return key;
 }
@@ -3263,6 +3478,38 @@ std::vector<GpuPrimitiveInstance> gpu_primitive_instances_for_scene(
     return instances;
 }
 
+std::vector<GpuGlyphInstance> append_gpu_glyph_instances(const ParsedScene& scene, int width, int height, int logical_width, int logical_height) {
+    std::vector<GpuGlyphInstance> instances;
+    const double scale_x = static_cast<double>(width) / std::max(1, logical_width);
+    const double scale_y = static_cast<double>(height) / std::max(1, logical_height);
+    const double scale = std::max(1.0, std::min(scale_x, scale_y));
+    for (const auto& text : scene.texts) {
+        if (text.text.empty() || text.color.a <= 0) continue;
+        int x_cursor = static_cast<int>(std::round((text.x - scene.content_offset_x) * scale_x));
+        int y_top = static_cast<int>(std::round((text.y - scene.content_offset_y) * scale_y));
+        const int line_start = x_cursor;
+        for (char ch : text.text) {
+            GlyphBitmap glyph = glyph_bitmap(ch);
+            const int px = std::max(1, static_cast<int>(std::round(text.size * scale / std::max(1, glyph.height))));
+            if (ch == '\n') {
+                x_cursor = line_start;
+                y_top += px * (glyph.height + 2);
+                continue;
+            }
+            instances.push_back({
+                static_cast<float>(x_cursor) / width,
+                static_cast<float>(y_top) / height,
+                static_cast<float>(glyph.width * px) / width,
+                static_cast<float>(glyph.height * px) / height,
+                gpu_color_channel(text.color.r), gpu_color_channel(text.color.g), gpu_color_channel(text.color.b), gpu_color_channel(text.color.a),
+                static_cast<uint32_t>(static_cast<unsigned char>(ch)), static_cast<uint32_t>(glyph.width), static_cast<uint32_t>(glyph.height), 0u,
+            });
+            x_cursor += px * glyph.advance;
+        }
+    }
+    return instances;
+}
+
 bool prepare_gpu_primitive_instances(
     VulkanState& vk,
     VulkanState::PreviewFrameSync& frame_sync,
@@ -3275,6 +3522,17 @@ bool prepare_gpu_primitive_instances(
     if (vkMapMemory(vk.device, frame_sync.primitive_instance_memory, 0, bytes, 0, &mapped) != VK_SUCCESS) return false;
     std::memcpy(mapped, instances.data(), static_cast<size_t>(bytes));
     vkUnmapMemory(vk.device, frame_sync.primitive_instance_memory);
+    return true;
+}
+
+bool prepare_gpu_glyph_instances(VulkanState& vk, VulkanState::PreviewFrameSync& frame, const std::vector<GpuGlyphInstance>& instances) {
+    if (instances.empty()) return true;
+    const VkDeviceSize bytes = static_cast<VkDeviceSize>(instances.size() * sizeof(GpuGlyphInstance));
+    if (!ensure_glyph_batch_resources(vk) || !ensure_glyph_instance_buffer(vk, frame, bytes)) return false;
+    void* mapped = nullptr;
+    if (vkMapMemory(vk.device, frame.glyph_instance_memory, 0, bytes, 0, &mapped) != VK_SUCCESS) return false;
+    std::memcpy(mapped, instances.data(), static_cast<size_t>(bytes));
+    vkUnmapMemory(vk.device, frame.glyph_instance_memory);
     return true;
 }
 
@@ -3296,6 +3554,13 @@ void draw_gpu_primitives(
         0,
         nullptr
     );
+    vkCmdDraw(cmd, 6, instance_count, 0, 0);
+}
+
+void draw_gpu_glyphs(VulkanState& vk, VkCommandBuffer cmd, const VulkanState::PreviewFrameSync& frame, uint32_t instance_count) {
+    if (instance_count == 0 || vk.glyph_batch_pipeline == VK_NULL_HANDLE || frame.glyph_descriptor_set == VK_NULL_HANDLE) return;
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.glyph_batch_pipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.glyph_batch_pipeline_layout, 0, 1, &frame.glyph_descriptor_set, 0, nullptr);
     vkCmdDraw(cmd, 6, instance_count, 0, 0);
 }
 
@@ -3377,13 +3642,18 @@ bool render_scene_gpu_preview(VulkanState& vk, const ParsedScene& scene, int log
         error = "GPU preview base resources are unavailable";
         return false;
     }
+    const int width = static_cast<int>(vk.extent.width);
+    const int height = static_cast<int>(vk.extent.height);
     const auto primitive_instances = gpu_primitive_instances_for_scene(scene, logical_width, logical_height);
+    const auto glyph_instances = append_gpu_glyph_instances(scene, width, height, logical_width, logical_height);
     if (!prepare_gpu_primitive_instances(vk, frame_sync, primitive_instances)) {
         error = "failed to prepare GPU primitive instances";
         return false;
     }
-    int width = static_cast<int>(vk.extent.width);
-    int height = static_cast<int>(vk.extent.height);
+    if (!prepare_gpu_glyph_instances(vk, frame_sync, glyph_instances)) {
+        error = "failed to prepare GPU glyph instances";
+        return false;
+    }
     if (!ensure_camera_intermediate_texture(vk, width, height)) {
         error = "failed to create display-sized camera intermediate texture";
         g_gpu_preview.intermediate_last_error = error;
@@ -3397,12 +3667,12 @@ bool render_scene_gpu_preview(VulkanState& vk, const ParsedScene& scene, int log
         error = "imported HardwareBuffer preview is not ready";
         return false;
     }
-    std::string overlay_key = overlay_cache_key_for_scene(scene, width, height, logical_width, logical_height, false);
+    std::string overlay_key = overlay_cache_key_for_scene(scene, width, height, logical_width, logical_height, false, false);
     bool overlay_upload_required = false;
     if (vk.overlay_descriptor_set != VK_NULL_HANDLE && vk.overlay_cache_key == overlay_key) {
         g_gpu_preview.overlay_cache_hits += 1;
     } else {
-        auto overlay = rasterize_overlay_pixels(scene, width, height, logical_width, logical_height, false);
+        auto overlay = rasterize_overlay_pixels(scene, width, height, logical_width, logical_height, false, false);
         if (!prepare_overlay_texture_upload(vk, frame_sync, overlay, width, height)) {
             error = "failed to upload HUD overlay texture";
             return false;
@@ -3553,6 +3823,7 @@ bool render_scene_gpu_preview(VulkanState& vk, const ParsedScene& scene, int log
     );
     vkCmdDraw(cmd, 3, 1, 0, 0);
     draw_gpu_primitives(vk, cmd, frame_sync, static_cast<uint32_t>(primitive_instances.size()));
+    draw_gpu_glyphs(vk, cmd, frame_sync, static_cast<uint32_t>(glyph_instances.size()));
     vkCmdEndRenderPass(cmd);
 
     if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
@@ -3614,15 +3885,16 @@ bool render_scene_gpu_preview(VulkanState& vk, const ParsedScene& scene, int log
 
 bool render_scene_gpu_primitive_batch(VulkanState& vk, const ParsedScene& scene, int logical_width, int logical_height) {
     if (logical_width <= 0 || logical_height <= 0 || !ensure_preview_base_resources(vk) || vk.preview_frames.empty()) return false;
+    const int width = static_cast<int>(vk.extent.width);
+    const int height = static_cast<int>(vk.extent.height);
     const std::vector<GpuPrimitiveInstance> instances = gpu_primitive_instances_for_scene(scene, logical_width, logical_height);
-    if (instances.empty()) return false;
+    const std::vector<GpuGlyphInstance> glyph_instances = append_gpu_glyph_instances(scene, width, height, logical_width, logical_height);
+    if (instances.empty() && glyph_instances.empty()) return false;
     uint32_t frame_slot = static_cast<uint32_t>(vk.frame_counter % vk.preview_frames.size());
     VulkanState::PreviewFrameSync& frame_sync = vk.preview_frames[frame_slot];
     if (!wait_fence_for_preview(vk, frame_sync.in_flight, nullptr, false)) return false;
     if (!prepare_gpu_primitive_instances(vk, frame_sync, instances)) return false;
-
-    const int width = static_cast<int>(vk.extent.width);
-    const int height = static_cast<int>(vk.extent.height);
+    if (!prepare_gpu_glyph_instances(vk, frame_sync, glyph_instances)) return false;
     auto base_pixels = rasterize_scene_without_gpu_primitives(scene, width, height, logical_width, logical_height);
     VkDeviceSize base_bytes = static_cast<VkDeviceSize>(base_pixels.size() * sizeof(uint32_t));
     if (!ensure_overlay_texture(vk, width, height) || !ensure_frame_staging_buffer(vk, frame_sync, base_bytes)) return false;
@@ -3659,6 +3931,7 @@ bool render_scene_gpu_primitive_batch(VulkanState& vk, const ParsedScene& scene,
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.overlay_pipeline_layout, 0, 1, &vk.overlay_descriptor_set, 0, nullptr);
     vkCmdDraw(cmd, 3, 1, 0, 0);
     draw_gpu_primitives(vk, cmd, frame_sync, static_cast<uint32_t>(instances.size()));
+    draw_gpu_glyphs(vk, cmd, frame_sync, static_cast<uint32_t>(glyph_instances.size()));
     vkCmdEndRenderPass(cmd);
     if (vkEndCommandBuffer(cmd) != VK_SUCCESS) return false;
     VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -3707,7 +3980,7 @@ bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_
         }
     }
     g_preview_gpu_ready = false;
-    if ((!scene.rects.empty() || !scene.circles.empty()) && render_scene_gpu_primitive_batch(vk, scene, logical_width, logical_height)) return true;
+    if ((!scene.rects.empty() || !scene.circles.empty() || !scene.texts.empty()) && render_scene_gpu_primitive_batch(vk, scene, logical_width, logical_height)) return true;
     int width = static_cast<int>(vk.extent.width);
     int height = static_cast<int>(vk.extent.height);
     auto pixels = rasterize_scene_pixels(scene, width, height, logical_width, logical_height);
@@ -6776,6 +7049,7 @@ Java_com_luvatrix_app_NativeVulkan_setBitmapGlyphTable(JNIEnv *env, jobject, jst
     }
     std::lock_guard<std::mutex> lock(g_mutex);
     g_bitmap_font = std::move(parsed);
+    g_bitmap_font_revision += 1;
     LVX_LOGI(
         "luvatrix bitmap glyph table loaded glyphs=%zu size=%dx%d advance=%d",
         g_bitmap_font.glyphs.size(),

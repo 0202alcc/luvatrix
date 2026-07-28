@@ -27,6 +27,7 @@
 #endif
 
 #include "luvatrix_camera_preview_shaders.h"
+#include "luvatrix_glyph_batch_shaders.h"
 #include "luvatrix_primitive_batch_shaders.h"
 
 #define LVX_LOGI(...) __android_log_print(ANDROID_LOG_INFO, "Luvatrix", __VA_ARGS__)
@@ -93,6 +94,21 @@ struct GpuPrimitiveInstance {
 
 using GpuRectInstance = GpuPrimitiveInstance;
 
+struct GpuGlyphInstance {
+    float x = 0.0f;
+    float y = 0.0f;
+    float width = 0.0f;
+    float height = 0.0f;
+    float color_r = 0.0f;
+    float color_g = 0.0f;
+    float color_b = 0.0f;
+    float color_a = 1.0f;
+    uint32_t glyph_index = 0;
+    uint32_t glyph_width = 5;
+    uint32_t glyph_height = 7;
+    uint32_t reserved = 0;
+};
+
 struct TextPrimitive {
     std::string text;
     double x = 0.0;
@@ -158,6 +174,10 @@ struct VulkanState {
         VkDeviceMemory primitive_instance_memory = VK_NULL_HANDLE;
         VkDeviceSize primitive_instance_capacity = 0;
         VkDescriptorSet primitive_descriptor_set = VK_NULL_HANDLE;
+        VkBuffer glyph_instance_buffer = VK_NULL_HANDLE;
+        VkDeviceMemory glyph_instance_memory = VK_NULL_HANDLE;
+        VkDeviceSize glyph_instance_capacity = 0;
+        VkDescriptorSet glyph_descriptor_set = VK_NULL_HANDLE;
     };
     std::vector<PreviewFrameSync> preview_frames;
     std::vector<VkFence> images_in_flight;
@@ -177,6 +197,14 @@ struct VulkanState {
     VkPipeline rect_batch_pipeline = VK_NULL_HANDLE;
     VkShaderModule rect_batch_vertex_shader = VK_NULL_HANDLE;
     VkShaderModule rect_batch_fragment_shader = VK_NULL_HANDLE;
+    VkDescriptorSetLayout glyph_batch_descriptor_set_layout = VK_NULL_HANDLE;
+    VkPipelineLayout glyph_batch_pipeline_layout = VK_NULL_HANDLE;
+    VkPipeline glyph_batch_pipeline = VK_NULL_HANDLE;
+    VkShaderModule glyph_batch_vertex_shader = VK_NULL_HANDLE;
+    VkShaderModule glyph_batch_fragment_shader = VK_NULL_HANDLE;
+    VkBuffer glyph_atlas_buffer = VK_NULL_HANDLE;
+    VkDeviceMemory glyph_atlas_memory = VK_NULL_HANDLE;
+    uint64_t glyph_atlas_revision = 0;
     VkImage overlay_image = VK_NULL_HANDLE;
     VkDeviceMemory overlay_memory = VK_NULL_HANDLE;
     VkImageView overlay_view = VK_NULL_HANDLE;
@@ -367,6 +395,7 @@ float g_blue_gain = 1.0f;
 float g_color_brightness = 0.0f;
 float g_color_contrast = 1.0f;
 BitmapFont g_bitmap_font;
+uint64_t g_bitmap_font_revision = 1;
 CameraYuvFrame g_camera_primary;
 CameraYuvFrame g_camera_secondary;
 CameraHardwareBufferFrame g_hardware_primary;
@@ -857,6 +886,16 @@ void destroy_preview_base_resources(VulkanState& vk) {
     if (vk.device == VK_NULL_HANDLE) return;
     destroy_imported_camera_preview(vk);
     destroy_camera_intermediate_resources(vk);
+    if (vk.glyph_batch_pipeline != VK_NULL_HANDLE) vkDestroyPipeline(vk.device, vk.glyph_batch_pipeline, nullptr);
+    if (vk.glyph_batch_pipeline_layout != VK_NULL_HANDLE) vkDestroyPipelineLayout(vk.device, vk.glyph_batch_pipeline_layout, nullptr);
+    if (vk.glyph_batch_descriptor_set_layout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(vk.device, vk.glyph_batch_descriptor_set_layout, nullptr);
+    if (vk.glyph_batch_vertex_shader != VK_NULL_HANDLE) vkDestroyShaderModule(vk.device, vk.glyph_batch_vertex_shader, nullptr);
+    if (vk.glyph_batch_fragment_shader != VK_NULL_HANDLE) vkDestroyShaderModule(vk.device, vk.glyph_batch_fragment_shader, nullptr);
+    vk.glyph_batch_pipeline = VK_NULL_HANDLE;
+    vk.glyph_batch_pipeline_layout = VK_NULL_HANDLE;
+    vk.glyph_batch_descriptor_set_layout = VK_NULL_HANDLE;
+    vk.glyph_batch_vertex_shader = VK_NULL_HANDLE;
+    vk.glyph_batch_fragment_shader = VK_NULL_HANDLE;
     if (vk.rect_batch_pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(vk.device, vk.rect_batch_pipeline, nullptr);
         vk.rect_batch_pipeline = VK_NULL_HANDLE;
@@ -918,7 +957,10 @@ void destroy_preview_base_resources(VulkanState& vk) {
         vk.preview_descriptor_pool = VK_NULL_HANDLE;
     }
     vk.overlay_descriptor_set = VK_NULL_HANDLE;
-    for (auto& frame : vk.preview_frames) frame.primitive_descriptor_set = VK_NULL_HANDLE;
+    for (auto& frame : vk.preview_frames) {
+        frame.primitive_descriptor_set = VK_NULL_HANDLE;
+        frame.glyph_descriptor_set = VK_NULL_HANDLE;
+    }
     vk.overlay_width = 0;
     vk.overlay_height = 0;
     vk.overlay_uploaded = false;
@@ -967,8 +1009,12 @@ void destroy_vulkan(VulkanState& vk) {
             if (frame.staging_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, frame.staging_memory, nullptr);
             if (frame.primitive_instance_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, frame.primitive_instance_buffer, nullptr);
             if (frame.primitive_instance_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, frame.primitive_instance_memory, nullptr);
+            if (frame.glyph_instance_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, frame.glyph_instance_buffer, nullptr);
+            if (frame.glyph_instance_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, frame.glyph_instance_memory, nullptr);
         }
         vk.preview_frames.clear();
+        if (vk.glyph_atlas_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, vk.glyph_atlas_buffer, nullptr);
+        if (vk.glyph_atlas_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, vk.glyph_atlas_memory, nullptr);
         if (vk.staging_buffer != VK_NULL_HANDLE) vkDestroyBuffer(vk.device, vk.staging_buffer, nullptr);
         if (vk.staging_memory != VK_NULL_HANDLE) vkFreeMemory(vk.device, vk.staging_memory, nullptr);
         vkDestroyDevice(vk.device, nullptr);
@@ -1894,6 +1940,14 @@ std::vector<uint32_t> rasterize_overlay_pixels(
 std::vector<uint32_t> rasterize_scene_without_gpu_primitives(const ParsedScene& scene, int width, int height, int logical_width, int logical_height) {
     return rasterize_scene_pixels_impl(scene, width, height, logical_width, logical_height, true, false, false, false);
 }
+
+// The app template ships the same packed glyph-atlas shader assets as the
+// bundled renderer. Keeping these hooks explicit lets generated projects opt
+// into the identical per-frame glyph batch when their native renderer is used.
+bool ensure_glyph_atlas_buffer(VulkanState& vk);
+bool ensure_glyph_batch_resources(VulkanState& vk);
+std::vector<GpuGlyphInstance> append_gpu_glyph_instances(const ParsedScene& scene, int width, int height, int logical_width, int logical_height);
+void draw_gpu_glyphs(VulkanState& vk, VkCommandBuffer cmd, const VulkanState::PreviewFrameSync& frame, uint32_t instance_count);
 
 struct PixelBounds {
     int x = 0;
