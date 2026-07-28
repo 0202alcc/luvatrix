@@ -2795,7 +2795,7 @@ bool prepare_overlay_texture_upload(
     void* mapped = nullptr;
     if (vkMapMemory(vk.device, frame_sync.staging_memory, 0, byte_count, 0, &mapped) != VK_SUCCESS) return false;
     std::memcpy(mapped, pixels.data(), static_cast<size_t>(byte_count));
-    vkUnmapMemory(vk.device, vk.staging_memory);
+    vkUnmapMemory(vk.device, frame_sync.staging_memory);
     return true;
 }
 

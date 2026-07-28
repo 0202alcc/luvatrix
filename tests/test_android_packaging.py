@@ -42,6 +42,16 @@ class AndroidPackagingTests(unittest.TestCase):
             self.assertIn("vkCmdDraw(cmd, 6,", native_cpp)
             self.assertIn("render_scene_gpu_rect_batch", native_cpp)
 
+    def test_android_frame_upload_unmaps_its_own_staging_memory(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            native_cpp = (root / "app/src/main/cpp/luvatrix_vulkan_renderer.cpp").read_text(encoding="utf-8")
+            frame_upload_body = native_cpp.split("bool prepare_overlay_texture_upload", 1)[1].split(
+                "\nvoid record_overlay_texture_upload", 1
+            )[0]
+
+            self.assertIn("vkUnmapMemory(vk.device, frame_sync.staging_memory)", frame_upload_body)
+            self.assertNotIn("vkUnmapMemory(vk.device, vk.staging_memory)", frame_upload_body)
+
     def test_android_activity_reattaches_and_detaches_process_runtime(self) -> None:
         for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
             activity = (root / "app/src/main/java/com/luvatrix/app/MainActivity.kt").read_text(encoding="utf-8")
@@ -697,6 +707,11 @@ class AndroidPackagingTests(unittest.TestCase):
         self.assertIn("bool ensure_frame_staging_buffer", native_cpp)
         self.assertIn("ensure_frame_staging_buffer(vk, frame_sync, byte_count)", native_cpp)
         self.assertIn("frame_sync.staging_buffer", native_cpp)
+        frame_upload_body = native_cpp.split("bool prepare_overlay_texture_upload", 1)[1].split(
+            "\nvoid record_overlay_texture_upload", 1
+        )[0]
+        self.assertIn("vkUnmapMemory(vk.device, frame_sync.staging_memory)", frame_upload_body)
+        self.assertNotIn("vkUnmapMemory(vk.device, vk.staging_memory)", frame_upload_body)
         self.assertIn("vkQueueSubmit(vk.queue, 1, &submit, frame_sync.in_flight)", native_cpp)
         gpu_preview_body = native_cpp.split("bool render_scene_gpu_preview", 1)[1].split("bool render_scene_pixels", 1)[0]
         self.assertNotIn("vkQueueWaitIdle(vk.queue);", gpu_preview_body)
