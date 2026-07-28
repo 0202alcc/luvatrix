@@ -694,6 +694,7 @@ class AndroidPackagingTests(unittest.TestCase):
         self.assertNotIn("vkQueueWaitIdle(vk.queue);", scene_pixels_body)
         clear_body = native_cpp.split("bool render_clear", 1)[1].split("bool render_scene_", 1)[0]
         self.assertNotIn("vkQueueWaitIdle(vk.queue);", clear_body)
+        self.assertNotIn("vkQueueWaitIdle(vk.queue);", native_cpp)
         self.assertLess(
             gpu_preview_body.find("vk.camera_intermediate_descriptor_set"),
             gpu_preview_body.find("&vk.overlay_descriptor_set"),
