@@ -456,6 +456,62 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         overlayView.post { presentLatestRgba() }
     }
 
+    fun presentRgbaRegion(
+        rgba: ByteArray,
+        revision: Int,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+    ) {
+        if (width <= 0 || height <= 0 || x < 0 || y < 0 || x + width > sourceWidth || y + height > sourceHeight) return
+        if (rgba.size != width * height * 4) return
+        AndroidLaunchTelemetry.mark("first_app_frame_submitted")
+        val nativePresented = try {
+            NativeVulkan.presentRgbaRegion(rgba, revision, sourceWidth, sourceHeight, x, y, width, height)
+        } catch (exc: Throwable) {
+            Log.w("Luvatrix", "native RGBA region presentation unavailable", exc)
+            false
+        }
+        if (nativePresented) {
+            if (!nativeRgbaActive) {
+                nativeRgbaActive = true
+                overlayView.post {
+                    overlayMode = OverlayMode.Native
+                    overlaySceneJson = null
+                    retainedSceneJson = null
+                    overlayView.setBackgroundColor(Color.TRANSPARENT)
+                    overlayView.invalidate()
+                }
+            }
+            framesPresented += 1
+            return
+        }
+        nativeRgbaActive = false
+        overlayView.post {
+            val bitmap = frameBitmap
+            if (bitmap == null || frameBitmapWidth != sourceWidth || frameBitmapHeight != sourceHeight) return@post
+            val colors = IntArray(width * height)
+            for (index in colors.indices) {
+                val offset = index * 4
+                colors[index] = Color.argb(
+                    rgba[offset + 3].toInt() and 0xff,
+                    rgba[offset].toInt() and 0xff,
+                    rgba[offset + 1].toInt() and 0xff,
+                    rgba[offset + 2].toInt() and 0xff,
+                )
+            }
+            bitmap.setPixels(colors, 0, width, x, y, width, height)
+            overlayMode = OverlayMode.Bitmap
+            overlaySceneJson = null
+            retainedSceneJson = null
+            overlayView.invalidate()
+            framesPresented += 1
+        }
+    }
+
     private fun presentLatestRgba() {
         val presentation = rgbaFrameMailbox.take() ?: return
         bootstrapMessage = null

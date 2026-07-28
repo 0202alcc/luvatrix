@@ -2601,7 +2601,15 @@ bool prepare_overlay_texture_upload(
     return true;
 }
 
-void record_overlay_texture_upload(VulkanState& vk, VkCommandBuffer cmd, VkBuffer staging_buffer, int width, int height) {
+void record_overlay_texture_upload(
+    VulkanState& vk,
+    VkCommandBuffer cmd,
+    VkBuffer staging_buffer,
+    int width,
+    int height,
+    int destination_x = 0,
+    int destination_y = 0
+) {
     VkImageLayout old_layout = vk.overlay_uploaded
         ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         : VK_IMAGE_LAYOUT_UNDEFINED;
@@ -2609,6 +2617,7 @@ void record_overlay_texture_upload(VulkanState& vk, VkCommandBuffer cmd, VkBuffe
     VkBufferImageCopy region{};
     region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     region.imageSubresource.layerCount = 1;
+    region.imageOffset = {destination_x, destination_y, 0};
     region.imageExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
     vkCmdCopyBufferToImage(
         cmd,
@@ -3221,16 +3230,22 @@ bool render_scene_pixels(VulkanState& vk, const ParsedScene& scene, int logical_
     return pr == VK_SUCCESS || pr == VK_SUBOPTIMAL_KHR;
 }
 
-bool render_rgba_matrix(
+bool render_rgba_matrix_region(
     VulkanState& vk,
     const std::vector<uint32_t>& pixels,
     int source_width,
-    int source_height
+    int source_height,
+    int destination_x,
+    int destination_y,
+    int upload_width,
+    int upload_height
 ) {
-    if (source_width <= 0 || source_height <= 0) return false;
-    if (pixels.size() != static_cast<size_t>(source_width) * static_cast<size_t>(source_height)) return false;
+    if (source_width <= 0 || source_height <= 0 || upload_width <= 0 || upload_height <= 0) return false;
+    if (destination_x < 0 || destination_y < 0 || destination_x + upload_width > source_width || destination_y + upload_height > source_height) return false;
+    if (pixels.size() != static_cast<size_t>(upload_width) * static_cast<size_t>(upload_height)) return false;
     if (!ensure_vulkan(vk) || vk.preview_frames.empty()) return false;
     if (!ensure_preview_base_resources(vk)) return false;
+    if (!vk.overlay_uploaded && (destination_x != 0 || destination_y != 0 || upload_width != source_width || upload_height != source_height)) return false;
 
     // The matrix presenter reuses one staging buffer. Waiting on its previous
     // submission protects that buffer without stalling the entire Vulkan queue.
@@ -3251,7 +3266,16 @@ bool render_rgba_matrix(
     if (acquire == VK_ERROR_OUT_OF_DATE_KHR || acquire == VK_SUBOPTIMAL_KHR) {
         destroy_swapchain(vk);
         return create_swapchain(vk) && create_render_resources(vk) &&
-            render_rgba_matrix(vk, pixels, source_width, source_height);
+            render_rgba_matrix_region(
+                vk,
+                pixels,
+                source_width,
+                source_height,
+                destination_x,
+                destination_y,
+                upload_width,
+                upload_height
+            );
     }
     if (acquire != VK_SUCCESS) return false;
     if (image_index < vk.images_in_flight.size() && vk.images_in_flight[image_index] != VK_NULL_HANDLE) {
@@ -3265,7 +3289,7 @@ bool render_rgba_matrix(
     vkResetCommandBuffer(cmd, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) return false;
-    record_overlay_texture_upload(vk, cmd, frame_sync.staging_buffer, source_width, source_height);
+    record_overlay_texture_upload(vk, cmd, frame_sync.staging_buffer, upload_width, upload_height, destination_x, destination_y);
     VkClearValue clear{};
     clear.color.float32[3] = 1.0f;
     VkRenderPassBeginInfo render_pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
@@ -3314,6 +3338,15 @@ bool render_rgba_matrix(
     vk.current_frame_slot = frame_slot;
     vk.frame_counter += 1;
     return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
+}
+
+bool render_rgba_matrix(
+    VulkanState& vk,
+    const std::vector<uint32_t>& pixels,
+    int source_width,
+    int source_height
+) {
+    return render_rgba_matrix_region(vk, pixels, source_width, source_height, 0, 0, source_width, source_height);
 }
 
 bool render_clear(VulkanState& vk, Rgba color) {
@@ -3479,6 +3512,63 @@ Java_com_luvatrix_app_NativeVulkan_presentRgba(
             height,
             g_vk.extent.width,
             g_vk.extent.height
+        );
+    }
+    return presented ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_luvatrix_app_NativeVulkan_presentRgbaRegion(
+    JNIEnv *env,
+    jobject,
+    jbyteArray rgba,
+    jint revision,
+    jint source_width,
+    jint source_height,
+    jint x,
+    jint y,
+    jint width,
+    jint height
+) {
+    if (rgba == nullptr || source_width <= 0 || source_height <= 0 || width <= 0 || height <= 0) return JNI_FALSE;
+    if (x < 0 || y < 0 || x > source_width - width || y > source_height - height) return JNI_FALSE;
+    size_t pixel_count = static_cast<size_t>(width) * static_cast<size_t>(height);
+    if (pixel_count > std::numeric_limits<size_t>::max() / 4u) return JNI_FALSE;
+    size_t byte_count = pixel_count * 4u;
+    if (byte_count > static_cast<size_t>(std::numeric_limits<jsize>::max())) return JNI_FALSE;
+    if (env->GetArrayLength(rgba) != static_cast<jsize>(byte_count)) return JNI_FALSE;
+
+    std::vector<uint32_t> pixels(pixel_count);
+    env->GetByteArrayRegion(
+        rgba,
+        0,
+        static_cast<jsize>(byte_count),
+        reinterpret_cast<jbyte*>(pixels.data())
+    );
+    if (env->ExceptionCheck()) return JNI_FALSE;
+    rgba_to_bgra_in_place(reinterpret_cast<uint8_t*>(pixels.data()), pixel_count);
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    bool presented = render_rgba_matrix_region(
+        g_vk,
+        pixels,
+        static_cast<int>(source_width),
+        static_cast<int>(source_height),
+        static_cast<int>(x),
+        static_cast<int>(y),
+        static_cast<int>(width),
+        static_cast<int>(height)
+    );
+    if (presented && revision % 120 == 0) {
+        LVX_LOGI(
+            "luvatrix vulkan rgba region revision=%d source=%dx%d region=%d,%d %dx%d",
+            revision,
+            source_width,
+            source_height,
+            x,
+            y,
+            width,
+            height
         );
     }
     return presented ? JNI_TRUE : JNI_FALSE;

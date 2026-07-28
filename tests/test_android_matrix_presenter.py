@@ -19,15 +19,23 @@ def test_matrix_rgba_uses_direct_vulkan_with_latest_frame_fallback() -> None:
         cmake = (android / "cpp/CMakeLists.txt").read_text(encoding="utf-8")
 
         assert "external fun presentRgba" in native_api
+        assert "external fun presentRgbaRegion" in native_api
         assert "NativeVulkan.presentRgba" in view
+        assert "NativeVulkan.presentRgbaRegion" in view
         assert "rgbaFrameMailbox.offer" in view
         assert "class LatestFrameMailbox" in mailbox
         assert "Java_com_luvatrix_app_NativeVulkan_presentRgba" in renderer
-        rgba_renderer = renderer.split("bool render_rgba_matrix(", 1)[1].split(
-            "\nbool render_clear(", 1
+        assert "Java_com_luvatrix_app_NativeVulkan_presentRgbaRegion" in renderer
+        assert "render_rgba_matrix_region" in renderer
+        rgba_renderer = renderer.split("bool render_rgba_matrix_region(", 1)[1].split(
+            "\nbool render_rgba_matrix(", 1
         )[0]
         assert "record_overlay_texture_upload" in rgba_renderer
         assert "vkQueueWaitIdle" not in rgba_renderer
+        rgba_wrapper = renderer.split("bool render_rgba_matrix(", 1)[1].split(
+            "\nbool render_clear(", 1
+        )[0]
+        assert "render_rgba_matrix_region" in rgba_wrapper
         assert "rgba_to_bgra_in_place" in renderer
         assert "vld4q_u8" in renderer
         assert "$<$<CONFIG:Debug>:-O3>" in cmake
