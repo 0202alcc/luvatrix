@@ -188,6 +188,7 @@ class AppContext:
     _scene_quality_tier: int = field(default=0, init=False, repr=False)
     _scene_content_offset: tuple[float, float] = field(default=(0.0, 0.0), init=False, repr=False)
     _scene_retained: bool = field(default=False, init=False, repr=False)
+    _render_permitted: bool = field(default=True, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.logical_width_px is None:
@@ -215,6 +216,15 @@ class AppContext:
     def submit_write_batch(self, batch: WriteBatch) -> CallBlitEvent:
         self._require_capability("window.write")
         return self.matrix.submit_write_batch(batch)
+
+    @property
+    def render_permitted(self) -> bool:
+        """Whether this app-loop tick can compose a Matrix frame for presentation."""
+        return bool(self._render_permitted)
+
+    def set_render_permitted(self, permitted: bool) -> None:
+        """Set by the runtime to pace Matrix composition independently of updates."""
+        self._render_permitted = bool(permitted)
 
     def poll_hdi_events(self, max_events: int, frame: str | None = None) -> list[HDIEvent]:
         if max_events <= 0:

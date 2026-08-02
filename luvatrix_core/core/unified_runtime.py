@@ -280,13 +280,19 @@ class UnifiedRuntime:
                     if decision.should_shutdown:
                         stopped_by_energy_safety = True
                         break
+                matrix_present_due = (
+                    not scene_present_loop_started and rate.should_present(now)
+                )
+                ctx.set_render_permitted(
+                    True if scene_present_loop_started else matrix_present_due
+                )
                 ctx.hdi.collect_once()
                 lifecycle.loop(ctx, dt)
                 self._app_loop_ticks += 1
                 self._app_loop_rate.mark()
                 ticks_run += 1
                 tick_idx += 1
-                if not scene_present_loop_started and rate.should_present(now):
+                if matrix_present_due:
                     matrix_tick = self._display_runtime.run_once(timeout=display_timeout)
                     if matrix_tick is not None:
                         frames_presented += 1
