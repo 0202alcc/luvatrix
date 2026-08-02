@@ -4,6 +4,7 @@ import unittest
 
 from luvatrix_core import accel
 from luvatrix_core.platform.android.vulkan_target import AndroidVulkanBridge, AndroidVulkanTarget
+from luvatrix_core.core.matrix_viewport import MatrixViewport
 from luvatrix_core.targets.base import DisplayFrame
 
 
@@ -34,7 +35,50 @@ class _RegionPresenter(_Presenter):
         self.region_calls.append((rgba, revision, source_width, source_height, x, y, width, height))
 
 
+class _ViewportPresenter(_RegionPresenter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.viewport_calls = []
+        self.viewport_rgba_calls = []
+        self.viewport_region_calls = []
+
+    def present_viewport(self, revision, source_width, source_height, x, y, width, height, wrap_x, wrap_y) -> None:
+        self.viewport_calls.append((revision, source_width, source_height, x, y, width, height, wrap_x, wrap_y))
+
+    def present_rgba_viewport(self, rgba, revision, source_width, source_height, x, y, width, height, wrap_x, wrap_y) -> None:
+        self.viewport_rgba_calls.append((rgba, revision, source_width, source_height, x, y, width, height, wrap_x, wrap_y))
+
+    def present_rgba_region_viewport(self, rgba, revision, source_width, source_height, x, y, width, height, viewport_x, viewport_y, viewport_width, viewport_height, wrap_x, wrap_y) -> None:
+        self.viewport_region_calls.append((rgba, revision, source_width, source_height, x, y, width, height, viewport_x, viewport_y, viewport_width, viewport_height, wrap_x, wrap_y))
+
+
 class AndroidVulkanTargetTests(unittest.TestCase):
+    def test_viewport_only_frame_uses_resident_gpu_texture_without_rgba_upload(self) -> None:
+        presenter = _ViewportPresenter()
+        target = AndroidVulkanTarget(AndroidVulkanBridge(presenter))
+        target.start()
+        viewport = MatrixViewport(x=0, y=2, width=2, height=2, wrap_y=True)
+
+        target.present_frame(DisplayFrame(revision=7, width=2, height=4, rgba=None, viewport=viewport))
+
+        self.assertEqual(presenter.calls, [])
+        self.assertEqual(presenter.region_calls, [])
+        self.assertEqual(presenter.viewport_calls, [(7, 2, 4, 0, 2, 2, 2, False, True)])
+
+    def test_dirty_viewport_frame_uses_native_partial_upload(self) -> None:
+        presenter = _ViewportPresenter()
+        target = AndroidVulkanTarget(AndroidVulkanBridge(presenter))
+        target.start()
+        rgba = accel.from_sequence(list(range(32)), (4, 2, 4))
+        viewport = MatrixViewport(x=0, y=1, width=2, height=2)
+
+        target.present_frame(DisplayFrame(revision=8, width=2, height=4, rgba=rgba, dirty_rect=(1, 2, 1, 1), viewport=viewport))
+
+        self.assertEqual(presenter.calls, [])
+        self.assertEqual(presenter.viewport_rgba_calls, [])
+        self.assertEqual(presenter.viewport_region_calls[0][1:], (8, 2, 4, 1, 2, 1, 1, 0, 1, 2, 2, False, False))
+        self.assertEqual(presenter.viewport_region_calls[0][0], bytes([20, 21, 22, 23]))
+
     def test_present_frame_forwards_only_dirty_region_when_presenter_supports_it(self) -> None:
         presenter = _RegionPresenter()
         target = AndroidVulkanTarget(AndroidVulkanBridge(presenter))

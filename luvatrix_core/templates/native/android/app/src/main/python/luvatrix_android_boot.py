@@ -101,6 +101,7 @@ def run_headless_ticks(ticks: int = 5) -> str:
     from luvatrix_core.core.hdi_thread import HDIThread
     from luvatrix_core.core.sensor_manager import SensorManagerThread
     from luvatrix_core.core.unified_runtime import UnifiedRuntime
+    from luvatrix_core.core.matrix_viewport import MatrixViewport
     from luvatrix_core.core.window_matrix import WindowMatrix
     from luvatrix_core.platform.android.hdi_source import AndroidHDISource
     from luvatrix_core.targets.base import RenderTarget
@@ -457,8 +458,10 @@ def _run_visual_runtime(view, *, before_lifecycle_init=None):
     app_dir = _app_dir(config)
     width, height = _runtime_dimensions(view, config)
     render_scale = max(0.05, float(config.get("render_scale", 1.0) or 1.0))
-    matrix_width = max(1, int(round(width * render_scale)))
-    matrix_height = max(1, int(round(height * render_scale)))
+    matrix_content_width = int(config.get("matrix_content_width") or width)
+    matrix_content_height = int(config.get("matrix_content_height") or height)
+    matrix_width = max(1, int(round(matrix_content_width * render_scale)))
+    matrix_height = max(1, int(round(matrix_content_height * render_scale)))
     target_fps, present_fps = _runtime_frame_rates(view, config)
     render_mode = _runtime_render_mode(config, app_dir=app_dir)
     if view is not None and _truthy(config.get("low_latency_mode"), default=True):
@@ -484,12 +487,13 @@ def _run_visual_runtime(view, *, before_lifecycle_init=None):
 
     target = AndroidVulkanTarget(AndroidVulkanBridge(view)) if view is not None else _CountingTarget()
     scene_target = AndroidNativeSceneTarget(view) if view is not None and render_mode in ("auto", "scene") else None
+    matrix = WindowMatrix(height=matrix_height, width=matrix_width, lazy=render_mode == "scene")
+    viewport_width = max(1, int(round(width * render_scale)))
+    viewport_height = max(1, int(round(height * render_scale)))
+    if matrix_width != viewport_width or matrix_height != viewport_height:
+        matrix.set_presentation_viewport(MatrixViewport(x=0, y=0, width=viewport_width, height=viewport_height))
     runtime = UnifiedRuntime(
-        matrix=WindowMatrix(
-            height=matrix_height,
-            width=matrix_width,
-            lazy=render_mode == "scene",
-        ),
+        matrix=matrix,
         target=target,
         hdi=HDIThread(
             source=AndroidHDISource(view, logical_width=float(width), logical_height=float(height)),

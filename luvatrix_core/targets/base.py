@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from luvatrix_core.core.matrix_viewport import MatrixViewport
+
 if TYPE_CHECKING:
     import torch
 
@@ -13,10 +15,13 @@ class DisplayFrame:
     revision: int
     width: int
     height: int
-    rgba: torch.Tensor
+    # ``None`` is valid only for a viewport-capable target and means its
+    # resident Matrix texture is unchanged.
+    rgba: torch.Tensor | None
     # ``None`` means the target must replace its entire backing surface.
     # Otherwise this is an (x, y, width, height) region within ``rgba``.
     dirty_rect: tuple[int, int, int, int] | None = None
+    viewport: MatrixViewport | None = None
 
 
 class RenderTarget(ABC):
@@ -38,4 +43,8 @@ class RenderTarget(ABC):
 
     def should_close(self) -> bool:
         """Optional hook for targets that expose window-close state."""
+        return False
+
+    def supports_matrix_viewport(self) -> bool:
+        """Whether transform-only Matrix frames can reuse resident GPU pixels."""
         return False

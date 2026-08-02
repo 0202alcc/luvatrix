@@ -158,6 +158,7 @@ struct VulkanState {
     VkFormat swapchain_format = VK_FORMAT_B8G8R8A8_UNORM;
     VkExtent2D extent{0, 0};
     std::vector<VkImage> images;
+    std::vector<bool> image_layout_initialized;
     std::vector<VkImageView> image_views;
     VkRenderPass render_pass = VK_NULL_HANDLE;
     std::vector<VkFramebuffer> framebuffers;
@@ -1242,6 +1243,7 @@ bool create_swapchain(VulkanState& vk) {
     vkGetSwapchainImagesKHR(vk.device, vk.swapchain, &actual_count, nullptr);
     vk.images.resize(actual_count);
     vkGetSwapchainImagesKHR(vk.device, vk.swapchain, &actual_count, vk.images.data());
+    vk.image_layout_initialized.assign(actual_count, false);
     return true;
 }
 
@@ -1956,6 +1958,15 @@ struct PixelBounds {
     int height = 0;
 };
 
+struct MatrixViewport {
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+    bool wrap_x = false;
+    bool wrap_y = false;
+};
+
 std::optional<PixelBounds> changed_pixel_bounds(
     const std::vector<uint32_t>& previous,
     const std::vector<uint32_t>& current,
@@ -2001,7 +2012,8 @@ uint32_t find_memory_type(VulkanState& vk, uint32_t bits, VkMemoryPropertyFlags 
 }
 
 bool ensure_preview_base_resources(VulkanState& vk);
-bool render_rgba_matrix_region(VulkanState& vk, const std::vector<uint32_t>& pixels, int source_width, int source_height, int destination_x, int destination_y, int upload_width, int upload_height);
+bool render_rgba_matrix_region(VulkanState& vk, const std::vector<uint32_t>& pixels, int source_width, int source_height, int destination_x, int destination_y, int upload_width, int upload_height, const MatrixViewport* viewport = nullptr);
+bool render_resident_matrix_viewport(VulkanState& vk, int source_width, int source_height, const MatrixViewport& viewport);
 bool ensure_preview_descriptor_pool(VulkanState& vk);
 bool allocate_texture_descriptor_set(VulkanState& vk, VkDescriptorSetLayout layout, VkDescriptorSet& set);
 void image_barrier(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout);
@@ -2644,14 +2656,21 @@ void image_barrier(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout,
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         src_stage = old_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } else if (new_layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+        barrier.srcAccessMask = old_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ? VK_ACCESS_SHADER_READ_BIT : 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        src_stage = old_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
     } else if (new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
         barrier.srcAccessMask =
             old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ? VK_ACCESS_TRANSFER_WRITE_BIT :
+            old_layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ? VK_ACCESS_TRANSFER_READ_BIT :
             old_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT :
             0;
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         src_stage =
             old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ? VK_PIPELINE_STAGE_TRANSFER_BIT :
+            old_layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ? VK_PIPELINE_STAGE_TRANSFER_BIT :
             old_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT :
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
@@ -2886,7 +2905,7 @@ bool ensure_overlay_texture(VulkanState& vk, int width, int height) {
     }
     vk.overlay_descriptor_set = VK_NULL_HANDLE;
     vk.overlay_uploaded = false;
-    if (!create_image_2d(vk, width, height, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, vk.overlay_image, vk.overlay_memory)) {
+    if (!create_image_2d(vk, width, height, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, vk.overlay_image, vk.overlay_memory)) {
         return false;
     }
     VkImageViewCreateInfo view_info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
@@ -2981,6 +3000,83 @@ void record_overlay_texture_upload_from_buffer(
     region.imageExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
     vkCmdCopyBufferToImage(cmd, staging_buffer, vk.overlay_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
     image_barrier(cmd, vk.overlay_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+}
+
+struct ViewportSpan {
+    int source_offset = 0;
+    int destination_offset = 0;
+    int length = 0;
+};
+
+bool viewport_spans(
+    int source_size,
+    int viewport_offset,
+    int viewport_size,
+    bool wrap,
+    std::vector<ViewportSpan>& out
+) {
+    if (source_size <= 0 || viewport_size <= 0 || viewport_size > source_size) return false;
+    if (!wrap && (viewport_offset < 0 || viewport_offset + viewport_size > source_size)) return false;
+    int source_offset = wrap ? ((viewport_offset % source_size) + source_size) % source_size : viewport_offset;
+    int first_length = std::min(viewport_size, source_size - source_offset);
+    out.push_back(ViewportSpan{source_offset, 0, first_length});
+    if (first_length < viewport_size) {
+        out.push_back(ViewportSpan{0, first_length, viewport_size - first_length});
+    }
+    return true;
+}
+
+bool record_matrix_viewport_blit(
+    VulkanState& vk,
+    VkCommandBuffer cmd,
+    VkImage destination,
+    int source_width,
+    int source_height,
+    const MatrixViewport& viewport
+) {
+    if (source_width != vk.overlay_width || source_height != vk.overlay_height) return false;
+    std::vector<ViewportSpan> x_spans;
+    std::vector<ViewportSpan> y_spans;
+    if (!viewport_spans(source_width, viewport.x, viewport.width, viewport.wrap_x, x_spans) ||
+        !viewport_spans(source_height, viewport.y, viewport.height, viewport.wrap_y, y_spans)) {
+        return false;
+    }
+    image_barrier(cmd, vk.overlay_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    const auto image_it = std::find(vk.images.begin(), vk.images.end(), destination);
+    const size_t image_index = static_cast<size_t>(image_it - vk.images.begin());
+    const bool initialized = image_it != vk.images.end() && image_index < vk.image_layout_initialized.size() && vk.image_layout_initialized[image_index];
+    image_barrier(cmd, destination, initialized ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    for (const auto& y_span : y_spans) {
+        for (const auto& x_span : x_spans) {
+            const int destination_x0 = x_span.destination_offset * static_cast<int>(vk.extent.width) / viewport.width;
+            const int destination_x1 = (x_span.destination_offset + x_span.length) * static_cast<int>(vk.extent.width) / viewport.width;
+            const int destination_y0 = y_span.destination_offset * static_cast<int>(vk.extent.height) / viewport.height;
+            const int destination_y1 = (y_span.destination_offset + y_span.length) * static_cast<int>(vk.extent.height) / viewport.height;
+            VkImageBlit blit{};
+            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.srcSubresource.layerCount = 1;
+            blit.srcOffsets[0] = {x_span.source_offset, y_span.source_offset, 0};
+            blit.srcOffsets[1] = {x_span.source_offset + x_span.length, y_span.source_offset + y_span.length, 1};
+            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.dstSubresource.layerCount = 1;
+            blit.dstOffsets[0] = {destination_x0, destination_y0, 0};
+            blit.dstOffsets[1] = {destination_x1, destination_y1, 1};
+            vkCmdBlitImage(
+                cmd,
+                vk.overlay_image,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                destination,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1,
+                &blit,
+                VK_FILTER_NEAREST
+            );
+        }
+    }
+    image_barrier(cmd, vk.overlay_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    image_barrier(cmd, destination, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    if (image_it != vk.images.end() && image_index < vk.image_layout_initialized.size()) vk.image_layout_initialized[image_index] = true;
+    return true;
 }
 
 bool ensure_camera_intermediate_render_pass(VulkanState& vk) {
@@ -3778,7 +3874,8 @@ bool render_rgba_matrix_region(
     int destination_x,
     int destination_y,
     int upload_width,
-    int upload_height
+    int upload_height,
+    const MatrixViewport* viewport
 ) {
     if (source_width <= 0 || source_height <= 0 || upload_width <= 0 || upload_height <= 0) return false;
     if (destination_x < 0 || destination_y < 0 || destination_x + upload_width > source_width || destination_y + upload_height > source_height) return false;
@@ -3814,7 +3911,8 @@ bool render_rgba_matrix_region(
                 destination_x,
                 destination_y,
                 upload_width,
-                upload_height
+                upload_height,
+                viewport
             );
     }
     if (acquire != VK_SUCCESS) return false;
@@ -3830,32 +3928,36 @@ bool render_rgba_matrix_region(
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) return false;
     record_overlay_texture_upload(vk, cmd, frame_sync.staging_buffer, upload_width, upload_height, destination_x, destination_y);
-    VkClearValue clear{};
-    clear.color.float32[3] = 1.0f;
-    VkRenderPassBeginInfo render_pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-    render_pass.renderPass = vk.render_pass;
-    render_pass.framebuffer = vk.framebuffers[image_index];
-    render_pass.renderArea.offset = {0, 0};
-    render_pass.renderArea.extent = vk.extent;
-    render_pass.clearValueCount = 1;
-    render_pass.pClearValues = &clear;
-    vkCmdBeginRenderPass(cmd, &render_pass, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.overlay_pipeline);
-    vkCmdBindDescriptorSets(
-        cmd,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        vk.overlay_pipeline_layout,
-        0,
-        1,
-        &vk.overlay_descriptor_set,
-        0,
-        nullptr
-    );
-    vkCmdDraw(cmd, 3, 1, 0, 0);
-    vkCmdEndRenderPass(cmd);
+    if (viewport != nullptr) {
+        if (!record_matrix_viewport_blit(vk, cmd, vk.images[image_index], source_width, source_height, *viewport)) return false;
+    } else {
+        VkClearValue clear{};
+        clear.color.float32[3] = 1.0f;
+        VkRenderPassBeginInfo render_pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        render_pass.renderPass = vk.render_pass;
+        render_pass.framebuffer = vk.framebuffers[image_index];
+        render_pass.renderArea.offset = {0, 0};
+        render_pass.renderArea.extent = vk.extent;
+        render_pass.clearValueCount = 1;
+        render_pass.pClearValues = &clear;
+        vkCmdBeginRenderPass(cmd, &render_pass, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.overlay_pipeline);
+        vkCmdBindDescriptorSets(
+            cmd,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            vk.overlay_pipeline_layout,
+            0,
+            1,
+            &vk.overlay_descriptor_set,
+            0,
+            nullptr
+        );
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
+    }
     if (vkEndCommandBuffer(cmd) != VK_SUCCESS) return false;
 
-    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkPipelineStageFlags wait_stage = viewport != nullptr ? VK_PIPELINE_STAGE_TRANSFER_BIT : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submit.waitSemaphoreCount = 1;
     submit.pWaitSemaphores = &frame_sync.image_available;
@@ -3886,7 +3988,68 @@ bool render_rgba_matrix(
     int source_width,
     int source_height
 ) {
-    return render_rgba_matrix_region(vk, pixels, source_width, source_height, 0, 0, source_width, source_height);
+    return render_rgba_matrix_region(vk, pixels, source_width, source_height, 0, 0, source_width, source_height, nullptr);
+}
+
+bool render_resident_matrix_viewport(
+    VulkanState& vk,
+    int source_width,
+    int source_height,
+    const MatrixViewport& viewport
+) {
+    if (!vk.overlay_uploaded || source_width != vk.overlay_width || source_height != vk.overlay_height) return false;
+    if (!ensure_vulkan(vk) || vk.preview_frames.empty()) return false;
+    uint32_t frame_slot = 0;
+    VulkanState::PreviewFrameSync& frame_sync = vk.preview_frames[frame_slot];
+    if (!wait_fence_for_preview(vk, frame_sync.in_flight, nullptr, false)) return false;
+    uint32_t image_index = 0;
+    VkResult acquire = vkAcquireNextImageKHR(
+        vk.device,
+        vk.swapchain,
+        UINT64_MAX,
+        frame_sync.image_available,
+        VK_NULL_HANDLE,
+        &image_index
+    );
+    if (acquire == VK_ERROR_OUT_OF_DATE_KHR || acquire == VK_SUBOPTIMAL_KHR) {
+        destroy_swapchain(vk);
+        return create_swapchain(vk) && create_render_resources(vk) &&
+            render_resident_matrix_viewport(vk, source_width, source_height, viewport);
+    }
+    if (acquire != VK_SUCCESS) return false;
+    if (image_index < vk.images_in_flight.size() && vk.images_in_flight[image_index] != VK_NULL_HANDLE) {
+        if (!wait_fence_for_preview(vk, vk.images_in_flight[image_index], nullptr, false)) return false;
+    }
+    if (image_index < vk.images_in_flight.size()) {
+        vk.images_in_flight[image_index] = frame_sync.in_flight;
+    }
+    VkCommandBuffer cmd = vk.command_buffers[image_index];
+    vkResetCommandBuffer(cmd, 0);
+    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    if (vkBeginCommandBuffer(cmd, &begin) != VK_SUCCESS) return false;
+    if (!record_matrix_viewport_blit(vk, cmd, vk.images[image_index], source_width, source_height, viewport)) return false;
+    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) return false;
+    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    submit.waitSemaphoreCount = 1;
+    submit.pWaitSemaphores = &frame_sync.image_available;
+    submit.pWaitDstStageMask = &wait_stage;
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &cmd;
+    submit.signalSemaphoreCount = 1;
+    submit.pSignalSemaphores = &frame_sync.render_finished;
+    if (vkResetFences(vk.device, 1, &frame_sync.in_flight) != VK_SUCCESS) return false;
+    if (vkQueueSubmit(vk.queue, 1, &submit, frame_sync.in_flight) != VK_SUCCESS) return false;
+    VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+    present.waitSemaphoreCount = 1;
+    present.pWaitSemaphores = &frame_sync.render_finished;
+    present.swapchainCount = 1;
+    present.pSwapchains = &vk.swapchain;
+    present.pImageIndices = &image_index;
+    VkResult result = vkQueuePresentKHR(vk.queue, &present);
+    vk.current_frame_slot = frame_slot;
+    vk.frame_counter += 1;
+    return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
 }
 
 bool render_clear(VulkanState& vk, Rgba color) {
@@ -4110,6 +4273,120 @@ Java_com_luvatrix_app_NativeVulkan_presentRgbaRegion(
             width,
             height
         );
+    }
+    return presented ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_luvatrix_app_NativeVulkan_presentRgbaViewport(
+    JNIEnv *env,
+    jobject,
+    jbyteArray rgba,
+    jint revision,
+    jint source_width,
+    jint source_height,
+    jint viewport_x,
+    jint viewport_y,
+    jint viewport_width,
+    jint viewport_height,
+    jboolean wrap_x,
+    jboolean wrap_y
+) {
+    if (rgba == nullptr || source_width <= 0 || source_height <= 0) return JNI_FALSE;
+    size_t pixel_count = static_cast<size_t>(source_width) * static_cast<size_t>(source_height);
+    if (pixel_count > std::numeric_limits<size_t>::max() / 4u) return JNI_FALSE;
+    size_t byte_count = pixel_count * 4u;
+    if (byte_count > static_cast<size_t>(std::numeric_limits<jsize>::max())) return JNI_FALSE;
+    if (env->GetArrayLength(rgba) != static_cast<jsize>(byte_count)) return JNI_FALSE;
+    std::vector<uint32_t> pixels(pixel_count);
+    env->GetByteArrayRegion(rgba, 0, static_cast<jsize>(byte_count), reinterpret_cast<jbyte*>(pixels.data()));
+    if (env->ExceptionCheck()) return JNI_FALSE;
+    rgba_to_bgra_in_place(reinterpret_cast<uint8_t*>(pixels.data()), pixel_count);
+    MatrixViewport viewport{
+        static_cast<int>(viewport_x), static_cast<int>(viewport_y),
+        static_cast<int>(viewport_width), static_cast<int>(viewport_height),
+        wrap_x == JNI_TRUE, wrap_y == JNI_TRUE,
+    };
+    std::lock_guard<std::mutex> lock(g_mutex);
+    bool presented = render_rgba_matrix_region(
+        g_vk, pixels, static_cast<int>(source_width), static_cast<int>(source_height),
+        0, 0, static_cast<int>(source_width), static_cast<int>(source_height), &viewport
+    );
+    if (presented && revision % 120 == 0) {
+        LVX_LOGI("luvatrix vulkan rgba viewport revision=%d source=%dx%d viewport=%d,%d %dx%d", revision, source_width, source_height, viewport_x, viewport_y, viewport_width, viewport_height);
+    }
+    return presented ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_luvatrix_app_NativeVulkan_presentRgbaRegionViewport(
+    JNIEnv *env,
+    jobject,
+    jbyteArray rgba,
+    jint revision,
+    jint source_width,
+    jint source_height,
+    jint x,
+    jint y,
+    jint width,
+    jint height,
+    jint viewport_x,
+    jint viewport_y,
+    jint viewport_width,
+    jint viewport_height,
+    jboolean wrap_x,
+    jboolean wrap_y
+) {
+    if (rgba == nullptr || source_width <= 0 || source_height <= 0 || width <= 0 || height <= 0) return JNI_FALSE;
+    if (x < 0 || y < 0 || x > source_width - width || y > source_height - height) return JNI_FALSE;
+    size_t pixel_count = static_cast<size_t>(width) * static_cast<size_t>(height);
+    if (pixel_count > std::numeric_limits<size_t>::max() / 4u) return JNI_FALSE;
+    size_t byte_count = pixel_count * 4u;
+    if (byte_count > static_cast<size_t>(std::numeric_limits<jsize>::max())) return JNI_FALSE;
+    if (env->GetArrayLength(rgba) != static_cast<jsize>(byte_count)) return JNI_FALSE;
+    std::vector<uint32_t> pixels(pixel_count);
+    env->GetByteArrayRegion(rgba, 0, static_cast<jsize>(byte_count), reinterpret_cast<jbyte*>(pixels.data()));
+    if (env->ExceptionCheck()) return JNI_FALSE;
+    rgba_to_bgra_in_place(reinterpret_cast<uint8_t*>(pixels.data()), pixel_count);
+    MatrixViewport viewport{
+        static_cast<int>(viewport_x), static_cast<int>(viewport_y),
+        static_cast<int>(viewport_width), static_cast<int>(viewport_height),
+        wrap_x == JNI_TRUE, wrap_y == JNI_TRUE,
+    };
+    std::lock_guard<std::mutex> lock(g_mutex);
+    bool presented = render_rgba_matrix_region(
+        g_vk, pixels, static_cast<int>(source_width), static_cast<int>(source_height),
+        static_cast<int>(x), static_cast<int>(y), static_cast<int>(width), static_cast<int>(height), &viewport
+    );
+    if (presented && revision % 120 == 0) {
+        LVX_LOGI("luvatrix vulkan rgba region viewport revision=%d source=%dx%d region=%d,%d %dx%d", revision, source_width, source_height, x, y, width, height);
+    }
+    return presented ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_luvatrix_app_NativeVulkan_presentViewport(
+    JNIEnv *,
+    jobject,
+    jint revision,
+    jint source_width,
+    jint source_height,
+    jint viewport_x,
+    jint viewport_y,
+    jint viewport_width,
+    jint viewport_height,
+    jboolean wrap_x,
+    jboolean wrap_y
+) {
+    MatrixViewport viewport{
+        static_cast<int>(viewport_x), static_cast<int>(viewport_y),
+        static_cast<int>(viewport_width), static_cast<int>(viewport_height),
+        wrap_x == JNI_TRUE, wrap_y == JNI_TRUE,
+    };
+    std::lock_guard<std::mutex> lock(g_mutex);
+    bool presented = render_resident_matrix_viewport(g_vk, static_cast<int>(source_width), static_cast<int>(source_height), viewport);
+    if (presented && revision % 120 == 0) {
+        LVX_LOGI("luvatrix vulkan resident viewport revision=%d source=%dx%d viewport=%d,%d %dx%d", revision, source_width, source_height, viewport_x, viewport_y, viewport_width, viewport_height);
     }
     return presented ? JNI_TRUE : JNI_FALSE;
 }

@@ -1648,6 +1648,19 @@ class App:
         """Move the retained scene without rebuilding its nodes."""
         self.ctx.set_scene_content_offset(float(x), float(y))
 
+    def set_matrix_viewport(
+        self,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        *,
+        wrap_x: bool = False,
+        wrap_y: bool = False,
+    ) -> None:
+        """Move a Matrix-first app's visible viewport without rebuilding Matrix pixels."""
+        self.ctx.set_matrix_viewport(x, y, width, height, wrap_x=wrap_x, wrap_y=wrap_y)
+
     def stop(self, ctx: AppContext) -> None:
         _ = ctx
         self.teardown()
@@ -1861,6 +1874,7 @@ _LAZY_EXPORTS = {
         "luvatrix_core.core.interaction_work",
         "InteractionAwareWorkScheduler",
     ),
+    "MatrixViewport": ("luvatrix_core.core.matrix_viewport", "MatrixViewport"),
 }
 
 
@@ -1907,6 +1921,7 @@ __all__ = [
     "InputState",
     "InteractionAwareWorkScheduler",
     "MatrixFrame",
+    "MatrixViewport",
     "MissingOptionalDependencyError",
     "ResolvedAppVariant",
     "SceneFrame",

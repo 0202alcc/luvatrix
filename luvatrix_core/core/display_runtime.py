@@ -6,6 +6,7 @@ import threading
 import time
 from typing import Optional
 
+from .matrix_viewport import MatrixViewport
 from .window_matrix import CallBlitEvent, WindowMatrix
 from luvatrix_core import accel
 from luvatrix_core.perf.copy_telemetry import begin_copy_telemetry_frame, snapshot_copy_telemetry
@@ -81,19 +82,42 @@ class DisplayRuntime:
 
         # Coalesce queued blits to newest revision so frame data and revision stay aligned.
         dirty_rect = event.dirty_rect
+        requires_snapshot = not event.transform_only
         while True:
             newer = self._matrix.pop_call_blit(timeout=None)
             if newer is None:
                 break
-            dirty_rect = _union_dirty_rects(dirty_rect, newer.dirty_rect)
+            if not newer.transform_only:
+                dirty_rect = _union_dirty_rects(dirty_rect, newer.dirty_rect)
+                requires_snapshot = True
             event = newer
 
-        snapshot = self._matrix.read_revision_snapshot(event.revision)
-        if snapshot is None:
-            snapshot = self._matrix.read_snapshot()
-        if self._last_presented_revision is None:
-            dirty_rect = None
-        frame = _build_frame(snapshot=snapshot, revision=event.revision, dirty_rect=dirty_rect)
+        target_supports_viewport = bool(getattr(self._target, "supports_matrix_viewport", lambda: False)())
+        if requires_snapshot or not target_supports_viewport:
+            snapshot = self._matrix.read_revision_snapshot(event.revision)
+            if snapshot is None:
+                snapshot = self._matrix.read_snapshot()
+            if event.viewport is not None and not target_supports_viewport:
+                snapshot = _crop_viewport(snapshot, event.viewport)
+                frame = _build_frame(snapshot=snapshot, revision=event.revision, dirty_rect=None)
+            else:
+                if self._last_presented_revision is None:
+                    dirty_rect = None
+                frame = _build_frame(
+                    snapshot=snapshot,
+                    revision=event.revision,
+                    dirty_rect=dirty_rect,
+                    viewport=event.viewport,
+                )
+        else:
+            frame = DisplayFrame(
+                revision=event.revision,
+                width=self._matrix.width,
+                height=self._matrix.height,
+                rgba=None,
+                dirty_rect=(0, 0, 0, 0),
+                viewport=event.viewport,
+            )
         self._target.present_frame(frame)
         self._last_presented_revision = event.revision
         self._last_copy_telemetry = snapshot_copy_telemetry()
@@ -132,6 +156,7 @@ def _build_frame(
     snapshot: object,
     revision: int,
     dirty_rect: tuple[int, int, int, int] | None = None,
+    viewport: MatrixViewport | None = None,
 ) -> DisplayFrame:
     if snapshot.ndim != 3 or snapshot.shape[2] != 4:
         raise ValueError(f"invalid snapshot shape: {tuple(snapshot.shape)}")
@@ -144,7 +169,19 @@ def _build_frame(
         height=int(height),
         rgba=snapshot,
         dirty_rect=dirty_rect,
+        viewport=viewport,
     )
+
+
+def _crop_viewport(snapshot: object, viewport: MatrixViewport) -> object:
+    """CPU fallback for targets without a retained Matrix texture."""
+    output = accel.zeros((viewport.height, viewport.width, 4))
+    for destination_y in range(viewport.height):
+        source_y = (viewport.y + destination_y) % snapshot.shape[0] if viewport.wrap_y else viewport.y + destination_y
+        for destination_x in range(viewport.width):
+            source_x = (viewport.x + destination_x) % snapshot.shape[1] if viewport.wrap_x else viewport.x + destination_x
+            output[destination_y, destination_x, :] = snapshot[source_y, source_x, :]
+    return output
 
 
 def _union_dirty_rects(

@@ -228,6 +228,7 @@ _MODULE_MAP: dict[str, str] = {
     "ReplaceRow": ".window_matrix",
     "WriteBatch": ".window_matrix",
     "WindowMatrix": ".window_matrix",
+    "MatrixViewport": ".matrix_viewport",
 }
 
 

@@ -5,6 +5,7 @@ import unittest
 import torch
 
 from luvatrix_core.core.display_runtime import DisplayRuntime
+from luvatrix_core.core.matrix_viewport import MatrixViewport
 from luvatrix_core.core.window_matrix import FullRewrite, ReplaceRect, WindowMatrix, WriteBatch
 from luvatrix_core.targets.base import DisplayFrame
 from luvatrix_core.targets.vulkan_target import VulkanTarget
@@ -71,7 +72,28 @@ class _FrameCaptureTarget:
         return
 
 
+class _ViewportCaptureTarget(_FrameCaptureTarget):
+    def supports_matrix_viewport(self) -> bool:
+        return True
+
+
 class DisplayRuntimeTests(unittest.TestCase):
+    def test_viewport_only_update_skips_matrix_snapshot_for_viewport_target(self) -> None:
+        matrix = WindowMatrix(height=8, width=4)
+        target = _ViewportCaptureTarget()
+        runtime = DisplayRuntime(matrix=matrix, target=target)
+        matrix.submit_write_batch(WriteBatch([FullRewrite(torch.zeros((8, 4, 4), dtype=torch.uint8))]))
+        runtime.run_once(timeout=0.01)
+
+        matrix.set_presentation_viewport(MatrixViewport(x=0, y=2, width=4, height=4, wrap_y=True))
+        tick = runtime.run_once(timeout=0.01)
+
+        assert tick is not None
+        self.assertIsNone(tick.frame.rgba)
+        self.assertEqual(tick.frame.width, 4)
+        self.assertEqual(tick.frame.height, 8)
+        self.assertEqual(tick.frame.viewport, MatrixViewport(x=0, y=2, width=4, height=4, wrap_y=True))
+
     def test_local_matrix_update_carries_dirty_region_after_initial_present(self) -> None:
         matrix = WindowMatrix(height=4, width=5)
         target = _FrameCaptureTarget()
