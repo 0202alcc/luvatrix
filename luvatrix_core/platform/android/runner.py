@@ -23,6 +23,7 @@ from luvatrix_core.scaffold import resolve_native_project_dir
 DEFAULT_ANDROID_PACKAGE = "com.luvatrix.app"
 ANDROID_GENERATED_GITIGNORE_RULES = (
     "app/luvatrix-android-accel.txt",
+    "app/luvatrix-android-accel.lock.json",
     "app/wheels/",
     "app/.cxx/",
     "app/build/",
@@ -363,7 +364,6 @@ def sync_android_accelerator_wheels(project_dir: Path, *, version: str) -> tuple
     """Download verified CPython 3.14 Android wheels when this release provides them."""
     project = project_dir.resolve()
     app_dir = project / "app"
-    requirement = app_dir / "luvatrix-android-accel.txt"
     cached = _cached_android_accelerator_wheels(app_dir, version=version)
     try:
         with urllib.request.urlopen(
@@ -372,7 +372,7 @@ def sync_android_accelerator_wheels(project_dir: Path, *, version: str) -> tuple
         ) as response:
             release = json.loads(response.read())
     except (OSError, ValueError, urllib.error.URLError):
-        return cached
+        return _finalize_android_accelerator_wheels(app_dir, version=version, wheels=cached)
 
     normalized_version = str(version).replace("-", "_")
     pattern = re.compile(
@@ -387,7 +387,7 @@ def sync_android_accelerator_wheels(project_dir: Path, *, version: str) -> tuple
         if match is not None:
             selected[match.group(1)] = entry
     if set(selected) != {"arm64_v8a", "x86_64"}:
-        return cached
+        return _finalize_android_accelerator_wheels(app_dir, version=version, wheels=cached)
 
     wheel_dir = app_dir / "wheels"
     wheel_dir.mkdir(parents=True, exist_ok=True)
@@ -417,13 +417,59 @@ def sync_android_accelerator_wheels(project_dir: Path, *, version: str) -> tuple
     except (KeyError, OSError, ValueError, urllib.error.URLError):
         for temporary, _destination in pending:
             temporary.unlink(missing_ok=True)
-        return cached
+        return _finalize_android_accelerator_wheels(app_dir, version=version, wheels=cached)
 
     for temporary, destination in pending:
         temporary.replace(destination)
 
-    requirement.write_text(f"luvatrix=={version}\n", encoding="utf-8")
-    return tuple(synced)
+    return _finalize_android_accelerator_wheels(app_dir, version=version, wheels=tuple(synced))
+
+
+def _finalize_android_accelerator_wheels(
+    app_dir: Path,
+    *,
+    version: str,
+    wheels: tuple[Path, ...],
+) -> tuple[Path, ...]:
+    if not wheels:
+        return ()
+
+    requirement = app_dir / "luvatrix-android-accel.txt"
+    lock_path = app_dir / "luvatrix-android-accel.lock.json"
+    requirement_text = f"luvatrix=={version}\n"
+    lock_text = json.dumps(
+        {
+            "schema_version": 1,
+            "version": version,
+            "wheels": [
+                {
+                    "filename": path.name,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+                for path in wheels
+            ],
+        },
+        indent=2,
+        sort_keys=True,
+    ) + "\n"
+    try:
+        previous_requirement = requirement.read_text(encoding="utf-8")
+    except OSError:
+        previous_requirement = ""
+    try:
+        previous_lock = lock_path.read_text(encoding="utf-8")
+    except OSError:
+        previous_lock = ""
+
+    changed = previous_requirement != requirement_text or previous_lock != lock_text
+    if changed:
+        pip_output = app_dir / "build" / "python" / "pip"
+        if pip_output.exists():
+            shutil.rmtree(pip_output)
+            print("[android] invalidated cached Chaquopy requirements after accelerator wheel change")
+    requirement.write_text(requirement_text, encoding="utf-8")
+    lock_path.write_text(lock_text, encoding="utf-8")
+    return wheels
 
 
 def _cached_android_accelerator_wheels(app_dir: Path, *, version: str) -> tuple[Path, ...]:
