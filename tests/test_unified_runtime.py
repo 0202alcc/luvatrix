@@ -98,6 +98,52 @@ class _CriticalEnergySafety:
 
 
 class UnifiedRuntimeTests(unittest.TestCase):
+    def test_manual_hdi_collection_happens_immediately_before_app_loop(self) -> None:
+        events: list[str] = []
+
+        class _ManualHDI(HDIThread):
+            def __init__(self) -> None:
+                super().__init__(source=_NoopHDISource(), background_poll=False)
+
+            def start(self) -> None:
+                events.append("hdi-started")
+
+            def collect_once(self) -> None:
+                events.append("hdi-collected")
+
+            def mark_loop(self) -> None:
+                events.append("app-loop")
+
+            def stop(self) -> None:
+                events.append("hdi-stopped")
+
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            (app_dir / "app.toml").write_text(
+                'app_id = "test.manual-hdi"\nprotocol_version = "1"\nentrypoint = "app_main:create"\n'
+                'required_capabilities = ["window.write"]\noptional_capabilities = []\n',
+                encoding="utf-8",
+            )
+            (app_dir / "app_main.py").write_text(
+                "class App:\n"
+                "    def init(self, ctx): pass\n"
+                "    def loop(self, ctx, dt): ctx.hdi.mark_loop()\n"
+                "    def stop(self, ctx): pass\n"
+                "def create(): return App()\n",
+                encoding="utf-8",
+            )
+            runtime = UnifiedRuntime(
+                matrix=WindowMatrix(height=1, width=1),
+                target=_RecordingTarget(),
+                hdi=_ManualHDI(),
+                sensor_manager=_FakeSensorManager(),
+                capability_decider=lambda _cap: True,
+            )
+
+            runtime.run_app(app_dir, max_ticks=1, target_fps=1000)
+
+        self.assertEqual(events[:3], ["hdi-started", "hdi-collected", "app-loop"])
+
     def test_required_hdi_polling_is_not_deferred_past_first_frame(self) -> None:
         events: list[str] = []
 

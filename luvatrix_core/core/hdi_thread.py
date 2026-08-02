@@ -33,7 +33,7 @@ class HDIThread:
 
     def __init__(
         self,
-        source: HDIEventSource,
+        source: HDIEventSource | None,
         max_queue_size: int = 1024,
         poll_interval_s: float = 1 / 240,
         hold_threshold_s: float = 0.35,
@@ -43,6 +43,7 @@ class HDIThread:
         window_geometry_provider: Callable[[], tuple[float, float, float, float]] | None = None,
         target_extent_provider: Callable[[], tuple[float, float]] | None = None,
         source_content_rect_provider: Callable[[], tuple[float, float, float, float]] | None = None,
+        background_poll: bool = True,
     ) -> None:
         if max_queue_size <= 0:
             raise ValueError("max_queue_size must be > 0")
@@ -55,6 +56,7 @@ class HDIThread:
         if double_press_threshold_s <= 0:
             raise ValueError("double_press_threshold_s must be > 0")
         self._source = source
+        self._background_poll = bool(background_poll)
         self._max_queue_size = max_queue_size
         self._poll_interval_s = poll_interval_s
         self._hold_threshold_s = hold_threshold_s
@@ -68,6 +70,7 @@ class HDIThread:
         self._motion_slots: dict[tuple[str, str, tuple[str, str]], HDIEvent] = {}
         self._motion_order: deque[tuple[str, str, tuple[str, str]]] = deque()
         self._lock = threading.Lock()
+        self._poll_lock = threading.Lock()
         self._running = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_error: Exception | None = None
@@ -90,6 +93,8 @@ class HDIThread:
         if self._thread and self._thread.is_alive():
             return
         self._running.set()
+        if not self._background_poll:
+            return
         self._thread = threading.Thread(target=self._run, name="luvatrix-hdi", daemon=True)
         self._thread.start()
 
@@ -141,26 +146,43 @@ class HDIThread:
     def last_error(self) -> Exception | None:
         return self._last_error
 
+    def collect_once(self) -> None:
+        """Collect input on the runtime thread when background polling is disabled."""
+        if self._background_poll or not self._running.is_set():
+            return
+        try:
+            self._collect_once()
+        except Exception as exc:  # noqa: BLE001
+            self._last_error = exc
+            self._running.clear()
+            raise
+
     def _run(self) -> None:
         while self._running.is_set():
             try:
-                active = bool(self._window_active_provider())
-                if not active and self._last_window_active:
-                    for event in self._emit_keyboard_cancel_events(ts_ns=time.time_ns()):
-                        self._enqueue(event)
-                events = self._source.poll(window_active=active, ts_ns=time.time_ns())
-                for event in events:
-                    for normalized in self._normalize_events(event, active):
-                        self._enqueue(normalized)
-                if active:
-                    for event in self._emit_hold_events(ts_ns=time.time_ns()):
-                        self._enqueue(event)
-                self._last_window_active = active
+                self._collect_once()
             except Exception as exc:  # noqa: BLE001
                 self._last_error = exc
                 self._running.clear()
                 break
             time.sleep(self._poll_interval_s)
+
+    def _collect_once(self) -> None:
+        if self._source is None:
+            return
+        with self._poll_lock:
+            active = bool(self._window_active_provider())
+            if not active and self._last_window_active:
+                for event in self._emit_keyboard_cancel_events(ts_ns=time.time_ns()):
+                    self._enqueue(event)
+            events = self._source.poll(window_active=active, ts_ns=time.time_ns())
+            for event in events:
+                for normalized in self._normalize_events(event, active):
+                    self._enqueue(normalized)
+            if active:
+                for event in self._emit_hold_events(ts_ns=time.time_ns()):
+                    self._enqueue(event)
+            self._last_window_active = active
 
     def _normalize_events(self, event: HDIEvent, active: bool) -> list[HDIEvent]:
         if event.device == "keyboard":
@@ -579,6 +601,10 @@ def _is_move_event(event: HDIEvent) -> bool:
     return event.event_type in ("pointer_move", "mouse_move", "trackpad_move")
 
 
+def _is_continuous_gesture_event(event: HDIEvent) -> bool:
+    return event.event_type in ("pressure", "pinch", "rotate")
+
+
 def _is_scroll_event(event: HDIEvent) -> bool:
     return event.event_type in ("scroll", "pan", "swipe")
 
@@ -587,7 +613,7 @@ def _is_motion_event(event: HDIEvent) -> bool:
     if event.device == "touch" and event.event_type == "touch":
         payload = event.payload if isinstance(event.payload, dict) else {}
         return str(payload.get("phase", "")).lower() == "move"
-    return _is_move_event(event) or _is_scroll_event(event)
+    return _is_move_event(event) or _is_scroll_event(event) or _is_continuous_gesture_event(event)
 
 
 def _uses_latest_motion_slot(event: HDIEvent) -> bool:
@@ -605,6 +631,8 @@ def _motion_coalesce_key(event: HDIEvent) -> tuple[str, str]:
         phase = str(payload.get("phase", ""))
         momentum = str(payload.get("momentum_phase", ""))
         return ("scroll", f"{phase}|{momentum}")
+    if _is_continuous_gesture_event(event):
+        return ("continuous_gesture", event.event_type)
     return ("", "")
 
 

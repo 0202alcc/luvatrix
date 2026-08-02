@@ -24,6 +24,21 @@ class _ScriptedHDISource(HDIEventSource):
 
 
 class HDIThreadTests(unittest.TestCase):
+    def test_manual_collection_runs_only_when_pumped(self) -> None:
+        source = _ScriptedHDISource(
+            [[HDIEvent(1, 1, "w", "keyboard", "key_down", "OK", {"key": "a"})]]
+        )
+        thread = HDIThread(source=source, poll_interval_s=0.001, background_poll=False)
+
+        thread.start()
+        self.assertEqual(thread.poll_events(max_events=10), [])
+        thread.collect_once()
+        thread.stop()
+
+        events = thread.poll_events(max_events=10)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].event_type, "press")
+
     def test_coalesces_pointer_move_when_queue_full(self) -> None:
         source = _ScriptedHDISource(
             [
@@ -89,6 +104,39 @@ class HDIThreadTests(unittest.TestCase):
         assert isinstance(payload, dict)
         self.assertEqual(payload["x"], 99.0)
         self.assertEqual(payload["y"], 99.0)
+
+    def test_trackpad_continuous_gesture_uses_latest_slot_without_evicting_click(self) -> None:
+        thread = HDIThread(source=_ScriptedHDISource([]), max_queue_size=1, poll_interval_s=0.001)
+        thread._enqueue(  # type: ignore[attr-defined]
+            HDIEvent(
+                1,
+                1,
+                "w",
+                "trackpad",
+                "click",
+                "OK",
+                {"x": 10.0, "y": 20.0, "button": 0, "phase": "down"},
+            )
+        )
+        for event_id in range(2, 102):
+            thread._enqueue(  # type: ignore[attr-defined]
+                HDIEvent(
+                    event_id,
+                    event_id,
+                    "w",
+                    "trackpad",
+                    "pinch",
+                    "OK",
+                    {"x": 10.0, "y": 20.0, "magnification": float(event_id)},
+                )
+            )
+
+        events = thread.poll_events(max_events=10)
+        self.assertEqual([event.event_type for event in events], ["click", "pinch"])
+        pinch_payload = events[1].payload
+        assert isinstance(pinch_payload, dict)
+        self.assertEqual(pinch_payload["magnification"], 101.0)
+        self.assertGreaterEqual(int(thread.consume_telemetry()["events_coalesced"]), 99)
 
     def test_touch_moves_coalesce_per_touch_id_and_preserve_transitions(self) -> None:
         source = _ScriptedHDISource(

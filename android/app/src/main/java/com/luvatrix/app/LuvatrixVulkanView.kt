@@ -34,7 +34,6 @@ import javax.crypto.spec.GCMParameterSpec
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import java.net.URL
-import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.abs
 
 class LuvatrixVulkanView @JvmOverloads constructor(
@@ -77,7 +76,9 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     private val nativeSurfaceLock = Any()
     private var nativeSurface: Surface? = null
     private var nativeSurfaceGeneration: Long = 0L
-    private val inputEvents = ConcurrentLinkedQueue<String>()
+    private val inputEdgePackets = AndroidInputPacketRingBuffer(capacity = 1024)
+    private val inputMotionPackets = AndroidInputPacketRingBuffer(capacity = 2048)
+    private var nextInputSequence: Int = 1
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -1004,7 +1005,11 @@ class LuvatrixVulkanView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (lowLatencyMode) {
+        val action = event.actionMasked
+        val activeGesture = action == MotionEvent.ACTION_DOWN ||
+            action == MotionEvent.ACTION_POINTER_DOWN ||
+            action == MotionEvent.ACTION_MOVE
+        if (lowLatencyMode && activeGesture) {
             requestUnbufferedDispatch(event)
         }
         lastInputCount += 1
@@ -1024,13 +1029,10 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         return true
     }
 
-    fun drainInputEventsJson(): Array<String> {
-        val out = ArrayList<String>()
-        while (true) {
-            val event = inputEvents.poll() ?: break
-            out.add(event)
-        }
-        return out.toTypedArray()
+    fun drainInputEventsBinary(): ByteArray {
+        val edge = inputEdgePackets.drain()
+        val motion = inputMotionPackets.drain()
+        return AndroidInputPacketRingBuffer.merge(edge, motion)
     }
 
     private fun enqueueTouch(event: MotionEvent) {
@@ -1046,30 +1048,33 @@ class LuvatrixVulkanView @JvmOverloads constructor(
             if ((action == MotionEvent.ACTION_POINTER_DOWN || action == MotionEvent.ACTION_POINTER_UP) && idx != pointerIndex) {
                 continue
             }
-            inputEvents.add(
-                JSONObject()
-                    .put("device", "touch")
-                    .put("touch_id", event.getPointerId(idx))
-                    .put("phase", phase)
-                    .put("x", event.getX(idx).toDouble())
-                    .put("y", event.getY(idx).toDouble())
-                    .put("force", event.getPressure(idx).toDouble())
-                    .put("major_radius", event.getTouchMajor(idx).toDouble())
-                    .put("tool_type", event.getToolType(idx).toString())
-                    .toString()
+            val ring = if (phase == "move") inputMotionPackets else inputEdgePackets
+            ring.offerTouch(
+                sequence = nextInputSequence(),
+                phase = phase,
+                touchId = event.getPointerId(idx),
+                x = event.getX(idx),
+                y = event.getY(idx),
+                force = event.getPressure(idx),
+                majorRadius = event.getTouchMajor(idx),
+                toolType = event.getToolType(idx),
             )
         }
     }
 
     private fun enqueueKey(event: KeyEvent, phase: String) {
-        inputEvents.add(
-            JSONObject()
-                .put("device", "keyboard")
-                .put("key", KeyEvent.keyCodeToString(event.keyCode))
-                .put("phase", phase)
-                .put("scan_code", event.scanCode)
-                .toString()
+        inputEdgePackets.offerKey(
+            sequence = nextInputSequence(),
+            phase = phase,
+            key = KeyEvent.keyCodeToString(event.keyCode),
+            scanCode = event.scanCode,
         )
+    }
+
+    private fun nextInputSequence(): Int {
+        val next = nextInputSequence
+        nextInputSequence = if (next == Int.MAX_VALUE) 1 else next + 1
+        return next
     }
 
     private fun setBootstrapFrame(color: Int) {
@@ -1216,5 +1221,201 @@ class LuvatrixVulkanView @JvmOverloads constructor(
                 }
             }
         }
+    }
+}
+
+private class AndroidInputPacketRingBuffer(private val capacity: Int) {
+    data class Drain(val bytes: ByteArray, val count: Int)
+
+    private val slots = ByteArray(capacity * PACKET_BYTES)
+    @Volatile private var readIndex = 0
+    @Volatile private var writeIndex = 0
+
+    init {
+        require(capacity >= 2) { "input packet ring needs at least two slots" }
+    }
+
+    fun offerTouch(
+        sequence: Int,
+        phase: String,
+        touchId: Int,
+        x: Float,
+        y: Float,
+        force: Float,
+        majorRadius: Float,
+        toolType: Int,
+    ): Boolean = offer(
+        device = DEVICE_TOUCH,
+        phase = touchPhase(phase),
+        toolType = toolType,
+        touchId = touchId,
+        x = x,
+        y = y,
+        force = force,
+        majorRadius = majorRadius,
+        scanCode = 0,
+        sequence = sequence,
+        key = "",
+    )
+
+    fun offerKey(sequence: Int, phase: String, key: String, scanCode: Int): Boolean = offer(
+        device = DEVICE_KEYBOARD,
+        phase = keyPhase(phase),
+        toolType = 0,
+        touchId = 0,
+        x = 0.0f,
+        y = 0.0f,
+        force = 0.0f,
+        majorRadius = 0.0f,
+        scanCode = scanCode,
+        sequence = sequence,
+        key = key,
+    )
+
+    fun drain(): Drain {
+        val first = readIndex
+        val last = writeIndex
+        var count = if (last >= first) last - first else capacity - first + last
+        val out = ByteArray(count * PACKET_BYTES)
+        var source = first
+        var destination = 0
+        while (count > 0) {
+            System.arraycopy(slots, source * PACKET_BYTES, out, destination, PACKET_BYTES)
+            source = (source + 1) % capacity
+            destination += PACKET_BYTES
+            count -= 1
+        }
+        readIndex = last
+        return Drain(out, destination / PACKET_BYTES)
+    }
+
+    private fun offer(
+        device: Int,
+        phase: Int,
+        toolType: Int,
+        touchId: Int,
+        x: Float,
+        y: Float,
+        force: Float,
+        majorRadius: Float,
+        scanCode: Int,
+        sequence: Int,
+        key: String,
+    ): Boolean {
+        val slot = writeIndex
+        val next = (slot + 1) % capacity
+        if (next == readIndex) return false
+        writePacket(
+            offset = slot * PACKET_BYTES,
+            device = device,
+            phase = phase,
+            toolType = toolType,
+            touchId = touchId,
+            x = x,
+            y = y,
+            force = force,
+            majorRadius = majorRadius,
+            scanCode = scanCode,
+            sequence = sequence,
+            key = key,
+        )
+        writeIndex = next
+        return true
+    }
+
+    private fun writePacket(
+        offset: Int,
+        device: Int,
+        phase: Int,
+        toolType: Int,
+        touchId: Int,
+        x: Float,
+        y: Float,
+        force: Float,
+        majorRadius: Float,
+        scanCode: Int,
+        sequence: Int,
+        key: String,
+    ) {
+        slots[offset] = device.toByte()
+        slots[offset + 1] = phase.toByte()
+        slots[offset + 2] = toolType.coerceIn(0, 255).toByte()
+        val keyBytes = if (key.isEmpty()) null else key.toByteArray(Charsets.UTF_8)
+        val keySize = minOf(KEY_BYTES, keyBytes?.size ?: 0)
+        slots[offset + 3] = keySize.toByte()
+        writeInt(slots, offset + 4, touchId)
+        writeInt(slots, offset + 8, x.toRawBits())
+        writeInt(slots, offset + 12, y.toRawBits())
+        writeInt(slots, offset + 16, force.toRawBits())
+        writeInt(slots, offset + 20, majorRadius.toRawBits())
+        writeInt(slots, offset + 24, scanCode)
+        writeInt(slots, offset + 28, sequence)
+        java.util.Arrays.fill(slots, offset + 32, offset + PACKET_BYTES, 0.toByte())
+        if (keyBytes != null && keySize > 0) System.arraycopy(keyBytes, 0, slots, offset + 32, keySize)
+    }
+
+    private fun touchPhase(value: String): Int = when (value) {
+        "down" -> PHASE_DOWN
+        "up" -> PHASE_UP
+        "cancel" -> PHASE_CANCEL
+        else -> PHASE_MOVE
+    }
+
+    private fun keyPhase(value: String): Int = if (value == "up") PHASE_UP else PHASE_DOWN
+
+    companion object {
+        private const val HEADER_BYTES = 8
+        private const val PACKET_BYTES = 64
+        private const val KEY_BYTES = 32
+        private const val DEVICE_TOUCH = 1
+        private const val DEVICE_KEYBOARD = 2
+        private const val PHASE_MOVE = 0
+        private const val PHASE_DOWN = 1
+        private const val PHASE_UP = 2
+        private const val PHASE_CANCEL = 3
+
+        fun merge(edge: Drain, motion: Drain): ByteArray {
+            val total = edge.count + motion.count
+            val out = ByteArray(HEADER_BYTES + total * PACKET_BYTES)
+            out[0] = 'L'.code.toByte()
+            out[1] = 'V'.code.toByte()
+            out[2] = 'X'.code.toByte()
+            out[3] = 'I'.code.toByte()
+            writeShort(out, 4, 1)
+            writeShort(out, 6, total)
+            var edgeIndex = 0
+            var motionIndex = 0
+            var destination = HEADER_BYTES
+            while (edgeIndex < edge.count || motionIndex < motion.count) {
+                val useEdge = motionIndex >= motion.count || (
+                    edgeIndex < edge.count &&
+                        readInt(edge.bytes, edgeIndex * PACKET_BYTES + 28) <=
+                        readInt(motion.bytes, motionIndex * PACKET_BYTES + 28)
+                    )
+                val source = if (useEdge) edge.bytes else motion.bytes
+                val index = if (useEdge) edgeIndex++ else motionIndex++
+                System.arraycopy(source, index * PACKET_BYTES, out, destination, PACKET_BYTES)
+                destination += PACKET_BYTES
+            }
+            return out
+        }
+
+        private fun writeShort(buffer: ByteArray, offset: Int, value: Int) {
+            buffer[offset] = (value and 0xff).toByte()
+            buffer[offset + 1] = ((value ushr 8) and 0xff).toByte()
+        }
+
+        private fun writeInt(buffer: ByteArray, offset: Int, value: Int) {
+            buffer[offset] = (value and 0xff).toByte()
+            buffer[offset + 1] = ((value ushr 8) and 0xff).toByte()
+            buffer[offset + 2] = ((value ushr 16) and 0xff).toByte()
+            buffer[offset + 3] = ((value ushr 24) and 0xff).toByte()
+        }
+
+        private fun readInt(buffer: ByteArray, offset: Int): Int =
+            (buffer[offset].toInt() and 0xff) or
+                ((buffer[offset + 1].toInt() and 0xff) shl 8) or
+                ((buffer[offset + 2].toInt() and 0xff) shl 16) or
+                ((buffer[offset + 3].toInt() and 0xff) shl 24)
     }
 }
