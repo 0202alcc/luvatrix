@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 import json
+import struct
 import threading
 import time
 from typing import Any
@@ -21,6 +22,15 @@ _TELEMETRY: dict[str, object] = {
     "last_phase": "",
     "last_key": "",
 }
+
+_BINARY_HEADER = struct.Struct("<4sHH")
+_BINARY_PACKET = struct.Struct("<BBBBiffffii32s")
+_BINARY_MAGIC = b"LVXI"
+_BINARY_VERSION = 1
+_BINARY_DEVICE_TOUCH = 1
+_BINARY_DEVICE_KEYBOARD = 2
+_BINARY_TOUCH_PHASES = {0: "move", 1: "down", 2: "up", 3: "cancel"}
+_BINARY_KEY_PHASES = {1: "down", 2: "up"}
 
 
 def clear_android_input_events() -> None:
@@ -141,6 +151,18 @@ class AndroidHDISource(HDIEventSource):
     def _drain_input_bridge(self) -> None:
         if self.input_bridge is None:
             return
+        drain_binary = getattr(self.input_bridge, "drainInputEventsBinary", None) or getattr(
+            self.input_bridge, "drain_input_events_binary", None
+        )
+        if callable(drain_binary):
+            try:
+                raw_binary = drain_binary()
+            except Exception:
+                return
+            for event in _coalesce_touch_moves(_decode_binary_input_events(raw_binary)):
+                self._scale_touch_event(event)
+                _enqueue_bridge_event(event)
+            return
         drain = getattr(self.input_bridge, "drainInputEventsJson", None) or getattr(
             self.input_bridge, "drain_input_events_json", None
         )
@@ -225,6 +247,71 @@ def _coalesce_touch_moves(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         flush_moves()
         out.append(event)
     flush_moves()
+    return out
+
+
+def _decode_binary_input_events(raw: object) -> list[dict[str, Any]]:
+    try:
+        data = bytes(raw)
+    except (TypeError, ValueError):
+        return []
+    if len(data) < _BINARY_HEADER.size:
+        return []
+    magic, version, count = _BINARY_HEADER.unpack_from(data)
+    if magic != _BINARY_MAGIC or version != _BINARY_VERSION:
+        return []
+    expected_size = _BINARY_HEADER.size + int(count) * _BINARY_PACKET.size
+    if len(data) != expected_size:
+        return []
+
+    out: list[dict[str, Any]] = []
+    offset = _BINARY_HEADER.size
+    for _ in range(int(count)):
+        (
+            device,
+            phase_code,
+            tool_type,
+            key_length,
+            touch_id,
+            x,
+            y,
+            force,
+            major_radius,
+            scan_code,
+            _key_code,
+            key_raw,
+        ) = _BINARY_PACKET.unpack_from(data, offset)
+        offset += _BINARY_PACKET.size
+        if device == _BINARY_DEVICE_TOUCH:
+            phase = _BINARY_TOUCH_PHASES.get(int(phase_code))
+            if phase is None:
+                continue
+            out.append(
+                {
+                    "device": "touch",
+                    "touch_id": int(touch_id),
+                    "phase": phase,
+                    "x": float(x),
+                    "y": float(y),
+                    "force": float(force),
+                    "major_radius": float(major_radius),
+                    "tool_type": str(int(tool_type)),
+                }
+            )
+        elif device == _BINARY_DEVICE_KEYBOARD:
+            phase = _BINARY_KEY_PHASES.get(int(phase_code))
+            if phase is None:
+                continue
+            key_size = min(len(key_raw), int(key_length))
+            key = key_raw[:key_size].decode("utf-8", errors="replace")
+            out.append(
+                {
+                    "device": "keyboard",
+                    "phase": phase,
+                    "key": key,
+                    "scan_code": int(scan_code),
+                }
+            )
     return out
 
 

@@ -134,6 +134,18 @@ class AndroidPackagingTests(unittest.TestCase):
             self.assertIn("defer_hdi_polling_until_first_frame=True", boot)
             self.assertNotIn("def _app_manifest_render_mode", boot)
 
+    def test_android_input_bridge_uses_binary_packets_and_frame_driven_collection(self) -> None:
+        for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
+            view = (root / "app/src/main/java/com/luvatrix/app/LuvatrixVulkanView.kt").read_text(encoding="utf-8")
+            boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")
+
+            self.assertIn("fun drainInputEventsBinary(): ByteArray", view)
+            self.assertIn("AndroidInputPacketRingBuffer", view)
+            self.assertIn("inputEdgePackets", view)
+            self.assertIn("inputMotionPackets", view)
+            self.assertNotIn("ConcurrentLinkedQueue<String>", view)
+            self.assertIn("background_poll=False", boot)
+
     def test_android_bootstrap_prefers_chaquopy_bytecode_without_source_wrapper(self) -> None:
         for root in (ANDROID, ROOT / "luvatrix_core/templates/native/android"):
             boot = (root / "app/src/main/python/luvatrix_android_boot.py").read_text(encoding="utf-8")

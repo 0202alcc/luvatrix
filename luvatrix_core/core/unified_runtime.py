@@ -280,6 +280,7 @@ class UnifiedRuntime:
                     if decision.should_shutdown:
                         stopped_by_energy_safety = True
                         break
+                ctx.hdi.collect_once()
                 lifecycle.loop(ctx, dt)
                 self._app_loop_ticks += 1
                 self._app_loop_rate.mark()

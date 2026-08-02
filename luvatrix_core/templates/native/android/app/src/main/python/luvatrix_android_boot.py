@@ -496,6 +496,7 @@ def _run_visual_runtime(view, *, before_lifecycle_init=None):
             poll_interval_s=1.0 / 1000.0,
             window_geometry_provider=lambda: (0.0, 0.0, float(width), float(height)),
             target_extent_provider=lambda: (float(width), float(height)),
+            background_poll=False,
         ),
         sensor_manager=SensorManagerThread(providers=make_android_sensor_providers(view)),
         capability_decider=lambda cap: True,

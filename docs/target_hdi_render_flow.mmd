@@ -1,0 +1,140 @@
+%% Target HDI and Matrix-canonical rendering flow.
+%% Solid paths are implemented today.
+%% Dashed paths identify future presentation-pacing work.
+
+flowchart TB
+    subgraph App["Application and canonical pixel contract"]
+        direction LR
+        AppLoop["App init(ctx) → loop(ctx, dt) → stop(ctx)"]
+        Scene["Scene facade\nretained nodes and content transforms"]
+        DirectMatrix["Direct Matrix writes"]
+        SceneToMatrix["Scene-to-Matrix compositor"]
+        Matrix["WindowMatrix\ncanonical RGBA pixel state"]
+        Revision["Atomic revision and dirty-region tracking"]
+        Frame["DisplayFrame\nRGBA, dimensions, revision, dirty_rect"]
+
+        AppLoop --> Scene --> SceneToMatrix --> Matrix
+        AppLoop --> DirectMatrix --> Matrix
+        Matrix --> Revision --> Frame
+    end
+
+    subgraph MacHDI["macOS HDI: current low-latency path"]
+        direction TB
+        MacHardware["Keyboard and mouse hardware"]
+        IOKit["IOKit HID source\nhardware-rate input; no WindowServer round trip"]
+        MacGestures["AppKit local NSEvent monitor\ntrackpad scroll, pressure, pinch, rotate"]
+        MacFallback["NSEvent-only fallback\nwhen IOKit is unavailable"]
+        MacSource["MacOSWindowHDISource\nscoped to the active AppKit window"]
+        MacPoll["HDIThread at 1 kHz\nwindow-active safety; coordinate mapping; telemetry"]
+
+        MacEdges["Discrete edge queue\nkey down/up; mouse click down/up\nprocessed before continuous state"]
+        MacLatest["Latest-state slots\npointer movement; scroll delta accumulation;\npressure, pinch, rotate"]
+        MacAppInput["ctx.poll_hdi_events() → InputManager.snapshot()\njust before app state update"]
+
+        MacHardware --> IOKit --> MacSource
+        MacGestures --> MacSource
+        MacFallback -. "fallback" .-> MacSource
+        MacSource --> MacPoll
+        MacPoll --> MacEdges
+        MacPoll --> MacLatest
+        MacEdges --> MacAppInput
+        MacLatest --> MacAppInput
+    end
+
+    subgraph AndroidHDI["Android HDI: implemented low-latency path"]
+        direction TB
+        AndroidOS["Android input dispatcher\nMotionEvent and KeyEvent on LuvatrixVulkanView"]
+        AndroidEdges["Reliable transitions\nACTION_DOWN / POINTER_DOWN / POINTER_UP / UP / CANCEL\nkey down/up"]
+        AndroidState["Continuous state\nlatest MOVE per pointer ID; coordinates, pressure,\nradius, tool type; current active-contact map"]
+        CurrentBridge["Fixed binary packets\nseparate SPSC edge and motion rings\ndrainInputEventsBinary()"]
+        CurrentSource["AndroidHDISource\nscale coordinates and coalesce MOVE per touch ID"]
+        AndroidThread["HDIThread\nnormalized touch and keyboard events"]
+
+        AndroidOS --> AndroidEdges --> CurrentBridge
+        AndroidOS --> AndroidState --> CurrentBridge
+        CurrentBridge --> CurrentSource --> AndroidThread
+        TargetDispatch["Active-gesture unbuffered dispatch\nrequestUnbufferedDispatch() on down/drag only\nstops at up/cancel"]
+        LateSample["Frame-driven HDI collection\nUnifiedRuntime calls collect_once()\nimmediately before lifecycle.loop()"]
+        AndroidOS --> TargetDispatch
+        AndroidThread --> LateSample
+        AndroidThread --> AppAndroid["ctx.poll_hdi_events() → InputManager.snapshot()"]
+        LateSample --> AppAndroid
+    end
+
+    subgraph WebHDI["Web HDI: current browser snapshot path"]
+        direction LR
+        WebEvents["Canvas Pointer Events; wheel events;\nwindow key down/up events"]
+        WebAdapter["input.js\nCSS-pixel to canvas-pixel mapping;\npointer capture and canvas focus"]
+        WebSnapshot["Snapshot state\npointer and buttons; pressure; scroll;\nkeys-down; active touches; two-finger pinch"]
+        WebInput["Pyodide callback → BrowserAppContext\nInputManager.snapshot() once per animation frame"]
+        WebLoop["Current browser app loop\nloop_browser(dt)"]
+        WebCommands["Current browser command buffer"]
+        WebRender["JavaScript Canvas/WebGL renderer\n→ browser compositor → display"]
+
+        WebEvents --> WebAdapter --> WebSnapshot --> WebInput --> WebLoop --> WebCommands --> WebRender
+    end
+
+    subgraph SensorFlow["Sensor flow: independent of HDI events"]
+        direction LR
+        MacSensors["macOS providers\nthermal, power, motion, camera,\nmicrophone, speaker metadata"]
+        AndroidSensors["Android providers\nthermal, power, accelerometer, gyroscope,\ndisplay refresh, camera, microphone permissions"]
+        SensorManager["SensorManagerThread\npoll and cache SensorSample"]
+        SensorGate["Manifest capability; consent; safety policy;\nrate limit and privacy sanitization"]
+        AppSensor["ctx.read_sensor(sensor_type)"]
+
+        MacSensors --> SensorManager
+        AndroidSensors --> SensorManager
+        SensorGate --> SensorManager --> AppSensor --> AppLoop
+    end
+
+    MacAppInput --> AppLoop
+    AppAndroid --> AppLoop
+
+    WebNote["Current web input is implemented, but its command-buffer renderer\ndoes not yet use WindowMatrix or WebTarget.\nMatrix-derived DisplayFrame is the target convergence point."]
+    WebNote -.-> WebRender
+
+    subgraph NativeOutput["Matrix-derived native presentation"]
+        direction TB
+        Target["RenderTarget.present_frame(DisplayFrame)"]
+
+        subgraph AndroidOutput["Android Vulkan"]
+            direction LR
+            AndroidTarget["AndroidVulkanTarget"]
+            AndroidUpload["Dirty-region RGBA when available\notherwise full-frame transfer"]
+            AndroidJNI["Kotlin/JNI\npresentRgbaRegion() or presentRgba()"]
+            AndroidGPU["Frame-owned Vulkan upload buffer\nupdate sampled image and record commands"]
+            AndroidPresent["Acquire swapchain → submit/fence\n→ vkQueuePresentKHR"]
+            AndroidDisplay["ANativeWindow → SurfaceFlinger → display"]
+            AndroidTarget --> AndroidUpload --> AndroidJNI --> AndroidGPU --> AndroidPresent --> AndroidDisplay
+        end
+
+        subgraph MacOutput["macOS Metal or Vulkan"]
+            direction LR
+            MacTarget["MetalTarget or VulkanTarget"]
+            MacUpload["RGBA texture upload\nor Vulkan copy/scale/blit"]
+            MacSubmit["Encode drawable work\ncommit/submit and present"]
+            MacDisplay["CAMetalLayer or MoltenVK\n→ WindowServer → display"]
+            MacTarget --> MacUpload --> MacSubmit --> MacDisplay
+        end
+
+        Target --> AndroidTarget
+        Target --> MacTarget
+    end
+
+    subgraph AndroidPacing["Android frame pacing"]
+        direction LR
+        Vsync["Requested display refresh + Vulkan FIFO presentation"]
+        Sample["Late input sample"]
+        Update["App update and Matrix composition"]
+        Submit["Vulkan submission\nretain only newest visual revision"]
+        Present["Present at target refresh rate"]
+        Vsync --> Sample --> Update --> Submit --> Present
+    end
+
+    Frame --> Target
+    LateSample -.-> Sample
+    AppLoop -.-> Update
+    AndroidPresent -.-> Present
+
+    Rule["Invariant: Scene has no direct backend path.\nAny GPU batching accelerates Scene-to-Matrix only and must preserve Matrix-equivalent pixels."]
+    Rule -.-> SceneToMatrix

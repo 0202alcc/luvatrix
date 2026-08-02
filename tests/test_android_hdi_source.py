@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import struct
 import unittest
 
 from luvatrix_core.platform.android.hdi_source import (
@@ -78,6 +79,74 @@ class AndroidHDISourceTests(unittest.TestCase):
         self.assertEqual(by_id[1]["y"], 4.0)
         self.assertEqual(by_id[2]["x"], 5.0)
         self.assertEqual(by_id[2]["y"], 6.0)
+
+    def test_binary_bridge_preserves_edges_and_coalesces_touch_moves(self) -> None:
+        class _Bridge:
+            def getWidth(self) -> int:
+                return 100
+
+            def getHeight(self) -> int:
+                return 200
+
+            def drainInputEventsBinary(self) -> bytes:
+                return _binary_input_packets(
+                    _binary_packet(device=1, phase=1, touch_id=7, x=10.0, y=20.0),
+                    _binary_packet(device=1, phase=0, touch_id=7, x=30.0, y=40.0),
+                    _binary_packet(device=1, phase=0, touch_id=7, x=50.0, y=60.0),
+                    _binary_packet(device=1, phase=2, touch_id=7, x=50.0, y=60.0),
+                    _binary_packet(device=2, phase=1, key="KEYCODE_A", scan_code=29),
+                )
+
+        events = AndroidHDISource(_Bridge(), logical_width=10, logical_height=20).poll(window_active=True, ts_ns=1)
+
+        self.assertEqual(
+            [(event.device, event.event_type, event.payload.get("phase")) for event in events],
+            [
+                ("touch", "touch", "down"),
+                ("touch", "touch", "move"),
+                ("touch", "touch", "up"),
+                ("keyboard", "key_down", "down"),
+            ],
+        )
+        self.assertEqual(events[1].payload["x"], 5.0)
+        self.assertEqual(events[1].payload["y"], 6.0)
+        self.assertEqual(events[-1].payload["key"], "KEYCODE_A")
+        self.assertEqual(events[-1].payload["scan_code"], 29)
+
+
+def _binary_input_packets(*packets: bytes) -> bytes:
+    return struct.pack("<4sHH", b"LVXI", 1, len(packets)) + b"".join(packets)
+
+
+def _binary_packet(
+    *,
+    device: int,
+    phase: int,
+    touch_id: int = 0,
+    x: float = 0.0,
+    y: float = 0.0,
+    force: float = 0.0,
+    major_radius: float = 0.0,
+    tool_type: int = 0,
+    scan_code: int = 0,
+    key: str = "",
+) -> bytes:
+    key_bytes = key.encode("utf-8")[:32]
+    return struct.pack(
+        "<BBBBiffffii32s",
+        device,
+        phase,
+        tool_type,
+        len(key_bytes),
+        touch_id,
+        x,
+        y,
+        force,
+        major_radius,
+        scan_code,
+        0,
+        key_bytes.ljust(32, b"\0"),
+    )
 
 
 if __name__ == "__main__":
