@@ -56,6 +56,7 @@ from .scene_graph import (
 )
 from .sensor_manager import SensorManagerThread, SensorSample
 from .window_matrix import CallBlitEvent, FullRewrite, ReplaceRect, ShiftFrame, WindowMatrix, WriteBatch
+from .matrix_viewport import MatrixViewport
 from luvatrix_core import accel
 from luvatrix_core.perf.copy_telemetry import (
     add_copy_telemetry,
@@ -216,6 +217,22 @@ class AppContext:
     def submit_write_batch(self, batch: WriteBatch) -> CallBlitEvent:
         self._require_capability("window.write")
         return self.matrix.submit_write_batch(batch)
+
+    def set_matrix_viewport(
+        self,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        *,
+        wrap_x: bool = False,
+        wrap_y: bool = False,
+    ) -> CallBlitEvent:
+        """Move the Matrix presentation viewport without rewriting its pixels."""
+        self._require_capability("window.write")
+        return self.matrix.set_presentation_viewport(
+            MatrixViewport(x=int(x), y=int(y), width=int(width), height=int(height), wrap_x=wrap_x, wrap_y=wrap_y)
+        )
 
     @property
     def render_permitted(self) -> bool:

@@ -29,6 +29,48 @@ object NativeVulkan {
         height: Int,
     ): Boolean
 
+    external fun presentRgbaViewport(
+        rgba: ByteArray,
+        revision: Int,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        viewportX: Int,
+        viewportY: Int,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        wrapX: Boolean,
+        wrapY: Boolean,
+    ): Boolean
+
+    external fun presentRgbaRegionViewport(
+        rgba: ByteArray,
+        revision: Int,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        viewportX: Int,
+        viewportY: Int,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        wrapX: Boolean,
+        wrapY: Boolean,
+    ): Boolean
+
+    external fun presentViewport(
+        revision: Int,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        viewportX: Int,
+        viewportY: Int,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        wrapX: Boolean,
+        wrapY: Boolean,
+    ): Boolean
+
     external fun presentScene(sceneJson: String, revision: Int, width: Int, height: Int, presentationMode: String): Boolean
 
     external fun presentSceneBinary(scenePacket: ByteArray, revision: Int, width: Int, height: Int, presentationMode: String): Boolean

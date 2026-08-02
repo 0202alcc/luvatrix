@@ -14,6 +14,7 @@ from luvatrix.app import (
     InputManager,
     InputState,
     InteractionAwareWorkScheduler,
+    MatrixViewport,
     MissingOptionalDependencyError,
     PLATFORM_ANDROID,
     PLATFORM_IOS,
@@ -110,6 +111,10 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         ):
             self.assertIn(name, luvatrix_app_api.__all__)
             self.assertIsNotNone(getattr(luvatrix_app_api, name))
+
+    def test_matrix_viewport_is_a_public_app_api_contract(self) -> None:
+        self.assertIn("MatrixViewport", luvatrix_app_api.__all__)
+        self.assertEqual(MatrixViewport(x=1, y=2, width=3, height=4).height, 4)
 
     def test_vertical_scrollbar_supports_track_click_drag_and_release_capture(self) -> None:
         controller = ScrollbarController("vertical", min_thumb_extent=20.0)

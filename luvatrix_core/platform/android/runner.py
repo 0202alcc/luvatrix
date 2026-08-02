@@ -142,7 +142,12 @@ def _read_app_display_config(raw: dict[str, object]) -> dict[str, int]:
     if not isinstance(display, dict):
         return {}
     out: dict[str, int] = {}
-    for source_key, dest_key in (("native_width", "native_width"), ("native_height", "native_height")):
+    for source_key, dest_key in (
+        ("native_width", "native_width"),
+        ("native_height", "native_height"),
+        ("matrix_content_width", "matrix_content_width"),
+        ("matrix_content_height", "matrix_content_height"),
+    ):
         try:
             value = int(display.get(source_key, 0))
         except (TypeError, ValueError):

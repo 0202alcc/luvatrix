@@ -20,9 +20,23 @@ from luvatrix_core.core.window_matrix import (
     WriteBatch,
     WindowMatrix,
 )
+from luvatrix_core.core.matrix_viewport import MatrixViewport
 
 
 class WindowMatrixProtocolTests(unittest.TestCase):
+    def test_viewport_change_emits_transform_only_blit_without_advancing_content_revision(self) -> None:
+        matrix = WindowMatrix(height=8, width=4)
+        matrix.submit_write_batch(WriteBatch([FullRewrite(torch.zeros((8, 4, 4), dtype=torch.uint8))]))
+        matrix.pop_call_blit()
+
+        event = matrix.set_presentation_viewport(MatrixViewport(x=0, y=2, width=4, height=4, wrap_y=True))
+
+        self.assertEqual(matrix.revision, 1)
+        self.assertEqual(event.revision, 1)
+        self.assertTrue(event.transform_only)
+        self.assertEqual(event.dirty_rect, (0, 0, 0, 0))
+        self.assertEqual(event.viewport, MatrixViewport(x=0, y=2, width=4, height=4, wrap_y=True))
+
     def test_init_uses_canonical_shape_dtype(self) -> None:
         matrix = WindowMatrix(height=3, width=4)
         self.assertTrue(matrix.is_materialized)

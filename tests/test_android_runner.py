@@ -98,6 +98,24 @@ class AndroidRunnerTests(unittest.TestCase):
             self.assertIn('"native_width": 393', text)
             self.assertIn('"native_height": 852', text)
 
+    def test_write_launch_config_includes_matrix_content_extent(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td)
+            app = project / "example"
+            app.mkdir()
+            (app / "app.toml").write_text(
+                "[display]\n"
+                "matrix_content_width = 393\n"
+                "matrix_content_height = 3408\n",
+                encoding="utf-8",
+            )
+
+            path = write_android_launch_config(app, project_dir=project)
+
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(data["matrix_content_width"], 393)
+            self.assertEqual(data["matrix_content_height"], 3408)
+
     def test_write_launch_config_resolves_auto_mode_from_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             project = Path(td)

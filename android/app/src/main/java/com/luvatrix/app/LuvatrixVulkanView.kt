@@ -560,6 +560,109 @@ class LuvatrixVulkanView @JvmOverloads constructor(
         }
     }
 
+    fun presentRgbaViewport(
+        rgba: ByteArray,
+        revision: Int,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        viewportX: Int,
+        viewportY: Int,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        wrapX: Boolean,
+        wrapY: Boolean,
+    ) {
+        if (rgba.size != sourceWidth * sourceHeight * 4) return
+        AndroidLaunchTelemetry.mark("first_app_frame_submitted")
+        val nativePresented = try {
+            NativeVulkan.presentRgbaViewport(rgba, revision, sourceWidth, sourceHeight, viewportX, viewportY, viewportWidth, viewportHeight, wrapX, wrapY)
+        } catch (exc: Throwable) {
+            Log.w("Luvatrix", "native RGBA viewport presentation unavailable", exc)
+            false
+        }
+        if (!nativePresented) return
+        if (!nativeRgbaActive) {
+            nativeRgbaActive = true
+            overlayView.post {
+                overlayMode = OverlayMode.Native
+                overlaySceneJson = null
+                retainedSceneJson = null
+                overlayView.setBackgroundColor(Color.TRANSPARENT)
+                overlayView.invalidate()
+            }
+        }
+        framesPresented += 1
+    }
+
+    fun presentRgbaRegionViewport(
+        rgba: ByteArray,
+        revision: Int,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        viewportX: Int,
+        viewportY: Int,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        wrapX: Boolean,
+        wrapY: Boolean,
+    ) {
+        if (rgba.size != width * height * 4) return
+        AndroidLaunchTelemetry.mark("first_app_frame_submitted")
+        val nativePresented = try {
+            NativeVulkan.presentRgbaRegionViewport(rgba, revision, sourceWidth, sourceHeight, x, y, width, height, viewportX, viewportY, viewportWidth, viewportHeight, wrapX, wrapY)
+        } catch (exc: Throwable) {
+            Log.w("Luvatrix", "native RGBA region viewport presentation unavailable", exc)
+            false
+        }
+        if (!nativePresented) return
+        if (!nativeRgbaActive) {
+            nativeRgbaActive = true
+            overlayView.post {
+                overlayMode = OverlayMode.Native
+                overlaySceneJson = null
+                retainedSceneJson = null
+                overlayView.setBackgroundColor(Color.TRANSPARENT)
+                overlayView.invalidate()
+            }
+        }
+        framesPresented += 1
+    }
+
+    fun presentViewport(
+        revision: Int,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        viewportX: Int,
+        viewportY: Int,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        wrapX: Boolean,
+        wrapY: Boolean,
+    ) {
+        val nativePresented = try {
+            NativeVulkan.presentViewport(revision, sourceWidth, sourceHeight, viewportX, viewportY, viewportWidth, viewportHeight, wrapX, wrapY)
+        } catch (exc: Throwable) {
+            Log.w("Luvatrix", "native resident Matrix viewport presentation unavailable", exc)
+            false
+        }
+        if (!nativePresented) return
+        if (!nativeRgbaActive) {
+            nativeRgbaActive = true
+            overlayView.post {
+                overlayMode = OverlayMode.Native
+                overlaySceneJson = null
+                retainedSceneJson = null
+                overlayView.setBackgroundColor(Color.TRANSPARENT)
+                overlayView.invalidate()
+            }
+        }
+        framesPresented += 1
+    }
+
     private fun presentLatestRgba() {
         val presentation = rgbaFrameMailbox.take() ?: return
         bootstrapMessage = null

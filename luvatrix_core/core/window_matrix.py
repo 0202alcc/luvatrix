@@ -10,6 +10,7 @@ from typing import TypeAlias
 
 from luvatrix_core import accel
 from luvatrix_core.perf.copy_telemetry import add_copy_telemetry
+from .matrix_viewport import MatrixViewport
 
 
 LOGGER = logging.getLogger(__name__)
@@ -84,8 +85,11 @@ class CallBlitEvent:
     event_id: int
     revision: int
     ts_ns: int
-    # ``None`` denotes a global rewrite or transform that invalidates all pixels.
+    # ``None`` denotes a global rewrite that invalidates all pixels.
     dirty_rect: tuple[int, int, int, int] | None = None
+    # A transform-only event presents an already resident Matrix texture.
+    transform_only: bool = False
+    viewport: MatrixViewport | None = None
 
 
 class WindowMatrix:
@@ -115,6 +119,7 @@ class WindowMatrix:
         self._events: deque[CallBlitEvent] = deque()
         self._next_event_id = 1
         self._revision = 0
+        self._presentation_viewport: MatrixViewport | None = None
         self._revision_snapshot_enabled = os.getenv("LUVATRIX_ENABLE_REVISIONED_SNAPSHOT", "0").strip() == "1"
         self._revision_snapshot: object | None = None
         self._revision_snapshot_revision = 0
@@ -131,6 +136,35 @@ class WindowMatrix:
         """Whether the RGBA backing store has been allocated."""
         with self._write_lock:
             return self._matrix is not None
+
+    @property
+    def presentation_viewport(self) -> MatrixViewport | None:
+        """Current Matrix viewport, or ``None`` when the full Matrix is shown."""
+        with self._write_lock:
+            return self._presentation_viewport
+
+    def set_presentation_viewport(self, viewport: MatrixViewport | None) -> CallBlitEvent:
+        """Present a new Matrix view without mutating Matrix content.
+
+        This deliberately preserves ``revision``: render targets that retain
+        Matrix pixels can perform only a GPU viewport/blit operation.
+        """
+        normalized = self._normalize_viewport(viewport)
+        with self._write_lock:
+            self._presentation_viewport = normalized
+            event = CallBlitEvent(
+                event_id=self._next_event_id,
+                revision=self._revision,
+                ts_ns=time.time_ns(),
+                dirty_rect=(0, 0, 0, 0),
+                transform_only=True,
+                viewport=normalized,
+            )
+            self._next_event_id += 1
+        with self._event_cv:
+            self._events.append(event)
+            self._event_cv.notify_all()
+        return event
 
     def read_snapshot(self) -> object:
         """Safe read view for external consumers."""
@@ -216,6 +250,7 @@ class WindowMatrix:
                 revision=self._revision,
                 ts_ns=time.time_ns(),
                 dirty_rect=dirty_rect,
+                viewport=self._presentation_viewport,
             )
             self._next_event_id += 1
 
@@ -224,6 +259,24 @@ class WindowMatrix:
             self._event_cv.notify_all()
 
         return event
+
+    def _normalize_viewport(self, viewport: MatrixViewport | None) -> MatrixViewport | None:
+        if viewport is None:
+            return None
+        x, y, width, height = int(viewport.x), int(viewport.y), int(viewport.width), int(viewport.height)
+        if width <= 0 or height <= 0:
+            raise ValueError("viewport width/height must be > 0")
+        if width > self.width or height > self.height:
+            raise ValueError("viewport dimensions cannot exceed Matrix dimensions")
+        if viewport.wrap_x:
+            x %= self.width
+        elif x < 0 or x + width > self.width:
+            raise ValueError("viewport x bounds exceed Matrix dimensions")
+        if viewport.wrap_y:
+            y %= self.height
+        elif y < 0 or y + height > self.height:
+            raise ValueError("viewport y bounds exceed Matrix dimensions")
+        return MatrixViewport(x=x, y=y, width=width, height=height, wrap_x=bool(viewport.wrap_x), wrap_y=bool(viewport.wrap_y))
 
     def pop_call_blit(self, timeout: float | None = None) -> CallBlitEvent | None:
         with self._event_cv:

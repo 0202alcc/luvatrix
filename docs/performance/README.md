@@ -16,3 +16,4 @@ Each record should include:
 | Release | Area | Evidence | Result |
 | --- | --- | --- | --- |
 | 0.2.3 | Android cold launch and Activity recreation | [Android Activity rebind](android_activity_rebind_0_2_3.md) | 19.08% faster median cold launch; 81.46% faster median Activity recreation |
+| Unreleased | Matrix scrolling | [Retained Matrix viewports](matrix_viewport_retention.md) | One full upload, then zero-byte Android viewport updates |
