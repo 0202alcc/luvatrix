@@ -675,6 +675,62 @@ class UnifiedRuntimeTests(unittest.TestCase):
             # With a very low present cap, runtime should present far fewer frames than ticks.
             self.assertLessEqual(result.frames_presented, 2)
 
+    def test_matrix_app_updates_at_target_rate_but_renders_at_present_rate(self) -> None:
+        """High-rate input/update ticks must not force unused Matrix compositions."""
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            stats_path = app_dir / "stats.txt"
+            (app_dir / "app.toml").write_text(
+                "\n".join(
+                    [
+                        'app_id = "test.matrix.render-pacing"',
+                        'protocol_version = "1"',
+                        'entrypoint = "app_main:create"',
+                        'required_capabilities = ["window.write"]',
+                        "optional_capabilities = []",
+                        "",
+                        "[render]",
+                        'preferred = "matrix"',
+                        'fallbacks = ["matrix"]',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (app_dir / "app_main.py").write_text(
+                "\n".join(
+                    [
+                        "from pathlib import Path",
+                        "from luvatrix.app import App",
+                        "",
+                        "class _App(App):",
+                        "    def setup(self):",
+                        "        self.updates = 0",
+                        "        self.renders = 0",
+                        "    def update(self, dt):",
+                        "        self.updates += 1",
+                        "    def render(self):",
+                        "        self.renders += 1",
+                        "    def teardown(self):",
+                        f"        Path({str(stats_path)!r}).write_text(f'{{self.updates}},{{self.renders}}', encoding='utf-8')",
+                        "def create():",
+                        "    return _App()",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            runtime = UnifiedRuntime(
+                matrix=WindowMatrix(height=1, width=1),
+                target=_RecordingTarget(),
+                hdi=HDIThread(source=_NoopHDISource()),
+                sensor_manager=_FakeSensorManager(),
+                capability_decider=lambda _cap: True,
+            )
+
+            result = runtime.run_app(app_dir, max_ticks=8, target_fps=120, present_fps=1)
+
+            self.assertEqual(result.ticks_run, 8)
+            self.assertEqual(stats_path.read_text(encoding="utf-8"), "8,1")
+
     def test_unified_runtime_supports_v2_python_process_lane(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             app_dir = Path(td)

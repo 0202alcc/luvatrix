@@ -1628,9 +1628,9 @@ class App:
         self.setup()
 
     def loop(self, ctx: AppContext, dt: float) -> None:
-        _ = ctx
         self.update(dt)
-        if self._continuous_render or self._render_requested:
+        render_permitted = bool(getattr(ctx, "render_permitted", True))
+        if render_permitted and (self._continuous_render or self._render_requested):
             self._render_requested = False
             self.render()
 
