@@ -41,6 +41,7 @@ def run_ios_tour(
     timeout: float = 900.0,
     settle: float = 0.75,
     ack_timeout: float = 60.0,
+    keep_open: bool = False,
     run_id: str | None = None,
     run: Callable[..., Any] = subprocess.run,
     popen: Callable[..., Any] = subprocess.Popen,
@@ -122,7 +123,11 @@ def run_ios_tour(
                 sleep(POLL_SECONDS)
         finally:
             _write_app_log(run, udid, log_start, out)
-            run(["xcrun", "simctl", "terminate", udid, BUNDLE_ID], capture_output=True)
+            if keep_open:
+                summary["kept_open"] = True
+                _relaunch_for_user(run, udid, render_scale)
+            else:
+                run(["xcrun", "simctl", "terminate", udid, BUNDLE_ID], capture_output=True)
             if proc.poll() is None:
                 proc.terminate()
                 try:
@@ -130,6 +135,24 @@ def run_ios_tour(
                 except subprocess.TimeoutExpired:
                     proc.kill()
     return _finish(out, summary)
+
+
+def _relaunch_for_user(run: Callable[..., Any], udid: str, render_scale: float) -> None:
+    """Relaunch the app detached, without tour env, and surface the simulator window.
+
+    The tour instance may still be foregrounded, so the bare ``simctl launch``
+    activates (or fresh-starts) the app without ``--console``: whatever survives
+    is owned by the simulator, not by this exiting launcher.
+    """
+    env = os.environ.copy()
+    for key in (f"SIMCTL_CHILD_{TOUR_ENV}", f"SIMCTL_CHILD_{TOUR_RUN_ENV}", f"SIMCTL_CHILD_{TOUR_ACK_TIMEOUT_ENV}"):
+        env.pop(key, None)
+    env["SIMCTL_CHILD_LUVATRIX_IOS_RENDER_SCALE"] = f"{render_scale:.6g}"
+    env["SIMCTL_CHILD_LUVATRIX_RENDER_MODE"] = os.environ.get("LUVATRIX_RENDER_MODE", "auto")
+    run(["xcrun", "simctl", "launch", udid, BUNDLE_ID], capture_output=True, env=env)
+    opened = run(["open", "-a", "Simulator", "--args", "-CurrentDeviceUDID", udid], capture_output=True)
+    if opened.returncode != 0:
+        run(["open", "-a", "Simulator"], capture_output=True)
 
 
 def _finish(out: Path, summary: dict[str, Any]) -> int:

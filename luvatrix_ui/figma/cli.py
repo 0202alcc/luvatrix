@@ -218,6 +218,7 @@ def add_figma_parser(subparsers: Any) -> None:
     tour.add_argument("--native-project", type=Path, default=None, help="Native iOS project (default: <app_dir>/ios)")
     tour.add_argument("--render-scale", type=float, default=3.0)
     tour.add_argument("--timeout", type=float, default=900.0, help="Seconds for build, launch, and the whole tour")
+    tour.add_argument("--keep-open", action="store_true", help="After the tour, relaunch the app fresh and leave it running in the simulator")
 
 
 def run_figma_command(args: Any) -> None:
@@ -265,5 +266,6 @@ def run_figma_command(args: Any) -> None:
             native_project=args.native_project,
             render_scale=args.render_scale,
             timeout=args.timeout,
+            keep_open=args.keep_open,
         )
         raise SystemExit(code)
