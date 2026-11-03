@@ -311,8 +311,8 @@ def variant_file() -> dict[str, Any]:
     carries a copy of the dry variant's subtree, mirroring how Figma REST
     materializes instance children.
     """
-    dry_child = node("5:3", "RECTANGLE", "Fill", 600, 0, 40, 40, fills=[solid(1, 0, 0)])
-    wet_child = node("5:4", "RECTANGLE", "Fill", 600, 60, 40, 40, fills=[solid(0, 1, 0)])
+    dry_child = node("5:3", "RECTANGLE", "Fill", 600, 0, 40, 40, fills=[solid(1, 0, 0)], relativeTransform=[[1, 0, 0], [0, 1, 0]], size={"x": 40, "y": 40})
+    wet_child = node("5:4", "RECTANGLE", "Fill", 600, 60, 40, 40, fills=[solid(0, 1, 0)], relativeTransform=[[1, 0, 0], [0, 1, 0]], size={"x": 40, "y": 40})
     component_set = node(
         "5:0",
         "COMPONENT_SET",

@@ -73,6 +73,10 @@ def test_variant_switch_is_scoped_to_one_instance() -> None:
     second["name"] = "Other Badge"
     second["absoluteBoundingBox"] = {"x": 20, "y": 70, "width": 20, "height": 20}
     second.pop("interactions", None)
+    second_child = dict(frame["children"][0]["children"][0])
+    second_child["id"] = "4:5"
+    second_child["absoluteBoundingBox"] = {"x": 20, "y": 70, "width": 20, "height": 20}
+    second["children"] = [second_child]
     frame["children"].append(second)
     ctx = _FakeCtx(100, 100)
     app = FigmaApp(FigmaDocument.from_dict(data))

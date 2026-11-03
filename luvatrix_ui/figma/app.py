@@ -9,7 +9,16 @@ import numpy as np
 
 from luvatrix.app import App
 
-from .document import BackAction, FigmaDocument, Frame, Hotspot, NavigateAction, OverlayAction, UrlAction
+from .document import (
+    BackAction,
+    FigmaDocument,
+    Frame,
+    Hotspot,
+    NavigateAction,
+    OverlayAction,
+    UrlAction,
+    VariantAction,
+)
 from .render import FigmaRenderer
 from .smart_animate import layer_geometry, match_layers, walk_with_parent
 from .tour import Tour
@@ -94,7 +103,8 @@ class FigmaApp(App):
         self.scroll_y = 0.0
         self.history: list[tuple[str, float, dict[str, Any] | None]] = []
         self._background = background
-        self._renderer = FigmaRenderer(self.document, font_dirs=font_dirs)
+        self._variant_overrides: dict[str, str] = {}
+        self._renderer = FigmaRenderer(self.document, font_dirs=font_dirs, variant_overrides=self._variant_overrides)
         self._handlers: dict[str, TapHandler] = {}
         self._targets: dict[str, list[Hotspot]] = {}
         self._fixed_bounds: dict[str, list[tuple[float, float, float, float]]] = {}
@@ -168,6 +178,24 @@ class FigmaApp(App):
         if not self._overlays:
             return False
         self._overlays.pop()
+        self._press = None
+        self.invalidate()
+        return True
+
+    def switch_variant(self, variant_id: str, instance_id: str | None = None) -> bool:
+        """Render an instance (or every instance) of the variant's set as that variant."""
+        set_id = self.document.component_set_of(variant_id)
+        if set_id is None:
+            return False
+        instances = self.document.instances_of_set(self.current_frame_id, set_id)
+        if instance_id is not None:
+            instances = [i for i in instances if str(i.get("id", "")) == instance_id]
+        if not instances:
+            return False
+        for instance in instances:
+            self._variant_overrides[str(instance.get("id", ""))] = variant_id
+        for key in [k for k in self._screens if k[0] == self.current_frame_id]:
+            del self._screens[key]
         self._press = None
         self.invalidate()
         return True
@@ -512,6 +540,8 @@ class FigmaApp(App):
             )
         elif isinstance(action, BackAction):
             self.back()
+        elif isinstance(action, VariantAction):
+            self.switch_variant(action.destination_id, spot.node_id)
         elif isinstance(action, UrlAction):
             print(f"[figma] open URL requested: {action.url}")
 

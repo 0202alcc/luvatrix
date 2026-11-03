@@ -19,6 +19,7 @@ _EXPORTS = {
     "NavigateAction": "document",
     "OverlayAction": "document",
     "UrlAction": "document",
+    "VariantAction": "document",
     "FigmaRenderer": "render",
     "render_frame": "render",
     "FontLibrary": "text",

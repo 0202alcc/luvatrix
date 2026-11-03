@@ -78,13 +78,21 @@ def _arc_is_full(node: dict[str, Any]) -> bool:
 
 
 class FigmaRenderer:
-    def __init__(self, doc: FigmaDocument, *, font_dirs: Iterable[str] = (), fonts: FontLibrary | None = None) -> None:
+    def __init__(
+        self,
+        doc: FigmaDocument,
+        *,
+        font_dirs: Iterable[str] = (),
+        fonts: FontLibrary | None = None,
+        variant_overrides: dict[str, str] | None = None,
+    ) -> None:
         self.doc = doc
         dirs = list(font_dirs)
         if doc.base_dir is not None:
             dirs.append(str(doc.base_dir / "fonts"))
         self.fonts = fonts or FontLibrary(dirs)
         self.images = ImageCache(doc.image_path)
+        self.variant_overrides: dict[str, str] = variant_overrides if variant_overrides is not None else {}
 
     def render(
         self,
@@ -135,6 +143,7 @@ class FigmaRenderer:
     ) -> None:
         if str(node.get("id")) in self._skip:
             return
+        node = self._variant_node(node)
         if clip.rect[2] <= clip.rect[0] or clip.rect[3] <= clip.rect[1]:
             return
         opacity = float(node.get("opacity", 1.0))
@@ -157,6 +166,18 @@ class FigmaRenderer:
             _composite_layer(canvas, layer, clip.rect, opacity)
             return
         self._draw_contents(node, children, tf, container, clip, canvas, frame, effects, included, opacity=opacity, shadow_from_layer=False)
+
+    def _variant_node(self, node: dict[str, Any]) -> dict[str, Any]:
+        """Substitute a component instance with its overridden variant, if any."""
+        if node.get("type") != "INSTANCE" or not self.variant_overrides:
+            return node
+        variant = self.doc.node_or_none(self.variant_overrides.get(str(node.get("id")), ""))
+        if variant is None:
+            return node
+        effective = dict(variant)
+        if "opacity" not in effective and "opacity" in node:
+            effective["opacity"] = node["opacity"]
+        return effective
 
     def _draw_contents(
         self,
