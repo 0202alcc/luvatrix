@@ -150,6 +150,39 @@ def two_screen_file() -> dict[str, Any]:
     }
 
 
+def scrolling_file(transition: dict[str, Any] | None = None) -> dict[str, Any]:
+    """A 100x400 scrolling feed shown on a 100x200 device, with a fixed 20px tab bar."""
+    link = navigate("5:1")
+    link[0]["actions"][0]["transition"] = transition
+    feed = node(
+        "4:1",
+        "FRAME",
+        "Feed",
+        0,
+        0,
+        100,
+        400,
+        fills=[solid(1, 1, 1)],
+        clipsContent=True,
+        overflowDirection="VERTICAL_SCROLLING",
+        numberOfFixedChildren=1,
+        children=[
+            node("4:2", "RECTANGLE", "Top Band", 0, 0, 100, 100, fills=[solid(1, 0, 0)]),
+            node("4:3", "RECTANGLE", "Deep Link", 0, 250, 100, 50, fills=[solid(0, 1, 0)], interactions=link),
+            node("4:4", "RECTANGLE", "Tab Bar", 0, 180, 100, 20, fills=[solid(0, 0, 0)]),
+        ],
+    )
+    other = node("5:1", "FRAME", "Other", 200, 0, 100, 200, fills=[solid(0, 0, 1)], children=[])
+    return {
+        "name": "Scrolling",
+        "document": {
+            "id": "0:0",
+            "type": "DOCUMENT",
+            "children": [{"id": "0:1", "type": "CANVAS", "name": "Page", "children": [feed, other]}],
+        },
+    }
+
+
 def single_frame(children: list[dict[str, Any]], *, w: float = 100, h: float = 100, **frame_extra: Any) -> dict[str, Any]:
     frame = node("9:0", "FRAME", "Frame", 0, 0, w, h, children=children, **frame_extra)
     frame.setdefault("fills", [solid(1, 1, 1)])
