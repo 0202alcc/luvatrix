@@ -26,6 +26,17 @@ class NavigateAction:
 
 
 @dataclass(frozen=True)
+class OverlayAction:
+    """Open the destination frame as a modal layer over the current screen."""
+
+    destination_id: str
+    position: str = "CENTER"
+    background: tuple[float, float, float, float] | None = None
+    dismiss_on_click_outside: bool = False
+    transition: dict[str, Any] | None = field(default=None, compare=False)
+
+
+@dataclass(frozen=True)
 class BackAction:
     pass
 
@@ -35,7 +46,7 @@ class UrlAction:
     url: str
 
 
-Action = NavigateAction | BackAction | UrlAction
+Action = NavigateAction | OverlayAction | BackAction | UrlAction
 
 
 @dataclass(frozen=True)
@@ -322,9 +333,36 @@ class FigmaDocument:
         if kind == "URL" and action.get("url"):
             return UrlAction(str(action["url"]))
         if kind == "NODE" and action.get("destinationId"):
-            if action.get("navigation", "NAVIGATE") in {"NAVIGATE", "SWAP", "OVERLAY"}:
+            navigation = action.get("navigation", "NAVIGATE")
+            if navigation in {"NAVIGATE", "SWAP"}:
                 return self._navigate_to(str(action["destinationId"]), action.get("transition"))
+            if navigation == "OVERLAY":
+                return self._overlay_to(str(action["destinationId"]), action.get("transition"), action.get("overlay"))
         return None
+
+    def _overlay_to(
+        self, node_id: str, transition: dict[str, Any] | None, overlay: Any
+    ) -> OverlayAction | None:
+        frame_id = self._owner_frame.get(node_id)
+        if frame_id is None:
+            return None
+        spec = overlay if isinstance(overlay, dict) else {}
+        node = self._frames_by_id[frame_id].node
+        position = str(node.get("overlayPositionType") or spec.get("positionType") or "CENTER")
+        background_spec = node.get("overlayBackground") or spec.get("background") or {}
+        color = background_spec.get("color") if isinstance(background_spec, dict) else None
+        background = (
+            tuple(float(color.get(k, 1.0 if k == "a" else 0.0)) for k in "rgba") if isinstance(color, dict) else None
+        )
+        interaction = str(node.get("overlayBackgroundInteraction") or spec.get("backgroundInteraction") or "NONE")
+        dismiss = interaction.upper() == "CLOSE_ON_CLICK_OUTSIDE"
+        return OverlayAction(
+            frame_id,
+            position=position.upper(),
+            background=background,
+            dismiss_on_click_outside=dismiss,
+            transition=transition,
+        )
 
     def _navigate_to(self, node_id: str, transition: dict[str, Any] | None = None) -> NavigateAction | None:
         frame_id = self._owner_frame.get(node_id)

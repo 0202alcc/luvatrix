@@ -50,9 +50,10 @@ def test_opening_an_overlay_composites_it_over_the_current_frame() -> None:
     assert app.current_frame_id == "1:1"
     assert app.overlay_frame_name == "Sheet"
     frame = ctx.frames[-1]
-    assert _px(frame, 50, 45) == BLUE
+    assert _px(frame, 50, 55) == YELLOW
+    assert _px(frame, 50, 90) == BLUE
     assert _px(frame, 50, 150) == BLUE
-    assert _px(frame, 50, 180) == WHITE
+    assert _px(frame, 50, 180) == (153, 153, 153, 255)
     assert _px(frame, 50, 10) == (0, 153, 0, 255)
 
 
@@ -72,7 +73,7 @@ def test_back_on_an_overlay_closes_it_and_preserves_the_base_scroll() -> None:
     assert app.scroll_y == 100
     frame = ctx.frames[-1]
     assert _px(frame, 50, 60) == RED
-    assert _px(frame, 50, 10) == GREEN
+    assert _px(frame, 50, 5) == WHITE
     assert _px(frame, 50, 190) == WHITE
 
 

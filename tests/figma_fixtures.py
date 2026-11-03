@@ -228,7 +228,7 @@ def overlay_file(*, interaction: str | None = None, sheet_height: float = 120) -
         fills=[solid(0, 0, 1)],
         clipsContent=True,
         children=[
-            node("3:2", "RECTANGLE", "Close", 0, 0, 100, 30, fills=[solid(1, 1, 0)], interactions=back()),
+            node("3:2", "RECTANGLE", "Close", 600, 0, 100, 30, fills=[solid(1, 1, 0)], interactions=back()),
         ],
         **sheet_extra,
     )

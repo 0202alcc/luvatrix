@@ -9,7 +9,7 @@ import numpy as np
 
 from luvatrix.app import App
 
-from .document import BackAction, FigmaDocument, Frame, Hotspot, NavigateAction, UrlAction
+from .document import BackAction, FigmaDocument, Frame, Hotspot, NavigateAction, OverlayAction, UrlAction
 from .render import FigmaRenderer
 from .tour import Tour
 from .transitions import Transition
@@ -17,6 +17,7 @@ from .transitions import Transition
 TapHandler = Callable[["FigmaApp", str], Any]
 DRAG_THRESHOLD_PT = 6.0
 _SCRIPTED_POINTER = -2
+DEFAULT_SCRIM = (0.0, 0.0, 0.0, 0.4)
 
 
 @dataclass
@@ -35,11 +36,37 @@ class _Screen:
 
 
 @dataclass
+class _Overlay:
+    """An open modal layer over the base frame."""
+
+    frame_id: str
+    position: str
+    background: tuple[float, float, float, float] | None
+    dismiss_on_click_outside: bool
+    scroll_y: float = 0.0
+
+
+@dataclass
+class _OverlaySurface:
+    """The overlay frame rasterized and placed for one matrix size."""
+
+    scale: float
+    origin_x: int
+    origin_y: int
+    box_w: int
+    box_h: int
+    content: np.ndarray
+    max_scroll: float
+
+
+@dataclass
 class _Press:
     pointer_id: int
     start: tuple[float, float]
     start_scroll: float
     target: Hotspot | None
+    overlay: int = -1
+    outside: bool = False
     dragging: bool = False
 
 
@@ -71,6 +98,8 @@ class FigmaApp(App):
         self._targets: dict[str, list[Hotspot]] = {}
         self._fixed_bounds: dict[str, list[tuple[float, float, float, float]]] = {}
         self._screens: dict[tuple[str, int, int], _Screen] = {}
+        self._overlays: list[_Overlay] = []
+        self._overlay_cache: dict[tuple[str, int, int], _OverlaySurface] = {}
         self._press: _Press | None = None
         self._pointer = (0.0, 0.0)
         self._transition: Transition | None = None
@@ -88,6 +117,15 @@ class FigmaApp(App):
         return self.document.frame(self.current_frame_id).name
 
     @property
+    def overlay_frame_name(self) -> str | None:
+        """Name of the topmost open overlay frame, or None when none is open."""
+        return self.document.frame(self._overlays[-1].frame_id).name if self._overlays else None
+
+    @property
+    def overlay_scroll_y(self) -> float:
+        return self._overlays[-1].scroll_y if self._overlays else 0.0
+
+    @property
     def busy(self) -> bool:
         """True while a transition plays or the latest state has not been rendered yet."""
         return self._transition is not None or self._render_requested
@@ -100,10 +138,43 @@ class FigmaApp(App):
         target = self.document.find_frame(frame).id
         if target == self.current_frame_id:
             return
+        self._overlays.clear()
         self.history.append((self.current_frame_id, self.scroll_y, transition))
         self._go(target, 0.0, transition, reverse=False)
 
+    def open_overlay(
+        self,
+        frame: str,
+        *,
+        position: str = "CENTER",
+        background: tuple[float, float, float, float] | None = None,
+        dismiss_on_click_outside: bool = False,
+    ) -> None:
+        """Open `frame` as a modal layer over the current screen without navigating."""
+        self._overlays.append(
+            _Overlay(
+                self.document.find_frame(frame).id,
+                str(position).upper(),
+                background,
+                dismiss_on_click_outside,
+            )
+        )
+        self._press = None
+        self.invalidate()
+
+    def close_overlay(self) -> bool:
+        """Dismiss the topmost overlay; returns True when one was open."""
+        if not self._overlays:
+            return False
+        self._overlays.pop()
+        self._press = None
+        self.invalidate()
+        return True
+
     def back(self) -> None:
+        if self._overlays:
+            self.close_overlay()
+            return
         if not self.history:
             return
         frame_id, scroll, transition = self.history.pop()
@@ -112,9 +183,32 @@ class FigmaApp(App):
     def tap(self, node: str) -> None:
         """Tap the center of a tappable layer (by name or id) through normal hit testing.
 
-        A layer outside the viewport is scrolled into view first. Raises KeyError
-        when the current frame has no visible tappable layer with that name.
+        A layer outside the viewport is scrolled into view first. While an
+        overlay is open only its own layers are tappable. Raises KeyError when
+        there is no visible tappable layer with that name on the active surface.
         """
+        if self._overlays:
+            overlay = self._overlays[-1]
+            spot = next(
+                (t for t in reversed(self._tap_targets(overlay.frame_id)) if node in (t.node_name, t.node_id)), None
+            )
+            if spot is None:
+                raise KeyError(node)
+            surface = self._overlay_surface(overlay)
+            cx, cy = spot.x + spot.width / 2, spot.y + spot.height / 2
+            viewport_h = surface.box_h / surface.scale
+            if not (0.0 <= cy - overlay.scroll_y and cy - overlay.scroll_y <= viewport_h):
+                overlay.scroll_y = min(max(0.0, cy - viewport_h / 2), surface.max_scroll)
+                self.invalidate()
+            vy = cy - overlay.scroll_y
+            kx, ky = self._display_to_matrix()
+            self._pointer = (
+                (cx * surface.scale + surface.origin_x) / kx,
+                (vy * surface.scale + surface.origin_y) / ky,
+            )
+            self._pointer_phase(_SCRIPTED_POINTER, "down")
+            self._pointer_phase(_SCRIPTED_POINTER, "up")
+            return
         spot = next((t for t in reversed(self._tap_targets()) if node in (t.node_name, t.node_id)), None)
         if spot is None:
             raise KeyError(node)
@@ -234,7 +328,61 @@ class FigmaApp(App):
                 alpha = src[..., 3:4] / 255.0
                 mixed = src[..., :3] * alpha + region[..., :3].astype(np.float32) * (1 - alpha)
                 region[..., :3] = np.rint(mixed).astype(np.uint8)
+        for overlay in self._overlays:
+            surface = self._overlay_surface(overlay)
+            self._draw_scrim(image, overlay.background or DEFAULT_SCRIM)
+            top = int(round(overlay.scroll_y * surface.scale))
+            region = surface.content[top : top + surface.box_h]
+            rh, rw = region.shape[:2]
+            dst = image[surface.origin_y : surface.origin_y + rh, surface.origin_x : surface.origin_x + rw]
+            alpha = region[..., 3:4].astype(np.float32) / 255.0
+            mixed = region[..., :3].astype(np.float32) * alpha + dst[..., :3].astype(np.float32) * (1 - alpha)
+            dst[..., :3] = np.rint(mixed).astype(np.uint8)
+            dst[..., 3:4] = 255
         return image
+
+    def _draw_scrim(self, image: np.ndarray, scrim: tuple[float, float, float, float]) -> None:
+        r, g, b, a = scrim
+        if a <= 0.0:
+            return
+        tint = np.array([r * 255.0, g * 255.0, b * 255.0], dtype=np.float32)
+        image[..., :3] = np.rint(image[..., :3].astype(np.float32) * (1.0 - a) + tint * a).astype(np.uint8)
+
+    def _overlay_surface(self, overlay: _Overlay) -> _OverlaySurface:
+        base_scale = self._screen(self.current_frame_id).scale
+        key = (overlay.frame_id, *self._matrix_size(), round(base_scale, 4))
+        surface = self._overlay_cache.get(key)
+        if surface is not None:
+            return surface
+        frame = self.document.frame(overlay.frame_id)
+        width, height = self._matrix_size()
+        # Overlays render at the prototype scale of the screen beneath them and
+        # scroll when taller than the viewport, like Figma's modal sheets.
+        scale = min(base_scale, width / frame.width)
+        content = self._renderer.render(overlay.frame_id, scale, transparent=True)
+        dh, dw = content.shape[:2]
+        box_w, box_h = min(dw, width), min(dh, height)
+        origin_x, origin_y = self._overlay_origin(overlay.position, box_w, box_h, width, height)
+        surface = _OverlaySurface(
+            scale=scale,
+            origin_x=origin_x,
+            origin_y=origin_y,
+            box_w=box_w,
+            box_h=box_h,
+            content=content,
+            max_scroll=max(0.0, (dh - box_h) / scale),
+        )
+        self._overlay_cache[key] = surface
+        return surface
+
+    def _overlay_origin(self, position: str, box_w: int, box_h: int, width: int, height: int) -> tuple[int, int]:
+        corners = {
+            "TOP_LEFT": (0, 0),
+            "TOP_RIGHT": (width - box_w, 0),
+            "BOTTOM_LEFT": (0, height - box_h),
+            "BOTTOM_RIGHT": (width - box_w, height - box_h),
+        }
+        return corners.get(position, ((width - box_w) // 2, (height - box_h) // 2))
 
     def _letterbox_color(self, frame: Frame) -> tuple[int, int, int, int]:
         if self._background is not None:
@@ -281,6 +429,13 @@ class FigmaApp(App):
         action = spot.action
         if isinstance(action, NavigateAction):
             self.navigate(action.destination_id, action.transition)
+        elif isinstance(action, OverlayAction):
+            self.open_overlay(
+                action.destination_id,
+                position=action.position,
+                background=action.background,
+                dismiss_on_click_outside=action.dismiss_on_click_outside,
+            )
         elif isinstance(action, BackAction):
             self.back()
         elif isinstance(action, UrlAction):
@@ -307,6 +462,21 @@ class FigmaApp(App):
             self.scroll_y = clamped
             self.invalidate()
 
+    def _scroll_surface(self, overlay_idx: int, value: float) -> None:
+        if overlay_idx < 0:
+            self._scroll_to(value)
+            return
+        overlay = self._overlays[overlay_idx]
+        clamped = min(max(0.0, value), self._overlay_surface(overlay).max_scroll)
+        if clamped != overlay.scroll_y:
+            overlay.scroll_y = clamped
+            self.invalidate()
+
+    def _surface_scale(self, overlay_idx: int) -> float:
+        if overlay_idx >= 0:
+            return self._overlay_surface(self._overlays[overlay_idx]).scale
+        return self._screen(self.current_frame_id).scale
+
     def _handle_event(self, event: Any) -> None:
         if getattr(event, "status", "OK") != "OK":
             return
@@ -318,7 +488,9 @@ class FigmaApp(App):
             self._pointer = (float(payload["x"]), float(payload["y"]))
         if device in {"mouse", "trackpad"} and kind == "scroll":
             _, ky = self._display_to_matrix()
-            self._scroll_to(self.scroll_y - float(payload.get("delta_y", 0.0) or 0.0) * ky / self._screen(self.current_frame_id).scale)
+            idx = len(self._overlays) - 1 if self._overlays else -1
+            current = self._overlays[-1].scroll_y if idx >= 0 else self.scroll_y
+            self._scroll_surface(idx, current - float(payload.get("delta_y", 0.0) or 0.0) * ky / self._surface_scale(idx))
             return
         if device == "touch" and kind == "touch":
             pointer_id, phase = int(payload.get("touch_id", 0)), str(payload.get("phase", ""))
@@ -335,7 +507,8 @@ class FigmaApp(App):
             return
         press = self._press
         if phase == "down":
-            self._press = _Press(pointer_id, self._pointer, self.scroll_y, self._hit(*self._to_view(*self._pointer)))
+            spot, overlay_idx, outside, start_scroll = self._press_target()
+            self._press = _Press(pointer_id, self._pointer, start_scroll, spot, overlay_idx, outside)
             return
         if press is None or press.pointer_id != pointer_id:
             return
@@ -344,16 +517,43 @@ class FigmaApp(App):
             press.dragging = True
         if press.dragging:
             _, ky = self._display_to_matrix()
-            self._scroll_to(press.start_scroll - dy * ky / self._screen(self.current_frame_id).scale)
+            self._scroll_surface(press.overlay, press.start_scroll - dy * ky / self._surface_scale(press.overlay))
         if phase == "cancel":
             self._press = None
         elif phase == "up":
             self._press = None
-            if press.dragging or press.target is None:
+            if press.dragging:
                 return
-            released = self._hit(*self._to_view(*self._pointer))
-            if released is not None and released.node_id == press.target.node_id:
-                self._activate(released)
+            if press.target is None:
+                if (
+                    press.outside
+                    and 0 <= press.overlay < len(self._overlays)
+                    and press.overlay == len(self._overlays) - 1
+                    and self._overlays[press.overlay].dismiss_on_click_outside
+                ):
+                    self.close_overlay()
+                return
+            spot, overlay_idx, _outside, _scroll = self._press_target()
+            if spot is not None and overlay_idx == press.overlay and spot.node_id == press.target.node_id:
+                self._activate(spot)
+
+    def _press_target(self) -> tuple[Hotspot | None, int, bool, float]:
+        """Hotspot under the pointer, its overlay index (-1 = base), and press-outside state."""
+        if self._overlays:
+            overlay = self._overlays[-1]
+            surface = self._overlay_surface(overlay)
+            kx, ky = self._display_to_matrix()
+            lx = (self._pointer[0] * kx - surface.origin_x) / surface.scale
+            ly = (self._pointer[1] * ky - surface.origin_y) / surface.scale
+            frame = self.document.frame(overlay.frame_id)
+            outside = not (0.0 <= lx <= frame.width and 0.0 <= ly <= frame.height)
+            spot = None if outside else self._hit_overlay(overlay, lx, ly)
+            return spot, len(self._overlays) - 1, outside, overlay.scroll_y
+        return self._hit(*self._to_view(*self._pointer)), -1, False, self.scroll_y
+
+    def _hit_overlay(self, overlay: _Overlay, lx: float, ly: float) -> Hotspot | None:
+        y = ly + overlay.scroll_y
+        return next((t for t in reversed(self._tap_targets(overlay.frame_id)) if t.contains(lx, y)), None)
 
     def _hit(self, vx: float, vy: float) -> Hotspot | None:
         targets = self._tap_targets()
@@ -370,9 +570,10 @@ class FigmaApp(App):
             self._fixed_bounds[frame_id] = list(self.document.node_bounds(frame_id, ids).values())
         return self._fixed_bounds[frame_id]
 
-    def _tap_targets(self) -> list[Hotspot]:
-        cached = self._targets.get(self.current_frame_id)
+    def _tap_targets(self, frame_id: str | None = None) -> list[Hotspot]:
+        key = frame_id or self.current_frame_id
+        cached = self._targets.get(key)
         if cached is None:
-            cached = self.document.targets(self.current_frame_id, frozenset(self._handlers))
-            self._targets[self.current_frame_id] = cached
+            cached = self.document.targets(key, frozenset(self._handlers))
+            self._targets[key] = cached
         return cached

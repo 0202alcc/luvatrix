@@ -17,6 +17,7 @@ _EXPORTS = {
     "Frame": "document",
     "Hotspot": "document",
     "NavigateAction": "document",
+    "OverlayAction": "document",
     "UrlAction": "document",
     "FigmaRenderer": "render",
     "render_frame": "render",
