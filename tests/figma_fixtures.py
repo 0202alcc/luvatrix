@@ -356,6 +356,44 @@ def variant_file() -> dict[str, Any]:
     }
 
 
+def horizontal_file() -> dict[str, Any]:
+    """A 400x100 horizontal strip shown on a 100x200 device, with a pinned badge.
+
+    The strip is 400 design units wide but only 50 are visible at once, so it
+    scrolls horizontally by drag or wheel while its fixed child stays put.
+    """
+    link = navigate("5:1")
+    strip = node(
+        "4:1",
+        "FRAME",
+        "Strip",
+        0,
+        0,
+        400,
+        100,
+        fills=[solid(1, 1, 1)],
+        clipsContent=True,
+        overflowDirection="HORIZONTAL_SCROLLING",
+        numberOfFixedChildren=1,
+        children=[
+            node("4:2", "RECTANGLE", "Start", 0, 0, 100, 100, fills=[solid(1, 0, 0)]),
+            node("4:3", "RECTANGLE", "Mid Link", 100, 0, 100, 100, fills=[solid(0, 1, 0)], interactions=link),
+            node("4:4", "RECTANGLE", "End", 200, 0, 100, 100, fills=[solid(0, 0, 1)]),
+            node("4:8", "RECTANGLE", "Far", 300, 0, 100, 100, fills=[solid(1, 0, 1)]),
+            node("4:9", "RECTANGLE", "Badge", 0, 25, 50, 50, fills=[solid(1, 1, 0)]),
+        ],
+    )
+    other = node("5:1", "FRAME", "Other", 500, 0, 100, 200, fills=[solid(0, 0, 1)], children=[])
+    return {
+        "name": "Horizontal",
+        "document": {
+            "id": "0:0",
+            "type": "DOCUMENT",
+            "children": [{"id": "0:1", "type": "CANVAS", "name": "Page", "children": [strip, other]}],
+        },
+    }
+
+
 def single_frame(children: list[dict[str, Any]], *, w: float = 100, h: float = 100, **frame_extra: Any) -> dict[str, Any]:
     frame = node("9:0", "FRAME", "Frame", 0, 0, w, h, children=children, **frame_extra)
     frame.setdefault("fills", [solid(1, 1, 1)])
