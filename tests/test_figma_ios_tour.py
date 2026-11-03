@@ -76,8 +76,7 @@ class _FakeSimulator:
         self.now += seconds
         self.ticks += 1
         if self.ticks == 3:
-            self.container.mkdir(parents=True)
-            (self.container / "Documents").mkdir()
+            (self.container / "Documents").mkdir(parents=True)
             (self.container / "Documents" / "luvatrix_run.log").write_text("app log\n")
         if self.ticks < 5:
             return
