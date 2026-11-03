@@ -150,3 +150,31 @@ def test_main_cli_figma_render(tmp_path: Path) -> None:
         main()
 
     assert (tmp_path / "png" / "Home.png").is_file()
+
+
+def test_main_cli_figma_ios_tour_passes_options_and_exits_with_the_tour_result(tmp_path: Path) -> None:
+    from main import main
+
+    tour = tmp_path / "tour.json"
+    tour.write_text('[{"capture": "start"}]', encoding="utf-8")
+    argv = [
+        "luvatrix", "figma", "ios-tour", "examples/figma_app",
+        "--tour", str(tour), "--out", str(tmp_path / "shots"),
+        "--simulator", "iPhone 17", "--native-project", "examples/figma_app/ios",
+        "--render-scale", "2", "--timeout", "120",
+    ]
+
+    with patch.object(sys, "argv", argv), patch("luvatrix_ui.figma.ios_tour.run_ios_tour", return_value=1) as run:
+        with pytest.raises(SystemExit) as exit_info:
+            main()
+
+    assert exit_info.value.code == 1
+    run.assert_called_once_with(
+        Path("examples/figma_app"),
+        str(tour),
+        tmp_path / "shots",
+        simulator="iPhone 17",
+        native_project=Path("examples/figma_app/ios"),
+        render_scale=2.0,
+        timeout=120.0,
+    )
