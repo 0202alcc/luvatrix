@@ -156,6 +156,17 @@ class FigmaRenderer:
         effects = [e for e in node.get("effects") or () if isinstance(e, dict) and e.get("visible", True) is not False]
         has_fill = bool(visible_paints(node.get("fills")))
         content_shadow = bool(children) and not has_fill and any(e.get("type") == "DROP_SHADOW" for e in effects)
+        layer_blur = next((e for e in effects if e.get("type") == "LAYER_BLUR"), None)
+        if layer_blur is not None:
+            layer = np.zeros_like(canvas)
+            self._draw_contents(node, children, tf, container, clip, layer, frame, effects, included, opacity=1.0, shadow_from_layer=content_shadow)
+            if content_shadow:
+                for effect in effects:
+                    if effect.get("type") == "DROP_SHADOW":
+                        self._drop_shadow(layer, _alpha_coverage(layer, clip.rect), effect, self._root @ tf, clip)
+            radius = float(layer_blur.get("radius", 0.0) or 0.0) * (self._root @ tf).mean_scale
+            self._layer_blur(canvas, layer, clip.rect, radius, opacity)
+            return
         if children and (opacity < 1.0 or content_shadow):
             layer = np.zeros_like(canvas)
             self._draw_contents(node, children, tf, container, clip, layer, frame, effects, included, opacity=1.0, shadow_from_layer=content_shadow)
@@ -357,6 +368,24 @@ class FigmaRenderer:
 
     # ── effects ──────────────────────────────────────────────────────────────
 
+    def _layer_blur(self, target: np.ndarray, layer: np.ndarray, rect: Rect, radius_px: float, opacity: float) -> None:
+        """Blur a node's own rendered layer and composite it back over the backdrop."""
+        x0, y0, x1, y1 = rect
+        region = layer[y0:y1, x0:x1]
+        alpha = region[..., 3]
+        if not alpha.any():
+            return
+        ys, xs = np.nonzero(alpha)
+        pad = int(math.ceil(radius_px * 1.5)) + 2
+        ry0, ry1 = max(0, int(ys.min()) - pad), min(region.shape[0], int(ys.max()) + 1 + pad)
+        rx0, rx1 = max(0, int(xs.min()) - pad), min(region.shape[1], int(xs.max()) + 1 + pad)
+        sub = _blur_region(np.ascontiguousarray(region[ry0:ry1, rx0:rx1]), radius_px)
+        if opacity < 1.0:
+            sub = sub * opacity
+        dst = target[y0 + ry0 : y0 + ry1, x0 + rx0 : x0 + rx1]
+        dst *= 1.0 - sub[..., 3:4]
+        dst += sub
+
     def _shadow_coverage(self, shape: Shape, tf: Affine, effect: dict[str, Any], clip: Clip) -> Coverage | None:
         spread = float(effect.get("spread", 0.0) or 0.0) * tf.mean_scale
         blur = float(effect.get("radius", 0.0) or 0.0) * tf.mean_scale
@@ -517,6 +546,13 @@ def _background_blur(target: np.ndarray, cov: Coverage | None, radius_px: float)
     blurred = np.stack([gaussian_blur(region[..., ch], radius_px / 2) for ch in range(4)], axis=-1)
     mask = cov.mask[: region.shape[0], : region.shape[1], None]
     region[...] = region * (1 - mask) + blurred * mask
+
+
+def _blur_region(region: np.ndarray, radius_px: float) -> np.ndarray:
+    if radius_px <= 0.5:
+        return region
+    sigma = radius_px / 2.0
+    return np.stack([gaussian_blur(np.ascontiguousarray(region[..., ch]), sigma) for ch in range(4)], axis=-1)
 
 
 def render_frame(

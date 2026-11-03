@@ -65,20 +65,21 @@ def test_layer_blur_applies_to_the_whole_subtree() -> None:
     assert _px(img, 5, 30) == WHITE
 
 
-def test_layer_blur_affects_the_node_not_its_backdrop() -> None:
-    backdrop = node("0", "RECTANGLE", "Backdrop", 0, 0, 100, 100, fills=[solid(0, 1, 0)])
+def test_layer_blur_leaves_the_backdrop_sharp() -> None:
+    backdrop = node("0", "RECTANGLE", "Backdrop", 0, 0, 50, 100, fills=[solid(0, 1, 0)])
     glass = node(
         "1",
         "RECTANGLE",
         "Glass",
-        30,
-        30,
-        40,
-        40,
-        fills=[solid(1, 1, 1, opacity=0.01)],
-        effects=[{"type": "LAYER_BLUR", "radius": 6, "visible": True}],
+        25,
+        25,
+        50,
+        50,
+        fills=[solid(1, 1, 1, opacity=0.5)],
+        effects=[{"type": "LAYER_BLUR", "radius": 10, "visible": True}],
     )
 
     img = _render([backdrop, glass])
 
-    assert _px(img, 50, 50) == (253, 255, 253, 255)
+    left, right = int(img[50, 48, 0]), int(img[50, 52, 0])
+    assert abs(left - right) > 100
