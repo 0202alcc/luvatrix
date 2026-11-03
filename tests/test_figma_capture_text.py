@@ -176,3 +176,24 @@ def test_whitespace_between_inline_word_spans_becomes_a_space() -> None:
 
     text = result.file["document"]["children"][0]["children"][0]["children"][0]
     assert text["characters"] == "Accelerating the"
+
+
+def test_gap_separated_inline_block_words_get_spaces() -> None:
+    b, body = page()
+    heading = b.element("H1", parent=body)
+    b.layout(heading, 0, 0, 300, 40, **{"font-size": "32px", "display": "flex"})
+    word1 = b.element("SPAN", parent=heading)
+    b.layout(word1, 0, 0, 120, 40, **{"display": "inline-block"})
+    t1 = b.text("Accelerating", parent=word1)
+    li1 = b.layout(t1, 0, 0, 120, 40)
+    b.text_box(li1, 0, 0, 120, 40)
+    word2 = b.element("SPAN", parent=heading)
+    b.layout(word2, 140, 0, 60, 40, **{"display": "inline-block"})
+    t2 = b.text("the", parent=word2)
+    li2 = b.layout(t2, 140, 0, 60, 40)
+    b.text_box(li2, 140, 0, 60, 40)
+
+    result = compile_snapshots([("/", b.build())])
+
+    text = result.file["document"]["children"][0]["children"][0]["children"][0]
+    assert text["characters"] == "Accelerating the"
