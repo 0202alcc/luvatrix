@@ -27,12 +27,20 @@ concurrency:
 
 jobs:
   tour:
-    name: Tour app in iOS Simulator
+    name: Tour ${{ matrix.slug }} in iOS Simulator
     if: ${{ vars.LUVATRIX_IOS_SIM_RUNNER == '1' }}
     runs-on: [self-hosted, macOS, ios-sim]
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: examples/figma_app
+            slug: figma_app
+          - app: examples/captured_site
+            slug: captured_site
     env:
-      APP_DIR: ${{ inputs.app_dir || 'examples/figma_app' }}
+      APP_DIR: ${{ inputs.app_dir || matrix.app }}
       TOUR: ${{ inputs.tour }}
       SIMULATOR: ${{ inputs.simulator || 'iPhone 17' }}
     steps:
@@ -68,7 +76,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ios-tour-${{ github.run_id }}
+          name: ios-tour-${{ matrix.slug }}-${{ github.run_id }}
           path: ${{ runner.temp }}/ios-tour
           if-no-files-found: warn
           retention-days: 14
