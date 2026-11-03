@@ -6,7 +6,7 @@ app's data container. At each capture it takes ``xcrun simctl io screenshot``
 and writes the matching ``ack_<step>`` so the app moves on.
 
 Output directory contents: ``NN_<capture>.png`` screenshots, ``console.log``
-(run-app and simulator console), ``app_log.txt`` (the app's Documents log),
+(run-app and simulator console), ``app_log.txt`` (the app's unified-log output),
 and ``summary.json``.
 """
 
@@ -26,6 +26,7 @@ from typing import Any
 from .tour import STATUS_FILE, TOUR_ACK_TIMEOUT_ENV, TOUR_ENV, TOUR_RUN_ENV, load_tour_steps
 
 BUNDLE_ID = "com.luvatrix.app"
+APP_PROCESS = "Luvatrix"
 POLL_SECONDS = 0.25
 
 
@@ -59,7 +60,9 @@ def run_ios_tour(
         return _finish(out, summary)
     summary["udid"] = udid
 
+    log_start = time.strftime("%Y-%m-%d %H:%M:%S")
     env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
     env[f"SIMCTL_CHILD_{TOUR_ENV}"] = json.dumps(steps)
     env[f"SIMCTL_CHILD_{TOUR_RUN_ENV}"] = run_id
     env[f"SIMCTL_CHILD_{TOUR_ACK_TIMEOUT_ENV}"] = f"{ack_timeout:g}"
@@ -113,9 +116,7 @@ def run_ios_tour(
                     break
                 sleep(POLL_SECONDS)
         finally:
-            container = container or _app_container(run, udid)
-            if container is not None:
-                _copy_app_log(container, out)
+            _write_app_log(run, udid, log_start, out)
             run(["xcrun", "simctl", "terminate", udid, BUNDLE_ID], capture_output=True)
             if proc.poll() is None:
                 proc.terminate()
@@ -161,10 +162,11 @@ def _read_status(container: Path, run_id: str) -> dict[str, Any] | None:
     return status if isinstance(status, dict) and status.get("run") == run_id else None
 
 
-def _copy_app_log(container: Path, out: Path) -> None:
-    log = container / "Documents" / "luvatrix_run.log"
-    if log.is_file():
-        (out / "app_log.txt").write_bytes(log.read_bytes())
+def _write_app_log(run: Callable[..., Any], udid: str, start: str, out: Path) -> None:
+    # On iOS the app's Python stdout goes to syslog, so its output only reaches the unified log.
+    cmd = ["xcrun", "simctl", "spawn", udid, "log", "show", "--style", "compact", "--start", start]
+    result = run([*cmd, "--predicate", f'process == "{APP_PROCESS}"'], capture_output=True, text=True)
+    (out / "app_log.txt").write_text(result.stdout or result.stderr or "")
 
 
 def _safe_name(name: str) -> str:

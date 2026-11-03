@@ -24,6 +24,7 @@ class _FakeSimulator:
         self.commands: list[list[str]] = []
         self.env: dict[str, str] = {}
         self.launch_cmd: list[str] = []
+        self.log_show_cmd: list[str] = []
         self.returncode: int | None = None
         self.terminated = False
         self.step = 0
@@ -47,6 +48,9 @@ class _FakeSimulator:
         if cmd[:3] == ["xcrun", "simctl", "terminate"]:
             self.terminated = True
             return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd[:6] == ["xcrun", "simctl", "spawn", UDID, "log", "show"]:
+            self.log_show_cmd = cmd
+            return SimpleNamespace(returncode=0, stdout="Luvatrix: [figma-tour] run=run-xyz\n", stderr="")
         raise AssertionError(f"unexpected command {cmd}")
 
     def popen(self, cmd, *, env, stdout, stderr, **_kwargs):
@@ -76,8 +80,7 @@ class _FakeSimulator:
         self.now += seconds
         self.ticks += 1
         if self.ticks == 3:
-            (self.container / "Documents").mkdir(parents=True)
-            (self.container / "Documents" / "luvatrix_run.log").write_text("app log\n")
+            self.container.mkdir(parents=True, exist_ok=True)
         if self.ticks < 5:
             return
         if self.exit_early:
@@ -136,7 +139,8 @@ def test_ios_tour_screenshots_each_capture_and_writes_a_summary(tmp_path: Path) 
         ("home", "Home", "01_home.png"),
     ]
     assert "[ios] launching" in (out / "console.log").read_text()
-    assert (out / "app_log.txt").read_text() == "app log\n"
+    assert "[figma-tour] run=run-xyz" in (out / "app_log.txt").read_text()
+    assert 'process == "Luvatrix"' in sim.log_show_cmd
     assert sim.terminated
 
 
@@ -160,6 +164,7 @@ def test_ios_tour_launches_run_app_with_the_tour_in_the_simulator_env(tmp_path: 
     ]
     assert json.loads(sim.env["SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR"]) == [{"capture": "welcome"}]
     assert sim.env["SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_RUN"] == "run-xyz"
+    assert sim.env["PYTHONUNBUFFERED"] == "1"
 
 
 def test_ios_tour_ignores_status_from_a_previous_run(tmp_path: Path) -> None:
@@ -206,6 +211,7 @@ def test_ios_tour_times_out_and_stops_the_app(tmp_path: Path) -> None:
     assert summary["state"] == "timeout"
     assert sim.returncode is not None
     assert sim.terminated
+    assert "[figma-tour]" in (tmp_path / "out" / "app_log.txt").read_text()
 
 
 def test_ios_tour_rejects_a_malformed_tour_before_launching(tmp_path: Path) -> None:
