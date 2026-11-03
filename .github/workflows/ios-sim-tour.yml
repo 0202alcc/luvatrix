@@ -39,6 +39,8 @@ jobs:
             slug: figma_app
           - app: examples/captured_site
             slug: captured_site
+          - app: examples/nomic_app
+            slug: nomic_app
     env:
       APP_DIR: ${{ inputs.app_dir || matrix.app }}
       TOUR: ${{ inputs.tour }}
