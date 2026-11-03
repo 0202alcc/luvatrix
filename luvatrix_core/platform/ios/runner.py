@@ -771,7 +771,8 @@ def _run_ios_simulator(
 
     # Boot the simulator (no-op if already running).
     subprocess.run(["xcrun", "simctl", "boot", udid], capture_output=True)
-    subprocess.run(["open", "-a", "Simulator"], check=True)
+    if not _open_simulator_app():
+        print("[ios] warning: could not open Simulator.app; the app will still run on the booted simulator")
     subprocess.run(["xcrun", "simctl", "bootstatus", udid, "-b"], check=True)
 
     # Install and launch, streaming output to the terminal.
@@ -793,6 +794,18 @@ def _run_ios_simulator(
         )
     except KeyboardInterrupt:
         subprocess.run(["xcrun", "simctl", "terminate", udid, "com.luvatrix.app"], capture_output=True)
+
+
+def _open_simulator_app() -> bool:
+    # Launch Services only indexes Simulator.app for a standard /Applications/Xcode.app,
+    # so open it by path inside whichever Xcode xcode-select points at.
+    selected = subprocess.run(["xcode-select", "-p"], capture_output=True, text=True)
+    if selected.returncode == 0:
+        simulator_app = Path(selected.stdout.strip()) / "Applications" / "Simulator.app"
+        if simulator_app.is_dir():
+            if subprocess.run(["open", str(simulator_app)], capture_output=True).returncode == 0:
+                return True
+    return subprocess.run(["open", "-a", "Simulator"], capture_output=True).returncode == 0
 
 
 def _build_ios_device_app(
