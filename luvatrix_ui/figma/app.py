@@ -11,8 +11,9 @@ from luvatrix.app import App
 
 from .document import BackAction, FigmaDocument, Frame, Hotspot, NavigateAction, OverlayAction, UrlAction
 from .render import FigmaRenderer
+from .smart_animate import layer_geometry, match_layers, walk_with_parent
 from .tour import Tour
-from .transitions import Transition
+from .transitions import SmartAnimateTransition, Transition, TweenLayer
 
 TapHandler = Callable[["FigmaApp", str], Any]
 DRAG_THRESHOLD_PT = 6.0
@@ -262,6 +263,7 @@ class FigmaApp(App):
         if self._transition is not None:
             image = self._transition.frame()
             if self._transition.done:
+                self._transition.restore()
                 self._transition = None
                 self.set_continuous_render(False)
                 image = self._compose(self.current_frame_id, self.scroll_y)
@@ -276,9 +278,9 @@ class FigmaApp(App):
         snap = self.ctx.read_matrix_snapshot()
         return int(snap.shape[1]), int(snap.shape[0])
 
-    def _screen(self, frame_id: str) -> _Screen:
+    def _screen(self, frame_id: str, skip_ids: frozenset[str] = frozenset()) -> _Screen:
         width, height = self._matrix_size()
-        key = (frame_id, width, height)
+        key = (frame_id, width, height, tuple(sorted(skip_ids)))
         screen = self._screens.get(key)
         if screen is not None:
             return screen
@@ -287,7 +289,7 @@ class FigmaApp(App):
         scrolls = frame.scrolls_vertically and frame.height * fit_width > height + 0.5
         scale = fit_width if scrolls else min(fit_width, height / frame.height)
         fixed = self.document.fixed_child_ids(frame_id) if scrolls else set()
-        content = self._renderer.render(frame_id, scale, skip_ids=fixed)
+        content = self._renderer.render(frame_id, scale, skip_ids=fixed | skip_ids)
         overlay = None
         rows = (0, 0)
         if fixed:
@@ -310,9 +312,9 @@ class FigmaApp(App):
         self._screens[key] = screen
         return screen
 
-    def _compose(self, frame_id: str, scroll: float) -> np.ndarray:
+    def _compose(self, frame_id: str, scroll: float, *, skip_ids: frozenset[str] = frozenset()) -> np.ndarray:
         width, height = self._matrix_size()
-        screen = self._screen(frame_id)
+        screen = self._screen(frame_id, skip_ids)
         image = np.empty((height, width, 4), dtype=np.uint8)
         image[...] = np.asarray(screen.letterbox, dtype=np.uint8)
         top = int(round(scroll * screen.scale))
@@ -407,20 +409,92 @@ class FigmaApp(App):
     # ── navigation ───────────────────────────────────────────────────────────
 
     def _go(self, frame_id: str, scroll: float, transition: dict[str, Any] | None, *, reverse: bool) -> None:
+        source_frame_id = self.current_frame_id
         source = self._last_image
         self.current_frame_id = frame_id
         self.scroll_y = scroll
         self._press = None
         if not hasattr(self, "ctx"):
             return
-        self._transition = None
+        if self._transition is not None:
+            self._transition.restore()
+            self._transition = None
         if source is not None and transition:
             target = self._compose(frame_id, scroll)
             if target.shape == source.shape:
-                self._transition = Transition.from_figma(transition, source, target, reverse=reverse)
+                self._transition = self._build_transition(
+                    transition, source, target, source_frame_id, frame_id, scroll, reverse=reverse
+                )
         if self._transition is not None:
             self.set_continuous_render(True)
         self.invalidate()
+
+    def _build_transition(
+        self,
+        transition: dict[str, Any],
+        source: np.ndarray,
+        target: np.ndarray,
+        source_frame_id: str,
+        frame_id: str,
+        scroll: float,
+        *,
+        reverse: bool,
+    ) -> Transition | None:
+        if str(transition.get("type", "")).upper() == "SMART_ANIMATE" and not reverse:
+            built = self._build_smart_animate(transition, source_frame_id, frame_id, scroll)
+            if built is not None:
+                return built
+        return Transition.from_figma(transition, source, target, reverse=reverse)
+
+    def _build_smart_animate(
+        self,
+        transition: dict[str, Any],
+        source_frame_id: str,
+        frame_id: str,
+        scroll: float,
+    ) -> SmartAnimateTransition | None:
+        duration = float(transition.get("duration", 0.0) or 0.0)
+        if duration <= 0:
+            return None
+        src_frame = self.document.frame(source_frame_id)
+        dst_frame = self.document.frame(frame_id)
+        src_info = {str(n.get("id")): (n, tf, container) for n, tf, container in walk_with_parent(src_frame)}
+        dst_info = {str(n.get("id")): (n, tf, container) for n, tf, container in walk_with_parent(dst_frame)}
+        scale = self._screen(frame_id).scale
+        screen = self._screen(frame_id)
+        fixed = self.document.fixed_child_ids(frame_id)
+        layers: list[TweenLayer] = []
+        skip: set[str] = set()
+        for pair in match_layers(src_frame, dst_frame):
+            if pair.target_id in fixed:
+                continue
+            src_entry, dst_entry = src_info.get(pair.source_id), dst_info.get(pair.target_id)
+            if src_entry is None or dst_entry is None:
+                continue
+            src_node, src_tf, _ = src_entry
+            dst_node, dst_tf, dst_container = dst_entry
+            src_geom = layer_geometry(src_node, src_tf)
+            dst_geom = layer_geometry(dst_node, dst_tf)
+            if not src_geom.differs(dst_geom):
+                continue
+            skip.add(pair.target_id)
+            raster_frame_id, raster_scale, raster_only = frame_id, scale, pair.target_id
+            layers.append(
+                TweenLayer(
+                    node=dst_node,
+                    parent_inv=dst_container.inverse(),
+                    src=src_geom,
+                    dst=dst_geom,
+                    render=lambda: self._renderer.render(raster_frame_id, raster_scale, only_ids=(raster_only,), transparent=True),
+                    paste_x=screen.offset_x,
+                    paste_y=screen.offset_y - int(round(scroll * scale)),
+                )
+            )
+        if not layers:
+            return None
+        base = self._compose(frame_id, scroll, skip_ids=frozenset(skip))
+        easing = str((transition.get("easing") or {}).get("type", "EASE_OUT"))
+        return SmartAnimateTransition(duration=duration, easing=easing, base=base, layers=layers)
 
     def _activate(self, spot: Hotspot) -> None:
         handler = self._handlers.get(spot.node_name)

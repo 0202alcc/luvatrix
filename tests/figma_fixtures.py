@@ -283,7 +283,7 @@ def smart_animate_file() -> dict[str, Any]:
         100,
         fills=[solid(1, 1, 1)],
         children=[
-            node("2:2", "RECTANGLE", "Card", 60, 60, 40, 40, fills=[solid(1, 0, 0)]),
+            node("2:2", "RECTANGLE", "Card", 260, 60, 40, 40, fills=[solid(1, 0, 0)]),
             node("2:3", "RECTANGLE", "Static", 260, 0, 20, 20, fills=[solid(0, 0, 1)]),
         ],
     )

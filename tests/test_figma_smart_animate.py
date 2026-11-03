@@ -61,7 +61,7 @@ def test_smart_animate_interpolates_opacity() -> None:
     app.loop(ctx, 0.1)
 
     frame = ctx.frames[-1]
-    assert _close(_px(frame, 70, 70), (255, 128, 128, 255))
+    assert _close(_px(frame, 40, 40), (255, 128, 128, 255))
 
 
 def test_smart_animate_restores_the_document_after_the_transition() -> None:

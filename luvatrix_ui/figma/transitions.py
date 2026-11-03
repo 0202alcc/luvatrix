@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
+
+from .geometry import Affine
+from .smart_animate import LayerGeometry
 
 _FADES = frozenset({"DISSOLVE", "SMART_ANIMATE", "SCROLL_ANIMATE"})
 _SLIDES = frozenset({"PUSH", "MOVE_IN", "MOVE_OUT", "SLIDE_IN", "SLIDE_OUT"})
@@ -47,6 +50,9 @@ class Transition:
         easing = str((spec.get("easing") or {}).get("type", "EASE_OUT"))
         return cls(kind, direction, duration, easing, source, target)
 
+    def restore(self) -> None:
+        """Undo any document mutations this transition made (no-op by default)."""
+
     @property
     def done(self) -> bool:
         return self.elapsed >= self.duration
@@ -87,3 +93,90 @@ def _paste_shifted(dst: np.ndarray, src: np.ndarray, offset: int, horizontal: bo
         dst[:, lo:hi] = src[:, lo - offset : hi - offset]
     else:
         dst[lo:hi] = src[lo - offset : hi - offset]
+
+
+_MISSING = object()
+
+
+@dataclass
+class TweenLayer:
+    """A matched layer whose node data is rewritten to interpolated geometry each tick.
+
+    `render` rasterizes the layer's subtree with its current (mutated) state as
+    straight-alpha RGBA; `paste_x`/`paste_y` place that raster on the matrix.
+    Parent clipping contexts are not reapplied, so a matched layer renders
+    unclipped for the duration of the transition.
+    """
+
+    node: dict[str, Any]
+    parent_inv: Affine
+    src: LayerGeometry
+    dst: LayerGeometry
+    render: Callable[[], np.ndarray]
+    paste_x: int
+    paste_y: int
+    _saved: dict[str, Any] | None = None
+
+    def apply(self, p: float) -> None:
+        geometry = self.src.lerp(self.dst, p)
+        if self._saved is None:
+            keys = ("relativeTransform", "size", "opacity", "rectangleCornerRadii")
+            self._saved = {key: self.node.get(key, _MISSING) for key in keys}
+        rel = self.parent_inv @ Affine(*geometry.matrix)
+        self.node["relativeTransform"] = [[rel.a, rel.c, rel.tx], [rel.b, rel.d, rel.ty]]
+        self.node["size"] = {"x": geometry.width, "y": geometry.height}
+        self.node["opacity"] = geometry.opacity
+        self.node["rectangleCornerRadii"] = list(geometry.radii)
+
+    def restore(self) -> None:
+        if self._saved is None:
+            return
+        for key, value in self._saved.items():
+            if value is _MISSING:
+                self.node.pop(key, None)
+            else:
+                self.node[key] = value
+        self._saved = None
+
+
+@dataclass
+class SmartAnimateTransition:
+    """SMART_ANIMATE as per-layer tweening over the matched-layer-free target."""
+
+    duration: float
+    easing: str
+    base: np.ndarray
+    layers: list[TweenLayer]
+    elapsed: float = 0.0
+
+    @property
+    def done(self) -> bool:
+        return self.elapsed >= self.duration
+
+    def advance(self, dt: float) -> None:
+        self.elapsed = min(self.duration, self.elapsed + max(0.0, float(dt)))
+
+    def restore(self) -> None:
+        for layer in self.layers:
+            layer.restore()
+
+    def frame(self) -> np.ndarray:
+        p = ease(self.easing, self.elapsed / self.duration)
+        out = self.base.copy()
+        for layer in self.layers:
+            layer.apply(p)
+            _paste_layer(out, layer.render(), layer.paste_x, layer.paste_y)
+        return out
+
+
+def _paste_layer(out: np.ndarray, raster: np.ndarray, x: int, y: int) -> None:
+    h, w = raster.shape[:2]
+    height, width = out.shape[:2]
+    x0, y0 = max(0, x), max(0, y)
+    x1, y1 = min(width, x + w), min(height, y + h)
+    if x1 <= x0 or y1 <= y0:
+        return
+    src = raster[y0 - y : y1 - y, x0 - x : x1 - x].astype(np.float32)
+    dst = out[y0:y1, x0:x1]
+    alpha = src[..., 3:4] / 255.0
+    dst[..., :3] = np.rint(src[..., :3] * alpha + dst[..., :3].astype(np.float32) * (1 - alpha)).astype(np.uint8)
