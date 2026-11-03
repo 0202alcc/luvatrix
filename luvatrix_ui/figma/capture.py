@@ -86,6 +86,7 @@ class SnapshotModel:
             values = [_s(self.strings, v) for v in flat]
             self.attrs.append(dict(zip(values[0::2], values[1::2])))
         self.text_value = {i: _s(self.strings, v) for i, v in _sparse_map(nodes.get("textValue")).items()}
+        self.input_value = {i: _s(self.strings, v) for i, v in _sparse_map(nodes.get("inputValue")).items()}
         self.clickable_nodes = set(_sparse_map(nodes.get("isClickable")))
         layout = self.doc.get("layout") or {}
         self.layout_of_node = {int(n): li for li, n in enumerate(layout.get("nodeIndex") or ())}
@@ -277,6 +278,10 @@ class _PageCompiler:
         if tag == "svg":
             return self.svg_nodes(node, box, styles)
         runs = self.text_runs(node)
+        if tag in {"input", "textarea"} and not runs:
+            value = model.input_value.get(node) or model.attr(node, "value") or ""
+            if value.strip():
+                runs = [_Run(node, value, [])]
         paint = _image_fill_for_img(self, node) if tag == "img" else []
         if not paint:
             paint = _background_fills(styles, self, self.fetcher, box)
@@ -290,7 +295,7 @@ class _PageCompiler:
         ]
         if runs and all(model.style(c).get("display", "inline") in INLINE_DISPLAYS for c in element_children):
             wrapped = paint or has_border or has_shadow or self._is_interactive(node)
-            sequence = self._text_container_sequence(node, element_children, wrapped)
+            sequence = self._text_container_sequence(node, element_children, wrapped, runs)
             if wrapped:
                 return [self.box_node(node, box, styles, sequence, paint, [])]
             if len(sequence) == 1:
@@ -304,9 +309,10 @@ class _PageCompiler:
         self.skip("empty", node)
         return []
 
-    def _text_container_sequence(self, node: int, element_children: list[int], wrapped: bool) -> list[dict[str, Any]]:
+    def _text_container_sequence(
+        self, node: int, element_children: list[int], wrapped: bool, runs: list[_Run]
+    ) -> list[dict[str, Any]]:
         """Interleave text chunks and own-node inline children in DOM order."""
-        runs = self.text_runs(node)
         own: dict[int, list[dict[str, Any]]] = {}
         for child in element_children:
             if self._inline_is_own_node(child):
@@ -532,7 +538,9 @@ class _PageCompiler:
                     if override:
                         key = self._table_key(table, override)
             overrides.append(key)
-        local = self._text_box(runs, box)
+        local, centered = self._text_box(runs, box, str(base.get("textAlignHorizontal", "LEFT")))
+        if centered:
+            base = dict(base, textAlignHorizontal="CENTER")
         out: dict[str, Any] = {
             "id": node_id or self.node_id(node),
             "type": "TEXT",
@@ -558,15 +566,47 @@ class _PageCompiler:
         table[str(next_key)] = override
         return next_key
 
-    def _text_box(self, runs: list[_Run], box: list[float]) -> dict[str, float]:
+    def _text_box(self, runs: list[_Run], box: list[float], align: str = "LEFT") -> tuple[dict[str, float], bool]:
+        """Returns (frame-local box, whether the box was widened symmetrically)."""
         points = [bounds for run in runs for bounds in run.boxes]
         if not points:
-            return self.local_box(box)
-        x0 = min(p[0] for p in points)
-        y0 = min(p[1] for p in points)
-        x1 = max(p[0] + p[2] for p in points)
-        y1 = max(p[1] + p[3] for p in points)
-        return self.local_box([x0, y0, x1 - x0, y1 - y0])
+            return self.local_box(box), False
+        ux0 = min(p[0] for p in points)
+        uy0 = min(p[1] for p in points)
+        ux1 = max(p[0] + p[2] for p in points)
+        uy1 = max(p[1] + p[3] for p in points)
+        # Chrome measures text with the page font; the bundled renderer font can
+        # be wider, so widen the box from the alignment anchor to avoid
+        # re-wrapping while keeping the text visually anchored.
+        slack = max(0.0, (ux1 - ux0) * 0.12)
+        centered = False
+        by_source: dict[int, list[list[float]]] = {}
+        for run in runs:
+            by_source.setdefault(run.source, []).extend(run.boxes)
+        shrink_sources = 0
+        for source, source_boxes in by_source.items():
+            source_box = self.model.box(source)
+            if source_box is None:
+                continue
+            sx0 = min(b[0] for b in source_boxes)
+            sx1 = max(b[0] + b[2] for b in source_boxes)
+            if source_box[2] - (sx1 - sx0) < 4.0:
+                shrink_sources += 1
+        if shrink_sources and shrink_sources == len(by_source):
+            # Shrink-to-fit text (badge, flex item): widen symmetrically.
+            align = "CENTER"
+            centered = True
+        if align == "RIGHT":
+            x0 = min(ux0 - slack, box[0])
+            width = ux1 + slack - x0
+        elif align == "CENTER":
+            center = (ux0 + ux1) / 2
+            width = max(ux1 - ux0 + 2 * slack, box[2])
+            x0 = center - width / 2
+        else:
+            x0 = ux0
+            width = max(ux1 + slack, box[0] + box[2]) - x0
+        return self.local_box([x0, uy0, width, uy1 - uy0]), centered
 
     # ── geometry helpers ─────────────────────────────────────────────────────
 
@@ -584,14 +624,19 @@ class _PageCompiler:
         self,
         click_map: dict[str, str],
         frames_by_path: dict[str, dict[str, Any]],
+        consumed: set[str],
     ) -> tuple[int, list[dict[str, Any]]]:
         mapped, unmatched = 0, []
         for key, target_path in click_map.items():
+            if key in consumed:
+                continue
             page, separator, selector = key.partition("->")
             if not separator:
                 continue
-            if page.strip() != self.path:
+            page_key = page.strip()
+            if not (page_key == self.path or (page_key == "/" and self.page_index == 0)):
                 continue
+            consumed.add(key)
             selector = _normalize_selector(selector)
             target = frames_by_path.get(target_path.strip())
             if target is None:
@@ -1328,10 +1373,15 @@ def compile_snapshots(
     mapped_total, unmatched_total = 0, []
     if click_map:
         frames_by_path = {path: frame for (path, _snapshot), frame in zip(pages, frames)}
+        consumed: set[str] = set()
         for compiler in compilers:
-            mapped, unmatched = compiler.apply_click_map(click_map, frames_by_path)
+            mapped, unmatched = compiler.apply_click_map(click_map, frames_by_path, consumed)
             mapped_total += mapped
             unmatched_total.extend(unmatched)
+        for key in click_map:
+            if key not in consumed and "->" in key:
+                page = key.split("->")[0].strip()
+                unmatched_total.append({"page": page, "selector": _normalize_selector(key.split("->")[1]), "reason": "source page not captured"})
     first = frames[0]
     payload = {
         "name": str(first["name"]),
