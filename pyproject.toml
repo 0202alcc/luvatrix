@@ -73,6 +73,10 @@ include = ["luvatrix*", "luvatrix_core*", "luvatrix_plot*", "luvatrix_ui*"]
   "templates/native/android/**/*",
   "templates/native/ios/**/*",
 ]
+"luvatrix_ui.figma" = [
+  "fonts/*.ttf",
+  "fonts/OFL.txt",
+]
 "luvatrix_core.platform.web" = [
   "runtime_assets/index.html",
   "runtime_assets/runtime/*.js",
