@@ -304,6 +304,58 @@ def smart_animate_file() -> dict[str, Any]:
     }
 
 
+def variant_file() -> dict[str, Any]:
+    """A component set with two variants plus an instance that switches between them.
+
+    The instance carries a CHANGE_TO interaction to the "State=Wet" variant and
+    carries a copy of the dry variant's subtree, mirroring how Figma REST
+    materializes instance children.
+    """
+    dry_child = node("5:3", "RECTANGLE", "Fill", 600, 0, 40, 40, fills=[solid(1, 0, 0)])
+    wet_child = node("5:4", "RECTANGLE", "Fill", 600, 60, 40, 40, fills=[solid(0, 1, 0)])
+    component_set = node(
+        "5:0",
+        "COMPONENT_SET",
+        "Moisture",
+        600,
+        0,
+        100,
+        100,
+        children=[
+            node("5:1", "COMPONENT", "State=Dry", 600, 0, 40, 40, children=[dry_child]),
+            node("5:2", "COMPONENT", "State=Wet", 600, 60, 40, 40, children=[wet_child]),
+        ],
+    )
+    instance = node(
+        "4:2",
+        "INSTANCE",
+        "Moisture Badge",
+        20,
+        20,
+        40,
+        40,
+        componentId="5:1",
+        interactions=[{"trigger": {"type": "ON_CLICK"}, "actions": [{"type": "CHANGE_TO", "destinationId": "5:2"}]}],
+        children=[node("4:4", "RECTANGLE", "Fill", 20, 20, 40, 40, fills=[solid(1, 0, 0)])],
+    )
+    frame = node("4:1", "FRAME", "Detail", 0, 0, 100, 100, fills=[solid(1, 1, 1)], children=[instance])
+    return {
+        "name": "Variants",
+        "document": {
+            "id": "0:0",
+            "type": "DOCUMENT",
+            "children": [
+                {
+                    "id": "0:1",
+                    "type": "CANVAS",
+                    "name": "Page",
+                    "children": [component_set, frame],
+                }
+            ],
+        },
+    }
+
+
 def single_frame(children: list[dict[str, Any]], *, w: float = 100, h: float = 100, **frame_extra: Any) -> dict[str, Any]:
     frame = node("9:0", "FRAME", "Frame", 0, 0, w, h, children=children, **frame_extra)
     frame.setdefault("fills", [solid(1, 1, 1)])
