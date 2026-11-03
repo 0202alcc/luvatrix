@@ -1,13 +1,28 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
 
-from luvatrix_core.platform.ios.runner import _sync_ios_app_dir
+from luvatrix_core.platform.ios.runner import _resolve_ios_project, _sync_ios_app_dir
 
 
 class IOSAppSyncTests(unittest.TestCase):
+    def test_relative_native_project_resolves_to_absolute_path(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app = Path(td) / "app"
+            (app / "ios").mkdir(parents=True)
+            cwd = Path.cwd()
+            os.chdir(td)
+            try:
+                resolved = _resolve_ios_project(app, Path("app/ios"))
+            finally:
+                os.chdir(cwd)
+
+            self.assertTrue(resolved.is_absolute())
+            self.assertEqual(resolved, (app / "ios").resolve())
+
     def test_sync_skips_native_project_nested_inside_app_dir(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             app = Path(td) / "app"
