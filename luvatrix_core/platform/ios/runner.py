@@ -851,7 +851,8 @@ def _sync_luvatrix_packages(packages_dir: Path) -> None:
 def _resolve_ios_project(app_dir: Path, explicit: Path | None = None) -> Path:
     project = resolve_native_project_dir(app_dir, "ios", explicit)
     if project is not None:
-        return project
+        # xcodebuild runs with cwd=project, so a relative path would be applied twice.
+        return project.resolve()
     raise RuntimeError(
         "iOS native project not found. Run "
         "`luvatrix init-native APP_DIR --target ios --out APP_DIR/ios` "
