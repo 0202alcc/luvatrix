@@ -131,13 +131,13 @@ def test_shrink_to_fit_text_boxes_widen_symmetrically() -> None:
 
     result = compile_snapshots([("/", b.build())])
 
-    text = result.file["document"]["children"][0]["children"][0]["children"][0]["children"][0]
+    text = result.file["document"]["children"][0]["children"][0]["children"][0]
     box = text["absoluteBoundingBox"]
     # Content-sized box: widened symmetrically around the Chrome text center.
     center = box["x"] + box["width"] / 2
     assert abs(center - 269.0) < 2.0
     assert box["width"] >= 58 * 1.12
-    assert text["style"]["textAlignHorizontal"] == "LEFT"
+    assert text["style"]["textAlignHorizontal"] == "CENTER"
 
 
 def test_input_values_become_text() -> None:
@@ -152,3 +152,27 @@ def test_input_values_become_text() -> None:
     assert frame["type"] == "FRAME"
     text = frame["children"][0]
     assert text["characters"] == "Orbit"
+
+
+def test_whitespace_between_inline_word_spans_becomes_a_space() -> None:
+    b, body = page()
+    heading = b.element("H1", parent=body)
+    b.layout(heading, 0, 0, 300, 40, **{"font-size": "32px"})
+    word1 = b.element("SPAN", parent=heading)
+    b.layout(word1, 0, 0, 120, 40, **{"display": "inline"})
+    t1 = b.text("Accelerating", parent=word1)
+    li1 = b.layout(t1, 0, 0, 120, 40)
+    b.text_box(li1, 0, 0, 120, 40)
+    gap = b.text("  \n  ", parent=heading)
+    li2 = b.layout(gap, 120, 0, 8, 40)
+    b.text_box(li2, 120, 0, 8, 40)
+    word2 = b.element("SPAN", parent=heading)
+    b.layout(word2, 128, 0, 60, 40, **{"display": "inline"})
+    t2 = b.text("the", parent=word2)
+    li3 = b.layout(t2, 128, 0, 60, 40)
+    b.text_box(li3, 128, 0, 60, 40)
+
+    result = compile_snapshots([("/", b.build())])
+
+    text = result.file["document"]["children"][0]["children"][0]["children"][0]
+    assert text["characters"] == "Accelerating the"
