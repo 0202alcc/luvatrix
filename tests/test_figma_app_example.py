@@ -110,3 +110,33 @@ def test_water_now_binding_updates_the_label() -> None:
     assert app.current_frame_name == "Plant Detail"
     assert app.text("Water Label") == "Watered today"
     assert (ctx.frames[-1] != before).any()
+
+
+def test_example_tour_visits_every_screen_and_waters_the_plant(tmp_path: Path, monkeypatch) -> None:
+    import json
+
+    from luvatrix_ui.figma.tour import TOUR_DIR_ENV, TOUR_ENV
+
+    status_dir = tmp_path / "status"
+    monkeypatch.setenv(TOUR_ENV, str(APP_DIR / "tour.json"))
+    monkeypatch.setenv(TOUR_DIR_ENV, str(status_dir))
+    ctx = _FakeCtx(393 * 2, 852 * 2, display=(393, 852))
+    app = _load_app_main().create()
+    app.init(ctx)
+
+    captures: list[tuple[str, str]] = []
+    for _ in range(2000):
+        app.loop(ctx, 0.05)
+        status_path = status_dir / "status.json"
+        if not status_path.exists():
+            continue
+        status = json.loads(status_path.read_text())
+        if status["state"] == "capture" and not (status_dir / f"ack_{status['step']}").exists():
+            captures.append((status["capture"], status["frame"]))
+            (status_dir / f"ack_{status['step']}").write_text("ok")
+        if status["state"] in {"done", "error"}:
+            break
+
+    assert status["state"] == "done", status
+    assert [frame for _, frame in captures] == ["Welcome", "Home", "Home", "Plant Detail", "Plant Detail", "Home", "Profile"]
+    assert app.text("Water Label") == "Watered today"
