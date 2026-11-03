@@ -1,0 +1,17 @@
+app_id = "figma.captured_site"
+protocol_version = "3"
+entrypoint = "app_main:create"
+platform_support = ["ios", "macos"]
+required_capabilities = ["window.write"]
+optional_capabilities = ["hdi.touch", "hdi.mouse", "hdi.trackpad"]
+
+[display]
+native_width = 393
+native_height = 852
+bar_color_rgba = [0, 0, 0, 255]
+default_coordinate_frame = "screen_tl"
+title = "Captured Site"
+
+[render]
+preferred = "matrix"
+fallbacks = ["matrix"]
