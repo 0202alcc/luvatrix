@@ -334,7 +334,17 @@ def main() -> None:
         help="Record provenance for a legacy scaffold without overwriting customized files.",
     )
 
+    from luvatrix_ui.figma.cli import add_figma_parser
+
+    add_figma_parser(subparsers)
+
     args = parser.parse_args()
+
+    if args.command == "figma":
+        from luvatrix_ui.figma.cli import run_figma_command
+
+        run_figma_command(args)
+        return
 
     if args.command == "build-web":
         from luvatrix_core.platform.web.build import build_web_app

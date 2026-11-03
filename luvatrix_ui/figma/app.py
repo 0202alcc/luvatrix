@@ -100,6 +100,26 @@ class FigmaApp(App):
         frame_id, scroll, transition = self.history.pop()
         self._go(frame_id, scroll, transition, reverse=True)
 
+    def text(self, node: str) -> str:
+        return str(self._text_nodes(node)[0].get("characters", ""))
+
+    def set_text(self, node: str, text: str) -> None:
+        """Replace the characters of every TEXT layer with this name (or id) and re-render."""
+        nodes = self._text_nodes(node)
+        for target in nodes:
+            target["characters"] = str(text)
+            target["characterStyleOverrides"] = []
+            owner = self.document.owner_frame_id(str(target.get("id", "")))
+            for key in [k for k in self._screens if k[0] == owner]:
+                del self._screens[key]
+        self.invalidate()
+
+    def _text_nodes(self, key: str) -> list[dict[str, Any]]:
+        nodes = self.document.find_nodes(key, node_type="TEXT")
+        if not nodes:
+            raise KeyError(key)
+        return nodes
+
     # ── app loop ─────────────────────────────────────────────────────────────
 
     def update(self, dt: float) -> None:

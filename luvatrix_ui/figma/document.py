@@ -221,6 +221,14 @@ class FigmaDocument:
     def node(self, node_id: str) -> dict[str, Any]:
         return self._nodes[node_id]
 
+    def find_nodes(self, key: str, *, node_type: str | None = None) -> list[dict[str, Any]]:
+        """Nodes whose id or name equals `key`, optionally of one Figma node type."""
+        if key in self._nodes:
+            found = [self._nodes[key]]
+        else:
+            found = [n for n in self._nodes.values() if n.get("name") == key]
+        return [n for n in found if node_type is None or n.get("type") == node_type]
+
     def owner_frame_id(self, node_id: str) -> str | None:
         return self._owner_frame.get(node_id)
 
