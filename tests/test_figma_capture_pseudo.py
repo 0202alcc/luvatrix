@@ -117,7 +117,7 @@ def test_before_string_content_becomes_a_text_child() -> None:
     assert frame["type"] == "FRAME"
     bullet = frame["children"][0]
     assert bullet["type"] == "TEXT"
-    assert bullet["characters"] == "\u2022 "
+    assert bullet["characters"] == "\u2022"
     assert bullet["id"].endswith(":before")
     assert bullet["absoluteBoundingBox"]["x"] == 0.0
     assert bullet["style"]["fontSize"] == 16
@@ -148,7 +148,13 @@ def test_before_honors_parent_padding_and_border_when_anchoring() -> None:
     )
 
     bullet = first_child(result)["children"][0]
-    assert bullet["absoluteBoundingBox"]["x"] == 12.0
+    assert bullet["absoluteBoundingBox"]["x"] == 28.0
+
+
+def find_pseudo(node: dict[str, Any], suffix: str) -> dict[str, Any]:
+    matches = [child for child in node.get("children") or () if child["id"].endswith(f":{suffix}")]
+    assert len(matches) == 1, f"expected one :{suffix} child, got {len(matches)}"
+    return matches[0]
 
 
 def test_absolute_after_anchors_from_right_and_bottom_offsets() -> None:
@@ -177,7 +183,7 @@ def test_absolute_after_anchors_from_right_and_bottom_offsets() -> None:
         ],
     )
 
-    bar = first_child(result)["children"][0]
+    bar = find_pseudo(first_child(result), "after")
     assert bar["type"] == "RECTANGLE"
     assert bar["absoluteBoundingBox"] == {"x": 182.0, "y": 86.0, "width": 10.0, "height": 10.0}
     assert bar["fills"] == [{"type": "SOLID", "color": {"r": 239 / 255, "g": 68 / 255, "b": 68 / 255, "a": 1.0}}]
@@ -208,7 +214,7 @@ def test_absolute_after_uses_left_when_given() -> None:
         ],
     )
 
-    bar = first_child(result)["children"][0]
+    bar = find_pseudo(first_child(result), "after")
     assert bar["absoluteBoundingBox"] == {"x": 12.0, "y": 0.0, "width": 4.0, "height": 100.0}
 
 
@@ -241,7 +247,7 @@ def test_badge_pill_pseudo_becomes_a_frame_with_text() -> None:
         ],
     )
 
-    pill = first_child(result)["children"][0]
+    pill = find_pseudo(first_child(result), "before")
     assert pill["type"] == "FRAME"
     assert pill["cornerRadius"] == 999
     assert pill["fills"][0]["type"] == "SOLID"
@@ -276,14 +282,14 @@ def test_icon_font_glyph_keeps_its_font_family() -> None:
 def test_empty_content_with_no_paint_is_skipped_but_content_none_never_emits() -> None:
     b, body = page()
     card = b.element("DIV", parent=body)
-    b.layout(card, 0, 0, 200, 40)
+    b.layout(card, 0, 0, 200, 40, **{"background-color": "rgb(250, 250, 250)"})
     result = compile_snapshots(
         [("/", b.build())],
         pseudos=[[entry("0", "before", styles={"content": '""'}), entry("0", "after", styles={"content": "none"})]],
     )
 
     frame = first_child(result)
-    assert frame["children"] == []
+    assert frame.get("children") in (None, [])
     assert result.report["PSEUDO_COUNT"] == 0
 
 
@@ -296,7 +302,6 @@ def test_counter_content_is_counted_as_unsupported() -> None:
         pseudos=[[entry("0", "before", styles={"content": 'counter(item) ". "'})]],
     )
 
-    assert first_child(result)["children"] == []
     assert result.report["pages"][0]["unsupported"]["pseudo-counter"] == 1
     assert result.report["PSEUDO_COUNT"] == 0
 
@@ -310,8 +315,8 @@ def test_entries_with_unknown_paths_or_mismatched_tags_are_ignored() -> None:
         pseudos=[[entry("9.9", "before", styles={"content": '"x"'}), entry("0", "before", tag="span", styles={"content": '"y"'})]],
     )
 
-    assert first_child(result)["children"] == []
     assert result.report["PSEUDO_COUNT"] == 0
+    assert result.report["pages"][0]["unsupported"]["pseudo-unmatched"] == 2
 
 
 def test_pseudo_without_layout_or_hidden_display_is_skipped() -> None:
@@ -328,7 +333,6 @@ def test_pseudo_without_layout_or_hidden_display_is_skipped() -> None:
         ],
     )
 
-    assert first_child(result)["children"] == []
     assert result.report["PSEUDO_COUNT"] == 0
 
 

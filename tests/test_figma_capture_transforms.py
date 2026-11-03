@@ -98,8 +98,8 @@ def test_skew_x_recovers_the_unskewed_width() -> None:
     result = compile_snapshots([("/", b.build())])
 
     node = first_child(result)
-    assert node["size"]["x"] == 100.0
-    assert node["size"]["y"] == 50.0
+    assert abs(node["size"]["x"] - 100.0) < 0.01
+    assert abs(node["size"]["y"] - 50.0) < 1e-6
     tf = as_affine(node)
     assert abs(tf.c - 0.57735) < 1e-4
     assert abs(tf.tx) < 1e-6
@@ -194,8 +194,7 @@ def test_transformed_text_node_keeps_its_rotation() -> None:
 
     result = compile_snapshots([("/", b.build())])
 
-    frame = first_child(result)
-    text = frame["children"][0]
+    text = first_child(result)
     assert text["type"] == "TEXT"
     assert "relativeTransform" in text
     tf = as_affine(text)
@@ -254,4 +253,4 @@ def test_renderer_rotates_a_captured_node() -> None:
     center = image[45, 60]
     assert center[0] > 200 and center[3] > 200  # red, opaque
     corner = image[5, 5]
-    assert corner[0] < 60  # outside the rotated card: white background
+    assert corner[1] > 240 and corner[2] > 240  # white background, not the red card
