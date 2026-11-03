@@ -109,6 +109,30 @@ def test_unmatched_click_map_selectors_are_reported() -> None:
     assert unmatched[0]["selector"] == "[data-testid=missing]"
 
 
+def test_click_map_prefers_the_topmost_visible_matching_node() -> None:
+    b = SnapshotBuilder(title="Pick")
+    body = b.element("BODY")
+    b.layout(body, 0, 0, 393, 852, **{"background-color": "rgb(255, 255, 255)"})
+    offscreen = b.element("A", parent=body, attrs={"href": "/projects"}, clickable=True)
+    b.layout(offscreen, 10, -700, 172, 30)
+    deep = b.element("A", parent=body, attrs={"href": "/projects"}, clickable=True)
+    b.layout(deep, 10, 6400, 168, 24)
+    top = b.element("A", parent=body, attrs={"href": "/projects"}, clickable=True)
+    b.layout(top, 10, 700, 172, 30)
+    target = SnapshotBuilder(title="Projects")
+    tbody = target.element("BODY")
+    target.layout(tbody, 0, 0, 393, 852, **{"background-color": "rgb(255, 255, 255)"})
+
+    result = compile_snapshots(
+        [("/", b.build()), ("/projects", target.build())],
+        click_map={"/ -> a[href=/projects]": "/projects"},
+    )
+
+    source = next(node for node in _flatten(result.file["document"]["children"][0]["children"][0]) if node.get("interactions"))
+    box = source["absoluteBoundingBox"]
+    assert box["y"] == 700.0
+
+
 def _flatten(node: dict[str, Any]) -> list[dict[str, Any]]:
     out = [node]
     for child in node.get("children") or ():
