@@ -197,6 +197,15 @@ def add_figma_parser(subparsers: Any) -> None:
     init.add_argument("--width", type=int, default=393, help="Device width in points")
     init.add_argument("--height", type=int, default=852, help="Device height in points")
 
+    tour = sub.add_parser("ios-tour", help="Run a scripted tour in the iOS Simulator and screenshot each capture")
+    tour.add_argument("app_dir", type=Path)
+    tour.add_argument("--tour", required=True, help="Tour JSON file, or inline JSON")
+    tour.add_argument("--out", type=Path, required=True, help="Directory for screenshots, logs, and summary.json")
+    tour.add_argument("--simulator", default="iPhone 17", help="Simulator device name")
+    tour.add_argument("--native-project", type=Path, default=None, help="Native iOS project (default: <app_dir>/ios)")
+    tour.add_argument("--render-scale", type=float, default=3.0)
+    tour.add_argument("--timeout", type=float, default=900.0, help="Seconds for build, launch, and the whole tour")
+
 
 def run_figma_command(args: Any) -> None:
     if args.figma_command == "pull":
@@ -210,3 +219,16 @@ def run_figma_command(args: Any) -> None:
     elif args.figma_command == "init-app":
         root = init_figma_app(args.app_dir, app_id=args.app_id, width=args.width, height=args.height)
         print(f"[luvatrix] Created Figma app at {root}; pull a design into {root / 'design'}")
+    elif args.figma_command == "ios-tour":
+        from . import ios_tour
+
+        code = ios_tour.run_ios_tour(
+            args.app_dir,
+            args.tour,
+            args.out,
+            simulator=args.simulator,
+            native_project=args.native_project,
+            render_scale=args.render_scale,
+            timeout=args.timeout,
+        )
+        raise SystemExit(code)
