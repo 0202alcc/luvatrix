@@ -49,7 +49,10 @@ def _setup_syslog_redirect() -> None:
         import socket as _socket
 
         _libc = _ctypes.CDLL("/usr/lib/libSystem.dylib")
-        _libc.syslog.argtypes = [_ctypes.c_int, _ctypes.c_char_p, _ctypes.c_char_p]
+        # syslog() is variadic, and ctypes passes declared arguments in registers while
+        # Apple arm64 expects variadic ones on the stack, so pass the message as the
+        # format string with '%' escaped instead of syslog(prio, "%s", msg).
+        _libc.syslog.argtypes = [_ctypes.c_int, _ctypes.c_char_p]
         _libc.syslog.restype = None
         _LOG_NOTICE = 5
 
@@ -67,7 +70,7 @@ def _setup_syslog_redirect() -> None:
 
         def _emit(line: str) -> None:
             try:
-                _libc.syslog(_LOG_NOTICE, b"%s", line.encode("utf-8", errors="replace"))
+                _libc.syslog(_LOG_NOTICE, line.replace("%", "%%").encode("utf-8", errors="replace"))
             except Exception:
                 pass
             if _udp_sock is not None and _udp_addr is not None:
