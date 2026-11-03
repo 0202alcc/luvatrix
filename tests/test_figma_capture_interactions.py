@@ -40,7 +40,7 @@ def test_interactive_elements_are_recorded_in_clickables() -> None:
 
     names = [entry["name"] for entry in result.clickables]
     assert "Pricing" in names
-    assert "cta" in [entry["selector"] for entry in result.clickables]
+    assert "div.cta" in [entry["selector"] for entry in result.clickables]
     assert len(result.clickables) == 2
     entry = next(e for e in result.clickables if e["name"] == "Pricing")
     assert entry["page"] == "/"
@@ -86,7 +86,7 @@ def test_click_map_adds_navigate_interactions(tmp_path: Any) -> None:
 
     frames = result.file["document"]["children"][0]["children"]
     home, settings = frames[0], frames[1]
-    source = next(node for node in _flatten(home) if node["name"] == "BUTTON")
+    source = next(node for node in _flatten(home) if node["name"] == "button")
     interactions = source["interactions"]
     assert interactions[0]["trigger"]["type"] == "ON_CLICK"
     action = interactions[0]["actions"][0]
@@ -114,3 +114,24 @@ def _flatten(node: dict[str, Any]) -> list[dict[str, Any]]:
     for child in node.get("children") or ():
         out.extend(_flatten(child))
     return out
+
+def test_click_map_root_shorthand_matches_the_first_captured_page() -> None:
+    click_map = {"/ -> [data-testid=nav-settings]": "/settings.html"}
+
+    result = compile_snapshots(
+        [("/index.html", nav_page("/index.html", testid="nav-settings")), ("/settings.html", nav_page("/settings.html", title="Settings"))],
+        click_map=click_map,
+    )
+
+    assert result.report["interactions"]["mapped"] == 1
+    assert result.report["interactions"]["unmatched"] == []
+
+
+def test_click_map_with_unknown_source_page_is_reported() -> None:
+    result = compile_snapshots(
+        [("/index.html", nav_page("/index.html"))],
+        click_map={"/gone -> button": "/index.html"},
+    )
+
+    assert result.report["interactions"]["mapped"] == 0
+    assert result.report["interactions"]["unmatched"][0]["reason"] == "source page not captured"
