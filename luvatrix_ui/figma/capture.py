@@ -230,6 +230,7 @@ class _PageCompiler:
         self.unsupported: dict[str, int] = {}
         self.selector_index: dict[str, list[int]] = {}
         self.origin = (0.0, 0.0)
+        self.page_height = 852.0
         self.page_clickables: list[dict[str, Any]] = []
         self.images: dict[str, dict[str, Any]] = images if images is not None else {}
         self.image_failures: list[str] = []
@@ -275,6 +276,7 @@ class _PageCompiler:
         body = self._root_node()
         body_box = self.model.box(body) or [0, 0, 393, 852]
         self.origin = (body_box[0], body_box[1])
+        self.page_height = body_box[3]
         styles = self.model.style(body)
         frame: dict[str, Any] = {
             "id": f"{self.prefix}:0",
@@ -1400,8 +1402,16 @@ class _PageCompiler:
         pool = interactive or candidates
         if not pool:
             return None
-        chosen = pool[-1]
+        # Nav elements repeat down the page and lazy trees keep off-screen
+        # copies; bind the interaction to the topmost node that is actually
+        # inside the captured frame.
+        visible = [n for n in pool if self._box_in_page(n)]
+        chosen = min(visible, key=lambda n: (self.model.box(n)[1], n)) if visible else pool[-1]
         return self.emitted.get(self.node_id(chosen))
+
+    def _box_in_page(self, node: int) -> bool:
+        box = self.model.box(node)
+        return box is not None and -1.0 <= box[1] < self.page_height
 
     # ── scroll and fixed children ────────────────────────────────────────────
 
