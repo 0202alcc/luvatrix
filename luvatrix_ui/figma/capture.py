@@ -19,6 +19,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from hashlib import sha1
 import json
+import math
 from pathlib import Path
 import re
 from typing import Any
@@ -234,6 +235,7 @@ class _PageCompiler:
         self.image_failures: list[str] = []
         self.emitted: dict[str, dict[str, Any]] = {}
         self.svg_placeholders: list[tuple[dict[str, Any], dict[str, float]]] = []
+        self.raster_queue: list[tuple[dict[str, Any], dict[str, float]]] = []
         self.pseudo_paths = self._node_paths()
         self.pseudo_by_node = self._group_pseudo_entries(pseudo_entries or ())
 
@@ -488,6 +490,7 @@ class _PageCompiler:
         paint = _background_fills(styles, self, self.fetcher, box)
         if paint:
             out["fills"] = paint
+        self._finalize_fills(out, box)
         border = _border_info(styles)
         if border:
             out.update(border)
@@ -546,6 +549,7 @@ class _PageCompiler:
             effects = _effects(st, self)
             if effects:
                 frame["effects"] = effects
+            self._finalize_fills(frame, box)
             line_height = _length(st.get("line-height", ""), font_size) or font_size * 1.21
             text_w = min(width, max(font_size * 0.62 * len(content), 1.0))
             text_local = [(width - text_w) / 2, (height - line_height) / 2, text_w, line_height]
@@ -588,6 +592,7 @@ class _PageCompiler:
             effects = _effects(st, self)
             if effects:
                 out["effects"] = effects
+            self._finalize_fills(out, box)
             self.counts["rectangles"] += 1
         if placement is not None:
             self._decorate(out, list(pseudo_box), Affine.translate(pseudo_box[0], pseudo_box[1]))
@@ -812,8 +817,33 @@ class _PageCompiler:
                 out["type"] = "FRAME"
                 out["children"] = [self.text_node(node, box, styles, runs, node_id=f"{out['id']}:t1", register=False)]
         self.counts["frames" if out["type"] == "FRAME" else "rectangles"] += 1
+        self._finalize_fills(out, box)
         self._register_node(node, out)
         return out
+
+    def _finalize_fills(self, out: dict[str, Any], box: list[float]) -> None:
+        """Resolve CONIC_RASTER marker paints into image fills or placeholders."""
+        fills = out.get("fills") or []
+        if not any(paint.get("type") == "CONIC_RASTER" for paint in fills):
+            return
+        clip = {"x": box[0], "y": box[1], "width": box[2], "height": box[3]}
+        resolved: list[dict[str, Any]] = []
+        for paint in fills:
+            if paint.get("type") != "CONIC_RASTER":
+                resolved.append(paint)
+                continue
+            data = self.rasterize(clip) if self.rasterize is not None else None
+            if data:
+                ref = "conic-" + sha1(f"{self.path}:{out['id']}".encode("utf-8")).hexdigest()[:12]
+                self.images[ref] = {"url": f"rasterized:{out['id']}", "data": data}
+                resolved.append({"type": "IMAGE", "imageRef": ref, "scaleMode": "FILL"})
+                self.counts["images"] += 1
+            else:
+                out["fills"] = resolved + [{"type": "SOLID", "color": {"r": 0.85, "g": 0.85, "b": 0.85, "a": 1.0}}]
+                self.raster_queue.append((out, clip))
+                self.counts["conicRaster"] = self.counts.get("conicRaster", 0) + 1
+                return
+        out["fills"] = resolved
 
     def _register_node(self, node: int, out: dict[str, Any]) -> None:
         if self._is_interactive(node):
@@ -1424,6 +1454,9 @@ def _background_layer_paint(layer: str, compiler: "_PageCompiler", box: list[flo
     if url:
         fill = _image_fill(url, compiler)
         return [fill] if fill else []
+    if lowered.startswith("repeating-conic-gradient(") or lowered.startswith("conic-gradient("):
+        paint = _conic_paint(layer, compiler, box)
+        return [paint] if paint else []
     if lowered.startswith("linear-gradient("):
         paint = _gradient_paint("GRADIENT_LINEAR", layer, box)
         return [paint] if paint else []
@@ -1431,6 +1464,177 @@ def _background_layer_paint(layer: str, compiler: "_PageCompiler", box: list[flo
         paint = _gradient_paint("GRADIENT_RADIAL", layer, box)
         return [paint] if paint else []
     return []
+
+
+_CONIC_FROM = re.compile(
+    r"^from\s+(?P<angle>[-\d.]+(?:deg|grad|rad|turn))(?:\s+at\s+(?P<at>.+))?$", re.IGNORECASE
+)
+
+
+def _conic_paint(layer: str, compiler: "_PageCompiler", box: list[float]) -> dict[str, Any] | None:
+    """Map conic-gradient(...) to GRADIENT_ANGULAR; None (counted) when exotic."""
+    repeating = layer.lower().lstrip().startswith("repeating-conic-gradient(")
+    open_index = layer.find("(")
+    close_index = layer.rfind(")")
+    if open_index < 0 or close_index <= open_index:
+        return None
+    tokens = [t.strip() for t in _split_top_level(layer[open_index + 1 : close_index], ",") if t.strip()]
+    angle = 0.0
+    center = (0.5, 0.5)
+    if tokens and (tokens[0].lower().startswith("from ") or tokens[0].lower().startswith("at ")):
+        head = tokens.pop(0)
+        match = _CONIC_FROM.match(head)
+        if match:
+            angle = _css_angle_value(match.group("angle"))
+            if match.group("at"):
+                center = _conic_center(match.group("at"))
+        elif head.lower().startswith("at "):
+            center = _conic_center(head[3:])
+        else:
+            compiler.unsupported_css("conic-hints")
+            return _conic_raster_fallback(compiler, box)
+    stops: list[dict[str, Any]] = []
+    for token in tokens:
+        color_part, positions = _split_stop_positions(token)
+        color = parse_css_color(color_part)
+        if color is None:
+            if _stop_position(token) is not None or not color_part.strip():
+                compiler.unsupported_css("conic-hints")  # color interpolation hint
+            else:
+                compiler.unsupported_css("conic-color")
+            return _conic_raster_fallback(compiler, box)
+        for position in positions or (-1.0,):
+            stops.append({"position": position, "color": {"r": color[0], "g": color[1], "b": color[2], "a": color[3]}})
+    if not stops:
+        return _conic_raster_fallback(compiler, box)
+    stops = _distribute_stops(stops)
+    if repeating:
+        expanded = _expand_repeating_conic(stops)
+        if expanded is None:
+            compiler.unsupported_css("conic-repeat")
+            return _conic_raster_fallback(compiler, box)
+        stops = expanded
+    if len(stops) == 1:
+        stops = [dict(stops[0], position=0.0), dict(stops[0], position=1.0)]
+    rad = math.radians(angle)
+    direction = (math.sin(rad), -math.cos(rad))
+    sweep = (-direction[1], direction[0])
+    handles = [
+        {"x": center[0], "y": center[1]},
+        {"x": center[0] + 0.5 * direction[0], "y": center[1] + 0.5 * direction[1]},
+        {"x": center[0] + 0.5 * sweep[0], "y": center[1] + 0.5 * sweep[1]},
+    ]
+    return {"type": "GRADIENT_ANGULAR", "gradientStops": stops, "gradientHandlePositions": handles}
+
+
+def _conic_raster_fallback(compiler: "_PageCompiler", box: list[float]) -> dict[str, Any]:
+    """Marker paint; the owning node resolves it to a raster IMAGE or placeholder."""
+    return {"type": "CONIC_RASTER"}
+
+
+def _expand_repeating_conic(stops: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+    """Tile a repeating-conic segment across [0, 1] as explicit stops.
+
+    Returns None when the segment does not form a simple repeatable tile.
+    """
+    if len(stops) < 2:
+        return None
+    start, end = stops[0]["position"], stops[-1]["position"]
+    if abs(start) > 1e-9:
+        return None
+    if abs(end - 1.0) <= 1e-9:
+        return stops  # the "repeat" already spans the full turn
+    if not (0.0 < end < 1.0):
+        return None
+    segments = int(math.floor(1.0 / end + 1e-9))
+    if segments < 1 or segments > 12:
+        return None
+    out: list[dict[str, Any]] = []
+    for k in range(segments):
+        for stop in stops:
+            position = k * end + stop["position"]
+            if position > 1.0 + 1e-9:
+                continue
+            out.append({"position": min(position, 1.0), "color": stop["color"]})
+    if not out or out[-1]["position"] < 1.0:
+        out.append({"position": 1.0, "color": stops[0]["color"]})
+    return out
+
+
+def _conic_center(value: str) -> tuple[float, float]:
+    horizontal = {"left": 0.0, "center": 0.5, "right": 1.0}
+    vertical = {"top": 0.0, "center": 0.5, "bottom": 1.0}
+
+    def resolve(token: str, keywords: dict[str, float]) -> float | None:
+        lowered = token.lower()
+        if lowered in keywords:
+            return keywords[lowered]
+        if lowered.endswith("%"):
+            try:
+                return float(lowered[:-1]) / 100.0
+            except ValueError:
+                return None
+        return None
+
+    tokens = (value or "").split()
+    x = y = 0.5
+    if len(tokens) >= 1:
+        rx = resolve(tokens[0], horizontal)
+        if rx is not None:
+            x = rx
+        elif len(tokens) == 1:
+            ry = resolve(tokens[0], vertical)
+            if ry is not None:
+                y = ry
+    if len(tokens) >= 2:
+        ry = resolve(tokens[1], vertical)
+        if ry is not None:
+            y = ry
+    return x, y
+
+
+def _css_angle_value(token: str) -> float:
+    token = (token or "").strip().lower()
+    match = re.match(r"^([-\d.]+)(deg|grad|rad|turn)$", token)
+    if not match:
+        return 0.0
+    number = float(match.group(1))
+    unit = match.group(2)
+    if unit == "deg":
+        return number
+    if unit == "grad":
+        return number * 0.9
+    if unit == "rad":
+        return number * 180.0 / math.pi
+    return number * 360.0
+
+
+def _split_stop_positions(token: str) -> tuple[str, list[float]]:
+    """Split a gradient stop into (color, positions); supports % and angles."""
+    parts = token.split()
+    positions: list[float] = []
+    while len(parts) > 1:
+        last = parts[-1]
+        position = _stop_position(last)
+        if position is None:
+            break
+        positions.insert(0, position)
+        parts.pop()
+    return " ".join(parts), positions
+
+
+def _stop_position(token: str) -> float | None:
+    token = token.strip().lower()
+    if token.endswith("%"):
+        try:
+            return float(token[:-1]) / 100.0
+        except ValueError:
+            return None
+    match = re.match(r"^([-\d.]+)(deg|grad|rad|turn)$", token)
+    if match:
+        return _css_angle_value(token) / 360.0
+    return None
+
 
 
 def _url_token(layer: str) -> str | None:
@@ -2058,7 +2262,7 @@ def compile_snapshots(
     svg_raster = [
         {"node": node, "box": box, "key": f"{compilers[index].path}:{node['id']}"}
         for index, compiler in enumerate(compilers)
-        for node, box in compiler.svg_placeholders
+        for node, box in compiler.svg_placeholders + compiler.raster_queue
     ]
     return CaptureResult(file=payload, images=images, clickables=clickables, report=report, svg_raster=svg_raster)
 
