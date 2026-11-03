@@ -40,7 +40,9 @@ def test_text_element_becomes_a_text_node_with_span_overrides() -> None:
     assert text["style"]["fontSize"] == 16
     assert text["style"]["fontFamily"] == "sans-serif"
     assert text["fills"] == [{"type": "SOLID", "color": {"r": 51 / 255, "g": 51 / 255, "b": 51 / 255, "a": 1.0}}]
-    assert text["absoluteBoundingBox"] == {"x": 0.0, "y": 2.0, "width": 200.0, "height": 20.0}
+    # Box hugs the Chrome-drawn union; renderer-font measurement keeps it wide
+    # enough that the renderer does not re-wrap.
+    assert text["absoluteBoundingBox"] == {"x": 0.0, "y": 2.0, "width": 159.0, "height": 20.0}
     overrides = text["characterStyleOverrides"]
     assert len(overrides) == len(text["characters"])
     bold_keys = {overrides[i] for i in range(6, 10)}
@@ -117,7 +119,7 @@ def test_text_with_background_is_wrapped_in_a_frame() -> None:
     assert frame["type"] == "FRAME"
     assert frame["fills"] == [{"type": "SOLID", "color": {"r": 37 / 255, "g": 99 / 255, "b": 235 / 255, "a": 1.0}}]
     assert [child["type"] for child in frame["children"]] == ["TEXT"]
-    assert frame["children"][0]["absoluteBoundingBox"] == {"x": 40.0, "y": 20.0, "width": 90.0, "height": 20.0}
+    assert frame["children"][0]["absoluteBoundingBox"] == {"x": 40.0, "y": 20.0, "width": 60.0, "height": 20.0}
 
 def test_shrink_to_fit_text_boxes_widen_symmetrically() -> None:
     b, body = page()
@@ -133,10 +135,10 @@ def test_shrink_to_fit_text_boxes_widen_symmetrically() -> None:
 
     text = result.file["document"]["children"][0]["children"][0]["children"][0]
     box = text["absoluteBoundingBox"]
-    # Content-sized box: widened symmetrically around the Chrome text center.
+    # Content-sized box: re-anchored symmetrically around the Chrome text center.
     center = box["x"] + box["width"] / 2
     assert abs(center - 269.0) < 2.0
-    assert box["width"] >= 58 * 1.05
+    assert box["width"] >= 57.5
     assert text["style"]["textAlignHorizontal"] == "CENTER"
 
 

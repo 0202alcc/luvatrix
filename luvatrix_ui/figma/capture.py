@@ -238,6 +238,7 @@ class _PageCompiler:
         self.raster_queue: list[tuple[dict[str, Any], dict[str, float]]] = []
         self.pseudo_paths = self._node_paths()
         self.pseudo_by_node = self._group_pseudo_entries(pseudo_entries or ())
+        self._fonts: Any = None
 
     def node_id(self, node: int) -> str:
         backend = self.model.backend[node] if node < len(self.model.backend) else node
@@ -694,6 +695,7 @@ class _PageCompiler:
             return []
         if tag == "svg":
             return self.svg_nodes(node, box, styles)
+        allow_reflow = parent_tf is None and (styles.get("transform") or "none").strip().lower() in {"", "none"}
         runs = self.text_runs(node)
         if tag in {"input", "textarea"} and not runs:
             value = model.input_value.get(node) or model.attr(node, "value") or ""
@@ -712,17 +714,17 @@ class _PageCompiler:
         ]
         if runs and all(model.style(c).get("display", "inline") in INLINE_DISPLAYS for c in element_children):
             wrapped = paint or has_border or has_shadow or self._is_interactive(node)
-            sequence = self._text_container_sequence(node, element_children, wrapped, runs, parent_tf)
+            sequence = self._text_container_sequence(node, element_children, wrapped, runs, parent_tf, allow_reflow)
             if wrapped:
-                return [self.box_node(node, box, styles, sequence, paint, [])]
+                return [self.box_node(node, box, styles, sequence, paint, [], allow_reflow=allow_reflow)]
             if len(sequence) == 1:
                 self._register_node(node, sequence[0])
             return sequence
         children = self.build_children(node, inside_text=bool(runs), parent_tf=parent_tf)
         if children or paint or has_border or has_shadow or keep_leaf:
-            return [self.box_node(node, box, styles, children, paint, runs)]
+            return [self.box_node(node, box, styles, children, paint, runs, allow_reflow=allow_reflow)]
         if runs:
-            return [self.text_node(node, box, styles, runs)]
+            return [self.text_node(node, box, styles, runs, allow_reflow=allow_reflow)]
         self.skip("empty", node)
         return []
 
@@ -733,6 +735,7 @@ class _PageCompiler:
         wrapped: bool,
         runs: list[_Run],
         parent_tf: Affine | None = None,
+        allow_reflow: bool = True,
     ) -> list[dict[str, Any]]:
         """Interleave text chunks and own-node inline children in DOM order."""
         own: dict[int, list[dict[str, Any]]] = {}
@@ -765,7 +768,7 @@ class _PageCompiler:
                 continue
             chunk_index += 1
             node_id = f"{self.node_id(node)}:t{chunk_index}" if suffix else self.node_id(node)
-            result.append(self.text_node(node, box, styles, payload, node_id=node_id, register=False))
+            result.append(self.text_node(node, box, styles, payload, node_id=node_id, register=False, allow_reflow=allow_reflow))
         return result
 
     def box_node(
@@ -776,6 +779,7 @@ class _PageCompiler:
         children: list[dict[str, Any]],
         paint: list[dict[str, Any]],
         runs: list[_Run],
+        allow_reflow: bool = True,
     ) -> dict[str, Any]:
         model = self.model
         tag = model.tag[node].lower()
@@ -811,11 +815,13 @@ class _PageCompiler:
             if children:
                 out.setdefault("children", [])
                 out["children"].append(
-                    self.text_node(node, box, styles, runs, node_id=f"{out['id']}:t1", register=False)
+                    self.text_node(node, box, styles, runs, node_id=f"{out['id']}:t1", register=False, allow_reflow=allow_reflow)
                 )
             else:
                 out["type"] = "FRAME"
-                out["children"] = [self.text_node(node, box, styles, runs, node_id=f"{out['id']}:t1", register=False)]
+                out["children"] = [
+                    self.text_node(node, box, styles, runs, node_id=f"{out['id']}:t1", register=False, allow_reflow=allow_reflow)
+                ]
         self.counts["frames" if out["type"] == "FRAME" else "rectangles"] += 1
         self._finalize_fills(out, box)
         self._register_node(node, out)
@@ -984,13 +990,16 @@ class _PageCompiler:
         *,
         node_id: str | None = None,
         register: bool = True,
+        allow_reflow: bool = True,
     ) -> dict[str, Any]:
         font_size = _length(styles.get("font-size", "16px")) or 16.0
         chars: list[str] = []
         run_of: list[int] = []
         previous_end: float | None = None
         for run_index, run in enumerate(runs):
-            collapsed = re.sub(r"\s+", " ", run.text)
+            # <br> runs are exactly "\n"; keep them as hard breaks. Other
+            # whitespace runs collapse to single spaces as before.
+            collapsed = run.text if run.text == "\n" else re.sub(r"\s+", " ", run.text)
             if collapsed == " " and (not chars or chars[-1] == " " or chars[-1] == "\n"):
                 continue
             if (
@@ -1017,6 +1026,15 @@ class _PageCompiler:
         characters = "".join(chars[start:end])
         run_of = run_of[start:end]
         base = _text_style(styles)
+        reflowed = self._reflow_text(node, characters, run_of, runs, base, box, styles) if allow_reflow else None
+        if reflowed is not None:
+            characters, run_of, local, centered, overflow = reflowed
+            if overflow:
+                self.counts["textOverflow"] = self.counts.get("textOverflow", 0) + 1
+        else:
+            local, centered = self._text_box(runs, box, str(base.get("textAlignHorizontal", "LEFT")))
+        if centered:
+            base = dict(base, textAlignHorizontal="CENTER")
         table: dict[str, dict[str, Any]] = {}
         overrides: list[int] = []
         for ch_index, run_index in enumerate(run_of):
@@ -1028,9 +1046,6 @@ class _PageCompiler:
                     if override:
                         key = self._table_key(table, override)
             overrides.append(key)
-        local, centered = self._text_box(runs, box, str(base.get("textAlignHorizontal", "LEFT")))
-        if centered:
-            base = dict(base, textAlignHorizontal="CENTER")
         out: dict[str, Any] = {
             "id": node_id or self.node_id(node),
             "type": "TEXT",
@@ -1047,6 +1062,186 @@ class _PageCompiler:
         if register:
             self._register_node(node, out)
         return out
+
+    def _font_library(self) -> Any | None:
+        """The renderer's FontLibrary, loaded lazily; False marks "unavailable"."""
+        if self._fonts is None:
+            try:
+                from .text import FontLibrary
+
+                self._fonts: Any = FontLibrary()
+            except Exception:
+                self._fonts = False
+        return self._fonts or None
+
+    def _reflow_text(
+        self,
+        node: int,
+        characters: str,
+        run_of: list[int],
+        runs: list[_Run],
+        base: dict[str, Any],
+        box: list[float],
+        styles: dict[str, str],
+    ) -> tuple[str, list[int], dict[str, float], bool, bool] | None:
+        """Re-measure text with the renderer font and wrap to the captured box.
+
+        Returns (characters, run_of, frame-local box, centered, overflow) or
+        None when the renderer font cannot be loaded (caller keeps the old
+        Chrome-drawn box behavior).
+        """
+        lib = self._font_library()
+        if lib is None or not characters.strip():
+            return None
+        points = [bounds for run in runs for bounds in run.boxes]
+        if not points:
+            return None
+        ux0 = min(p[0] for p in points)
+        uy0 = min(p[1] for p in points)
+        ux1 = max(p[0] + p[2] for p in points)
+        uy1 = max(p[1] + p[3] for p in points)
+        union_w, union_h = ux1 - ux0, uy1 - uy0
+        available = max(box[2], 1.0)
+        font_size = float(base.get("fontSize", 16.0) or 16.0)
+        line_height = float(base.get("lineHeightPx", 0.0) or 0.0) or font_size * 1.21
+        align = str(base.get("textAlignHorizontal", "LEFT"))
+        centered = self._is_shrink_to_fit(runs)
+        if centered:
+            align = "CENTER"
+
+        cache: dict[int, tuple[Any, float]] = {}
+
+        def font_for(run_index: int) -> tuple[Any, float]:
+            if run_index not in cache:
+                cache[run_index] = self._run_font(lib, base, runs, run_index, styles, node)
+            return cache[run_index]
+
+        def measure(ch: str, run_index: int) -> float:
+            if ch == "\n":
+                return 0.0  # PIL cannot lay out newlines; breaks are handled structurally
+            font, spacing = font_for(run_index)
+            return float(font.getlength(ch)) + spacing
+
+        total_w = sum(measure(ch, run_index) for ch, run_index in zip(characters, run_of))
+        fills_box = union_w >= available - 4.0
+        single_line = (not fills_box and total_w <= union_w * 1.12 + 2.0) or total_w <= available
+        if single_line:
+            width = max(total_w, union_w)
+            if align == "RIGHT":
+                x0 = ux1 - width
+            elif align == "CENTER":
+                x0 = (ux0 + ux1) / 2.0 - width / 2.0
+            else:
+                x0 = ux0
+            overflow = width > available * 1.10
+            return characters, run_of, self.local_box([x0, uy0, width, union_h]), centered, overflow
+
+        # Greedy word wrap to the captured box width, honoring hard breaks.
+        # Words keep their trailing space so rebuilt lines read naturally.
+        all_lines: list[list[tuple[str, int]]] = []
+        current: list[tuple[str, int]] = []
+        current_w = 0.0
+        word: list[tuple[str, int]] = []
+
+        def flush_word() -> None:
+            nonlocal current, current_w
+            if not word:
+                return
+            word_w = sum(measure(ch, run_index) for ch, run_index in word)
+            if current and current_w + word_w > available:
+                all_lines.append(current)
+                current, current_w = [], 0.0
+            current.extend(word)
+            current_w += word_w
+            word.clear()
+
+        for ch, run_index in zip(characters, run_of):
+            if ch == "\n":
+                flush_word()
+                if current:
+                    all_lines.append(current)
+                    current, current_w = [], 0.0
+                continue
+            if ch == " ":
+                word.append((ch, run_index))
+                flush_word()
+                continue
+            word.append((ch, run_index))
+        flush_word()
+        if current:
+            all_lines.append(current)
+
+        if len(all_lines) <= 1 and all_lines:
+            single = all_lines[0]
+            rebuilt = "".join(ch for ch, _run_index in single)
+            new_run_of = [run_index for _ch, run_index in single]
+            width = max(total_w, union_w)
+            if align == "RIGHT":
+                x0 = ux1 - width
+            elif align == "CENTER":
+                x0 = (ux0 + ux1) / 2.0 - width / 2.0
+            else:
+                x0 = ux0
+            return rebuilt, new_run_of, self.local_box([x0, uy0, width, union_h]), centered, width > available * 1.10
+
+        new_chars: list[str] = []
+        new_run_of: list[int] = []
+        max_line_w = 0.0
+        for line_index, line in enumerate(all_lines):
+            if line_index:
+                new_chars.append("\n")
+                new_run_of.append(new_run_of[-1] if new_run_of else 0)
+            line_w = 0.0
+            for ch, run_index in line:
+                new_chars.append(ch)
+                new_run_of.append(run_index)
+                line_w += measure(ch, run_index)
+            max_line_w = max(max_line_w, line_w)
+        width = max(available, max_line_w)
+        height = max(union_h, len(all_lines) * line_height)
+        if align == "RIGHT":
+            x0 = ux1 - width
+        elif align == "CENTER":
+            x0 = (ux0 + ux1) / 2.0 - width / 2.0
+        else:
+            x0 = ux0
+        overflow = max_line_w > available * 1.10
+        return "".join(new_chars), new_run_of, self.local_box([x0, uy0, width, height]), centered, overflow
+
+    def _run_font(
+        self, lib: Any, base: dict[str, Any], runs: list[_Run], run_index: int, styles: dict[str, str], node: int
+    ) -> tuple[Any, float]:
+        """(PIL font, letter spacing) for one run, honoring span overrides."""
+        family = str(base.get("fontFamily", "Inter") or "Inter")
+        weight = float(base.get("fontWeight", 400.0) or 400.0)
+        italic = bool(base.get("italic", False))
+        size = float(base.get("fontSize", 16.0) or 16.0)
+        spacing = float(base.get("letterSpacing", 0.0) or 0.0)
+        source = runs[run_index].source if 0 <= run_index < len(runs) else -1
+        if source >= 0 and source != node:
+            override = _style_override(self.model.style(source), styles, base)
+            family = str(override.get("fontFamily", family))
+            weight = float(override.get("fontWeight", weight))
+            italic = bool(override.get("italic", italic))
+            size = float(override.get("fontSize", size))
+            spacing = float(override.get("letterSpacing", spacing))
+        path = lib.resolve(family, weight, italic) or lib.resolve("Inter", weight, italic)
+        return lib.font(path, size), spacing
+
+    def _is_shrink_to_fit(self, runs: list[_Run]) -> bool:
+        by_source: dict[int, list[list[float]]] = {}
+        for run in runs:
+            by_source.setdefault(run.source, []).extend(run.boxes)
+        shrink_sources = 0
+        for source, source_boxes in by_source.items():
+            source_box = self.model.box(source)
+            if source_box is None or not source_boxes:
+                continue
+            sx0 = min(b[0] for b in source_boxes)
+            sx1 = max(b[0] + b[2] for b in source_boxes)
+            if source_box[2] - (sx1 - sx0) < 4.0:
+                shrink_sources += 1
+        return bool(shrink_sources) and shrink_sources == len(by_source)
 
     def _table_key(self, table: dict[str, dict[str, Any]], override: dict[str, Any]) -> int:
         for key, value in table.items():
