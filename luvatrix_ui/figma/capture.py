@@ -466,9 +466,11 @@ class _PageCompiler:
 
     # ── text ─────────────────────────────────────────────────────────────────
 
-    def text_runs(self, node: int, top: int = -1) -> list[_Run]:
+    def text_runs(self, node: int, top: int = -1, following: bool = False) -> list[_Run]:
         runs: list[_Run] = []
-        for child in self.model.children(node):
+        siblings = self.model.children(node)
+        for position, child in enumerate(siblings):
+            child_following = following or self._has_following_inline_content(siblings, position)
             kind = self.model.node_type[child]
             if kind == 3:
                 li = self.model.layout_index(child)
@@ -478,6 +480,8 @@ class _PageCompiler:
                 if not text:
                     text = self.model.node_text(child)
                 if not text.strip():
+                    if text and child_following:
+                        runs.append(_Run(node, " ", [], top))
                     continue
                 boxes = [entry["bounds"] for entry in self.model.text_boxes.get(li, ())] if li is not None else []
                 runs.append(_Run(node, text, boxes, top))
@@ -492,8 +496,26 @@ class _PageCompiler:
                 elif self._inline_is_own_node(child):
                     continue
                 else:
-                    runs.extend(self.text_runs(child, top if top >= 0 else child))
+                    runs.extend(self.text_runs(child, top if top >= 0 else child, child_following))
         return runs
+
+    def _has_following_inline_content(self, siblings: list[int], position: int) -> bool:
+        for sibling in siblings[position + 1 :]:
+            kind = self.model.node_type[sibling]
+            if kind == 3:
+                text = self.model.node_text(sibling)
+                if text.strip():
+                    return True
+                continue
+            if kind != 1:
+                continue
+            styles = self.model.style(sibling)
+            if self.model.box(sibling) is None:
+                continue
+            if styles.get("display", "inline") not in INLINE_DISPLAYS:
+                return False
+            return True
+        return False
 
     def _inline_is_own_node(self, node: int) -> bool:
         styles = self.model.style(node)
@@ -516,16 +538,37 @@ class _PageCompiler:
         node_id: str | None = None,
         register: bool = True,
     ) -> dict[str, Any]:
+        font_size = _length(styles.get("font-size", "16px")) or 16.0
         chars: list[str] = []
         run_of: list[int] = []
+        previous_end: float | None = None
         for run_index, run in enumerate(runs):
             collapsed = re.sub(r"\s+", " ", run.text)
             if collapsed == " " and (not chars or chars[-1] == " " or chars[-1] == "\n"):
                 continue
+            if (
+                collapsed
+                and not collapsed.startswith(" ")
+                and chars
+                and chars[-1] not in {" ", "\n"}
+                and run.boxes
+                and previous_end is not None
+                and min(b[0] for b in run.boxes) - previous_end > font_size * 0.25
+            ):
+                chars.append(" ")
+                run_of.append(run_index)
             for ch in collapsed:
                 chars.append(ch)
                 run_of.append(run_index)
-        characters = "".join(chars).strip()
+            if run.boxes:
+                previous_end = max(b[0] + b[2] for b in run.boxes)
+        start, end = 0, len(chars)
+        while start < end and chars[start] in {" ", "\n"}:
+            start += 1
+        while end > start and chars[end - 1] in {" ", "\n"}:
+            end -= 1
+        characters = "".join(chars[start:end])
+        run_of = run_of[start:end]
         base = _text_style(styles)
         table: dict[str, dict[str, Any]] = {}
         overrides: list[int] = []
@@ -586,7 +629,7 @@ class _PageCompiler:
         shrink_sources = 0
         for source, source_boxes in by_source.items():
             source_box = self.model.box(source)
-            if source_box is None:
+            if source_box is None or not source_boxes:
                 continue
             sx0 = min(b[0] for b in source_boxes)
             sx1 = max(b[0] + b[2] for b in source_boxes)
@@ -596,12 +639,15 @@ class _PageCompiler:
             # Shrink-to-fit text (badge, flex item): widen symmetrically.
             align = "CENTER"
             centered = True
+        union_width = ux1 - ux0
         if align == "RIGHT":
             x0 = min(ux0 - slack, box[0])
             width = ux1 + slack - x0
         elif align == "CENTER":
             center = (ux0 + ux1) / 2
-            width = max(ux1 - ux0 + 2 * slack, box[2])
+            # Keep widening bounded so wide boxes cannot push text past the
+            # page edges; the union already spans where Chrome drew the text.
+            width = max(union_width * 1.08, min(max(union_width + 2 * slack, box[2]), union_width * 1.12 + 8.0))
             x0 = center - width / 2
         else:
             x0 = ux0
@@ -1637,6 +1683,25 @@ async def _grow_viewport_to_content(page: Any, width: int, scale: float) -> None
             await page.ready(timeout=5.0)
 
 
+async def _sleep(seconds: float) -> None:
+    import asyncio
+
+    await asyncio.sleep(seconds)
+
+
+async def _scroll_through_page(page: Any) -> None:
+    """Scroll to the bottom and back so lazy content and reveal animations fire."""
+    step = await page.evaluate("window.innerHeight || 800") or 800
+    height = await page.evaluate("document.documentElement.scrollHeight") or 0
+    position = 0
+    while position < height:
+        position += int(step)
+        await page.evaluate(f"window.scrollTo(0, {position})")
+        await _sleep(0.15)
+    await page.evaluate("window.scrollTo(0, 0)")
+    await _sleep(0.3)
+
+
 async def _rasterize_placeholders(page: Any, result: CaptureResult) -> None:
     for entry in result.svg_raster:
         data = await page.screenshot(clip=dict(entry["box"]), scale=2.0)
@@ -1678,7 +1743,9 @@ def capture_design(
                 if selector_ready:
                     await page.wait_for_selector(selector_ready, timeout=max(wait, 10.0))
                 if full_page:
+                    await _scroll_through_page(page)
                     await _grow_viewport_to_content(page, width, scale)
+                    await _sleep(wait)
                 snapshots.append((path, await page.capture_snapshot()))
             result = compile_snapshots(snapshots, click_map=click_map, fetcher=_http_fetcher(url))
             await _rasterize_placeholders(page, result)

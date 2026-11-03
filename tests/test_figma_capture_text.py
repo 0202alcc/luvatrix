@@ -136,7 +136,7 @@ def test_shrink_to_fit_text_boxes_widen_symmetrically() -> None:
     # Content-sized box: widened symmetrically around the Chrome text center.
     center = box["x"] + box["width"] / 2
     assert abs(center - 269.0) < 2.0
-    assert box["width"] >= 58 * 1.12
+    assert box["width"] >= 58 * 1.05
     assert text["style"]["textAlignHorizontal"] == "CENTER"
 
 
@@ -192,6 +192,32 @@ def test_gap_separated_inline_block_words_get_spaces() -> None:
     t2 = b.text("the", parent=word2)
     li2 = b.layout(t2, 140, 0, 60, 40)
     b.text_box(li2, 140, 0, 60, 40)
+
+    result = compile_snapshots([("/", b.build())])
+
+    text = result.file["document"]["children"][0]["children"][0]["children"][0]
+    assert text["characters"] == "Accelerating the"
+
+
+def test_whitespace_inside_wrapper_spans_between_words_becomes_a_space() -> None:
+    b, body = page()
+    heading = b.element("H1", parent=body)
+    b.layout(heading, 0, 0, 300, 40, **{"font-size": "32px"})
+    word = b.element("SPAN", parent=heading)
+    b.layout(word, 0, 0, 120, 40, **{"display": "inline"})
+    t1 = b.text("Accelerating", parent=word)
+    li1 = b.layout(t1, 0, 0, 120, 40)
+    b.text_box(li1, 0, 0, 120, 40)
+    gap_wrapper = b.element("SPAN", parent=heading)
+    b.layout(gap_wrapper, 120, 0, 10, 40, **{"display": "inline"})
+    gap = b.text("\xa0", parent=gap_wrapper)
+    li2 = b.layout(gap, 120, 0, 10, 40)
+    b.text_box(li2, 120, 0, 10, 40)
+    word2 = b.element("SPAN", parent=heading)
+    b.layout(word2, 130, 0, 60, 40, **{"display": "inline"})
+    t2 = b.text("the", parent=word2)
+    li3 = b.layout(t2, 130, 0, 60, 40)
+    b.text_box(li3, 130, 0, 60, 40)
 
     result = compile_snapshots([("/", b.build())])
 
