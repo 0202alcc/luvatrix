@@ -322,8 +322,8 @@ class _PageCompiler:
     def build_node(self, node: int, inside_text: bool = False, parent_tf: Affine | None = None) -> list[dict[str, Any]]:
         if self.model.node_type[node] != 1:
             return []
-        placement = self._resolve_placement(node, parent_tf)
-        nodes = self._build_node_inner(node, inside_text, placement[2] if placement else None)
+        page_tf, placement = self._resolve_placement(node, parent_tf)
+        nodes = self._build_node_inner(node, inside_text, page_tf)
         nodes = self._with_pseudos(node, nodes, placement)
         if placement:
             self._apply_placement(placement, nodes)
@@ -331,23 +331,29 @@ class _PageCompiler:
 
     # ── 2D CSS transforms ────────────────────────────────────────────────────
 
+    @staticmethod
+    def _pure_translation(tf: Affine) -> bool:
+        return abs(tf.a - 1.0) < 1e-9 and abs(tf.d - 1.0) < 1e-9 and abs(tf.b) < 1e-9 and abs(tf.c) < 1e-9
+
     def _resolve_placement(
         self, node: int, parent_tf: Affine | None
-    ) -> tuple[list[float], Affine, Affine, Affine | None, Affine] | None:
-        """Placement for a node inside (possibly) transformed ancestor space.
+    ) -> tuple[Affine, tuple[list[float], Affine, Affine | None, Affine] | None]:
+        """Resolve a node's placement inside (possibly) transformed ancestors.
 
-        Returns (base_box, relativeTransform, page_tf, css_L, parent_tf) where
-        base_box is the pre-transform border box in the parent's local space,
-        relativeTransform maps node-local -> parent-local (renderer contract),
-        and page_tf maps node-local -> frame-local for descendant placement.
-        None when neither the node nor any ancestor carries a 2D transform.
+        Returns (page_tf, placement). `page_tf` maps node-local coordinates to
+        frame-local space and is tracked for every node so descendants of a
+        transformed element can be placed correctly. `placement` is None for
+        the legacy axis-aligned path (frame-absolute boxes, no relativeTransform)
+        and otherwise carries (base_box, rel, css_l, parent_tf): base_box is the
+        pre-transform border box in the parent's local space and rel maps
+        node-local -> parent-local for the renderer.
         """
         box = self.model.box(node)
         if box is None or box[2] <= ZERO_AREA or box[3] <= ZERO_AREA:
-            return None
+            return (parent_tf or Affine()), None
         styles = self.model.style(node)
         if styles.get("visibility", "visible") == "hidden" or styles.get("display", "block") in {"none", "contents"}:
-            return None
+            return (parent_tf or Affine()), None
         raw = (styles.get("transform") or "none").strip().lower()
         css_l: Affine | None = None
         if raw not in {"", "none"}:
@@ -363,16 +369,16 @@ class _PageCompiler:
                         ox, oy = _parse_css_origin(styles.get("transform-origin", ""), box)
                         css_l = Affine.translate(ox, oy) @ Affine(a, b, c, d, e, f) @ Affine.translate(-ox, -oy)
                         self.counts["transforms"] = self.counts.get("transforms", 0) + 1
-        if css_l is None and parent_tf is None:
-            return None
         sp = parent_tf if parent_tf is not None else Affine()
         fbox = [box[0] - self.origin[0], box[1] - self.origin[1], box[2], box[3]]
+        if css_l is None and self._pure_translation(sp):
+            return Affine.translate(fbox[0], fbox[1]), None
         linear = sp if css_l is None else sp @ css_l
         size = _solve_size_from_aabb(linear.a, linear.b, linear.c, linear.d, fbox[2], fbox[3])
         if size is None:
             # Singular system (e.g. a 45deg rotation): keep the node placed in
-            # its parent's space but drop the rotation/skew rather than rendering
-            # an oversized rotated AABB.
+            # its parent's space but drop the rotation/skew rather than
+            # rendering an oversized rotated AABB.
             if css_l is not None:
                 self.unsupported_css("transform-aabb")
                 self.counts["transforms"] = self.counts.get("transforms", 0) - 1
@@ -382,8 +388,8 @@ class _PageCompiler:
             if size is None:
                 scale = linear.mean_scale
                 size = (fbox[2] / scale, fbox[3] / scale)
-            if parent_tf is None:
-                return None
+            if self._pure_translation(sp):
+                return Affine.translate(fbox[0], fbox[1]), None
         width, height = size
         center = (fbox[0] + fbox[2] / 2.0, fbox[1] + fbox[3] / 2.0)
         local_center = css_l.apply(width / 2.0, height / 2.0) if css_l is not None else (width / 2.0, height / 2.0)
@@ -392,12 +398,12 @@ class _PageCompiler:
         mapping = css_l if css_l is not None else Affine()
         rel = Affine.translate(*base) @ mapping
         page_tf = sp @ Affine.translate(*base) @ mapping
-        return ([base[0], base[1], width, height], rel, page_tf, css_l, sp)
+        return page_tf, ([base[0], base[1], width, height], rel, css_l, sp)
 
     def _apply_placement(
-        self, placement: tuple[list[float], Affine, Affine, Affine | None, Affine], nodes: list[dict[str, Any]]
+        self, placement: tuple[list[float], Affine, Affine | None, Affine], nodes: list[dict[str, Any]]
     ) -> None:
-        base_box, rel, _page_tf, css_l, sp = placement
+        base_box, rel, css_l, sp = placement
         if len(nodes) == 1:
             self._decorate(nodes[0], base_box, rel)
             return
@@ -432,7 +438,7 @@ class _PageCompiler:
         self,
         node: int,
         nodes: list[dict[str, Any]],
-        placement: tuple[list[float], Affine, Affine, Affine | None, Affine] | None = None,
+        placement: tuple[list[float], Affine, Affine | None, Affine] | None = None,
     ) -> list[dict[str, Any]]:
         """Attach ::before / ::after children around a node's own emission."""
         entries = self.pseudo_by_node.get(node)
@@ -476,7 +482,7 @@ class _PageCompiler:
         box: list[float],
         styles: dict[str, str],
         children: list[dict[str, Any]],
-        placement: tuple[list[float], Affine, Affine, Affine | None, Affine] | None = None,
+        placement: tuple[list[float], Affine, Affine | None, Affine] | None = None,
     ) -> dict[str, Any]:
         out: dict[str, Any] = {
             "id": f"{self.node_id(node)}:wrap",
@@ -503,7 +509,7 @@ class _PageCompiler:
         node: int,
         raw: dict[str, Any],
         box: list[float],
-        placement: tuple[list[float], Affine, Affine, Affine | None, Affine] | None = None,
+        placement: tuple[list[float], Affine, Affine | None, Affine] | None = None,
     ) -> dict[str, Any] | None:
         st: dict[str, str] = raw.get("styles") or {}
         if st.get("display", "inline") == "none":
@@ -604,7 +610,7 @@ class _PageCompiler:
         self,
         pseudo_box: list[float],
         box: list[float],
-        placement: tuple[list[float], Affine, Affine, Affine | None, Affine] | None,
+        placement: tuple[list[float], Affine, Affine | None, Affine] | None,
     ) -> dict[str, float]:
         if placement is not None:
             return {"x": pseudo_box[0], "y": pseudo_box[1], "width": pseudo_box[2], "height": pseudo_box[3]}
@@ -695,7 +701,7 @@ class _PageCompiler:
             return []
         if tag == "svg":
             return self.svg_nodes(node, box, styles)
-        allow_reflow = parent_tf is None and (styles.get("transform") or "none").strip().lower() in {"", "none"}
+        allow_reflow = (parent_tf is None or self._pure_translation(parent_tf)) and (styles.get("transform") or "none").strip().lower() in {"", "none"}
         runs = self.text_runs(node)
         if tag in {"input", "textarea"} and not runs:
             value = model.input_value.get(node) or model.attr(node, "value") or ""
