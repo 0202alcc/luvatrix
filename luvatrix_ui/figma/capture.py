@@ -144,6 +144,7 @@ class _PageCompiler:
         path: str,
         fetcher: FetchImage | None,
         rasterize: RasterizeSvg | None,
+        images: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.model = model
         self.page_index = page_index
@@ -157,6 +158,8 @@ class _PageCompiler:
         self.selector_index: dict[str, list[int]] = {}
         self.origin = (0.0, 0.0)
         self.page_clickables: list[dict[str, Any]] = []
+        self.images: dict[str, dict[str, Any]] = images if images is not None else {}
+        self.image_failures: list[str] = []
 
     def node_id(self, node: int) -> str:
         backend = self.model.backend[node] if node < len(self.model.backend) else node
@@ -261,9 +264,12 @@ class _PageCompiler:
         if tag == "svg":
             return self.svg_nodes(node, box, styles)
         runs = self.text_runs(node)
-        paint = _background_fills(styles, self, self.fetcher)
+        paint = _image_fill_for_img(self, node) if tag == "img" else []
+        if not paint:
+            paint = _background_fills(styles, self, self.fetcher, box)
         has_border = _border_info(styles) is not None
         has_shadow = styles.get("box-shadow", "none") != "none"
+        keep_leaf = tag == "img"
         element_children = [
             c
             for c in model.children(node)
@@ -278,7 +284,7 @@ class _PageCompiler:
                 return [self.box_node(node, box, styles, painted, paint, runs)]
             return [self.text_node(node, box, styles, runs)]
         children = self.build_children(node, inside_text=bool(runs))
-        if children or paint or has_border or has_shadow:
+        if children or paint or has_border or has_shadow or keep_leaf:
             return [self.box_node(node, box, styles, children, paint, runs)]
         if runs:
             return [self.text_node(node, box, styles, runs)]
@@ -530,16 +536,203 @@ def _background_fills(
     styles: dict[str, str],
     compiler: "_PageCompiler",
     fetcher: FetchImage | None,
+    box: list[float],
 ) -> list[dict[str, Any]]:
     fills: list[dict[str, Any]] = []
     color = styles.get("background-color", "rgba(0, 0, 0, 0)")
     solid = _solid_fills(color, compiler)
     if solid:
         fills.extend(solid)
-    image = styles.get("background-image", "none")
-    if image and image != "none":
-        compiler.unsupported_css("background-image")
+    layers = _split_top_level(styles.get("background-image", "none"), ",")
+    paints: list[dict[str, Any]] = []
+    for layer in reversed([layer.strip() for layer in layers if layer.strip()]):
+        if not layer or layer == "none":
+            continue
+        paint = _background_layer_paint(layer, compiler, box)
+        if paint is None:
+            compiler.unsupported_css("background-image")
+        elif paint:
+            paints.extend(paint)
+    fills.extend(paints)
     return fills
+
+
+def _background_layer_paint(layer: str, compiler: "_PageCompiler", box: list[float]) -> list[dict[str, Any]]:
+    lowered = layer.lower()
+    url = _url_token(layer)
+    if url:
+        fill = _image_fill(url, compiler)
+        return [fill] if fill else []
+    if lowered.startswith("linear-gradient("):
+        paint = _gradient_paint("GRADIENT_LINEAR", layer, box)
+        return [paint] if paint else []
+    if lowered.startswith("radial-gradient("):
+        paint = _gradient_paint("GRADIENT_RADIAL", layer, box)
+        return [paint] if paint else []
+    return []
+
+
+def _url_token(layer: str) -> str | None:
+    match = re.search(r"""url\(\s*(['"]?)([^'")]+)\1\s*\)""", layer, re.IGNORECASE)
+    return match.group(2) if match else None
+
+
+def _image_fill(url: str, compiler: "_PageCompiler") -> dict[str, Any] | None:
+    ref = "img-" + sha1(url.encode("utf-8")).hexdigest()[:12]
+    if ref not in compiler.images:
+        data = compiler.fetcher(url) if compiler.fetcher else None
+        if data is None:
+            compiler.image_failures.append(url)
+            return None
+        compiler.images[ref] = {"url": url, "data": data}
+    return {"type": "IMAGE", "imageRef": ref, "scaleMode": "FILL"}
+
+
+def _image_fill_for_img(compiler: "_PageCompiler", node: int) -> list[dict[str, Any]]:
+    src = compiler.model.attr(node, "src")
+    if not src:
+        return []
+    fill = _image_fill(src, compiler)
+    return [fill] if fill else []
+
+
+def _gradient_paint(figma_kind: str, layer: str, box: list[float]) -> dict[str, Any] | None:
+    open_index = layer.find("(")
+    close_index = layer.rfind(")")
+    if open_index < 0 or close_index <= open_index:
+        return None
+    tokens = _split_top_level(layer[open_index + 1 : close_index], ",")
+    tokens = [t.strip() for t in tokens if t.strip()]
+    angle = 180.0
+    if figma_kind == "GRADIENT_LINEAR" and tokens and _is_angle_token(tokens[0]):
+        angle = _css_angle(tokens[0])
+        tokens = tokens[1:]
+    if figma_kind == "GRADIENT_RADIAL":
+        tokens = _strip_radial_geometry(tokens)
+    stops: list[dict[str, Any]] = []
+    for token in tokens:
+        color_part, position = _split_stop(token)
+        color = parse_css_color(color_part)
+        if color is None:
+            return None
+        stops.append({"position": position, "color": {"r": color[0], "g": color[1], "b": color[2], "a": color[3]}})
+    if not stops:
+        return None
+    stops = _distribute_stops(stops)
+    if len(stops) == 1:
+        stops = [dict(stops[0], position=0.0), dict(stops[0], position=1.0)]
+    if figma_kind == "GRADIENT_LINEAR":
+        handles = _linear_handles(angle, box)
+    else:
+        handles = [{"x": 0.5, "y": 0.5}, {"x": 1.0, "y": 0.5}, {"x": 0.5, "y": 1.0}]
+    return {"type": figma_kind, "gradientStops": stops, "gradientHandlePositions": handles}
+
+
+_ANGLE_TOKEN = re.compile(r"^([-\d.]+)(deg|grad|rad|turn)$")
+
+
+def _is_angle_token(token: str) -> bool:
+    return bool(_ANGLE_TOKEN.match(token.strip().lower())) or token.strip().lower().startswith("to ")
+
+
+_RADIAL_GEOMETRY = {"circle", "ellipse", "at", "closest-side", "farthest-side", "closest-corner", "farthest-corner", "center", "top", "bottom", "left", "right"}
+
+
+def _strip_radial_geometry(tokens: list[str]) -> list[str]:
+    out = list(tokens)
+    at_pending = False
+    while out:
+        token = out[0].strip().lower()
+        if token in _RADIAL_GEOMETRY or token.endswith(("-side", "-corner")) or at_pending:
+            out.pop(0)
+            at_pending = token == "at"
+            continue
+        break
+    return out
+
+
+def _distribute_stops(stops: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if all(stop["position"] < 0 for stop in stops):
+        count = len(stops)
+        for index, stop in enumerate(stops):
+            stop["position"] = index / (count - 1) if count > 1 else 0.0
+    else:
+        previous, next_index = 0.0, 0
+        for index, stop in enumerate(stops):
+            if stop["position"] < 0:
+                lookahead = next(
+                    (s["position"] for s in stops[index + 1 :] if s["position"] >= 0), 1.0
+                )
+                span = max(next_index + 1, index + 1)
+                stop["position"] = previous + (lookahead - previous) * (index + 1 - next_index) / (span - next_index)
+            else:
+                previous, next_index = stop["position"], index
+    for stop in stops:
+        stop["position"] = max(0.0, min(1.0, stop["position"]))
+    return sorted(stops, key=lambda s: s["position"])
+
+
+def _split_stop(token: str) -> tuple[str, float]:
+    parts = token.rsplit(None, 1)
+    if len(parts) == 2 and re.match(r"^[\d.]+%$", parts[1]):
+        return parts[0], float(parts[1][:-1]) / 100.0
+    if len(parts) == 2 and re.match(r"^[\d.]+px$", parts[1]):
+        return parts[0], 0.0
+    return token, -1.0
+
+
+def _css_angle(token: str) -> float:
+    token = token.strip().lower()
+    match = re.match(r"^([-\d.]+)deg$", token)
+    if match:
+        return float(match.group(1))
+    if token.startswith("to "):
+        words = token[3:].split()
+        horizontal = {"right": 90, "left": -90}.get(words[-1] if words else "", None)
+        vertical = {"top": 0, "bottom": 180}.get(words[0] if words else "", None)
+        if horizontal is not None and vertical is not None:
+            return (horizontal + vertical) / 2
+        if horizontal is not None:
+            return horizontal
+        if vertical is not None:
+            return vertical
+    return 180.0
+
+
+def _linear_handles(angle: float, box: list[float]) -> list[dict[str, float]]:
+    import math
+
+    width, height = max(box[2], 1e-6), max(box[3], 1e-6)
+    rad = math.radians(angle)
+    sin_v, cos_v = math.sin(rad), math.cos(rad)
+    length = abs(width * sin_v) + abs(height * cos_v)
+    p0x = 0.5 - sin_v * length / (2 * width)
+    p0y = 0.5 + cos_v * length / (2 * height)
+    p1x = 0.5 + sin_v * length / (2 * width)
+    p1y = 0.5 - cos_v * length / (2 * height)
+    return [
+        {"x": p0x, "y": p0y},
+        {"x": p1x, "y": p1y},
+        {"x": p0x + cos_v, "y": p0y + sin_v},
+    ]
+
+
+def _split_top_level(value: str, separator: str) -> list[str]:
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for ch in value:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == separator and depth == 0:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(ch)
+    parts.append("".join(current))
+    return parts
 
 
 def _solid_fills(value: str | None, compiler: "_PageCompiler") -> list[dict[str, Any]]:
@@ -551,12 +744,147 @@ def _solid_fills(value: str | None, compiler: "_PageCompiler") -> list[dict[str,
     return [solid_paint(color[0], color[1], color[2])]
 
 
+_BORDER_SIDES = ("top", "right", "bottom", "left")
+
+
 def _border_info(styles: dict[str, str]) -> dict[str, Any] | None:
-    return None
+    widths = [_length(styles.get(f"border-{side}-width", "0px")) for side in _BORDER_SIDES]
+    if not any(width > 0 for width in widths):
+        return None
+    kinds = [styles.get(f"border-{side}-style", "none").strip().lower() for side in _BORDER_SIDES]
+    color = None
+    for side, width in zip(_BORDER_SIDES, widths):
+        if width > 0:
+            color = parse_css_color(styles.get(f"border-{side}-color", ""))
+            if color is not None:
+                break
+    if color is None:
+        return None
+    out: dict[str, Any] = {
+        "strokes": [{"type": "SOLID", "color": {"r": color[0], "g": color[1], "b": color[2], "a": color[3]}}],
+        "strokeAlign": "INSIDE",
+    }
+    if len({round(w, 6) for w in widths}) == 1:
+        out["strokeWeight"] = widths[0]
+    else:
+        out["individualStrokeWeights"] = {
+            "strokeTopWeight": widths[0],
+            "strokeRightWeight": widths[1],
+            "strokeBottomWeight": widths[2],
+            "strokeLeftWeight": widths[3],
+        }
+    if "dashed" in kinds:
+        weight = max(widths)
+        out["strokeDashes"] = [max(3.0, weight * 3), max(3.0, weight * 2)]
+    elif "dotted" in kinds:
+        weight = max(widths)
+        out["strokeDashes"] = [max(1.0, weight), max(1.0, weight)]
+    return out
 
 
 def _effects(styles: dict[str, str], compiler: "_PageCompiler") -> list[dict[str, Any]]:
-    return []
+    effects: list[dict[str, Any]] = []
+    for shadow in _split_top_level(styles.get("box-shadow", "none"), ","):
+        effect = _shadow_effect(shadow.strip())
+        if effect:
+            effects.append(effect)
+    backdrop = _blur_radius(styles.get("backdrop-filter", "none"))
+    if backdrop is not None:
+        effects.append({"type": "BACKGROUND_BLUR", "radius": backdrop, "visible": True})
+    layer_blur = _blur_radius(styles.get("filter", "none"))
+    if layer_blur is not None:
+        effects.append({"type": "LAYER_BLUR", "radius": layer_blur, "visible": True})
+    return effects
+
+
+def _shadow_effect(shadow: str) -> dict[str, Any] | None:
+    if not shadow or shadow == "none":
+        return None
+    inset = "inset" in [t.lower() for t in shadow.split()]
+    color = None
+    numbers: list[float] = []
+    for token in _split_top_level(shadow, " "):
+        token = token.strip()
+        if not token:
+            continue
+        if token.lower() == "inset":
+            continue
+        parsed = parse_css_color(token)
+        if parsed is not None and color is None:
+            color = parsed
+            continue
+        length = _length(token)
+        if length or re.match(r"^[-\d.]+(px|rem|em)?$", token):
+            numbers.append(length)
+    if color is None:
+        color = (0.0, 0.0, 0.0, 0.25)
+    while len(numbers) < 4:
+        numbers.append(0.0)
+    return {
+        "type": "INNER_SHADOW" if inset else "DROP_SHADOW",
+        "color": {"r": color[0], "g": color[1], "b": color[2], "a": color[3]},
+        "offset": {"x": numbers[0], "y": numbers[1]},
+        "radius": numbers[2],
+        "spread": numbers[3],
+        "visible": True,
+        "blendMode": "NORMAL",
+    }
+
+
+def _blur_radius(value: str) -> float | None:
+    match = re.search(r"blur\(\s*([\d.]+)px\s*\)", value or "", re.IGNORECASE)
+    return float(match.group(1)) if match else None
+
+
+def _opacity(styles: dict[str, str]) -> float | None:
+    try:
+        opacity = float(styles.get("opacity", "1"))
+    except ValueError:
+        return None
+    return opacity if opacity < 1.0 else None
+
+
+_BLEND_MODES = {
+    "multiply": "MULTIPLY",
+    "screen": "SCREEN",
+    "overlay": "OVERLAY",
+    "darken": "DARKEN",
+    "lighten": "LIGHTEN",
+    "color-dodge": "COLOR_DODGE",
+    "color-burn": "COLOR_BURN",
+    "hard-light": "HARD_LIGHT",
+    "soft-light": "SOFT_LIGHT",
+    "difference": "DIFFERENCE",
+    "exclusion": "EXCLUSION",
+    "hue": "HUE",
+    "saturation": "SATURATION",
+    "color": "COLOR",
+    "luminosity": "LUMINOSITY",
+}
+
+
+def _blend_mode(styles: dict[str, str]) -> str:
+    return _BLEND_MODES.get(styles.get("mix-blend-mode", "normal").strip().lower(), "")
+
+
+def _overflow_direction(model: SnapshotModel, node: int, overflow_x: str, overflow_y: str) -> str:
+    box = model.box(node)
+    if box is None:
+        return "NONE"
+    child_boxes = [model.box(c) for c in model.children(node) if model.node_type[c] == 1 and model.box(c) is not None]
+    if not child_boxes:
+        return "NONE"
+    reach_y = max(b[1] + b[3] for b in child_boxes)
+    reach_x = max(b[0] + b[2] for b in child_boxes)
+    vertical = overflow_y in {"auto", "scroll"} and reach_y > box[1] + box[3] + 1.0
+    horizontal = overflow_x in {"auto", "scroll"} and reach_x > box[0] + box[2] + 1.0
+    if vertical and horizontal:
+        return "HORIZONTAL_AND_VERTICAL_SCROLLING"
+    if vertical:
+        return "VERTICAL_SCROLLING"
+    if horizontal:
+        return "HORIZONTAL_SCROLLING"
+    return "NONE"
 
 
 def _corner_radii(styles: dict[str, str], box: list[float]) -> dict[str, Any]:
@@ -646,15 +974,11 @@ def _component(value: str, scale: float, *, alpha: bool = False) -> float:
 
 
 def _opacity(styles: dict[str, str]) -> float | None:
-    return None
-
-
-def _blend_mode(styles: dict[str, str]) -> str:
-    return ""
-
-
-def _overflow_direction(model: SnapshotModel, node: int, overflow_x: str, overflow_y: str) -> str:
-    return "NONE"
+    try:
+        opacity = float(styles.get("opacity", "1"))
+    except ValueError:
+        return None
+    return opacity if opacity < 1.0 else None
 
 
 def _text_style(styles: dict[str, str]) -> dict[str, Any]:
@@ -738,7 +1062,7 @@ def compile_snapshots(
     for page_index, (path, snapshot) in enumerate(pages):
         model = SnapshotModel(snapshot, props)
         report_page: dict[str, Any] = {"path": path, "title": str(model.doc.get("title") or "")}
-        compiler = _PageCompiler(model, page_index=page_index, path=path, fetcher=fetcher, rasterize=rasterize)
+        compiler = _PageCompiler(model, page_index=page_index, path=path, fetcher=fetcher, rasterize=rasterize, images=images)
         compiler.page_clickables: list[dict[str, Any]] = []
         frame = compiler.build()
         width = frame["absoluteBoundingBox"]["width"]
@@ -754,6 +1078,7 @@ def compile_snapshots(
                 "counts": dict(compiler.counts),
                 "skipped": dict(compiler.skipped),
                 "unsupported": dict(compiler.unsupported),
+                "images": {"downloaded": len(compiler.images), "failed": list(compiler.image_failures)},
             }
         )
         page_reports.append(report_page)
@@ -777,7 +1102,13 @@ def compile_snapshots(
             ],
         },
     }
-    report = {"pages": page_reports}
+    report = {
+        "pages": page_reports,
+        "images": {
+            "downloaded": len(images),
+            "failed": sorted({url for page in page_reports for url in page.get("images", {}).get("failed", ())}),
+        },
+    }
     return CaptureResult(file=payload, images=images, clickables=clickables, report=report)
 
 
