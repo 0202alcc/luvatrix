@@ -90,3 +90,10 @@ Repository-level operating rules and quick-start context for human and AI contri
    - `uv run python main.py run-app examples/hello_world --render headless --ticks 1 --energy-safety off`
 4. Broader runtime checks should be chosen based on touched modules, for example macOS renderer tests for `luvatrix_core/platform/macos/*` changes or planes tests for `luvatrix_ui/planes_*` changes.
 5. Retained scene-scroll throughput: `uv run python tools/perf/macos_scene_scroll_harness.py`.
+
+## Cursor Cloud specific instructions
+1. This repo pins Python `3.14+freethreaded` in `.python-version`. Ubuntu's system Python is too old. Install that interpreter with `uv python install 3.14+freethreaded`. Cloud Agent login shells do not load `~/.bashrc`, so `uv` and `uvx` must be on the default PATH (`/usr/local/bin`).
+2. Install locked dependencies with `uv sync --frozen --extra desktop`. The required tests import torch from that extra. `pytest` is not a project dependency; invoke it as `uv run --extra desktop --with pytest pytest`.
+3. On Linux, headless smoke uses `examples/hello_world`, which declares no `platform_support`: `uv run python main.py validate-app examples/hello_world --render headless` and `uv run python main.py run-app examples/hello_world --render headless --ticks 1 --energy-safety off`. `examples/full_suite_interactive --render headless` cannot infer a platform among android, ios, macos, and web; pass an explicit target such as `--render web`.
+4. macOS, iOS, and Android GUI targets do not run in this Linux VM. `validate-app` can still check a platform-scoped manifest, such as `examples/camera --render android-emulator`, without the Android SDK or Xcode. Launching those renderers needs the native toolchain.
+5. `[tool.uv.sources] coinbasetraderbot` points at `../CoinbaseTraderBot` and is not a lockfile dependency. `uv sync` succeeds without that sibling checkout.
