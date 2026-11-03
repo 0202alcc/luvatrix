@@ -17,6 +17,7 @@ from .geometry import (
     Shape,
     flatten,
     intersect,
+    dashed_polyline_coverage,
     path_shape_from_geometry,
     polyline_coverage,
     union,
@@ -326,7 +327,15 @@ class FigmaRenderer:
         cov: Coverage | None
         geometry = node.get("strokeGeometry")
         per_side = node.get("individualStrokeWeights")
-        if geometry:
+        dashes = node.get("strokeDashes") or node.get("dashPattern")
+        if dashes:
+            pattern = [float(d) * tf.mean_scale for d in dashes if float(d) > 0]
+            default = "INSIDE" if node.get("type") in BOX_TYPES | {"ELLIPSE"} else "CENTER"
+            align = str(node.get("strokeAlign", default))
+            w = weight * tf.mean_scale
+            offset = {"INSIDE": -w / 2, "OUTSIDE": w / 2}.get(align, 0.0)
+            cov = dashed_polyline_coverage(self._stroke_polylines(shape, tf, offset), w, pattern, clip.rect)
+        elif geometry:
             stroke_shape = path_shape_from_geometry(geometry)
             cov = stroke_shape.coverage(tf, clip.rect) if stroke_shape is not None else None
         elif isinstance(per_side, dict) and isinstance(shape, RoundedRect):
@@ -361,6 +370,29 @@ class FigmaRenderer:
             if sw > 0 and sh > 0:
                 merged = union(merged, RoundedRect(sw, sh).coverage(tf @ Affine.translate(x, y), clip.rect))
         return merged
+
+    def _stroke_polylines(self, shape: Shape, tf: Affine, offset_px: float = 0.0) -> list[np.ndarray]:
+        """Device-space outline polylines used for dash patterns.
+
+        Figma dashes follow the shape's centerline; SDF bands have no arc-length
+        parameterization, so dashed strokes are drawn from the flattened outline
+        (closed for box/ellipse shapes, offset per strokeAlign) via polyline
+        rasterization instead of the SDF band.
+        """
+        if isinstance(shape, (RoundedRect, Ellipse)):
+            polys = shape._offset_polygons(tf, offset_px) if offset_px else shape.polygons(tf)
+            return [np.vstack([poly, poly[:1]]) for poly in polys]
+        if isinstance(shape, _LineShape):
+            return [tf.apply_points(np.array([[0.0, 0.0], [shape.width, 0.0]]))]
+        if isinstance(shape, PathShape):
+            polys: list[np.ndarray] = []
+            for subpaths, _rule in shape.paths:
+                for sub, poly in zip(subpaths, _flatten_each(subpaths, tf)):
+                    if sub and sub[-1][0] == "Z":
+                        poly = np.vstack([poly, poly[:1]])
+                    polys.append(poly)
+            return polys
+        return [poly for poly in shape.polygons(tf) if len(poly) >= 2]
 
     # ── text ─────────────────────────────────────────────────────────────────
 

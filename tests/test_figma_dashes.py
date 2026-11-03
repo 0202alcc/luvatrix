@@ -28,9 +28,9 @@ def _dashed(**extra):
     )
 
 
-def _top_edge_runs(img: np.ndarray) -> list[int]:
-    """Run lengths of red pixels along the stroke's top edge."""
-    row = img[11, :, 0] > 200
+def _top_edge_runs(img: np.ndarray, scale: float = 1.0) -> list[int]:
+    """Run lengths of red-ink pixels along the stroke's top edge."""
+    row = img[int(11 * scale), :, 1] < 128
     runs, current = [], 0
     for value in row:
         if value:
@@ -64,8 +64,8 @@ def test_dash_pattern_key_is_honored_too() -> None:
 
 
 def test_dash_lengths_scale_with_the_render_scale() -> None:
-    small = _top_edge_runs(_render([_dashed(strokeDashes=[6, 4])], scale=1.0))
-    large = _top_edge_runs(_render([_dashed(strokeDashes=[6, 4])], scale=2.0))
+    small = _top_edge_runs(_render([_dashed(strokeDashes=[6, 4])], scale=1.0), scale=1.0)
+    large = _top_edge_runs(_render([_dashed(strokeDashes=[6, 4])], scale=2.0), scale=2.0)
 
     assert small and large
     assert abs(large[0] - 2 * small[0]) <= 4
@@ -87,12 +87,12 @@ def test_vector_lines_can_be_dashed() -> None:
 
     img = _render([line])
 
-    row = img[50, :, 0] > 200
-    runs, gaps = [], 0
+    row = img[50, :, 1] < 128
+    gaps, current = 0, 0
     for value in row:
         if not value:
+            current += 1
+        elif current:
             gaps += 1
-        elif gaps:
-            runs.append(gaps)
-            gaps = 0
-    assert len(runs) >= 1
+            current = 0
+    assert gaps >= 2
