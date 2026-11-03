@@ -231,13 +231,13 @@ class _PageCompiler:
             return "Home"
         return segment[-1].replace("-", " ").replace("_", " ").title()
 
-    def build_children(self, node: int) -> list[dict[str, Any]]:
+    def build_children(self, node: int, inside_text: bool = False) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         for child in self.model.children(node):
-            out.extend(self.build_node(child))
+            out.extend(self.build_node(child, inside_text=inside_text))
         return out
 
-    def build_node(self, node: int) -> list[dict[str, Any]]:
+    def build_node(self, node: int, inside_text: bool = False) -> list[dict[str, Any]]:
         model = self.model
         if model.node_type[node] != 1:
             return []
@@ -252,17 +252,32 @@ class _PageCompiler:
         if styles.get("display", "block") in {"none", "contents"}:
             self.skip("hidden", node)
             return []
+        tag = model.tag[node].lower()
+        if inside_text and styles.get("display", "inline") in INLINE_DISPLAYS and not self._inline_has_own_box(node):
+            return []
         if box[2] <= ZERO_AREA or box[3] <= ZERO_AREA:
             self.skip("zeroSize", node)
             return []
-        tag = model.tag[node].lower()
         if tag == "svg":
             return self.svg_nodes(node, box, styles)
-        children = self.build_children(node)
         runs = self.text_runs(node)
         paint = _background_fills(styles, self, self.fetcher)
         has_border = _border_info(styles) is not None
         has_shadow = styles.get("box-shadow", "none") != "none"
+        element_children = [
+            c
+            for c in model.children(node)
+            if model.node_type[c] == 1 and model.layout_index(c) is not None and model.style(c).get("display", "inline") not in {"none"}
+        ]
+        if runs and all(model.style(c).get("display", "inline") in INLINE_DISPLAYS for c in element_children):
+            painted: list[dict[str, Any]] = []
+            for child in element_children:
+                if self._inline_has_own_box(child):
+                    painted.extend(self.build_node(child, inside_text=True))
+            if painted or paint or has_border or has_shadow:
+                return [self.box_node(node, box, styles, painted, paint, runs)]
+            return [self.text_node(node, box, styles, runs)]
+        children = self.build_children(node, inside_text=bool(runs))
         if children or paint or has_border or has_shadow:
             return [self.box_node(node, box, styles, children, paint, runs)]
         if runs:
@@ -392,7 +407,7 @@ class _PageCompiler:
                 if not text.strip():
                     continue
                 boxes = [entry["bounds"] for entry in self.model.text_boxes.get(li, ())] if li is not None else []
-                runs.append(_Run(child, text, boxes))
+                runs.append(_Run(node, text, boxes))
             elif kind == 1:
                 styles = self.model.style(child)
                 if self.model.box(child) is None:
@@ -400,7 +415,7 @@ class _PageCompiler:
                 if styles.get("display", "inline") not in INLINE_DISPLAYS:
                     continue
                 if self.model.tag[child].lower() == "br":
-                    runs.append(_Run(child, "\n", []))
+                    runs.append(_Run(node, "\n", []))
                 elif self._inline_has_own_box(child):
                     continue
                 else:
@@ -465,7 +480,7 @@ class _PageCompiler:
         return next_key
 
     def _text_box(self, runs: list[_Run], box: list[float]) -> dict[str, float]:
-        points = [entry["bounds"] for run in runs for entry in run.boxes]
+        points = [bounds for run in runs for bounds in run.boxes]
         if not points:
             return self.local_box(box)
         x0 = min(p[0] for p in points)
@@ -643,11 +658,68 @@ def _overflow_direction(model: SnapshotModel, node: int, overflow_x: str, overfl
 
 
 def _text_style(styles: dict[str, str]) -> dict[str, Any]:
-    return {}
+    font_size = _length(styles.get("font-size", "16px")) or 16.0
+    style: dict[str, Any] = {
+        "fontFamily": _font_family(styles.get("font-family", "")),
+        "fontWeight": _number(styles.get("font-weight", "400"), 400.0),
+        "italic": styles.get("font-style", "normal") == "italic",
+        "fontSize": font_size,
+        "letterSpacing": _length(styles.get("letter-spacing", "normal")),
+        "textAutoResize": "HEIGHT",
+        "textAlignHorizontal": {"center": "CENTER", "right": "RIGHT", "end": "RIGHT"}.get(
+            styles.get("text-align", "start").strip(), "LEFT"
+        ),
+    }
+    line_height = styles.get("line-height", "normal").strip()
+    if line_height not in {"", "normal"}:
+        style["lineHeightPx"] = _length(line_height, font_size)
+        style["lineHeightUnit"] = "PIXELS"
+    decoration = styles.get("text-decoration", "none")
+    if "underline" in decoration:
+        style["textDecoration"] = "UNDERLINE"
+    elif "line-through" in decoration:
+        style["textDecoration"] = "STRIKETHROUGH"
+    case = styles.get("text-transform", "none").strip()
+    if case in {"uppercase", "lowercase", "capitalize"}:
+        style["textCase"] = {"uppercase": "UPPER", "lowercase": "LOWER", "capitalize": "TITLE"}[case]
+    return style
+
+
+def _font_family(value: str) -> str:
+    match = re.search(r'"([^"]+)"|\'([^\']+)\'|([^,]+)', value or "")
+    if not match:
+        return "Inter"
+    family = next(group for group in match.groups() if group is not None)
+    return family.strip() or "Inter"
+
+
+def _number(value: str, default: float) -> float:
+    try:
+        return float((value or "").strip())
+    except ValueError:
+        return default
 
 
 def _style_override(source: dict[str, str], base: dict[str, str], base_style: dict[str, Any]) -> dict[str, Any]:
-    return {}
+    source_style = _text_style(source)
+    override: dict[str, Any] = {}
+    for key in ("fontFamily", "fontWeight", "italic", "fontSize", "letterSpacing", "textDecoration", "textCase"):
+        if key in source_style and source_style[key] != base_style.get(key):
+            override[key] = source_style[key]
+    source_color = parse_css_color(source.get("color", ""))
+    base_color = parse_css_color(base.get("color", ""))
+    if source_color is not None and source_color != base_color:
+        if source_color[3] < 1.0:
+            override["fills"] = [
+                {
+                    "type": "SOLID",
+                    "color": {"r": source_color[0], "g": source_color[1], "b": source_color[2], "a": 1.0},
+                    "opacity": source_color[3],
+                }
+            ]
+        else:
+            override["fills"] = [solid_paint(source_color[0], source_color[1], source_color[2])]
+    return override
 
 
 def compile_snapshots(
