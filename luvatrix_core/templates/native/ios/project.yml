@@ -145,10 +145,11 @@ targets:
       - name: Process PyPackages native extensions
         script: |
           set -e
-          if [ "$PLATFORM_NAME" = "iphonesimulator" ]; then
+          # process_dylibs copies build/$PLATFORM_FAMILY_NAME-dylib-Info-template.plist;
+          # Python-Apple-support 3.12 ships only the shared iOS template.
+          PLATFORM_FAMILY_NAME="iOS"
+          if [ "$PLATFORM_NAME" = "iphonesimulator" ] && [ -f "$PROJECT_DIR/Python/PythonSupport.xcframework/build/iOS-simulator-dylib-Info-template.plist" ]; then
             PLATFORM_FAMILY_NAME="iOS-simulator"
-          else
-            PLATFORM_FAMILY_NAME="iOS"
           fi
           CODESIGNING_FOLDER_PATH="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app"
           PRODUCT_BUNDLE_IDENTIFIER="${PRODUCT_BUNDLE_IDENTIFIER:-com.luvatrix.app}"

@@ -10,7 +10,7 @@
     "Luvatrix/PythonBridge.h": "7f902ba317aff9903fe5c276277c884366fdae9588e0bcd29c9213016383b4aa",
     "Luvatrix/PythonBridge.m": "712aa4786e54bbcd5ccf2a983cd2c58bc1e02c7112cd507b1b3da9fb6c55234f",
     "Luvatrix/main.swift": "abb81b2bd3715628eb6d6932a360bb24c567b8a189ad8670825ff45fbb48220c",
-    "project.yml": "eb195af273e32beefe7bec4ad683776abed4f64060f1d00a7d6648a5ffb68224",
+    "project.yml": "15e5e1d58a1e4e0e953236f7012cdf0753a476cb83173b582a5c4ae6f8325d82",
     "scripts/setup_ios.sh": "582d6296bbc5fefaf5a6d1088770256a2f5078df932ff7c2a8638d43f058aaab"
   },
   "luvatrix_version": "0.2.10",
