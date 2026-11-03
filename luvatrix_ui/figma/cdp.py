@@ -222,6 +222,10 @@ class CDPPage:
         result = await self.call("Runtime.evaluate", {"expression": expression, "returnByValue": True})
         return (result or {}).get("result", {}).get("value")
 
+    async def set_cookies(self, cookies: Sequence[tuple[str, str]], url: str) -> None:
+        for name, value in cookies:
+            await self.call("Network.setCookie", {"name": name, "value": value, "url": url})
+
     async def set_viewport(self, width: int, height: int, scale: float = 3.0) -> None:
         await self.call(
             "Emulation.setDeviceMetricsOverride",

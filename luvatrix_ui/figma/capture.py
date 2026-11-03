@@ -2694,6 +2694,16 @@ def _load_click_map(path: str | Path | None) -> dict[str, str]:
     return {str(k): str(v) for k, v in parsed.items()}
 
 
+def _parse_cookie_args(args: Sequence[str]) -> list[tuple[str, str]]:
+    cookies: list[tuple[str, str]] = []
+    for arg in args:
+        name, separator, value = arg.partition("=")
+        if not separator or not name:
+            raise CaptureError(f"invalid --cookie {arg!r}; expected NAME=VALUE")
+        cookies.append((name, value))
+    return cookies
+
+
 def _page_targets(base: str, pages: Sequence[str]) -> list[tuple[str, str]]:
     from urllib.parse import urlparse, urljoin
 
@@ -2777,6 +2787,7 @@ def capture_design(
     selector_ready: str | None = None,
     full_page: bool = False,
     chrome_path: str | None = None,
+    cookies: Sequence[tuple[str, str]] = (),
 ) -> CaptureResult:
     """Capture `url` (plus extra pages) with headless Chrome and compile to Figma."""
     import asyncio
@@ -2792,6 +2803,8 @@ def capture_design(
             conn = await cdp.CDPConnection.connect(chrome.ws_url)
             page = await cdp.CDPPage.attach(conn)
             await page.set_viewport(width, height, scale)
+            if cookies:
+                await page.set_cookies(cookies, url=url)
             snapshots = []
             pseudos: list[list[dict[str, Any]]] = []
             for path, target in _page_targets(url, pages):

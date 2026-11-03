@@ -202,6 +202,7 @@ def add_figma_parser(subparsers: Any) -> None:
     capture.add_argument("--full-page", dest="full_page", action="store_true", default=True, help="Capture the full scrollable page (default)")
     capture.add_argument("--viewport-only", dest="full_page", action="store_false", help="Capture only the pinned viewport")
     capture.add_argument("--chrome", default=None, help="Path to a Chrome binary (default: autodetect)")
+    capture.add_argument("--cookie", action="append", default=None, metavar="NAME=VALUE", help="Send this cookie with every captured page (repeatable)")
 
     init = sub.add_parser("init-app", help="Create an app folder that runs design/figma_file.json")
     init.add_argument("app_dir", type=Path)
@@ -242,6 +243,7 @@ def run_figma_command(args: Any) -> None:
             selector_ready=args.selector_ready,
             full_page=args.full_page,
             chrome_path=args.chrome,
+            cookies=capture._parse_cookie_args(getattr(args, "cookie", None) or []),
         )
         design = capture.write_capture(result, args.out)
         page_count = len(result.report.get("pages", ()))
