@@ -33,7 +33,7 @@ class HelloIosExampleTests(unittest.TestCase):
                 self.assertTrue(validation.ok)
 
     def test_rejected_for_non_ios_targets(self) -> None:
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(RuntimeError, "does not support host os `android`"):
             validate_app_install(APP_DIR, render="android-emulator")
 
     def test_renders_non_empty_frame_as_ios(self) -> None:
