@@ -54,7 +54,7 @@ jobs:
 
       - name: Prepare embedded iOS Python
         working-directory: ${{ env.APP_DIR }}
-        run: bash ios/scripts/setup_ios.sh
+        run: uv run bash ios/scripts/setup_ios.sh
 
       - name: Run tour
         run: |
