@@ -136,6 +136,7 @@ class _Run:
     source: int
     text: str
     boxes: list[list[float]]
+    top: int = -1
 
 
 class _PageCompiler:
@@ -165,6 +166,7 @@ class _PageCompiler:
         self.page_clickables: list[dict[str, Any]] = []
         self.images: dict[str, dict[str, Any]] = images if images is not None else {}
         self.image_failures: list[str] = []
+        self.emitted: dict[str, dict[str, Any]] = {}
 
     def node_id(self, node: int) -> str:
         backend = self.model.backend[node] if node < len(self.model.backend) else node
@@ -261,7 +263,7 @@ class _PageCompiler:
             self.skip("hidden", node)
             return []
         tag = model.tag[node].lower()
-        if inside_text and styles.get("display", "inline") in INLINE_DISPLAYS and not self._inline_has_own_box(node):
+        if inside_text and styles.get("display", "inline") in INLINE_DISPLAYS and not self._inline_is_own_node(node):
             return []
         if box[2] <= ZERO_AREA or box[3] <= ZERO_AREA:
             self.skip("zeroSize", node)
@@ -281,13 +283,13 @@ class _PageCompiler:
             if model.node_type[c] == 1 and model.layout_index(c) is not None and model.style(c).get("display", "inline") not in {"none"}
         ]
         if runs and all(model.style(c).get("display", "inline") in INLINE_DISPLAYS for c in element_children):
-            painted: list[dict[str, Any]] = []
-            for child in element_children:
-                if self._inline_has_own_box(child):
-                    painted.extend(self.build_node(child, inside_text=True))
-            if painted or paint or has_border or has_shadow:
-                return [self.box_node(node, box, styles, painted, paint, runs)]
-            return [self.text_node(node, box, styles, runs)]
+            wrapped = paint or has_border or has_shadow or self._is_interactive(node)
+            sequence = self._text_container_sequence(node, element_children, wrapped)
+            if wrapped:
+                return [self.box_node(node, box, styles, sequence, paint, [])]
+            if len(sequence) == 1:
+                self._register_node(node, sequence[0])
+            return sequence
         children = self.build_children(node, inside_text=bool(runs))
         if children or paint or has_border or has_shadow or keep_leaf:
             return [self.box_node(node, box, styles, children, paint, runs)]
@@ -295,6 +297,42 @@ class _PageCompiler:
             return [self.text_node(node, box, styles, runs)]
         self.skip("empty", node)
         return []
+
+    def _text_container_sequence(self, node: int, element_children: list[int], wrapped: bool) -> list[dict[str, Any]]:
+        """Interleave text chunks and own-node inline children in DOM order."""
+        runs = self.text_runs(node)
+        own: dict[int, list[dict[str, Any]]] = {}
+        for child in element_children:
+            if self._inline_is_own_node(child):
+                own[child] = self.build_node(child, inside_text=False)
+        pieces: list[tuple[str, Any]] = []
+        pending: list[_Run] = []
+        run_index = 0
+        for child in self.model.children(node):
+            while run_index < len(runs) and runs[run_index].top <= child and (runs[run_index].top < child or child in own):
+                pending.append(runs[run_index])
+                run_index += 1
+            if child in own:
+                if pending:
+                    pieces.append(("text", pending))
+                    pending = []
+                pieces.append(("nodes", own[child]))
+        pending.extend(runs[run_index:])
+        if pending:
+            pieces.append(("text", pending))
+        box = self.model.box(node) or [0, 0, 0, 0]
+        styles = self.model.style(node)
+        suffix = wrapped or sum(1 for kind, _payload in pieces if kind == "text") > 1
+        result: list[dict[str, Any]] = []
+        chunk_index = 0
+        for kind, payload in pieces:
+            if kind == "nodes":
+                result.extend(payload)
+                continue
+            chunk_index += 1
+            node_id = f"{self.node_id(node)}:t{chunk_index}" if suffix else self.node_id(node)
+            result.append(self.text_node(node, box, styles, payload, node_id=node_id, register=False))
+        return result
 
     def box_node(
         self,
@@ -338,15 +376,23 @@ class _PageCompiler:
         if runs:
             if children:
                 out.setdefault("children", [])
-                out["children"].append(self.text_node(node, box, styles, runs))
+                out["children"].append(
+                    self.text_node(node, box, styles, runs, node_id=f"{out['id']}:t1", register=False)
+                )
             else:
                 out["type"] = "FRAME"
-                out["children"] = [self.text_node(node, box, styles, runs)]
+                out["children"] = [self.text_node(node, box, styles, runs, node_id=f"{out['id']}:t1", register=False)]
         self.counts["frames" if out["type"] == "FRAME" else "rectangles"] += 1
-        if self._is_interactive(node):
-            self.register_selector(node)
-            self.clickable_entry(node, out)
+        self._register_node(node, out)
         return out
+
+    def _register_node(self, node: int, out: dict[str, Any]) -> None:
+        if self._is_interactive(node):
+            self.clickable_entry(node, out)
+        attrs = self.model.attrs[node] if node < len(self.model.attrs) else {}
+        if self._is_interactive(node) or attrs.get("id") or attrs.get("data-testid") or attrs.get("role") or attrs.get("onclick"):
+            self.register_selector(node)
+        self.emitted[self.node_id(node)] = out
 
     def node_name(self, node: int) -> str:
         model = self.model
@@ -362,7 +408,7 @@ class _PageCompiler:
     def clickable_entry(self, node: int, figma_node: dict[str, Any]) -> None:
         attrs = self.model.attrs[node] if node < len(self.model.attrs) else {}
         name = self.text_of_subtree(node) or attrs.get("aria-label") or self.model.tag[node].lower()
-        box = figma_node["absoluteBoundingBox"]
+        box = self.local_box(self.model.box(node) or [0, 0, 0, 0])
         self.page_clickables.append(
             {
                 "nodeId": figma_node["id"],
@@ -408,7 +454,7 @@ class _PageCompiler:
 
     # ── text ─────────────────────────────────────────────────────────────────
 
-    def text_runs(self, node: int) -> list[_Run]:
+    def text_runs(self, node: int, top: int = -1) -> list[_Run]:
         runs: list[_Run] = []
         for child in self.model.children(node):
             kind = self.model.node_type[child]
@@ -418,7 +464,7 @@ class _PageCompiler:
                 if not text.strip():
                     continue
                 boxes = [entry["bounds"] for entry in self.model.text_boxes.get(li, ())] if li is not None else []
-                runs.append(_Run(node, text, boxes))
+                runs.append(_Run(node, text, boxes, top))
             elif kind == 1:
                 styles = self.model.style(child)
                 if self.model.box(child) is None:
@@ -426,14 +472,14 @@ class _PageCompiler:
                 if styles.get("display", "inline") not in INLINE_DISPLAYS:
                     continue
                 if self.model.tag[child].lower() == "br":
-                    runs.append(_Run(node, "\n", []))
-                elif self._inline_has_own_box(child):
+                    runs.append(_Run(node, "\n", [], top))
+                elif self._inline_is_own_node(child):
                     continue
                 else:
-                    runs.extend(self.text_runs(child))
+                    runs.extend(self.text_runs(child, top if top >= 0 else child))
         return runs
 
-    def _inline_has_own_box(self, node: int) -> bool:
+    def _inline_is_own_node(self, node: int) -> bool:
         styles = self.model.style(node)
         tag = self.model.tag[node].lower()
         return (
@@ -441,9 +487,19 @@ class _PageCompiler:
             or styles.get("background-image", "none") != "none"
             or _border_info(styles) is not None
             or tag in {"img", "svg"}
+            or self._is_interactive(node)
         )
 
-    def text_node(self, node: int, box: list[float], styles: dict[str, str], runs: list[_Run]) -> dict[str, Any]:
+    def text_node(
+        self,
+        node: int,
+        box: list[float],
+        styles: dict[str, str],
+        runs: list[_Run],
+        *,
+        node_id: str | None = None,
+        register: bool = True,
+    ) -> dict[str, Any]:
         chars: list[str] = []
         run_of: list[int] = []
         for run_index, run in enumerate(runs):
@@ -468,7 +524,7 @@ class _PageCompiler:
             overrides.append(key)
         local = self._text_box(runs, box)
         out: dict[str, Any] = {
-            "id": self.node_id(node),
+            "id": node_id or self.node_id(node),
             "type": "TEXT",
             "name": self.node_name(node),
             "absoluteBoundingBox": local,
@@ -480,6 +536,8 @@ class _PageCompiler:
             out["characterStyleOverrides"] = overrides
             out["styleOverrideTable"] = {str(k): v for k, v in table.items()}
         self.counts["texts"] += 1
+        if register:
+            self._register_node(node, out)
         return out
 
     def _table_key(self, table: dict[str, dict[str, Any]], override: dict[str, Any]) -> int:
@@ -509,6 +567,50 @@ class _PageCompiler:
             "width": max(0.0, box[2]),
             "height": max(0.0, box[3]),
         }
+
+    # ── click-map interactions ───────────────────────────────────────────────
+
+    def apply_click_map(
+        self,
+        click_map: dict[str, str],
+        frames_by_path: dict[str, dict[str, Any]],
+    ) -> tuple[int, list[dict[str, Any]]]:
+        mapped, unmatched = 0, []
+        for key, target_path in click_map.items():
+            page, separator, selector = key.partition("->")
+            if not separator:
+                continue
+            if page.strip() != self.path:
+                continue
+            selector = _normalize_selector(selector)
+            target = frames_by_path.get(target_path.strip())
+            if target is None:
+                unmatched.append({"page": self.path, "selector": selector, "target": target_path.strip(), "reason": "target page not captured"})
+                continue
+            node = self._match_selector(selector)
+            if node is None:
+                unmatched.append({"page": self.path, "selector": selector, "target": target_path.strip(), "reason": "no node matched"})
+                continue
+            node["interactions"] = [
+                {
+                    "trigger": {"type": "ON_CLICK"},
+                    "actions": [{"type": "NODE", "destinationId": target["id"], "navigation": "NAVIGATE", "transition": None}],
+                }
+            ]
+            mapped += 1
+        return mapped, unmatched
+
+    def _match_selector(self, selector: str) -> dict[str, Any] | None:
+        candidates: list[int] = []
+        for token, nodes in self.selector_index.items():
+            if _normalize_selector(token) == selector:
+                candidates.extend(nodes)
+        interactive = [n for n in candidates if self._is_interactive(n)]
+        pool = interactive or candidates
+        if not pool:
+            return None
+        chosen = pool[-1]
+        return self.emitted.get(self.node_id(chosen))
 
     # ── scroll and fixed children ────────────────────────────────────────────
 
@@ -1177,26 +1279,28 @@ def compile_snapshots(
     *,
     fetcher: FetchImage | None = None,
     rasterize: RasterizeSvg | None = None,
+    click_map: dict[str, str] | None = None,
     props: Sequence[str] = STYLE_PROPS,
 ) -> CaptureResult:
     """Compile captured DOMSnapshot payloads into a Figma file payload."""
-    canvas_children: list[dict[str, Any]] = []
     clickables: list[dict[str, Any]] = []
     images: dict[str, dict[str, Any]] = {}
     page_reports: list[dict[str, Any]] = []
+    compilers: list[_PageCompiler] = []
+    frames: list[dict[str, Any]] = []
     offset_x = 0.0
     for page_index, (path, snapshot) in enumerate(pages):
         model = SnapshotModel(snapshot, props)
         report_page: dict[str, Any] = {"path": path, "title": str(model.doc.get("title") or "")}
         compiler = _PageCompiler(model, page_index=page_index, path=path, fetcher=fetcher, rasterize=rasterize, images=images)
-        compiler.page_clickables: list[dict[str, Any]] = []
         frame = compiler.build()
         width = frame["absoluteBoundingBox"]["width"]
         frame["absoluteBoundingBox"]["x"] = offset_x
         for child in walk_all(frame):
             child["absoluteBoundingBox"]["x"] += offset_x
         offset_x += width + 200.0
-        canvas_children.append(frame)
+        compilers.append(compiler)
+        frames.append(frame)
         clickables.extend(compiler.page_clickables)
         report_page.update(
             {
@@ -1208,7 +1312,14 @@ def compile_snapshots(
             }
         )
         page_reports.append(report_page)
-    first = canvas_children[0]
+    mapped_total, unmatched_total = 0, []
+    if click_map:
+        frames_by_path = {path: frame for (path, _snapshot), frame in zip(pages, frames)}
+        for compiler in compilers:
+            mapped, unmatched = compiler.apply_click_map(click_map, frames_by_path)
+            mapped_total += mapped
+            unmatched_total.extend(unmatched)
+    first = frames[0]
     payload = {
         "name": str(first["name"]),
         "schemaVersion": 0,
@@ -1223,7 +1334,7 @@ def compile_snapshots(
                     "name": "Captures",
                     "backgroundColor": {"r": 1, "g": 1, "b": 1, "a": 1},
                     "flowStartingPoints": [{"nodeId": first["id"], "name": "Start"}],
-                    "children": canvas_children,
+                    "children": frames,
                 }
             ],
         },
@@ -1234,8 +1345,13 @@ def compile_snapshots(
             "downloaded": len(images),
             "failed": sorted({url for page in page_reports for url in page.get("images", {}).get("failed", ())}),
         },
+        "interactions": {"mapped": mapped_total, "unmatched": unmatched_total},
     }
     return CaptureResult(file=payload, images=images, clickables=clickables, report=report)
+
+
+def _normalize_selector(selector: str) -> str:
+    return re.sub(r"['\"]", "", selector.strip())
 
 
 def walk_all(node: dict[str, Any]) -> Iterable[dict[str, Any]]:
