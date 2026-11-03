@@ -58,7 +58,7 @@ jobs:
 
       - name: Run tour
         run: |
-          uv run python main.py figma ios-tour "$APP_DIR" \
+          caffeinate -dims uv run python main.py figma ios-tour "$APP_DIR" \
             --tour "${TOUR:-$APP_DIR/tour.json}" \
             --out "$RUNNER_TEMP/ios-tour" \
             --simulator "$SIMULATOR" \
