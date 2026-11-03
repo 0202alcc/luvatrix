@@ -24,7 +24,7 @@ import re
 from typing import Any
 
 from .cdp import STYLE_PROPS
-from .geometry import PathError, Segment, parse_path
+from .geometry import Affine, PathError, Segment, parse_path
 
 DEFAULT_VIEWPORT = (393, 852, 3.0)
 SVG_MAX_SHAPES = 24
@@ -310,17 +310,127 @@ class _PageCompiler:
             return "Home"
         return segment[-1].replace("-", " ").replace("_", " ").title()
 
-    def build_children(self, node: int, inside_text: bool = False) -> list[dict[str, Any]]:
+    def build_children(self, node: int, inside_text: bool = False, parent_tf: Affine | None = None) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         for child in self.model.children(node):
-            out.extend(self.build_node(child, inside_text=inside_text))
+            out.extend(self.build_node(child, inside_text=inside_text, parent_tf=parent_tf))
         return out
 
-    def build_node(self, node: int, inside_text: bool = False) -> list[dict[str, Any]]:
-        nodes = self._build_node_inner(node, inside_text)
-        return self._with_pseudos(node, nodes)
+    def build_node(self, node: int, inside_text: bool = False, parent_tf: Affine | None = None) -> list[dict[str, Any]]:
+        if self.model.node_type[node] != 1:
+            return []
+        placement = self._resolve_placement(node, parent_tf)
+        nodes = self._build_node_inner(node, inside_text, placement[2] if placement else None)
+        nodes = self._with_pseudos(node, nodes, placement)
+        if placement:
+            self._apply_placement(placement, nodes)
+        return nodes
 
-    def _with_pseudos(self, node: int, nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # ── 2D CSS transforms ────────────────────────────────────────────────────
+
+    def _resolve_placement(
+        self, node: int, parent_tf: Affine | None
+    ) -> tuple[list[float], Affine, Affine, Affine | None, Affine] | None:
+        """Placement for a node inside (possibly) transformed ancestor space.
+
+        Returns (base_box, relativeTransform, page_tf, css_L, parent_tf) where
+        base_box is the pre-transform border box in the parent's local space,
+        relativeTransform maps node-local -> parent-local (renderer contract),
+        and page_tf maps node-local -> frame-local for descendant placement.
+        None when neither the node nor any ancestor carries a 2D transform.
+        """
+        box = self.model.box(node)
+        if box is None or box[2] <= ZERO_AREA or box[3] <= ZERO_AREA:
+            return None
+        styles = self.model.style(node)
+        if styles.get("visibility", "visible") == "hidden" or styles.get("display", "block") in {"none", "contents"}:
+            return None
+        raw = (styles.get("transform") or "none").strip().lower()
+        css_l: Affine | None = None
+        if raw not in {"", "none"}:
+            if "matrix3d" in raw or "perspective" in raw:
+                self.unsupported_css("transform3d")
+            else:
+                matrix = _parse_css_matrix(raw)
+                if matrix is None:
+                    self.unsupported_css("transform-parse")
+                else:
+                    a, b, c, d, e, f = matrix
+                    if (a, b, c, d, e, f) != _IDENTITY_MATRIX:
+                        ox, oy = _parse_css_origin(styles.get("transform-origin", ""), box)
+                        css_l = Affine.translate(ox, oy) @ Affine(a, b, c, d, e, f) @ Affine.translate(-ox, -oy)
+                        self.counts["transforms"] = self.counts.get("transforms", 0) + 1
+        if css_l is None and parent_tf is None:
+            return None
+        sp = parent_tf if parent_tf is not None else Affine()
+        fbox = [box[0] - self.origin[0], box[1] - self.origin[1], box[2], box[3]]
+        linear = sp if css_l is None else sp @ css_l
+        size = _solve_size_from_aabb(linear.a, linear.b, linear.c, linear.d, fbox[2], fbox[3])
+        if size is None:
+            # Singular system (e.g. a 45deg rotation): keep the node placed in
+            # its parent's space but drop the rotation/skew rather than rendering
+            # an oversized rotated AABB.
+            if css_l is not None:
+                self.unsupported_css("transform-aabb")
+                self.counts["transforms"] = self.counts.get("transforms", 0) - 1
+            css_l = None
+            linear = sp
+            size = _solve_size_from_aabb(linear.a, linear.b, linear.c, linear.d, fbox[2], fbox[3])
+            if size is None:
+                scale = linear.mean_scale
+                size = (fbox[2] / scale, fbox[3] / scale)
+            if parent_tf is None:
+                return None
+        width, height = size
+        center = (fbox[0] + fbox[2] / 2.0, fbox[1] + fbox[3] / 2.0)
+        local_center = css_l.apply(width / 2.0, height / 2.0) if css_l is not None else (width / 2.0, height / 2.0)
+        base_x, base_y = sp.inverse().apply(*center)
+        base = (base_x - local_center[0], base_y - local_center[1])
+        mapping = css_l if css_l is not None else Affine()
+        rel = Affine.translate(*base) @ mapping
+        page_tf = sp @ Affine.translate(*base) @ mapping
+        return ([base[0], base[1], width, height], rel, page_tf, css_l, sp)
+
+    def _apply_placement(
+        self, placement: tuple[list[float], Affine, Affine, Affine | None, Affine], nodes: list[dict[str, Any]]
+    ) -> None:
+        base_box, rel, _page_tf, css_l, sp = placement
+        if len(nodes) == 1:
+            self._decorate(nodes[0], base_box, rel)
+            return
+        # Multi-node emissions (text pieces, svg vectors): each piece keeps its
+        # own captured AABB, re-based into the parent's transformed space with
+        # the element's own CSS transform applied.
+        for out in nodes:
+            bbox = out.get("absoluteBoundingBox") or {}
+            aabb = [float(bbox.get("x", 0.0)), float(bbox.get("y", 0.0)), float(bbox.get("width", 0.0)), float(bbox.get("height", 0.0))]
+            linear = sp if css_l is None else sp @ css_l
+            size = _solve_size_from_aabb(linear.a, linear.b, linear.c, linear.d, aabb[2], aabb[3])
+            if size is None:
+                scale = linear.mean_scale
+                size = (aabb[2] / scale, aabb[3] / scale)
+            center = (aabb[0] + aabb[2] / 2.0, aabb[1] + aabb[3] / 2.0)
+            local_center = css_l.apply(size[0] / 2.0, size[1] / 2.0) if css_l is not None else (size[0] / 2.0, size[1] / 2.0)
+            base_x, base_y = sp.inverse().apply(*center)
+            piece_rel = Affine.translate(base_x - local_center[0], base_y - local_center[1]) @ (css_l or Affine())
+            self._decorate(out, [base_x - local_center[0], base_y - local_center[1], size[0], size[1]], piece_rel)
+
+    def _decorate(self, out: dict[str, Any], base_box: list[float], rel: Affine) -> None:
+        out["size"] = {"x": base_box[2], "y": base_box[3]}
+        out["relativeTransform"] = [[rel.a, rel.c, rel.tx], [rel.b, rel.d, rel.ty]]
+        out["absoluteBoundingBox"] = {
+            "x": base_box[0],
+            "y": base_box[1],
+            "width": base_box[2],
+            "height": base_box[3],
+        }
+
+    def _with_pseudos(
+        self,
+        node: int,
+        nodes: list[dict[str, Any]],
+        placement: tuple[list[float], Affine, Affine, Affine | None, Affine] | None = None,
+    ) -> list[dict[str, Any]]:
         """Attach ::before / ::after children around a node's own emission."""
         entries = self.pseudo_by_node.get(node)
         if not entries:
@@ -338,13 +448,13 @@ class _PageCompiler:
         before: list[dict[str, Any]] = []
         after: list[dict[str, Any]] = []
         for raw in entries:
-            built = self._pseudo_node(node, raw, box)
+            built = self._pseudo_node(node, raw, box, placement)
             if built is not None:
                 (before if raw.get("pseudo") == "before" else after).append(built)
         if not before and not after:
             return nodes
         if not nodes:
-            return [self._pseudo_container(node, box, styles, before + after)]
+            return [self._pseudo_container(node, box, styles, before + after, placement)]
         if len(nodes) == 1 and nodes[0].get("type") == "FRAME":
             nodes[0]["children"] = before + (nodes[0].get("children") or []) + after
             return nodes
@@ -355,9 +465,16 @@ class _PageCompiler:
             self.counts["rectangles"] -= 1
             self.counts["frames"] += 1
             return nodes
-        return [self._pseudo_container(node, box, styles, before + nodes + after)]
+        return [self._pseudo_container(node, box, styles, before + nodes + after, placement)]
 
-    def _pseudo_container(self, node: int, box: list[float], styles: dict[str, str], children: list[dict[str, Any]]) -> dict[str, Any]:
+    def _pseudo_container(
+        self,
+        node: int,
+        box: list[float],
+        styles: dict[str, str],
+        children: list[dict[str, Any]],
+        placement: tuple[list[float], Affine, Affine, Affine | None, Affine] | None = None,
+    ) -> dict[str, Any]:
         out: dict[str, Any] = {
             "id": f"{self.node_id(node)}:wrap",
             "type": "FRAME",
@@ -366,6 +483,8 @@ class _PageCompiler:
             "clipsContent": False,
             "children": children,
         }
+        if placement is not None:
+            self._apply_placement(placement, [out])
         paint = _background_fills(styles, self, self.fetcher, box)
         if paint:
             out["fills"] = paint
@@ -375,7 +494,13 @@ class _PageCompiler:
         self.counts["frames"] += 1
         return out
 
-    def _pseudo_node(self, node: int, raw: dict[str, Any], box: list[float]) -> dict[str, Any] | None:
+    def _pseudo_node(
+        self,
+        node: int,
+        raw: dict[str, Any],
+        box: list[float],
+        placement: tuple[list[float], Affine, Affine, Affine | None, Affine] | None = None,
+    ) -> dict[str, Any] | None:
         st: dict[str, str] = raw.get("styles") or {}
         if st.get("display", "inline") == "none":
             return None
@@ -396,17 +521,20 @@ class _PageCompiler:
             return None
         x, y = _pseudo_origin(raw, st, box, width, height)
         pseudo_box = [x, y, width, height]
+        emitted = self._pseudo_emitted_box(pseudo_box, box, placement)
         suffix = "before" if raw.get("pseudo") == "before" else "after"
         if st.get("transform", "none") != "none":
             self.unsupported_css("pseudo-transform")
         if content and not bg and border is None:
-            out = self._pseudo_text_node(st, content, pseudo_box, f"{self.node_id(node)}:{suffix}", f"{self.node_name(node)}::{suffix}")
+            out = self._pseudo_text_node(
+                st, content, emitted, f"{self.node_id(node)}:{suffix}", f"{self.node_name(node)}::{suffix}"
+            )
         elif content:
             frame: dict[str, Any] = {
                 "id": f"{self.node_id(node)}:{suffix}",
                 "type": "FRAME",
                 "name": f"{self.node_name(node)}::{suffix}",
-                "absoluteBoundingBox": self.local_box(pseudo_box),
+                "absoluteBoundingBox": emitted,
                 "clipsContent": False,
                 "fills": bg,
             }
@@ -420,13 +548,26 @@ class _PageCompiler:
                 frame["effects"] = effects
             line_height = _length(st.get("line-height", ""), font_size) or font_size * 1.21
             text_w = min(width, max(font_size * 0.62 * len(content), 1.0))
+            text_local = [(width - text_w) / 2, (height - line_height) / 2, text_w, line_height]
+            if placement is None:
+                text_emitted = {
+                    "x": x + text_local[0] + box[0] - self.origin[0],
+                    "y": y + text_local[1] + box[1] - self.origin[1],
+                    "width": text_w,
+                    "height": line_height,
+                }
+                text_rel = None
+            else:
+                text_emitted = {"x": text_local[0], "y": text_local[1], "width": text_w, "height": line_height}
+                text_rel = Affine.translate(text_local[0], text_local[1])
             frame["children"] = [
                 self._pseudo_text_node(
                     st,
                     content,
-                    [x + (width - text_w) / 2, y + (height - line_height) / 2, text_w, line_height],
+                    text_emitted,
                     f"{self.node_id(node)}:{suffix}:t1",
                     "label",
+                    text_rel,
                 )
             ]
             out = frame
@@ -436,7 +577,7 @@ class _PageCompiler:
                 "id": f"{self.node_id(node)}:{suffix}",
                 "type": "RECTANGLE",
                 "name": f"{self.node_name(node)}::{suffix}",
-                "absoluteBoundingBox": self.local_box(pseudo_box),
+                "absoluteBoundingBox": emitted,
                 "fills": bg,
             }
             if border:
@@ -448,22 +589,49 @@ class _PageCompiler:
             if effects:
                 out["effects"] = effects
             self.counts["rectangles"] += 1
+        if placement is not None:
+            self._decorate(out, list(pseudo_box), Affine.translate(pseudo_box[0], pseudo_box[1]))
         self.counts["pseudos"] = self.counts.get("pseudos", 0) + 1
         return out
 
+    def _pseudo_emitted_box(
+        self,
+        pseudo_box: list[float],
+        box: list[float],
+        placement: tuple[list[float], Affine, Affine, Affine | None, Affine] | None,
+    ) -> dict[str, float]:
+        if placement is not None:
+            return {"x": pseudo_box[0], "y": pseudo_box[1], "width": pseudo_box[2], "height": pseudo_box[3]}
+        return {
+            "x": pseudo_box[0] + box[0] - self.origin[0],
+            "y": pseudo_box[1] + box[1] - self.origin[1],
+            "width": pseudo_box[2],
+            "height": pseudo_box[3],
+        }
+
     def _pseudo_text_node(
-        self, st: dict[str, str], content: str, pseudo_box: list[float], node_id: str, name: str
+        self,
+        st: dict[str, str],
+        content: str,
+        emitted: dict[str, float],
+        node_id: str,
+        name: str,
+        rel: Affine | None = None,
     ) -> dict[str, Any]:
         self.counts["texts"] += 1
-        return {
+        out: dict[str, Any] = {
             "id": node_id,
             "type": "TEXT",
             "name": name,
-            "absoluteBoundingBox": self.local_box(pseudo_box),
+            "absoluteBoundingBox": emitted,
             "characters": content,
             "style": _text_style(st),
             "fills": _solid_fills(st.get("color"), self) or [solid_paint(0, 0, 0)],
         }
+        if rel is not None:
+            out["size"] = {"x": emitted["width"], "y": emitted["height"]}
+            out["relativeTransform"] = [[rel.a, rel.c, rel.tx], [rel.b, rel.d, rel.ty]]
+        return out
 
     def _group_pseudo_entries(self, entries: Sequence[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
         grouped: dict[int, list[dict[str, Any]]] = {}
@@ -498,7 +666,7 @@ class _PageCompiler:
                 return node
         return self._root_node()
 
-    def _build_node_inner(self, node: int, inside_text: bool = False) -> list[dict[str, Any]]:
+    def _build_node_inner(self, node: int, inside_text: bool = False, parent_tf: Affine | None = None) -> list[dict[str, Any]]:
         model = self.model
         if model.node_type[node] != 1:
             return []
@@ -539,13 +707,13 @@ class _PageCompiler:
         ]
         if runs and all(model.style(c).get("display", "inline") in INLINE_DISPLAYS for c in element_children):
             wrapped = paint or has_border or has_shadow or self._is_interactive(node)
-            sequence = self._text_container_sequence(node, element_children, wrapped, runs)
+            sequence = self._text_container_sequence(node, element_children, wrapped, runs, parent_tf)
             if wrapped:
                 return [self.box_node(node, box, styles, sequence, paint, [])]
             if len(sequence) == 1:
                 self._register_node(node, sequence[0])
             return sequence
-        children = self.build_children(node, inside_text=bool(runs))
+        children = self.build_children(node, inside_text=bool(runs), parent_tf=parent_tf)
         if children or paint or has_border or has_shadow or keep_leaf:
             return [self.box_node(node, box, styles, children, paint, runs)]
         if runs:
@@ -554,13 +722,18 @@ class _PageCompiler:
         return []
 
     def _text_container_sequence(
-        self, node: int, element_children: list[int], wrapped: bool, runs: list[_Run]
+        self,
+        node: int,
+        element_children: list[int],
+        wrapped: bool,
+        runs: list[_Run],
+        parent_tf: Affine | None = None,
     ) -> list[dict[str, Any]]:
         """Interleave text chunks and own-node inline children in DOM order."""
         own: dict[int, list[dict[str, Any]]] = {}
         for child in element_children:
             if self._inline_is_own_node(child):
-                own[child] = self.build_node(child, inside_text=False)
+                own[child] = self.build_node(child, inside_text=False, parent_tf=parent_tf)
         pieces: list[tuple[str, Any]] = []
         pending: list[_Run] = []
         run_index = 0
@@ -1174,11 +1347,11 @@ def _pseudo_dimension(value: str | None, base: float) -> float | None:
 def _pseudo_origin(
     raw: dict[str, Any], st: dict[str, str], box: list[float], width: float, height: float
 ) -> tuple[float, float]:
-    """Pseudo box origin in page coordinates.
+    """Pseudo box origin in the anchor element's local coordinates.
 
-    Absolute pseudos anchor to the parent's padding box using computed
+    Absolute pseudos anchor to the element's padding box using computed
     top/left/right/bottom (approximation: the containing block is always the
-    anchor element). Static pseudos anchor to the parent's content-box origin,
+    anchor element). Static pseudos anchor to the element's content-box origin,
     which is exact for the common `padding-left` bullet/badge case and an
     approximation whenever the pseudo flows after real content.
     """
@@ -1189,8 +1362,8 @@ def _pseudo_origin(
     bb = _length(parent.get("border-bottom-width", "0px"))
     position = st.get("position", "static")
     if position in {"absolute", "fixed"}:
-        px0 = box[0] + bl
-        py0 = box[1] + bt
+        px0 = bl
+        py0 = bt
         pw = max(box[2] - bl - br, 0.0)
         ph = max(box[3] - bt - bb, 0.0)
         left = _auto_length(st.get("left"))
@@ -1217,7 +1390,7 @@ def _pseudo_origin(
         return x, y
     pl = _length(parent.get("padding-left", "0px"))
     pt = _length(parent.get("padding-top", "0px"))
-    return box[0] + bl + pl, box[1] + bt + pt
+    return bl + pl, bt + pt
 
 
 def _background_fills(
@@ -1712,6 +1885,62 @@ def _number(value: str, default: float) -> float:
         return default
 
 
+_IDENTITY_MATRIX = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+
+def _parse_css_matrix(value: str) -> tuple[float, float, float, float, float, float] | None:
+    """Parse a computed 2D `matrix(a, b, c, d, e, f)`; None when absent/3D."""
+    text = (value or "").strip()
+    if not text or text.lower() == "none":
+        return None
+    match = re.match(r"^matrix\(([^)]*)\)$", text, re.IGNORECASE)
+    if not match:
+        return None
+    parts = [float(p) for p in re.split(r"[,\s]+", match.group(1).strip()) if p]
+    if len(parts) != 6:
+        return None
+    return (parts[0], parts[1], parts[2], parts[3], parts[4], parts[5])
+
+
+def _parse_css_origin(value: str, box: list[float]) -> tuple[float, float]:
+    """transform-origin in px relative to the border-box top-left."""
+    tokens = (value or "").split()
+    if not tokens:
+        return box[2] / 2.0, box[3] / 2.0
+
+    def axis(token: str, base: float, default: float) -> float:
+        token = token.strip()
+        if token.endswith("%"):
+            try:
+                return base * float(token[:-1]) / 100.0
+            except ValueError:
+                return default
+        return _length(token) or default
+
+    ox = axis(tokens[0], box[2], box[2] / 2.0)
+    oy = axis(tokens[1], box[3], box[3] / 2.0) if len(tokens) > 1 else box[3] / 2.0
+    return ox, oy
+
+
+def _solve_size_from_aabb(
+    a: float, b: float, c: float, d: float, width: float, height: float
+) -> tuple[float, float] | None:
+    """Recover a base box size from its transformed AABB via |linear| extents.
+
+    W = |a|w + |c|h and H = |b|w + |d|h; singular exactly at 45deg-style
+    rotations where the system has no unique solution.
+    """
+    aa, cc, bb, dd = abs(a), abs(c), abs(b), abs(d)
+    det = aa * dd - cc * bb
+    if abs(det) < 1e-9:
+        return None
+    w = (dd * width - cc * height) / det
+    h = (aa * height - bb * width) / det
+    if w <= 0 or h <= 0:
+        return None
+    return w, h
+
+
 def _style_override(source: dict[str, str], base: dict[str, str], base_style: dict[str, Any]) -> dict[str, Any]:
     source_style = _text_style(source)
     override: dict[str, Any] = {}
@@ -1767,6 +1996,8 @@ def compile_snapshots(
         width = frame["absoluteBoundingBox"]["width"]
         frame["absoluteBoundingBox"]["x"] = offset_x
         for child in walk_all(frame):
+            if "relativeTransform" in child:
+                continue  # transformed-subtree boxes are parent-local, not frame-local
             child["absoluteBoundingBox"]["x"] += offset_x
         offset_x += width + 200.0
         compilers.append(compiler)

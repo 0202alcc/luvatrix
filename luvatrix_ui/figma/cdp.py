@@ -70,6 +70,8 @@ STYLE_PROPS: tuple[str, ...] = (
     "border-left-width",
     "border-left-style",
     "border-left-color",
+    "transform",
+    "transform-origin",
 )
 
 _WS_RE = re.compile(r"ws://\S+/devtools/browser/\S+")

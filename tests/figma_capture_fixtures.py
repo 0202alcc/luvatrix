@@ -60,6 +60,8 @@ DEFAULT_STYLES: dict[str, str] = {
     "border-left-width": "0px",
     "border-left-style": "none",
     "border-left-color": "rgb(0, 0, 0)",
+    "transform": "none",
+    "transform-origin": "50% 50%",
 }
 
 ELEMENT, TEXT_NODE = 1, 3
