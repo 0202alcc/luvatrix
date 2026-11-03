@@ -42,9 +42,14 @@ def test_write_capture_layout_matches_pull(tmp_path: Path) -> None:
 
 
 def test_write_capture_keeps_jpeg_extension(tmp_path: Path) -> None:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4), (200, 10, 10)).save(buf, format="JPEG")
     result = _result()
-    jpeg = bytes.fromhex("ffd8ffe000104a46494600010100000100010000") + b"\xff\xd9"
-    result.images["img-jpg"] = {"url": "https://cdn.test/x.jpg", "data": jpeg}
+    result.images["img-jpg"] = {"url": "https://cdn.test/x.jpg", "data": buf.getvalue()}
 
     write_capture(result, tmp_path)
 
@@ -92,7 +97,7 @@ def test_capture_help_does_not_import_browser_modules() -> None:
     code = (
         "import sys; sys.argv = ['luvatrix', 'figma', 'capture', '--help']; "
         "import main\n"
-        "try:\n    main()\nexcept SystemExit:\n    pass\n"
+        "try:\n    main.main()\nexcept SystemExit:\n    pass\n"
         "assert 'websockets' not in sys.modules, 'websockets imported eagerly'\n"
         "assert 'luvatrix_ui.figma.capture' not in sys.modules, 'capture imported eagerly'\n"
         "print('ok')\n"

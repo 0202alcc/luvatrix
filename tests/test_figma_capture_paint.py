@@ -46,9 +46,9 @@ def test_linear_gradient_maps_angle_and_stops() -> None:
         (0.0, 1.0, 0.0),
         (1.0, 0.0, 1.0),
     ]
-    (p0x, p0y), (p1x, p1y), _width = gradient["gradientHandlePositions"]
-    assert (round(p0x, 3), round(p0y, 3)) == (0.146, 0.854)
-    assert (round(p1x, 3), round(p1y, 3)) == (0.854, 0.146)
+    p0, p1, _width = gradient["gradientHandlePositions"]
+    assert (round(p0["x"], 3), round(p0["y"], 3)) == (0.125, -0.25)
+    assert (round(p1["x"], 3), round(p1["y"], 3)) == (0.875, 1.25)
 
 
 def test_gradient_stops_with_explicit_positions() -> None:
@@ -246,7 +246,7 @@ def test_sticky_children_become_fixed_children() -> None:
     scroller = b.element("DIV", parent=body)
     b.layout(scroller, 0, 0, 393, 400, **{"overflow-y": "auto"})
     row = b.element("DIV", parent=scroller)
-    b.layout(row, 0, 100, 393, 500)
+    b.layout(row, 0, 100, 393, 500, **{"background-color": "rgb(240, 240, 240)"})
     bar = b.element("DIV", parent=scroller)
     b.layout(bar, 0, 0, 393, 40, **{"position": "sticky", "background-color": "rgb(0, 0, 0)"})
 
