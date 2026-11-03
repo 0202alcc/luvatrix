@@ -665,6 +665,28 @@ def run_loop(app_dir: str) -> None:
     if vsync_read_fd is not None and _vsync_write_fd is not None:
         _destroy_vsync_pipe(vsync_read_fd, _vsync_write_fd)
         _os.environ.pop("LUVATRIX_IOS_VSYNC_WRITE_FD", None)
+def _sync_ios_app_dir(app_dir: Path, ios_dir: Path, packages_dir: Path) -> Path:
+    import shutil
+
+    app_dest = packages_dir / "luvatrix_app"
+    if app_dest.exists():
+        shutil.rmtree(app_dest)
+    pattern_ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", ".luvatrix")
+    # The native project may live inside app_dir, and it contains app_dest itself.
+    native_root = ios_dir.resolve()
+
+    def _ignore(directory: str, names: list[str]) -> set[str]:
+        ignored = set(pattern_ignore(directory, names))
+        root = Path(directory).resolve()
+        for name in names:
+            if (root / name).resolve() == native_root:
+                ignored.add(name)
+        return ignored
+
+    shutil.copytree(app_dir, app_dest, ignore=_ignore)
+    return app_dest
+
+
 def _run_ios_simulator(
     app_dir: Path,
     simulator_name: str,
@@ -693,10 +715,7 @@ def _run_ios_simulator(
     )
 
     # Sync app dir into PyPackages under a fixed name so AppDelegate can find it.
-    app_dest = packages_dir / "luvatrix_app"
-    if app_dest.exists():
-        shutil.rmtree(app_dest)
-    shutil.copytree(app_dir, app_dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    app_dest = _sync_ios_app_dir(app_dir, ios_dir, packages_dir)
     print(f"[ios] synced {app_dir} → {app_dest}")
 
     # Copy app icon into the asset catalog if one exists at assets/icon.png.
@@ -1373,10 +1392,7 @@ def _run_ios_device(
     device_id, display_name = _find_device_id(device_name)
     print(f"[ios] target device: {display_name} ({device_id})")
 
-    app_dest = packages_dir / "luvatrix_app"
-    if app_dest.exists():
-        shutil.rmtree(app_dest)
-    shutil.copytree(app_dir, app_dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    app_dest = _sync_ios_app_dir(app_dir, ios_dir, packages_dir)
     print(f"[ios] synced {app_dir} → {app_dest}")
 
     _write_ios_launch_config(
