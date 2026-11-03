@@ -183,6 +183,74 @@ def scrolling_file(transition: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
+def overlay_file(*, interaction: str | None = None, sheet_height: float = 120) -> dict[str, Any]:
+    """Home is a scrolling feed whose "Open Sheet" button opens a modal overlay.
+
+    `interaction` sets the destination frame's `overlayBackgroundInteraction`
+    (CLOSE_ON_CLICK_OUTSIDE dismisses on scrim taps; anything else blocks them).
+    """
+    open_action = [
+        {
+            "trigger": {"type": "ON_CLICK"},
+            "actions": [{"type": "NODE", "destinationId": "3:1", "navigation": "OVERLAY", "transition": None}],
+        }
+    ]
+    home = node(
+        "1:1",
+        "FRAME",
+        "Home",
+        0,
+        0,
+        100,
+        400,
+        fills=[solid(1, 1, 1)],
+        clipsContent=True,
+        overflowDirection="VERTICAL_SCROLLING",
+        children=[
+            node("1:2", "RECTANGLE", "Blocked Link", 0, 0, 100, 50, fills=[solid(0, 1, 0)], interactions=navigate("2:1")),
+            node("1:3", "RECTANGLE", "Open Sheet", 0, 150, 100, 30, fills=[solid(1, 0, 0)], interactions=open_action),
+            node("1:4", "RECTANGLE", "Tail", 0, 350, 100, 50, fills=[solid(1, 1, 0)]),
+        ],
+    )
+    other = node("2:1", "FRAME", "Other", 300, 0, 100, 200, fills=[solid(0, 0, 1)], children=[])
+    sheet_extra: dict[str, Any] = {}
+    if interaction is not None:
+        sheet_extra["overlayBackgroundInteraction"] = interaction
+        sheet_extra["overlayBackground"] = {"color": {"r": 0, "g": 0, "b": 0, "a": 0.5}}
+    sheet = node(
+        "3:1",
+        "FRAME",
+        "Sheet",
+        600,
+        0,
+        100,
+        sheet_height,
+        fills=[solid(0, 0, 1)],
+        clipsContent=True,
+        children=[
+            node("3:2", "RECTANGLE", "Close", 0, 0, 100, 30, fills=[solid(1, 1, 0)], interactions=back()),
+        ],
+        **sheet_extra,
+    )
+    return {
+        "name": "Overlays",
+        "document": {
+            "id": "0:0",
+            "type": "DOCUMENT",
+            "children": [
+                {
+                    "id": "0:1",
+                    "type": "CANVAS",
+                    "name": "Page",
+                    "backgroundColor": {"r": 0.9, "g": 0.9, "b": 0.9, "a": 1},
+                    "flowStartingPoints": [{"nodeId": "1:1", "name": "Flow 1"}],
+                    "children": [sheet, other, home],
+                }
+            ],
+        },
+    }
+
+
 def single_frame(children: list[dict[str, Any]], *, w: float = 100, h: float = 100, **frame_extra: Any) -> dict[str, Any]:
     frame = node("9:0", "FRAME", "Frame", 0, 0, w, h, children=children, **frame_extra)
     frame.setdefault("fills", [solid(1, 1, 1)])
