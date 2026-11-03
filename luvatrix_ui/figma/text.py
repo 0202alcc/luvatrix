@@ -165,6 +165,16 @@ def _make_style(base: dict[str, Any], override: dict[str, Any] | None, node_fill
     )
 
 
+def _fit_line_count(metrics: list[tuple[float, float, float, float]], box_px: float) -> int:
+    """How many lines fit in a fixed-height box (at least one)."""
+    total = 0.0
+    for i, (lh, _asc, _desc, gap) in enumerate(metrics):
+        total += lh + (gap if i else 0.0)
+        if total > box_px + 0.5 and i > 0:
+            return i
+    return len(metrics)
+
+
 def _apply_case(text: str, case: str | None) -> str:
     if case == "UPPER":
         return text.upper()
@@ -258,7 +268,6 @@ def text_coverages(
 
     base_style = style_at(0)
     metrics = []
-    total_h = 0.0
     for pieces, hard in lines:
         styles = [p.style for p in pieces] or [base_style]
         lh = max(st.line_height for st in styles) * s
@@ -266,6 +275,20 @@ def text_coverages(
         desc = max(font_for(st).getmetrics()[1] for st in styles)
         gap = max(st.paragraph_spacing for st in styles) * s if hard else 0.0
         metrics.append((lh, asc, desc, gap))
+
+    limit = int(base.get("maxLines", 0) or 0) if str(base.get("textTruncation", "") or "").upper() == "ENDING" else 0
+    if limit <= 0 and str(base.get("textAutoResize", "NONE")) == "NONE" and box_h > 0:
+        limit = _fit_line_count(metrics, box_h * s)
+    if limit > 0 and len(lines) > limit:
+        lines = lines[:limit]
+        metrics = metrics[:limit]
+        pieces = lines[-1][0]
+        if pieces:
+            style = pieces[-1].style
+            pieces.append(_Piece("…", style, measure("…", style)))
+
+    total_h = 0.0
+    for lh, _asc, _desc, gap in metrics:
         total_h += lh + gap
     if metrics:
         total_h -= metrics[-1][3]
