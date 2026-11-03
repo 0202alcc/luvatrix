@@ -786,8 +786,11 @@ def _run_ios_simulator(
 
     # Boot the simulator (no-op if already running).
     subprocess.run(["xcrun", "simctl", "boot", udid], capture_output=True)
-    if not _open_simulator_app():
-        print("[ios] warning: could not open Simulator.app; the app will still run on the booted simulator")
+    if not _open_simulator_app(udid):
+        print(
+            "[ios] warning: could not open Simulator.app or Device Hub; "
+            "the app will still run on the booted simulator"
+        )
     subprocess.run(["xcrun", "simctl", "bootstatus", udid, "-b"], check=True)
 
     # Install and launch, streaming output to the terminal.
@@ -811,16 +814,26 @@ def _run_ios_simulator(
         subprocess.run(["xcrun", "simctl", "terminate", udid, "com.luvatrix.app"], capture_output=True)
 
 
-def _open_simulator_app() -> bool:
-    # Launch Services only indexes Simulator.app for a standard /Applications/Xcode.app,
-    # so open it by path inside whichever Xcode xcode-select points at.
+def _open_simulator_app(udid: str) -> bool:
+    """Show the simulator window for ``udid``; returns False if no simulator UI opened."""
+
+    def _open(*args: str) -> bool:
+        return subprocess.run(["open", *args], capture_output=True).returncode == 0
+
+    # Prefer the UI that ships with the Xcode xcode-select points at. Through Xcode 26
+    # that is Contents/Developer/Applications/Simulator.app; Xcode 27 replaced it with
+    # Contents/Applications/DeviceHub.app, which focuses a device via devices:// URLs.
     selected = subprocess.run(["xcode-select", "-p"], capture_output=True, text=True)
     if selected.returncode == 0:
-        simulator_app = Path(selected.stdout.strip()) / "Applications" / "Simulator.app"
-        if simulator_app.is_dir():
-            if subprocess.run(["open", str(simulator_app)], capture_output=True).returncode == 0:
+        developer_dir = Path(selected.stdout.strip())
+        simulator_app = developer_dir / "Applications" / "Simulator.app"
+        if simulator_app.is_dir() and _open(str(simulator_app), "--args", "-CurrentDeviceUDID", udid):
+            return True
+        device_hub = developer_dir.parent / "Applications" / "DeviceHub.app"
+        if device_hub.is_dir():
+            if _open(f"devices://device/open?id={udid}") or _open(str(device_hub)):
                 return True
-    return subprocess.run(["open", "-a", "Simulator"], capture_output=True).returncode == 0
+    return _open("-a", "Simulator") or _open("-a", "Device Hub")
 
 
 def _build_ios_device_app(
