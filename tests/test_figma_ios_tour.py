@@ -15,7 +15,8 @@ BUNDLE = "com.luvatrix.app"
 class _FakeSimulator:
     """Stands in for xcrun simctl and the app: emits tour statuses and waits for acks."""
 
-    def __init__(self, root: Path, captures: list[tuple[str, str]], *, final: str = "done", exit_early: bool = False) -> None:
+    def __init__(self, root: Path, captures: list[tuple[str, str]], *, final: str = "done", exit_early: bool = False, bundle: str = BUNDLE) -> None:
+        self.bundle = bundle
         self.container = root / "container"
         self.status_dir = self.container / "tmp" / "luvatrix_tour"
         self.captures = captures
@@ -42,7 +43,7 @@ class _FakeSimulator:
             devices = {"devices": {"iOS": [{"name": "iPhone 17", "udid": UDID, "state": "Booted", "isAvailable": True}]}}
             return SimpleNamespace(returncode=0, stdout=json.dumps(devices), stderr="")
         if cmd[:3] == ["xcrun", "simctl", "get_app_container"]:
-            assert cmd[3:] == [UDID, BUNDLE, "data"]
+            assert cmd[3:] == [UDID, self.bundle, "data"]
             if not self.container.exists():
                 if self.previous_install is not None:
                     return SimpleNamespace(returncode=0, stdout=f"{self.previous_install}\n", stderr="")
@@ -55,7 +56,7 @@ class _FakeSimulator:
             self.terminated = True
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if cmd[:3] == ["xcrun", "simctl", "launch"]:
-            assert cmd[3:] == [UDID, BUNDLE]
+            assert cmd[3:] == [UDID, self.bundle]
             self.launch_commands.append((cmd, _kwargs.get("env")))
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if cmd[:1] == ["open"]:
@@ -276,6 +277,8 @@ def test_ios_tour_keep_open_relaunches_fresh_and_opens_the_simulator(tmp_path: P
     assert "SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_RUN" not in launch_env
     assert "SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_ACK_TIMEOUT" not in launch_env
     assert sim.open_commands == [["open", "-a", "Simulator", "--args", "-CurrentDeviceUDID", UDID]]
+    # The artifact proves which app ended up on screen.
+    assert (tmp_path / "out" / "kept_open.png").read_bytes().startswith(b"\x89PNG")
 
 
 def test_ios_tour_keep_open_falls_back_to_plain_simulator_open(tmp_path: Path) -> None:
@@ -314,3 +317,30 @@ def test_ios_tour_without_keep_open_terminates_and_never_relaunches(tmp_path: Pa
     assert sim.terminated
     assert sim.launch_commands == []
     assert sim.open_commands == []
+    assert not (tmp_path / "out" / "kept_open.png").exists()
+
+
+def test_ios_tour_resolves_the_bundle_id_from_the_app_dir(tmp_path: Path) -> None:
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "app.toml").write_text('app_id = "figma.nomic_app"\n', encoding="utf-8")
+    sim = _FakeSimulator(tmp_path, [("sign_in", "Sign In")], bundle="com.luvatrix.app.nomic-app")
+
+    code = _run(tmp_path, sim, keep_open=True)
+
+    summary = json.loads((tmp_path / "out" / "summary.json").read_text())
+    assert code == 0
+    assert summary["state"] == "done"
+    assert summary["kept_open"] is True
+    assert not sim.terminated
+    launch_cmd, _ = sim.launch_commands[0]
+    assert launch_cmd == ["xcrun", "simctl", "launch", UDID, "com.luvatrix.app.nomic-app"]
+
+
+def test_ios_tour_keeps_the_legacy_bundle_id_without_app_id(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("sign_in", "Sign In")], bundle=BUNDLE)
+
+    code = _run(tmp_path, sim)
+
+    assert code == 0
+    assert sim.terminated
