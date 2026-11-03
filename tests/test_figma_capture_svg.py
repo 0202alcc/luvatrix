@@ -16,8 +16,8 @@ def page() -> tuple[SnapshotBuilder, int]:
     return b, body
 
 
-def first_child(result: Any) -> dict[str, Any]:
-    return result.file["document"]["children"][0]["children"][0]["children"][0]
+def root_children(result: Any) -> list[dict[str, Any]]:
+    return result.file["document"]["children"][0]["children"][0]["children"]
 
 
 def icon_builder(paths: list[dict[str, str]] | None = None, *, extra_children: list[str] | None = None) -> SnapshotBuilder:
@@ -41,7 +41,7 @@ def test_svg_paths_become_vector_nodes() -> None:
 
     result = compile_snapshots([("/", b.build())])
 
-    vectors = first_child(result)["children"]
+    vectors = root_children(result)
     assert all(v["type"] == "VECTOR" and v["name"] == "svg:paths" for v in vectors)
     assert len(vectors) == 2
     line = vectors[0]
@@ -69,11 +69,10 @@ def test_svg_viewbox_scales_path_coordinates() -> None:
 
     result = compile_snapshots([("/", b.build())])
 
-    vector = first_child(result)["children"][0]
+    vector = root_children(result)[0]
     assert vector["absoluteBoundingBox"] == {"x": 0.0, "y": 0.0, "width": 24.0, "height": 24.0}
     data = vector["vectorPaths"][0]["data"]
-    assert "48" not in data.replace("48.0", "48") or "24" in data
-    assert data.lower().startswith("m 0 0") or data.startswith("M 0 0 L 24 24")
+    assert data.startswith("M 0 0 L 24 24")
 
 
 def test_complex_svg_rasterizes_to_an_image_fill() -> None:
@@ -89,7 +88,7 @@ def test_complex_svg_rasterizes_to_an_image_fill() -> None:
 
     result = compile_snapshots([("/", b.build())], rasterize=rasterize)
 
-    node = first_child(result)
+    node = root_children(result)[0]
     assert node["name"] == "svg:raster"
     assert node["type"] == "RECTANGLE"
     fill = node["fills"][0]
@@ -108,7 +107,7 @@ def test_complex_svg_without_a_rasterizer_falls_back_to_a_placeholder() -> None:
 
     result = compile_snapshots([("/", b.build())])
 
-    node = first_child(result)
+    node = root_children(result)[0]
     assert node["name"] == "svg:raster"
     assert node["fills"][0]["type"] == "SOLID"
     page_report = result.report["pages"][0]

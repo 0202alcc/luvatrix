@@ -22,9 +22,14 @@ import re
 from typing import Any
 
 from .cdp import STYLE_PROPS
+from .geometry import PathError, Segment, parse_path
 
 DEFAULT_VIEWPORT = (393, 852, 3.0)
 SVG_MAX_SHAPES = 24
+_SVG_SHAPE_TAGS = frozenset({"path", "rect", "circle", "ellipse", "line", "polygon", "polyline"})
+_SVG_COMPLEX_TAGS = frozenset(
+    {"image", "text", "filter", "foreignobject", "use", "mask", "clippath", "lineargradient", "radialgradient", "pattern"}
+)
 INLINE_DISPLAYS = frozenset(
     {"inline", "inline-block", "inline-flex", "inline-grid", "inline-table", "table-cell", "table-caption"}
 )
@@ -525,7 +530,128 @@ class _PageCompiler:
     # ── svg ──────────────────────────────────────────────────────────────────
 
     def svg_nodes(self, node: int, box: list[float], styles: dict[str, str]) -> list[dict[str, Any]]:
-        raise NotImplementedError
+        shapes = self._svg_shapes(node)
+        complex_svg = len(shapes) > SVG_MAX_SHAPES or self._svg_has_complex_parts(node)
+        if complex_svg:
+            return [self._svg_raster_node(node, box)]
+        attrs = self.model.attrs[node] if node < len(self.model.attrs) else {}
+        view_box = _parse_view_box(attrs.get("viewBox"))
+        if view_box is None:
+            view_box = (
+                0.0,
+                0.0,
+                _number(attrs.get("width", ""), 0.0) or box[2],
+                _number(attrs.get("height", ""), 0.0) or box[3],
+            )
+        if view_box[2] <= 0 or view_box[3] <= 0:
+            self.skip("empty", node)
+            return []
+        scale_x = box[2] / view_box[2]
+        scale_y = box[3] / view_box[3]
+        out: list[dict[str, Any]] = []
+        for shape_node, tag, shape_attrs in shapes:
+            vector = self._svg_vector_node(shape_node, tag, shape_attrs, box, view_box, scale_x, scale_y)
+            if vector is not None:
+                out.append(vector)
+        if not out:
+            self.skip("empty", node)
+        return out
+
+    def _svg_shapes(self, node: int) -> list[tuple[int, str, dict[str, str]]]:
+        shapes: list[tuple[int, str, dict[str, str]]] = []
+        stack = list(reversed(self.model.children(node)))
+        while stack:
+            current = stack.pop()
+            tag = self.model.tag[current].lower()
+            if tag == "svg":
+                continue
+            if tag in _SVG_SHAPE_TAGS:
+                shapes.append((current, tag, self.model.attrs[current] if current < len(self.model.attrs) else {}))
+            stack.extend(reversed(self.model.children(current)))
+        return shapes
+
+    def _svg_has_complex_parts(self, node: int) -> bool:
+        stack = list(self.model.children(node))
+        while stack:
+            current = stack.pop()
+            tag = self.model.tag[current].lower()
+            if tag in _SVG_COMPLEX_TAGS:
+                return True
+            stack.extend(self.model.children(current))
+        return False
+
+    def _svg_vector_node(
+        self,
+        node: int,
+        tag: str,
+        attrs: dict[str, str],
+        svg_box: list[float],
+        view_box: tuple[float, float, float, float],
+        scale_x: float,
+        scale_y: float,
+    ) -> dict[str, Any] | None:
+        data = _svg_shape_data(tag, attrs)
+        if not data:
+            return None
+        try:
+            subpaths = parse_path(data)
+        except PathError:
+            self.unsupported_css("svg-path")
+            return None
+        transform = _parse_svg_transform(attrs.get("transform"))
+        scaled: list[list[Segment]] = []
+        for subpath in subpaths:
+            scaled.append([_scale_segment(seg, transform, view_box, scale_x, scale_y) for seg in subpath])
+        points = [args for subpath in scaled for _cmd, args in subpath if args]
+        if not points:
+            return None
+        xs = [v for args in points for v in args[0::2]]
+        ys = [v for args in points for v in args[1::2]]
+        lx0, ly0 = max(min(xs), 0.0), max(min(ys), 0.0)
+        lx1, ly1 = min(max(xs), svg_box[2]), min(max(ys), svg_box[3])
+        if lx1 - lx0 < 0.05 or ly1 - ly0 < 0.05:
+            return None
+        local_data = _segments_to_data(scaled, offset=(-lx0, -ly0))
+        fill_rule = (attrs.get("fill-rule") or "nonzero").strip().lower()
+        out: dict[str, Any] = {
+            "id": self.node_id(node),
+            "type": "VECTOR",
+            "name": "svg:paths",
+            "absoluteBoundingBox": self.local_box([svg_box[0] + lx0, svg_box[1] + ly0, lx1 - lx0, ly1 - ly0]),
+            "vectorPaths": [{"windingRule": "EVENODD" if fill_rule == "evenodd" else "NONZERO", "data": local_data, "path": local_data}],
+        }
+        fill = parse_svg_paint(attrs.get("fill"))
+        stroke = parse_svg_paint(attrs.get("stroke"))
+        if fill is None and stroke is None:
+            fill = (0.0, 0.0, 0.0, 1.0)
+        if fill is not None:
+            out["fills"] = [{"type": "SOLID", "color": {"r": fill[0], "g": fill[1], "b": fill[2], "a": fill[3]}}]
+        if stroke is not None:
+            out["strokes"] = [{"type": "SOLID", "color": {"r": stroke[0], "g": stroke[1], "b": stroke[2], "a": stroke[3]}}]
+            out["strokeWeight"] = _number(attrs.get("stroke-width", "1"), 1.0)
+            out["strokeAlign"] = "CENTER"
+        self.counts["vectors"] += 1
+        return out
+
+    def _svg_raster_node(self, node: int, box: list[float]) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "id": self.node_id(node),
+            "type": "RECTANGLE",
+            "name": "svg:raster",
+            "absoluteBoundingBox": self.local_box(box),
+        }
+        data = None
+        if self.rasterize is not None:
+            data = self.rasterize({"x": box[0], "y": box[1], "width": box[2], "height": box[3]})
+        if data:
+            ref = "svg-" + sha1(f"{self.path}:{self.node_id(node)}".encode("utf-8")).hexdigest()[:12]
+            self.images[ref] = {"url": f"rasterized:{self.node_id(node)}", "data": data}
+            out["fills"] = [{"type": "IMAGE", "imageRef": ref, "scaleMode": "FILL"}]
+            self.counts["images"] += 1
+        else:
+            out["fills"] = [{"type": "SOLID", "color": {"r": 0.85, "g": 0.85, "b": 0.85, "a": 1.0}}]
+            self.counts["svgPlaceholders"] = self.counts.get("svgPlaceholders", 0) + 1
+        return out
 
 
 def solid_paint(r: float, g: float, b: float, a: float = 1.0) -> dict[str, Any]:
@@ -1116,3 +1242,129 @@ def walk_all(node: dict[str, Any]) -> Iterable[dict[str, Any]]:
     for child in node.get("children") or ():
         yield child
         yield from walk_all(child)
+
+def _parse_view_box(value: str | None) -> tuple[float, float, float, float] | None:
+    if not value:
+        return None
+    parts = [p for p in re.split(r"[,\s]+", value.strip()) if p]
+    if len(parts) != 4:
+        return None
+    try:
+        return tuple(float(p) for p in parts)  # type: ignore[return-value]
+    except ValueError:
+        return None
+
+
+def _svg_shape_data(tag: str, attrs: dict[str, str]) -> str | None:
+    if tag == "path":
+        return attrs.get("d") or None
+    if tag == "rect":
+        try:
+            x, y = float(attrs.get("x", 0)), float(attrs.get("y", 0))
+            w, h = float(attrs.get("width", 0)), float(attrs.get("height", 0))
+        except ValueError:
+            return None
+        if w <= 0 or h <= 0:
+            return None
+        return f"M {x} {y} L {x + w} {y} L {x + w} {y + h} L {x} {y + h} Z"
+    if tag in {"circle", "ellipse"}:
+        try:
+            cx, cy = float(attrs.get("cx", 0)), float(attrs.get("cy", 0))
+            if tag == "circle":
+                rx = ry = float(attrs.get("r", 0))
+            else:
+                rx, ry = float(attrs.get("rx", 0)), float(attrs.get("ry", 0))
+        except ValueError:
+            return None
+        if rx <= 0 or ry <= 0:
+            return None
+        return f"M {cx - rx} {cy} A {rx} {ry} 0 1 0 {cx + rx} {cy} A {rx} {ry} 0 1 0 {cx - rx} {cy} Z"
+    if tag == "line":
+        try:
+            return f"M {float(attrs.get('x1', 0))} {float(attrs.get('y1', 0))} L {float(attrs.get('x2', 0))} {float(attrs.get('y2', 0))}"
+        except ValueError:
+            return None
+    if tag in {"polygon", "polyline"}:
+        raw = attrs.get("points") or ""
+        numbers = [p for p in re.split(r"[,\s]+", raw.strip()) if p]
+        if len(numbers) < 4 or len(numbers) % 2:
+            return None
+        try:
+            coords = [float(n) for n in numbers]
+        except ValueError:
+            return None
+        pairs = " ".join(f"{coords[i]} {coords[i + 1]}" for i in range(0, len(coords), 2))
+        close = " Z" if tag == "polygon" else ""
+        return f"M {pairs}{close}"
+    return None
+
+
+def _parse_svg_transform(value: str | None) -> tuple[float, float, float, float, float, float] | None:
+    """Parse an SVG transform attribute into a 2x3 matrix (a, b, c, d, e, f)."""
+    if not value:
+        return None
+    matrix = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    for name, args_text in re.findall(r"(matrix|translate|scale)\s*\(([^)]*)\)", value, re.IGNORECASE):
+        parts = [float(p) for p in re.split(r"[,\s]+", args_text.strip()) if p]
+        if name.lower() == "matrix" and len(parts) == 6:
+            step = parts
+        elif name.lower() == "translate" and parts:
+            step = (1.0, 0.0, 0.0, 1.0, parts[0], parts[1] if len(parts) > 1 else 0.0)
+        elif name.lower() == "scale" and parts:
+            step = (parts[0], 0.0, 0.0, parts[1] if len(parts) > 1 else parts[0], 0.0, 0.0)
+        else:
+            continue
+        matrix = (
+            matrix[0] * step[0] + matrix[2] * step[1],
+            matrix[1] * step[0] + matrix[3] * step[1],
+            matrix[0] * step[2] + matrix[2] * step[3],
+            matrix[1] * step[2] + matrix[3] * step[3],
+            matrix[0] * step[4] + matrix[2] * step[5] + matrix[4],
+            matrix[1] * step[4] + matrix[3] * step[5] + matrix[5],
+        )
+    return matrix
+
+
+def _scale_segment(
+    seg: Segment,
+    transform: tuple[float, float, float, float, float, float] | None,
+    view_box: tuple[float, float, float, float],
+    scale_x: float,
+    scale_y: float,
+) -> Segment:
+    cmd, args = seg
+    if cmd == "Z" or not args:
+        return seg
+    shifted = [args[i] - (view_box[0] if i % 2 == 0 else view_box[1]) for i in range(len(args))]
+    if transform is not None:
+        a, b, c, d, e, f = transform
+        mapped: list[float] = []
+        for i in range(0, len(shifted), 2):
+            x, y = shifted[i], shifted[i + 1]
+            mapped.extend((a * x + c * y + e, b * x + d * y + f))
+        shifted = mapped
+    scaled = [shifted[i] * (scale_x if i % 2 == 0 else scale_y) for i in range(len(shifted))]
+    return (cmd, tuple(scaled))
+
+
+def _segments_to_data(subpaths: list[list[Segment]], offset: tuple[float, float]) -> str:
+    parts: list[str] = []
+    for subpath in subpaths:
+        for cmd, args in subpath:
+            if cmd == "Z" or not args:
+                parts.append("Z")
+                continue
+            shifted = [args[i] + (offset[0] if i % 2 == 0 else offset[1]) for i in range(len(args))]
+            parts.append(cmd + " " + " ".join(_fmt_number(v) for v in shifted))
+    return " ".join(parts)
+
+
+def _fmt_number(value: float) -> str:
+    text = f"{value:.2f}".rstrip("0").rstrip(".")
+    return text if text else "0"
+
+
+def parse_svg_paint(value: str | None) -> tuple[float, float, float, float] | None:
+    if not value or value.strip().lower() in {"none", "transparent"}:
+        return None
+    return parse_css_color(value)
