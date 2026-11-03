@@ -8,12 +8,14 @@ Current runtime policy:
 
 | Runtime date | Runtime protocol version | Supported manifest protocol versions | Deprecated but accepted |
 | --- | --- | --- | --- |
-| 2026-03-03 | `2` | `1`, `2` | `1` |
+| current | `3` | `1`, `2`, `3` | `1`, `2` |
+
+`CURRENT_PROTOCOL_VERSION` in `luvatrix_core/core/protocol_governance.py` is `"3"`. `luvatrix.app.APP_PROTOCOL_VERSION` follows that value.
 
 Interpretation:
 
-1. `protocol_version = "2"` is accepted without warning.
-2. `protocol_version = "1"` is accepted with deprecation warning.
+1. `protocol_version = "3"` is accepted without warning.
+2. `protocol_version = "2"` and `protocol_version = "1"` are accepted with a deprecation warning.
 3. Any other manifest protocol version is rejected.
 
 ## 2. Runtime Bounds Behavior (`min`/`max`)
@@ -23,7 +25,7 @@ App manifests may set:
 1. `min_runtime_protocol_version`
 2. `max_runtime_protocol_version`
 
-Current runtime uses protocol `2` and applies checks in this order:
+Current runtime uses protocol `3` and applies checks in this order:
 
 1. reject if `manifest.protocol_version` is unsupported
 2. reject if runtime version is below `min_runtime_protocol_version`
@@ -33,27 +35,35 @@ Current runtime uses protocol `2` and applies checks in this order:
 Examples:
 
 ```toml
-# accepted on runtime protocol 2
-protocol_version = "2"
-min_runtime_protocol_version = "2"
-max_runtime_protocol_version = "2"
+# accepted on runtime protocol 3
+protocol_version = "3"
+min_runtime_protocol_version = "3"
+max_runtime_protocol_version = "3"
 ```
 
 ```toml
-# rejected on runtime protocol 2 (runtime below app minimum)
+# accepted with a deprecation warning; runtime 3 satisfies the minimum
 protocol_version = "2"
 min_runtime_protocol_version = "3"
 ```
 
 ```toml
-# rejected on runtime protocol 2 (runtime above app maximum)
+# rejected on runtime protocol 3 (runtime below app minimum)
+protocol_version = "3"
+min_runtime_protocol_version = "4"
+```
+
+```toml
+# rejected on runtime protocol 3 (runtime above app maximum)
 protocol_version = "2"
 max_runtime_protocol_version = "0"
 ```
 
 ## 3. Planes Schema Capability Policy (vNext extension)
 
-When an app declares a `[planes]` table in `app.toml`, runtime applies additional compatibility checks:
+The manifest loader does not read a `[planes]` table and does not enforce `required_features`. Shipped Planes apps load a monolithic `plane.json` through `load_plane_app`. The checks below are the intended policy, not current startup behavior.
+
+When an app declares a `[planes]` table in `app.toml`, the intended runtime applies additional compatibility checks:
 
 1. `planes.schema_version` identifies authored Planes schema target.
 2. `planes.min_schema_version` and `planes.max_schema_version` bound acceptable runtime schema support.
@@ -78,7 +88,7 @@ These runtime updates are behavior-tightening changes, not protocol-wire breaks.
 
 Non-breaking guarantees:
 
-1. Manifest schema and capability names are unchanged (`protocol_version` support remains `1` + `2`).
+1. Manifest schema and capability names are unchanged. Supported manifest protocol versions are `1`, `2`, and `3`. Versions `1` and `2` are deprecated.
 2. Existing app lifecycle hooks (`init/loop/stop`) are unchanged.
 3. Existing operators can keep current launch commands and receive deterministic fallback behavior.
 
@@ -140,8 +150,8 @@ Performance-path migration checks (existing apps/operators):
 
 When adopting Planes schema vNext:
 
-1. add `[planes]` metadata (`schema_version`, bounds, required/optional features)
-2. confirm required feature set matches runtime support
+1. Author a `plane.json` payload and pass handlers to `load_plane_app`. The manifest loader does not enforce a `[planes]` table.
+2. confirm required feature set matches runtime support before relying on `required_features`
 3. verify compatibility mapping for legacy payloads is not relied on implicitly
 
 ## 7. Migration Example
@@ -166,7 +176,7 @@ required_capabilities = ["window.write"]
 optional_capabilities = ["sensor.thermal"]
 ```
 
-Protocol v2 + Planes vNext example:
+Protocol v2 + Planes vNext example. The `[planes]` table is not read by the manifest loader:
 
 ```toml
 protocol_version = "2"
@@ -186,35 +196,34 @@ optional_features = ["section_cuts", "route_activation"]
 Compatibility and bounds checks:
 
 ```bash
-uv run pytest tests/test_protocol_governance.py tests/test_app_runtime.py -k "protocol or runtime_protocol"
+uv run --extra desktop --with pytest pytest tests/test_protocol_governance.py tests/test_app_runtime.py -k "protocol or runtime_protocol"
 ```
 
 Runtime integration coverage:
 
 ```bash
-uv run pytest tests/test_unified_runtime.py tests/test_app_runtime.py
+uv run --extra desktop --with pytest pytest tests/test_unified_runtime.py tests/test_app_runtime.py
 ```
 
 Planes/runtime safety smoke for current M-008 track:
 
 ```bash
-PYTHONPATH=. uv run pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py
+PYTHONPATH=. uv run --extra desktop --with pytest pytest tests/test_planes_runtime.py tests/test_planes_v2_poc_example.py
 ```
 
 Performance-path determinism checks:
 
 ```bash
-PYTHONPATH=. uv run pytest tests/test_display_runtime.py -k "revision_snapshot_flag or parity or coalesces_to_latest_revision"
-PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "incremental_present or invalidation_escape_hatch or scroll_visual_parity"
-PYTHONPATH=. uv run pytest tests/test_sensor_manager.py tests/test_app_runtime.py -k "sensor"
-PYTHONPATH=. uv run pytest tests/test_macos_vulkan_backend.py -k "persistent_map or transient_mode_maps_each_frame or upload_image_reuse or swapchain_invalidation"
+PYTHONPATH=. uv run --extra desktop --with pytest pytest tests/test_display_runtime.py -k "revision_snapshot_flag or parity or coalesces_to_latest_revision"
+PYTHONPATH=. uv run --extra desktop --with pytest pytest tests/test_planes_runtime.py -k "incremental_present or invalidation_escape_hatch or scroll_visual_parity"
+PYTHONPATH=. uv run --extra desktop --with pytest pytest tests/test_sensor_manager.py tests/test_app_runtime.py -k "sensor"
+PYTHONPATH=. uv run --extra desktop --with pytest pytest tests/test_macos_vulkan_backend.py -k "persistent_map or transient_mode_maps_each_frame or upload_image_reuse or swapchain_invalidation"
 ```
 
 Debug manifest policy compatibility checks (A-037):
 
 ```bash
-uv run pytest tests -k "debug_manifest or legacy_debug_conformance" -q
+uv run --with pytest pytest tests/test_debug_manifest_policy.py -q
 ```
 
-Reference contract:
-1. `docs/debug_manifest_policy_contract.md`
+The policy lives in `tests/test_debug_manifest_policy.py`. There is no `docs/debug_manifest_policy_contract.md` in this repository.

@@ -1,12 +1,12 @@
 # camera_overlay_basics
 
 ## Objective
-Toggle camera overlay HUD visibility while maintaining world-plane content.
+Record a camera-overlay toggle in app state while the world-plane content stays mounted. The renderer keeps `camera_overlay` components mounted. `overlay_visible` is not read by the Planes runtime.
 
 ## Concepts introduced
 - Camera overlay attachment
-- Overlay state toggles
-- Independent overlay rendering
+- Overlay state flag recorded by the handler
+- Camera overlay attachment, separate from hiding the overlay in the renderer
 
 ## Files to inspect
 - `app.toml`

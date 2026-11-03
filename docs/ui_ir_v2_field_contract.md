@@ -76,7 +76,7 @@ Define the normative UI IR v2 field set needed to represent Planes vNext semanti
 7. `world_bounds_hint: BoundingBoxSpec | None`
 8. `culling_hint: dict[str, object]`
 9. `section_cut_refs: tuple[str, ...]`
-10. `stable_order_key: tuple[int, int, int, str]`
+10. `stable_order_key: tuple[int, int, int, int]` (`attachment_rank`, `plane_global_z`, `component_local_z`, `mount_order`). `component_id` is a separate tie-break in `UIIRPage.ordered_components_for_draw`, not a field of this tuple. `blend_mode` and `section_cuts` are carried on the IR. `planes_runtime` does not apply `blend_mode` or draw `section_cuts` during composition.
 
 ### Validation
 

@@ -10,10 +10,19 @@ This guide is the step-by-step implementation companion to `docs/android_computa
 - Android sensor adapter: `luvatrix_core/platform/android/sensors.py`
 - Upload/sync path: `luvatrix_core/platform/android/runner.py`
 
-The first implementation milestone is deliberately narrow:
+Current tree, beyond the first milestone logged below:
+
+- Default burst depth is 5 frames. Key `b` calls `_android_capture_yuv_burst(self._burst_frame_count)`. Key `n` cycles 3, 5, 10, and 12.
+- On-device YUV burst processing writes a JPEG to `Pictures/Luvatrix Camera`.
+- On-device RAW burst processing and gallery export are in `android/`. `raw_average_no_alignment` and `raw_average_global_aligned` exist in the native renderer.
+- `android/gradlew` delegates to a system Gradle install. No wrapper distribution is checked in.
+- `pytest` is not a project dependency. Use `uv run --with pytest pytest` for the commands in this log.
+- Sections titled "Next Milestone" and "Next implementation" below are the original packet log. Treat them as history when the status line in that packet already says implemented.
+
+The first implementation milestone was deliberately narrow:
 
 ```text
-Manual 10-frame YUV burst
+Manual YUV burst
   -> saved BurstPackage artifact
   -> every frame has metadata
   -> offline v0 processor chooses a reference frame
@@ -1491,7 +1500,7 @@ Stop and evaluate when all of these are true:
 
 - App uploads without importing `luvatrix_plot` or requiring `torch` for the camera example.
 - Debug HUD shows camera capability summary.
-- Button/key can trigger a 10-frame YUV burst.
+- Button/key can trigger a YUV burst. The current default depth is 5 frames, not a fixed 10.
 - Device stores a burst directory with `burst_manifest.json`, frame files, and metadata files.
 - `tools/camera/process_burst.py` can score the burst and write `processing_manifest.json`.
 - HUD shows latest burst ID and processing output path.
@@ -1882,7 +1891,7 @@ processing_manifest.json
 Confirm gallery:
 
 ```bash
-adb shell content query --uri content://media/external/images/media --projection _id:_display_name:relative_path:date_added
+adb shell content query --uri content://media/external/images/media --projection _id,display_name,relative_path,date_added
 ```
 
 Pull and decode:

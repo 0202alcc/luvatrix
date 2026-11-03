@@ -48,7 +48,8 @@ Install validation:
 2. Optional renderers validate their extras before launch.
 3. `run-app --render macos` requires the `macos` and `vulkan` extras.
 4. `run-app --render macos-metal` requires the `macos` extra.
-5. `run-app --render web` requires the `web` extra.
+5. `run-app --render web` does not require extra pip modules. The `web` extra is
+   empty, and `serve-web` uses the standard-library HTTP server.
 6. `run-app --render ios-simulator` and `run-app --render ios-device` require
    only the `ios` extra; iOS ABI-specific packages are prepared by the native
    scaffold's `ios/scripts/setup_ios.sh`.
@@ -58,7 +59,7 @@ Install validation:
 Platform runtime isolation:
 
 1. Extras are target-scoped. Installing `luvatrix[ios]` must not install macOS
-   PyObjC bindings, Vulkan bindings, web socket runtimes, or Android-only
+   PyObjC bindings, Vulkan bindings, or Android-only
    helpers.
 2. Public imports such as `from luvatrix.app import App` and CLI import paths
    must not eagerly import platform runtimes.
@@ -174,10 +175,15 @@ All pointer/trackpad input is active-window gated and normalized to window-relat
 
 ## 8. Audit Pipeline
 
-Audit sinks:
+Audit sink classes:
 
-1. SQLite (`SQLiteAuditSink`)
-2. JSONL (`JsonlAuditSink`)
+1. SQLite (`SQLiteAuditSink.log`)
+2. JSONL (`JsonlAuditSink.log`)
+
+The CLI exposes `--audit-sqlite` on `run-app`. It does not expose `--audit-jsonl`
+or an `audit-report` subcommand. `run-app` currently passes
+`SQLiteAuditSink.append`, and the sink implements `log`, so that flag does not
+record events until the callback matches `log`. JSONL remains a library sink.
 
 Audit events include capability and sensor security decisions.
 
@@ -188,12 +194,12 @@ Runtime can consume hardware telemetry and apply protective pacing:
 1. Reads `thermal.temperature` and `power.voltage_current`.
 2. Normalizes values to Celsius and Watts.
 3. Applies policy thresholds (`warn`, `critical`).
-4. In `monitor` mode: logs state transitions and throttles loop pacing.
+4. In `warn` mode: logs state transitions and throttles loop pacing.
 5. In `enforce` mode: gracefully stops app loop after sustained critical streak.
 
 CLI knobs:
 
-1. `--energy-safety off|monitor|enforce`
+1. `--energy-safety off|warn|enforce`
 2. `--energy-thermal-warn-c`, `--energy-thermal-critical-c`
 3. `--energy-power-warn-w`, `--energy-power-critical-w`
 4. `--energy-critical-streak`

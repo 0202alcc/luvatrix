@@ -4,7 +4,7 @@
 Compiler outputs a single canonical IR contract represented by `UIIRPage` with these invariants:
 - `ir_version = "planes-v2"`
 - `ordering_contract_version = "plane-z-local-z-overlay-v1"`
-- Runtime basis is canonical `u/v/w` semantics only.
+- Runtime placement uses named coordinate frames (`screen_tl`, `cartesian_center`, and the other frames in `CoordinateFrameRegistry`). The monolithic loader does not require `u_basis`, `v_basis`, and `w_basis`.
 
 ## Input Mapping
 ### Split-file input (`planes[]`)

@@ -1,6 +1,6 @@
 # Luvatrix JSON UI Compiler Spec (Draft v0)
 
-This document defines a first-party JSON-to-component compiler for app protocol apps.
+This document defines the intended first-party JSON-to-component compiler for app protocol apps. There is no single `json_ui_compiler` module. Planes JSON is compiled by `luvatrix_ui.planes_protocol.compile_planes_to_ui_ir`. `examples/demo_app/app_main.py` compiles its page JSON inline. Older page JSON is loaded by `luvatrix_core/ui/page_loader.py`.
 
 The compiler goal is deterministic conversion from design JSON (page JSON now, Lottie-derived JSON later) into a renderable component tree and action wiring that can be compiled into matrix writes for the next frame.
 
@@ -206,7 +206,7 @@ Current implemented fields:
 5. `elements[].x`, `elements[].y` (interpreted in bottom-left page frame)
 6. `elements[].scale`
 7. `elements[].opacity`
-8. `elements[].animate` (float only)
+8. `elements[].animate` as an object `{"type": "float", "amp", "speed"}`. `examples/demo_app/app_main.py` reads that object. It does not treat `animate` as a bare float.
 
 Recommended next migration for demo app JSON:
 

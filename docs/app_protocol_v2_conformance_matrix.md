@@ -1,15 +1,17 @@
-# App Protocol v1/v2 Conformance Matrix
+# App Protocol Conformance Matrix
+
+Current runtime protocol is `3` (`CURRENT_PROTOCOL_VERSION` in `luvatrix_core/core/protocol_governance.py`).
 
 ## Runtime Version Matrix
 
-| Runtime version | Accepts v1 | Accepts v2 | v1 warning | v2 process lane |
-| --- | --- | --- | --- | --- |
-| 2 | yes | yes | yes (deprecated) | yes (`stdio_jsonl`) |
+| Runtime version | Accepts v1 | Accepts v2 | Accepts v3 | v1 warning | v2 warning | v2 process lane |
+| --- | --- | --- | --- | --- | --- | --- |
+| 3 | yes | yes | yes | yes (deprecated) | yes (deprecated) | yes (`stdio_jsonl`) |
 
 ## Required Tests
 
 1. `tests/test_protocol_governance.py`
-- verifies support and bounds behavior for v1/v2.
+- verifies support and bounds behavior for v1, v2, and v3.
 
 2. `tests/test_app_runtime.py`
 - verifies manifest parsing and runtime table validation.
@@ -23,7 +25,7 @@
 ## CI Command
 
 ```bash
-PYTHONPATH=. uv run pytest \
+PYTHONPATH=. uv run --extra desktop --with pytest pytest \
   tests/test_protocol_governance.py \
   tests/test_app_runtime.py \
   tests/test_unified_runtime.py \

@@ -1,12 +1,11 @@
 # planes_v2_poc_plus
 
 ## Objective
-Navigate `/home`, `/settings`, `/analytics` routes and persist active route telemetry.
+Record `/home`, `/settings`, and `/analytics` path strings in app state. Those strings are telemetry. They do not change the compiled route or `active_plane_ids`. Route ids in `plane.json` are `home`, `settings`, and `analytics`.
 
 ## Concepts introduced
-- Planes v2 route switching
-- Route-specific plane activation
-- Navigation telemetry
+- Route path strings stored in app state
+- Navigation telemetry for validation artifacts
 
 ## Files to inspect
 - `app.toml`

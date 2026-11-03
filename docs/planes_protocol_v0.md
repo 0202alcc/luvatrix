@@ -127,6 +127,8 @@ Supported v0 hook names:
 12. `on_drag_start`
 13. `on_drag_move`
 14. `on_drag_end`
+
+`on_drag_start`, `on_drag_move`, and `on_drag_end` are accepted hook names. The current runtime updates drag position for draggable components and does not dispatch those three hooks.
 15. `on_scroll`
 16. `on_pinch`
 17. `on_rotate`
@@ -161,6 +163,10 @@ Example:
 `"on_press_single": "main_handlers::refresh_data"`
 
 ### 9.3 Resolution Rules
+
+The shipped runtime does not load `scripts[].src`. Call `load_plane_app(plane_path, handlers=...)` with a dict of callables. `_resolve_handler` matches the full `script_id::function_name` key, then a `::function_name` suffix. A missing handler fails when the event is invoked in strict mode, not while the document is loaded.
+
+The contract below is the intended registry behavior:
 
 1. Resolve `script_id` in `scripts` registry.
 2. Load script from `src`.

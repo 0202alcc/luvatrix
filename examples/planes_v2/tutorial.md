@@ -21,7 +21,7 @@ This tutorial walks through the 10 training projects in increasing complexity.
 What it showcases:
 - Minimal Planes v2 app structure
 - Basic event handler wiring
-- Theme toggle interaction
+- Hover profile cycle interaction (`cycle_hover_profile`)
 
 ### 2) `coordinate_playground` (Level 0)
 What it showcases:
@@ -32,13 +32,13 @@ What it showcases:
 ### 3) `camera_overlay_basics` (Level 1)
 What it showcases:
 - Camera overlay components
-- Overlay visibility/state toggles
+- Overlay toggle recorded in app state (`overlay_toggled`). The renderer does not hide the camera overlay from that flag.
 - Separation of world content vs overlay UI
 
 ### 4) `multi_plane_layout` (Level 1)
 What it showcases:
 - Multiple active planes in a route
-- Plane focus switching interactions
+- Plane-switch counters in app state. Compiled active planes stay the route set from `plane.json`.
 - Layered layout composition
 
 ### 5) `scroll_and_pan_plane` (Level 2)
@@ -74,7 +74,7 @@ What it showcases:
 ### 10) `planes_v2_poc_plus` (Level 5)
 What it showcases:
 - Route-oriented Planes v2 app flow
-- `/home`, `/settings`, `/analytics` navigation behavior
+- `/home`, `/settings`, and `/analytics` path strings stored in app state. They do not retarget compiled routes.
 - Multi-route validation and final integration pattern
 
 ## How To Run One Project

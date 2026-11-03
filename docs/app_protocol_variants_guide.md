@@ -139,13 +139,13 @@ Runtime rejects with validation error equivalent to:
 Variant/protocol governance tests:
 
 ```bash
-uv run pytest tests/test_app_runtime.py tests/test_protocol_governance.py tests/test_unified_runtime.py
+uv run --extra desktop --with pytest pytest tests/test_app_runtime.py tests/test_protocol_governance.py tests/test_unified_runtime.py
 ```
 
 Focused variant tests:
 
 ```bash
-uv run pytest tests/test_app_runtime.py -k "variant or platform_support"
+uv run --extra desktop --with pytest pytest tests/test_app_runtime.py -k "variant or platform_support"
 ```
 
 ## 8. First-Party Standardization Checklist

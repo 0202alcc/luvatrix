@@ -1,11 +1,11 @@
 # hello_plane
 
 ## Objective
-Render a starter plane app and toggle themes through direct click interaction.
+Render a starter plane app and cycle the hover profile through a direct click.
 
 ## Concepts introduced
 - Plane runtime bootstrapping
-- Theme toggle event handling
+- Hover profile cycle event handling
 - Deterministic state snapshots
 
 ## Files to inspect
@@ -16,14 +16,14 @@ Render a starter plane app and toggle themes through direct click interaction.
 - `validation_artifact.json` (generated)
 
 ## Hands-on tasks
-- Trigger `toggle_theme` from the on-screen control.
+- Trigger `cycle_hover_profile` from the on-screen control.
 - Run the validation command.
 - Open the resulting artifact and verify every interactive check is `true`.
 
 ## Expected outputs/artifacts
 - Console output containing `VALIDATION_ARTIFACT=`.
 - `examples/planes_v2/hello_plane/validation_artifact.json` with:
-- `theme_toggled` == `True`
+- `profile_cycle_count` == `True`
 
 ## Validation checklist
 - [ ] App loads through `app_main:create`.
