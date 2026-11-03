@@ -46,8 +46,9 @@ def _merge_login(design: dict, login: dict, login_clickables: list[dict], home_f
     frame = login_canvas["children"][0]
     frame["name"] = "Sign In"
     # The app boots onto the first top-level frame, so the sign-in screen
-    # leads the tour.
+    # leads the tour; the flow start point must follow it.
     canvas["children"].insert(0, frame)
+    canvas["flowStartingPoints"] = [{"nodeId": frame["id"], "name": "Start"}]
 
     wired = 0
     for clickable in login_clickables:
