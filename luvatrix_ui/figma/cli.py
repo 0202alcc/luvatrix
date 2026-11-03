@@ -191,6 +191,18 @@ def add_figma_parser(subparsers: Any) -> None:
     render.add_argument("--frame", default=None, help="Frame name or id (default: every top-level frame)")
     render.add_argument("--scale", type=float, default=2.0, help="Pixels per Figma point")
 
+    capture = sub.add_parser("capture", help="Capture a web page with headless Chrome into figma_file.json")
+    capture.add_argument("url", help="Page URL to capture")
+    capture.add_argument("--out", type=Path, required=True, help="Directory for figma_file.json, images/, clickables.json, capture_report.json")
+    capture.add_argument("--pages", default=None, help="Comma-separated extra paths (or URLs) captured as additional frames")
+    capture.add_argument("--click-map", type=Path, default=None, help="JSON file mapping \"<page> -> <selector>\" to a target page path")
+    capture.add_argument("--viewport", default="393x852@3", help="WIDTHxHEIGHT[@SCALE] device metrics (default 393x852@3x)")
+    capture.add_argument("--wait", type=float, default=2.0, help="Extra seconds to wait for the page to settle")
+    capture.add_argument("--selector-ready", default=None, help="CSS selector to wait for before snapshotting")
+    capture.add_argument("--full-page", dest="full_page", action="store_true", default=True, help="Capture the full scrollable page (default)")
+    capture.add_argument("--viewport-only", dest="full_page", action="store_false", help="Capture only the pinned viewport")
+    capture.add_argument("--chrome", default=None, help="Path to a Chrome binary (default: autodetect)")
+
     init = sub.add_parser("init-app", help="Create an app folder that runs design/figma_file.json")
     init.add_argument("app_dir", type=Path)
     init.add_argument("--app-id", default=None)
@@ -216,6 +228,27 @@ def run_figma_command(args: Any) -> None:
     elif args.figma_command == "render":
         for path in render_design(args.design, args.out, frame=args.frame, scale=args.scale):
             print(f"[luvatrix] Rendered {path}")
+    elif args.figma_command == "capture":
+        from . import capture
+
+        pages = [p.strip() for p in args.pages.split(",")] if args.pages else []
+        result = capture.capture_design(
+            args.url,
+            args.out,
+            pages=pages,
+            click_map_path=args.click_map,
+            viewport=args.viewport,
+            wait=args.wait,
+            selector_ready=args.selector_ready,
+            full_page=args.full_page,
+            chrome_path=args.chrome,
+        )
+        design = capture.write_capture(result, args.out)
+        page_count = len(result.report.get("pages", ()))
+        print(
+            f"[luvatrix] Captured {page_count} page(s) to {design} "
+            f"({len(result.images)} images, {len(result.clickables)} clickables)"
+        )
     elif args.figma_command == "init-app":
         root = init_figma_app(args.app_dir, app_id=args.app_id, width=args.width, height=args.height)
         print(f"[luvatrix] Created Figma app at {root}; pull a design into {root / 'design'}")

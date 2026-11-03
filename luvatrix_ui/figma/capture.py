@@ -18,6 +18,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from hashlib import sha1
+import json
+from pathlib import Path
 import re
 from typing import Any
 
@@ -50,6 +52,7 @@ class CaptureResult:
     images: dict[str, dict[str, Any]] = field(default_factory=dict)
     clickables: list[dict[str, Any]] = field(default_factory=list)
     report: dict[str, Any] = field(default_factory=dict)
+    svg_raster: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _s(strings: list[str], value: Any) -> str:
@@ -167,6 +170,7 @@ class _PageCompiler:
         self.images: dict[str, dict[str, Any]] = images if images is not None else {}
         self.image_failures: list[str] = []
         self.emitted: dict[str, dict[str, Any]] = {}
+        self.svg_placeholders: list[tuple[dict[str, Any], dict[str, float]]] = []
 
     def node_id(self, node: int) -> str:
         backend = self.model.backend[node] if node < len(self.model.backend) else node
@@ -753,6 +757,9 @@ class _PageCompiler:
         else:
             out["fills"] = [{"type": "SOLID", "color": {"r": 0.85, "g": 0.85, "b": 0.85, "a": 1.0}}]
             self.counts["svgPlaceholders"] = self.counts.get("svgPlaceholders", 0) + 1
+            self.svg_placeholders.append(
+                (out, {"x": box[0], "y": box[1], "width": box[2], "height": box[3]})
+            )
         return out
 
 
@@ -1347,7 +1354,12 @@ def compile_snapshots(
         },
         "interactions": {"mapped": mapped_total, "unmatched": unmatched_total},
     }
-    return CaptureResult(file=payload, images=images, clickables=clickables, report=report)
+    svg_raster = [
+        {"node": node, "box": box, "key": f"{compilers[index].path}:{node['id']}"}
+        for index, compiler in enumerate(compilers)
+        for node, box in compiler.svg_placeholders
+    ]
+    return CaptureResult(file=payload, images=images, clickables=clickables, report=report, svg_raster=svg_raster)
 
 
 def _normalize_selector(selector: str) -> str:
@@ -1484,3 +1496,140 @@ def parse_svg_paint(value: str | None) -> tuple[float, float, float, float] | No
     if not value or value.strip().lower() in {"none", "transparent"}:
         return None
     return parse_css_color(value)
+
+
+# ── orchestration: drive the browser and write outputs ──────────────────────
+
+
+def parse_viewport(value: str) -> tuple[int, int, float]:
+    """Parse a WIDTHxHEIGHT[@SCALE] viewport spec."""
+    match = re.match(r"^(\d+)x(\d+)(?:@([\d.]+))?$", (value or "").strip())
+    if not match:
+        raise CaptureError(f"invalid --viewport {value!r}; expected WIDTHxHEIGHT[@SCALE]")
+    return int(match.group(1)), int(match.group(2)), float(match.group(3) or 3.0)
+
+
+def write_capture(result: CaptureResult, out_dir: str | Path) -> Path:
+    """Write figma_file.json, images/, clickables.json, and capture_report.json."""
+    from .cli import _save_image
+
+    out = Path(out_dir)
+    (out / "images").mkdir(parents=True, exist_ok=True)
+    for ref, entry in result.images.items():
+        _save_image(entry["data"], out / "images", ref)
+    design = out / "figma_file.json"
+    design.write_text(json.dumps(result.file), encoding="utf-8")
+    (out / "clickables.json").write_text(json.dumps(result.clickables, indent=1), encoding="utf-8")
+    (out / "capture_report.json").write_text(json.dumps(result.report, indent=1), encoding="utf-8")
+    return design
+
+
+def _load_click_map(path: str | Path | None) -> dict[str, str]:
+    if path is None:
+        return {}
+    import json as _json
+
+    text = Path(path).read_text(encoding="utf-8")
+    parsed = _json.loads(text)
+    if not isinstance(parsed, dict):
+        raise CaptureError("click map must be a JSON object of \"page -> selector\": \"target\"")
+    return {str(k): str(v) for k, v in parsed.items()}
+
+
+def _page_targets(base: str, pages: Sequence[str]) -> list[tuple[str, str]]:
+    from urllib.parse import urlparse, urljoin
+
+    path = urlparse(base).path or "/"
+    targets = [(path, base)]
+    for extra in pages:
+        extra = extra.strip()
+        if not extra:
+            continue
+        if "://" in extra:
+            targets.append((urlparse(extra).path or "/", extra))
+        else:
+            if not extra.startswith("/"):
+                extra = "/" + extra
+            targets.append((extra, urljoin(base, extra)))
+    return targets
+
+
+def _http_fetcher(base: str) -> FetchImage:
+    from urllib.parse import urljoin
+    from urllib.request import Request, urlopen
+
+    def fetch(src: str) -> bytes | None:
+        target = src if "://" in src else urljoin(base, src)
+        try:
+            request = Request(target, headers={"User-Agent": "luvatrix-capture"})
+            with urlopen(request, timeout=30) as response:
+                return response.read()
+        except OSError:
+            return None
+
+    return fetch
+
+
+async def _grow_viewport_to_content(page: Any, width: int, scale: float) -> None:
+    size = await page.evaluate(
+        "[document.documentElement.scrollWidth, document.documentElement.scrollHeight]"
+    )
+    if isinstance(size, list) and len(size) == 2:
+        content_w, content_h = int(size[0] or 0), int(size[1] or 0)
+        if content_h > 0:
+            await page.set_viewport(max(width, content_w), content_h, scale)
+            await page.ready(timeout=5.0)
+
+
+async def _rasterize_placeholders(page: Any, result: CaptureResult) -> None:
+    for entry in result.svg_raster:
+        data = await page.screenshot(clip=dict(entry["box"]), scale=2.0)
+        ref = "svg-" + sha1(entry["key"].encode("utf-8")).hexdigest()[:12]
+        result.images[ref] = {"url": f"rasterized:{entry['key']}", "data": data}
+        entry["node"]["fills"] = [{"type": "IMAGE", "imageRef": ref, "scaleMode": "FILL"}]
+
+
+def capture_design(
+    url: str,
+    out_dir: str | Path,
+    *,
+    pages: Sequence[str] = (),
+    click_map_path: str | Path | None = None,
+    viewport: str = "393x852@3",
+    wait: float = 2.0,
+    selector_ready: str | None = None,
+    full_page: bool = False,
+    chrome_path: str | None = None,
+) -> CaptureResult:
+    """Capture `url` (plus extra pages) with headless Chrome and compile to Figma."""
+    import asyncio
+
+    from . import cdp
+
+    width, height, scale = parse_viewport(viewport)
+    click_map = _load_click_map(click_map_path)
+
+    async def run() -> CaptureResult:
+        chrome = cdp.Chrome.launch(chrome_path)
+        try:
+            conn = await cdp.CDPConnection.connect(chrome.ws_url)
+            page = await cdp.CDPPage.attach(conn)
+            await page.set_viewport(width, height, scale)
+            snapshots = []
+            for path, target in _page_targets(url, pages):
+                await page.navigate(target)
+                await page.ready(timeout=max(wait + 10.0, 12.0), extra_delay=wait)
+                if selector_ready:
+                    await page.wait_for_selector(selector_ready, timeout=max(wait, 10.0))
+                if full_page:
+                    await _grow_viewport_to_content(page, width, scale)
+                snapshots.append((path, await page.capture_snapshot()))
+            result = compile_snapshots(snapshots, click_map=click_map, fetcher=_http_fetcher(url))
+            await _rasterize_placeholders(page, result)
+            return result
+        finally:
+            chrome.close()
+
+    result = asyncio.run(run())
+    write_capture(result, out_dir)
+    return result

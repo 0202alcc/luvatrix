@@ -47,6 +47,9 @@ vulkan = [
 ]
 web = [
 ]
+capture = [
+  "websockets>=13",
+]
 android = [
 ]
 dev = [
