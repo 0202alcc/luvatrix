@@ -757,12 +757,14 @@ class _PageCompiler:
                 run_index += 1
             if child in own:
                 if pending:
-                    pieces.append(("text", pending))
+                    for chunk in self._split_run_lines(pending):
+                        pieces.append(("text", chunk))
                     pending = []
                 pieces.append(("nodes", own[child]))
         pending.extend(runs[run_index:])
         if pending:
-            pieces.append(("text", pending))
+            for chunk in self._split_run_lines(pending):
+                pieces.append(("text", chunk))
         box = self.model.box(node) or [0, 0, 0, 0]
         styles = self.model.style(node)
         suffix = wrapped or sum(1 for kind, _payload in pieces if kind == "text") > 1
@@ -776,6 +778,30 @@ class _PageCompiler:
             node_id = f"{self.node_id(node)}:t{chunk_index}" if suffix else self.node_id(node)
             result.append(self.text_node(node, box, styles, payload, node_id=node_id, register=False, allow_reflow=allow_reflow))
         return result
+
+    @staticmethod
+    def _split_run_lines(runs: list[_Run]) -> list[list[_Run]]:
+        """Split consecutive runs into one group per drawn line.
+
+        Runs from one text node can cover several visual lines (their
+        text-box fragments differ in y); each line needs its own anchored
+        TEXT node whenever inline siblings sit mid-line.
+        """
+        chunks: list[list[_Run]] = []
+        current: list[_Run] = []
+        current_y: float | None = None
+        for run in runs:
+            ys = {round(b[1], 1) for b in run.boxes}
+            y = next(iter(ys)) if len(ys) == 1 else None
+            if current and y is not None and current_y is not None and abs(y - current_y) > 2.0:
+                chunks.append(current)
+                current = []
+            current.append(run)
+            if y is not None:
+                current_y = y
+        if current:
+            chunks.append(current)
+        return chunks
 
     def box_node(
         self,
@@ -940,10 +966,22 @@ class _PageCompiler:
                     text = self.model.node_text(child)
                 if not text.strip():
                     if text and child_following:
-                        runs.append(_Run(node, " ", [], top))
+                        runs.append(_Run(node, " ", [], top if top >= 0 else child))
                     continue
-                boxes = [entry["bounds"] for entry in self.model.text_boxes.get(li, ())] if li is not None else []
-                runs.append(_Run(node, text, boxes, top))
+                entries = self.model.text_boxes.get(li, ()) if li is not None else ()
+                boxes = [entry["bounds"] for entry in entries]
+                run_top = top if top >= 0 else child
+                if li is not None and len({round(b[1], 1) for b in boxes}) > 1:
+                    # One text node painted on several lines: emit one run per
+                    # line fragment so each line anchors at its own x.
+                    for entry in sorted(entries, key=lambda e: (e["bounds"][1], e["bounds"][0])):
+                        start = int(entry.get("start", 0))
+                        length = int(entry.get("length", -1))
+                        fragment = text[start : start + length] if length >= 0 else text
+                        if fragment:
+                            runs.append(_Run(node, fragment, [entry["bounds"]], run_top))
+                else:
+                    runs.append(_Run(node, text, boxes, run_top))
             elif kind == 1:
                 styles = self.model.style(child)
                 if self.model.box(child) is None:
@@ -1129,8 +1167,12 @@ class _PageCompiler:
             return float(font.getlength(ch)) + spacing
 
         total_w = sum(measure(ch, run_index) for ch, run_index in zip(characters, run_of))
-        fills_box = union_w >= available - 4.0
-        single_line = (not fills_box and total_w <= union_w * 1.12 + 2.0) or total_w <= available
+        if centered:
+            # Shrink-to-fit text (badges, flex rows, inline spans): keep one
+            # line within a renderer-font tolerance instead of re-wrapping.
+            single_line = total_w <= union_w * 1.12 + 2.0
+        else:
+            single_line = total_w <= available
         if single_line:
             width = max(total_w, union_w)
             if align == "RIGHT":
