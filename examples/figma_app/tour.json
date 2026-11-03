@@ -1,0 +1,15 @@
+[
+  {"capture": "welcome"},
+  {"tap": "Get Started"},
+  {"capture": "home"},
+  {"scroll": 360},
+  {"capture": "home_scrolled"},
+  {"tap": "Card Monstera"},
+  {"capture": "plant_detail"},
+  {"tap": "Water Now"},
+  {"capture": "plant_watered"},
+  {"tap": "Back Button"},
+  {"capture": "home_again"},
+  {"tap": "Tab Profile"},
+  {"capture": "profile"}
+]
