@@ -1,0 +1,74 @@
+name: iOS Simulator Tour
+
+# Runs on a self-hosted Mac. The repository is public, so this workflow never
+# triggers on pull_request: only pushes (which need write access) and manual
+# dispatches can run code on that machine.
+on:
+  push:
+    branches: ["feature/**", "dev-alec/**"]
+  workflow_dispatch:
+    inputs:
+      app_dir:
+        description: App folder to tour
+        default: examples/figma_app
+      tour:
+        description: Tour JSON file (default <app_dir>/tour.json)
+        default: ""
+      simulator:
+        description: Simulator device name
+        default: iPhone 17
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-sim-tour
+  cancel-in-progress: false
+
+jobs:
+  tour:
+    name: Tour app in iOS Simulator
+    if: ${{ vars.LUVATRIX_IOS_SIM_RUNNER == '1' }}
+    runs-on: [self-hosted, macOS, ios-sim]
+    timeout-minutes: 45
+    env:
+      APP_DIR: ${{ inputs.app_dir || 'examples/figma_app' }}
+      TOUR: ${{ inputs.tour }}
+      SIMULATOR: ${{ inputs.simulator || 'iPhone 17' }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
+
+      - name: Check Xcode toolchain
+        run: |
+          xcodebuild -version
+          xcodegen --version
+          xcrun simctl list devices available | grep -F -- "$SIMULATOR"
+
+      - name: Sync deps
+        run: uv sync --frozen
+
+      - name: Prepare embedded iOS Python
+        working-directory: ${{ env.APP_DIR }}
+        run: bash ios/scripts/setup_ios.sh
+
+      - name: Run tour
+        run: |
+          uv run python main.py figma ios-tour "$APP_DIR" \
+            --tour "${TOUR:-$APP_DIR/tour.json}" \
+            --out "$RUNNER_TEMP/ios-tour" \
+            --simulator "$SIMULATOR" \
+            --native-project "$APP_DIR/ios"
+
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-tour-${{ github.run_id }}
+          path: ${{ runner.temp }}/ios-tour
+          if-no-files-found: warn
+          retention-days: 14
