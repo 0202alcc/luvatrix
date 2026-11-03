@@ -78,6 +78,7 @@ class SnapshotBuilder:
         self._layout: list[dict[str, Any]] = []
         self._text_boxes: list[tuple[int, float, float, float, float, int, int]] = []
         self._clickable: list[int] = []
+        self._input_values: dict[int, str] = {}
         self._backend = 9000
 
     # ── node construction ────────────────────────────────────────────────────
@@ -100,7 +101,7 @@ class SnapshotBuilder:
     def text(self, value: str, *, parent: int) -> int:
         return self._add_text_node(value, parent)
 
-    def _add_node(self, tag: str, node_type: int, parent: int | None, attrs: dict[str, str], clickable: bool) -> int:
+    def _add_node(self, tag: str, node_type: int, parent: int | None, attrs: dict[str, str], clickable: bool, text_value: str | None = None) -> int:
         index = len(self._nodes)
         self._nodes.append(
             {
@@ -108,7 +109,7 @@ class SnapshotBuilder:
                 "nodeType": node_type,
                 "parent": -1 if parent is None else parent,
                 "attrs": attrs,
-                "textValue": None,
+                "textValue": text_value,
                 "backend": self._backend + index,
                 "clickable": clickable,
             }
@@ -119,6 +120,10 @@ class SnapshotBuilder:
 
     def _add_text_node(self, value: str, parent: int) -> int:
         return self._add_node("#text", TEXT_NODE, parent, {}, False, text_value=value)
+
+    def set_input_value(self, node_index: int, value: str) -> None:
+        self._input_values[node_index] = value
+
 
     # ── layout construction ──────────────────────────────────────────────────
 
@@ -194,6 +199,11 @@ class SnapshotBuilder:
             nodes_payload["textValue"] = text_value
         if clickable:
             nodes_payload["isClickable"] = clickable
+        if self._input_values:
+            nodes_payload["inputValue"] = {
+                "index": sorted(self._input_values),
+                "value": [self._sid(self._input_values[i]) for i in sorted(self._input_values)],
+            }
 
         return {
             "strings": self._strings,

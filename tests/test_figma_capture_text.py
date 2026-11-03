@@ -40,7 +40,7 @@ def test_text_element_becomes_a_text_node_with_span_overrides() -> None:
     assert text["style"]["fontSize"] == 16
     assert text["style"]["fontFamily"] == "sans-serif"
     assert text["fills"] == [{"type": "SOLID", "color": {"r": 51 / 255, "g": 51 / 255, "b": 51 / 255, "a": 1.0}}]
-    assert text["absoluteBoundingBox"] == {"x": 0.0, "y": 2.0, "width": 159.0, "height": 20.0}
+    assert text["absoluteBoundingBox"] == {"x": 0.0, "y": 2.0, "width": 200.0, "height": 20.0}
     overrides = text["characterStyleOverrides"]
     assert len(overrides) == len(text["characters"])
     bold_keys = {overrides[i] for i in range(6, 10)}
@@ -117,4 +117,38 @@ def test_text_with_background_is_wrapped_in_a_frame() -> None:
     assert frame["type"] == "FRAME"
     assert frame["fills"] == [{"type": "SOLID", "color": {"r": 37 / 255, "g": 99 / 255, "b": 235 / 255, "a": 1.0}}]
     assert [child["type"] for child in frame["children"]] == ["TEXT"]
-    assert frame["children"][0]["absoluteBoundingBox"] == {"x": 30.0, "y": 10.0, "width": 60.0, "height": 20.0}
+    assert frame["children"][0]["absoluteBoundingBox"] == {"x": 40.0, "y": 20.0, "width": 90.0, "height": 20.0}
+
+def test_shrink_to_fit_text_boxes_widen_symmetrically() -> None:
+    b, body = page()
+    row = b.element("DIV", parent=body)
+    b.layout(row, 0, 0, 300, 20)
+    amount = b.element("B", parent=row)
+    b.layout(amount, 240, 0, 58, 20, **{"display": "inline"})
+    t = b.text("$1,200", parent=amount)
+    li = b.layout(t, 240, 0, 58, 20)
+    b.text_box(li, 240, 0, 58, 20)
+
+    result = compile_snapshots([("/", b.build())])
+
+    text = result.file["document"]["children"][0]["children"][0]["children"][0]["children"][0]
+    box = text["absoluteBoundingBox"]
+    # Content-sized box: widened symmetrically around the Chrome text center.
+    center = box["x"] + box["width"] / 2
+    assert abs(center - 269.0) < 2.0
+    assert box["width"] >= 58 * 1.12
+    assert text["style"]["textAlignHorizontal"] == "LEFT"
+
+
+def test_input_values_become_text() -> None:
+    b, body = page()
+    field = b.element("INPUT", parent=body, attrs={"value": "Orbit", "type": "text"})
+    b.layout(field, 20, 40, 260, 36, **{"border-top-width": "1px", "border-top-style": "solid", "border-top-color": "rgb(209, 213, 219)"})
+    b.set_input_value(field, "Orbit")
+
+    result = compile_snapshots([("/", b.build())])
+
+    frame = result.file["document"]["children"][0]["children"][0]["children"][0]
+    assert frame["type"] == "FRAME"
+    text = frame["children"][0]
+    assert text["characters"] == "Orbit"
