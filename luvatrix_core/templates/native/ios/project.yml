@@ -152,6 +152,10 @@ targets:
           fi
           CODESIGNING_FOLDER_PATH="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app"
           PRODUCT_BUNDLE_IDENTIFIER="${PRODUCT_BUNDLE_IDENTIFIER:-com.luvatrix.app}"
+          # process_dylibs passes this straight to codesign; unsigned simulator builds leave it empty.
+          if [ -z "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]; then
+            EXPANDED_CODE_SIGN_IDENTITY="-"
+          fi
           . "$PROJECT_DIR/Python/PythonSupport.xcframework/build/utils.sh"
           process_dylibs "Python/PythonSupport.xcframework" "PyPackages"
           FRAMEWORK_ROOT="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/Frameworks"
