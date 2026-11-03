@@ -1,12 +1,12 @@
 # multi_plane_layout
 
 ## Objective
-Switch focus across primary and secondary planes in a multi-plane route.
+Record primary and secondary plane-switch counts in app state. Compiled `active_plane_ids` stay the route set from `plane.json`. Handlers do not retarget that set.
 
 ## Concepts introduced
 - Planes v2 multi-plane layout
-- Plane focus controls
-- Route active-plane behavior
+- Plane-switch counters in app state
+- Layered planes declared by the compiled route
 
 ## Files to inspect
 - `app.toml`

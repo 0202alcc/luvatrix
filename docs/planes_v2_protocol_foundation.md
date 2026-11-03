@@ -1,6 +1,8 @@
 # Planes v2 Protocol Foundation and File Layout Spec
 
-Status: Frozen for F-027
+Status: Frozen for F-027 as a layout spec. The shipped loader does not use this split-file tree.
+
+`load_plane_app` reads one JSON document, and the training examples use `plane.json`. `planes_v2_validator.load_split_bundle` expects `manifest.json` plus `planes/`, `routes/`, and `frames/` directories. Neither path matches `plane_app/app.json`, `plane_app/planes.json`, or `plane_app/components/*.json`. Runtime ordering uses `plane_global_z` and `component_local_z` with named coordinate frames. It does not require `k_hat_index < 0` or `u_basis` / `v_basis` / `w_basis` on the monolithic payload.
 
 ## Objective
 
@@ -8,7 +10,7 @@ Freeze the Planes v2 split-file contract, canonical basis rules, and determinist
 
 ## Split-File Layout (Canonical)
 
-The runtime loader resolves a Planes v2 app from this canonical layout:
+The frozen layout spec below is not what `load_plane_app` reads. It describes this intended split-file layout:
 
 1. `plane_app/app.json` (app metadata, startup route id, protocol version)
 2. `plane_app/planes.json` (plane registry and canonical k-hat ordering fields)

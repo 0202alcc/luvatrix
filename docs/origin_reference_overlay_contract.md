@@ -1,8 +1,10 @@
 # Origin Reference Overlay Contract (R-040 Reopen)
 
-## CLI Surface
-- Flag: `--show-origin-refs`
-- Default: `false`
+## Enablement
+- Environment variable: `LUVATRIX_SHOW_ORIGIN_REFS` (`1` enables the overlay; default is off).
+- Runtime state: `app.state["origin_refs_enabled"]`.
+- Debug menu action: `debug.menu.overlay.origin_refs.toggle`.
+- There is no `--show-origin-refs` CLI flag.
 - Scope: runtime-local debug visualization only.
 - Non-goal: no App Protocol schema/state semantics changes.
 

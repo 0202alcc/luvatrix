@@ -4,11 +4,13 @@ This guide extends `docs/android_computational_camera_lab_implementation.md` wit
 
 - A physical Android phone is connected over USB.
 - USB debugging is enabled.
-- The current branch is `feature/android-camera`.
-- The native Android project is the repo-local `android/` project.
+- Use the repo-local `android/` project. The camera lab is on the current tree. It is not limited to the old `feature/android-camera` branch.
+- The native Android project is the repo-local `android/` project. A fresh `luvatrix init-native` scaffold does not include the full computational-camera Kotlin stack.
 - The target app is `examples/camera`.
 
 The goal is not merely to build. The goal is to iterate until a working app is visible on the phone, camera preview is active, the Python HUD is responsive, and runtime errors are cleared.
+
+`pytest` is not a project dependency. Run the commands in this guide as `uv run --with pytest pytest ...`. Android packaging tests do not need the `desktop` extra. Runtime tests that import `torch`, such as `tests/test_app_runtime.py`, also need `--extra desktop`.
 
 ## The Loop
 
@@ -36,11 +38,7 @@ Do not skip log inspection. A successful APK install only proves the package ins
 git status --short --branch
 ```
 
-Expected branch:
-
-```text
-## feature/android-camera
-```
+The camera lab is in this repository's `android/` and `examples/camera` trees. You do not need to check out `feature/android-camera`.
 
 Do not clean or reset unrelated files. This repo may already contain work in progress.
 
@@ -571,7 +569,7 @@ Inspect burst manifests:
 find /tmp/luvatrix_camera_artifacts -name burst_manifest.json -print
 ```
 
-Process a burst once Packet 6 exists:
+Process a saved burst with the offline tool. On-device YUV processing is already wired in `CameraBridge.kt`. This command is the offline path:
 
 ```bash
 uv run python tools/camera/process_burst.py /tmp/luvatrix_camera_artifacts/files/computational_camera/bursts/BURST_ID --out /tmp/luvatrix_processed --mode sharpest

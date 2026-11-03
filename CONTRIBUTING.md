@@ -62,7 +62,7 @@ Changes to public APIs, runtime behavior, bug fixes, dependency behavior, build 
 Use `uv` for repository Python workflows. Start with the narrowest relevant command, for example:
 
 ```sh
-uv run --with pytest pytest -q tests/test_app_runtime.py
+uv run --extra desktop --with pytest pytest -q tests/test_app_runtime.py
 ```
 
 Before requesting review, run the cross-platform contract suite used by the required `dev` gate when the touched surface warrants it:
@@ -78,4 +78,4 @@ uv run --extra desktop --with pytest pytest -q \
   tests/test_display_runtime.py
 ```
 
-This baseline does not replace focused tests for the changed code. Platform-specific changes require the relevant macOS, iOS, Android, Vulkan, or web checks documented in `AGENTS.md` and enforced by specialized workflows.
+This baseline does not replace focused tests for the changed code. Platform-specific changes should add or run the focused tests named in `AGENTS.md`. Optional workflows such as `macos-gui-smoke.yml` and `android-accelerator-wheels.yml` are not required checks on every pull request.

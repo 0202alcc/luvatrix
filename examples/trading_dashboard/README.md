@@ -28,8 +28,8 @@ Optional env vars:
 - `LUVATRIX_ORDERBOOK_DISPLAY_WINDOW_SEC` (default equals `LUVATRIX_ORDERBOOK_TIME_WINDOW_SEC`; shows cropped recent x-domain)
 - `LUVATRIX_ORDERBOOK_INITIAL_MID` (default `100.0`)
 - `LUVATRIX_ORDERBOOK_DRIFT` (default `0.12`)
-- `LUVATRIX_ORDERBOOK_FIT_PAD_TICKS` (default `1.0`; pad above ask/below bid when fitting y-range)
-- `LUVATRIX_ORDERBOOK_GRADIENT_BLUR_PX` (default `3`; vertical blur radius for smooth no-gap gradient)
+- `LUVATRIX_ORDERBOOK_FIT_PAD_TICKS` (default `0.0`; pad above ask/below bid when fitting y-range)
+- Gradient blur is fixed at `0` in `app_main.py`. `LUVATRIX_ORDERBOOK_GRADIENT_BLUR_PX` is not read.
 
 Run from repo root:
 

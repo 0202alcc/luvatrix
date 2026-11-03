@@ -16,7 +16,7 @@ Drive viewport scrolling and pan telemetry with scroll events.
 - `validation_artifact.json` (generated)
 
 ## Hands-on tasks
-- Trigger `scroll_plane` from the on-screen control.
+- Scroll the `scroll_canvas` viewport. `plane.json` binds `on_scroll` to `handlers::scroll_plane`. There is no `btn_scroll_plane` control.
 - Run the validation command.
 - Open the resulting artifact and verify every interactive check is `true`.
 

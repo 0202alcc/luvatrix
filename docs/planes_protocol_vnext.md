@@ -2,6 +2,8 @@
 
 Status: Draft v0.2.0-dev
 
+`compile_planes_to_ui_ir` copies `blend_mode` and `section_cuts` onto the UI IR. `planes_runtime` does not read `blend_mode` while compositing and does not apply `section_cuts`. `active_route_id` and `active_plane_ids` are fixed when the page is compiled. Handler updates to `app.state` do not retarget that set.
+
 This document extends `docs/planes_protocol_v0.md` for the M-008 architecture chain (`T-816`).
 
 It formalizes:

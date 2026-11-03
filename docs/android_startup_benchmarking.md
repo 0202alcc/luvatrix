@@ -9,7 +9,9 @@ profiles, and release configuration into each scaffolded Android project.
 ## Host-only checks
 
 Install JDK 17, Android SDK 35, and a Gradle version compatible with Android
-Gradle Plugin 8.7.3. These commands configure and compile the benchmark code,
+Gradle Plugin 8.7.3. `android/gradlew` is a stub. It runs a system `gradle`
+binary when one is installed, and it exits if neither Gradle nor a wrapper
+distribution is present. These commands configure and compile the benchmark code,
 but do not start an emulator or require a connected device:
 
 ```bash

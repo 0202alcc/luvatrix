@@ -85,9 +85,9 @@ Vulkan transfer-path safety checks (if using macOS render path):
 ## Verification
 
 ```bash
-PYTHONPATH=. uv run pytest tests/test_protocol_governance.py tests/test_app_runtime.py tests/test_unified_runtime.py
-PYTHONPATH=. uv run pytest tests/test_display_runtime.py -k "revision_snapshot_flag or parity or coalesces_to_latest_revision"
-PYTHONPATH=. uv run pytest tests/test_planes_runtime.py -k "incremental_present or invalidation_escape_hatch or scroll_visual_parity"
-PYTHONPATH=. uv run pytest tests/test_sensor_manager.py tests/test_app_runtime.py -k "sensor"
-PYTHONPATH=. uv run pytest tests/test_macos_vulkan_backend.py -k "persistent_map or transient_mode_maps_each_frame or upload_image_reuse or swapchain_invalidation"
+PYTHONPATH=. uv run --extra desktop --with pytest pytest tests/test_protocol_governance.py tests/test_app_runtime.py tests/test_unified_runtime.py
+PYTHONPATH=. uv run --extra desktop --with pytest pytest tests/test_display_runtime.py -k "revision_snapshot_flag or parity or coalesces_to_latest_revision"
+PYTHONPATH=. uv run --extra desktop --with pytest pytest tests/test_planes_runtime.py -k "incremental_present or invalidation_escape_hatch or scroll_visual_parity"
+PYTHONPATH=. uv run --extra desktop --with pytest pytest tests/test_sensor_manager.py tests/test_app_runtime.py -k "sensor"
+PYTHONPATH=. uv run --extra desktop --with pytest pytest tests/test_macos_vulkan_backend.py -k "persistent_map or transient_mode_maps_each_frame or upload_image_reuse or swapchain_invalidation"
 ```

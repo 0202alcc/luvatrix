@@ -6,18 +6,23 @@ scaffolded native Android/iOS projects.
 
 ## Install
 
+Requires Python 3.14 (`requires-python` is `>=3.14,<3.15`). Repository workflows
+pin the free-threaded build in `.python-version` (`3.14+freethreaded`).
+
 Base install:
 
 ```bash
 pip install luvatrix
 ```
 
-Optional platform/runtime extras:
+Optional extras:
 
 ```bash
-pip install "luvatrix[macos]"
-pip install "luvatrix[vulkan]"
-pip install "luvatrix[macos,vulkan]"
+pip install "luvatrix[desktop]"          # torch, used by the CPU frame pipeline and several tests
+pip install "luvatrix[dev]"              # matplotlib
+pip install "luvatrix[macos]"            # PyObjC/AppKit/Quartz/Metal and torch
+pip install "luvatrix[vulkan]"           # Python Vulkan binding
+pip install "luvatrix[macos,vulkan]"     # required together for --render macos
 pip install "luvatrix[web]"
 pip install "luvatrix[android]"
 pip install "luvatrix[ios]"
@@ -25,21 +30,34 @@ pip install "luvatrix[ios]"
 
 The base package intentionally includes common raster/data dependencies
 (`numpy` and `Pillow`). Platform-specific renderers still live behind extras.
-Extras are target-scoped: installing `luvatrix[ios]` does not install macOS
-PyObjC bindings, Vulkan bindings, web socket runtimes, or Android-only helpers.
-iOS ABI-specific packages are prepared by the native scaffold's
-`ios/scripts/setup_ios.sh` and copied into the app-owned `PyPackages` bundle.
+The `web`, `android`, and `ios` extras are placeholders with no extra pip
+packages. Browser apps are built and served with the standard library. Native
+Android and iOS runtimes come from the app-owned scaffold, not from those
+extras. Installing `luvatrix[ios]` does not install macOS PyObjC bindings,
+Vulkan bindings, or Android-only helpers. iOS ABI-specific packages are
+prepared by the native scaffold's `ios/scripts/setup_ios.sh` and copied into
+the app-owned `PyPackages` bundle. `--render macos` checks for both the
+`macos` and `vulkan` modules. `--render macos-metal` checks for the `macos`
+extra only.
 
 ## Create An External App
 
 Create a standalone app outside this repository:
 
 ```bash
-luvatrix init-app my_app
+luvatrix init-app my_app --platform-support linux
 cd my_app
 luvatrix validate-app . --render headless
 luvatrix run-app . --render headless --ticks 1
 ```
+
+The default `init-app` template sets
+`platform_support = ["macos", "ios", "android", "web"]`. Headless validation
+uses the host OS only when it is listed, or when the app lists exactly one
+platform. On Linux, validate and run that default app with an explicit target
+such as `--render web`, or pass `--platform-support linux` (repeat the flag
+for more than one platform). `examples/hello_world` omits `platform_support`,
+so headless validation accepts the current host.
 
 For an Android-only app, validate against the Android runtime from your
 development machine:

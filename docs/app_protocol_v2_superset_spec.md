@@ -8,8 +8,9 @@ This spec defines protocol v2 as a superset of v1.
 
 1. Runtime MUST continue accepting `protocol_version = "1"` manifests.
 2. Runtime MUST accept `protocol_version = "2"` manifests.
-3. v1 apps run through `runtime.kind = "python_inproc"` behavior (default).
-4. v2 apps may run through `runtime.kind = "process"` over `stdio_jsonl`.
+3. Current runtime also accepts `protocol_version = "3"`, which is the non-deprecated version. Versions `1` and `2` warn.
+4. v1 apps run through `runtime.kind = "python_inproc"` behavior (default).
+5. v2 apps may run through `runtime.kind = "process"` over `stdio_jsonl`.
 
 ## Manifest Additions (v2)
 
@@ -42,6 +43,8 @@ optional_features = ["section_cuts", "route_activation", "perf.culling_hints"]
 ```
 
 ### Rules
+
+The manifest loader does not apply these rules today. They remain the draft contract.
 
 1. If `[planes]` is omitted, runtime assumes legacy Planes compatibility behavior.
 2. `schema_version` declares the app-authored schema target.
@@ -102,7 +105,9 @@ Example app response:
 
 ## Governance Notes
 
-1. `CURRENT_PROTOCOL_VERSION = "2"`.
-2. `SUPPORTED_PROTOCOL_VERSIONS = {"1", "2"}`.
-3. Protocol `1` is accepted with deprecation warning.
-4. Planes capability/version checks are enforced only when `[planes]` metadata is present.
+The runtime has moved past this draft. Current constants in `luvatrix_core/core/protocol_governance.py`:
+
+1. `CURRENT_PROTOCOL_VERSION = "3"`.
+2. `SUPPORTED_PROTOCOL_VERSIONS = {"1", "2", "3"}`.
+3. Protocol `1` and protocol `2` are accepted with a deprecation warning. Protocol `3` is accepted without a warning.
+4. The manifest loader does not enforce `[planes]` capability or schema bounds. Planes apps load `plane.json` through `load_plane_app`.

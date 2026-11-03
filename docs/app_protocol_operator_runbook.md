@@ -22,24 +22,18 @@ Enable macOS sensor providers:
 uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --render headless --sensor-backend macos --ticks 300
 ```
 
-Audit to SQLite and summarize:
+Audit to SQLite:
 
 ```bash
 uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --render headless --ticks 120 --audit-sqlite ./.luvatrix/audit.db
-uv run --python 3.14+freethreaded python main.py audit-report --audit-sqlite ./.luvatrix/audit.db
 ```
 
-Audit to JSONL and summarize:
+There is no `audit-report` subcommand and no `--audit-jsonl` flag. `SQLiteAuditSink` and `JsonlAuditSink` both record through `.log`. `run-app --audit-sqlite` currently binds `.append`, so the CLI flag does not write audit rows until that callback uses `.log`. Summaries are available on the sink objects in `luvatrix_core/core/audit.py`, not through the CLI.
+
+Energy safety warn mode:
 
 ```bash
-uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --render headless --ticks 120 --audit-jsonl ./.luvatrix/audit.jsonl
-uv run --python 3.14+freethreaded python main.py audit-report --audit-jsonl ./.luvatrix/audit.jsonl
-```
-
-Energy safety monitor mode:
-
-```bash
-uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --sensor-backend macos --energy-safety monitor --ticks 300
+uv run --python 3.14+freethreaded python main.py run-app examples/app_protocol/input_sensor_logger --sensor-backend macos --energy-safety warn --ticks 300
 ```
 
 Energy safety enforce mode:
@@ -101,28 +95,23 @@ Incident: required capability denied
 For each operational run:
 
 1. confirm CLI summary prints `run complete: ticks=... frames=...`
-2. verify audit sink file exists and is non-empty (`.db` or `.jsonl`)
-3. run `main.py audit-report` and check expected action counts
+2. if audit logging is wired through `SQLiteAuditSink.log` or `JsonlAuditSink.log`, verify the sink file exists and is non-empty
+3. call the sink `summarize()` method and check expected action counts
 4. verify capability actions include expected grants/denials
 5. verify security events include expected sensor/HDI gating when applicable
 
-Quick verification commands:
-
-```bash
-uv run --python 3.14+freethreaded python main.py audit-report --audit-sqlite ./.luvatrix/audit.db
-uv run --python 3.14+freethreaded python main.py audit-report --audit-jsonl ./.luvatrix/audit.jsonl
-```
+The CLI does not provide `audit-report`.
 
 ## 5. Operator Test Pack
 
 Use this deterministic pack before milestone review:
 
 ```bash
-uv run pytest tests/test_protocol_governance.py tests/test_app_runtime.py tests/test_unified_runtime.py
+uv run --extra desktop --with pytest pytest tests/test_protocol_governance.py tests/test_app_runtime.py tests/test_unified_runtime.py
 ```
 
 Optional focused checks:
 
 ```bash
-uv run pytest tests/test_app_runtime.py -k "variant or protocol"
+uv run --extra desktop --with pytest pytest tests/test_app_runtime.py -k "variant or protocol"
 ```

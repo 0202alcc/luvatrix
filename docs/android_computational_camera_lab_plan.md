@@ -39,16 +39,16 @@ The current Android camera app is already strong for layer 1 and live diagnostic
 - `examples/camera/app_main.py` provides a Python HUD/control surface for preview quality, target mode, sharpness, white balance, pipeline mode, refresh hint, RAW capture, and manual exposure controls.
 - Native telemetry exposes GPU import/draw timing, cache behavior, frame delivery, and fallback status.
 
-The next major milestone is:
+The burst, offline processor, and on-device gallery export described below as the next milestone are in the repo-root `android/` project and `examples/camera`. Default burst depth is 5 frames. RAW defaults are `balanced_2400`, `malvar_approx`, `raw_average_motion_aware`, and render style `Google`. The phase lists after this section are the original plan, not a queue of missing work.
+
+Original milestone this plan was written toward:
 
 ```text
-Capture a 10-frame RAW/YUV burst,
+Capture a RAW/YUV burst,
 save every frame plus metadata,
-process it offline into one visibly better image,
+process it into one visibly better image,
 then display the result back in the app.
 ```
-
-That is the point where the project becomes a real computational camera.
 
 ## Phase 1: Stabilize The Camera Core
 

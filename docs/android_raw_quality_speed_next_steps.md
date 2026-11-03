@@ -1,6 +1,20 @@
 # Android RAW Quality/Speed Next Steps Implementation Plan
 
-This plan continues from `docs/android_computational_camera_lab_implementation.md` and the current RAW path:
+This plan continues from `docs/android_computational_camera_lab_implementation.md`. The defaults in `examples/camera/app_main.py` and `CameraBridge.kt` are no longer the single-frame 1600×1200 bilinear path described in the older packets below.
+
+Current RAW defaults:
+
+```text
+quality: balanced_2400
+demosaic: malvar_approx
+merge: raw_average_motion_aware
+render style: Google
+burst depth: 5 (cycle with n through 3, 5, 10, 12)
+```
+
+`fast_1600`, bilinear demosaic, and Neutral style remain selectable. They are not the defaults. Later sections that say the default is `fast_1600` or Neutral describe an earlier milestone.
+
+Historical fast path this plan started from:
 
 ```text
 tap raw burst
@@ -11,7 +25,7 @@ tap raw burst
   -> MediaStore gallery save
 ```
 
-The current fast path is intentionally simple. It gets a RAW-derived JPEG into the phone gallery quickly, but it trades quality for speed in these places:
+That older fast path traded quality for speed in these places:
 
 ```text
 4000x3000 RAW -> 1600x1200 Bayer-area reduction
@@ -562,7 +576,7 @@ Inspect:
 ```bash
 adb shell run-as com.luvatrix.app find files/computational_camera -maxdepth 5 -type f
 adb shell run-as com.luvatrix.app cat files/computational_camera/processed/<raw_burst_id>/processing_manifest.json
-adb shell content query --uri content://media/external/images/media --projection _id:_display_name:relative_path:date_added
+adb shell content query --uri content://media/external/images/media --projection _id,display_name,relative_path,date_added
 adb logcat -d -t 500 AndroidRuntime:E Python:E Luvatrix:E com.luvatrix.app:E '*:S'
 ```
 

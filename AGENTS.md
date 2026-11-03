@@ -21,11 +21,14 @@ Repository-level operating rules and quick-start context for human and AI contri
 1. `luvatrix` is one Python distribution with optional extras, not split distributions.
 2. Keep base dependencies usable for manifest loading, public API imports, and headless app validation/runs.
 3. Platform-heavy dependencies must stay in extras:
-   - `macos`: PyObjC/AppKit/Quartz/Metal runtime support.
-   - `vulkan`: Python Vulkan binding only; native Vulkan SDK/MoltenVK is still installed outside pip.
-   - `web`: websocket runtime support.
-   - `ios`: reserved for Python-installable iOS helpers; native Xcode packaging remains outside pip.
-   - `trading`: Coinbase/trading-dashboard dependencies.
+   - `macos`: PyObjC/AppKit/Quartz/Metal runtime support, plus torch. `--render macos-metal` checks this extra. `--render macos` also checks `vulkan`.
+   - `desktop`: torch for the CPU frame pipeline and parts of the repository test suite.
+   - `dev`: matplotlib for development and examples.
+   - `vulkan`: Python Vulkan binding only; native Vulkan SDK/MoltenVK is still installed outside pip. `--render macos` also requires this extra.
+   - `web`: reserved extra with no pip dependencies. Browser apps use `build-web` and `serve-web`.
+   - `ios`: reserved extra with no pip dependencies; native Xcode packaging remains outside pip.
+   - `android`: reserved extra with no pip dependencies; the Android SDK and Gradle stay outside pip.
+   - Trading-dashboard examples import a separate Coinbase API package. There is no `luvatrix[trading]` extra. `[tool.uv.sources]` names `coinbasetraderbot`, and that package is not a project dependency.
 4. Do not add eager top-level imports of macOS, iOS, Vulkan, or web modules from public API or CLI import paths. Missing extras should fail only when the matching renderer is selected, with an actionable install hint.
 
 ## App Protocol Conventions
@@ -40,12 +43,13 @@ Repository-level operating rules and quick-start context for human and AI contri
 7. Use `luvatrix.app.ScrollbarController` for custom scene scrollbars. It supplies track clicking, thumb-anchor dragging, pointer capture outside the track, release handling, and horizontal/vertical parity; keep painted scrollbar geometry separate from a comfortably sized interaction target.
 
 ## Python Tooling Policy
-1. Use `uv` for Python workflows:
-   - `uv sync`
-   - `uv run pytest ...`
+1. Use `uv` for Python workflows. Python is 3.14, and `.python-version` selects `3.14+freethreaded`.
+   - `uv sync --extra desktop`
+   - `uv run --extra desktop --with pytest pytest ...`
    - `uv run python ...`
-2. Do not use bare `python` or `pip` unless blocked by environment constraints. If blocked, document the reason and fallback.
-3. For tests, prefer focused coverage first, then broaden only when the touched surface warrants it.
+2. `pytest` is not a project dependency. Several runtime tests import `torch` at collection time, so pass `--extra desktop` as well as `--with pytest`.
+3. Do not use bare `python` or `pip` unless blocked by environment constraints. If blocked, document the reason and fallback.
+4. For tests, prefer focused coverage first, then broaden only when the touched surface warrants it.
 
 ## Test-First Development Policy
 1. For every behavior change or bug fix, write or update the test that defines the expected behavior before implementing the production change.
@@ -82,14 +86,16 @@ Repository-level operating rules and quick-start context for human and AI contri
 
 ## Useful Verification Commands
 1. Public API and optional install validation:
-   - `uv run pytest tests/test_luvatrix_public_app_api.py`
+   - `uv run --extra desktop --with pytest pytest tests/test_luvatrix_public_app_api.py`
 2. App manifest and variant routing:
-   - `uv run pytest tests/test_app_runtime.py -k "manifest or variant or platform_support"`
+   - `uv run --extra desktop --with pytest pytest tests/test_app_runtime.py -k "manifest or variant or platform_support"`
 3. Headless CLI smoke:
-   - `uv run python main.py validate-app examples/full_suite_interactive --render headless`
+   - `uv run python main.py validate-app examples/hello_world --render headless`
    - `uv run python main.py run-app examples/hello_world --render headless --ticks 1 --energy-safety off`
-4. Broader runtime checks should be chosen based on touched modules, for example macOS renderer tests for `luvatrix_core/platform/macos/*` changes or planes tests for `luvatrix_ui/planes_*` changes.
-5. Retained scene-scroll throughput: `uv run python tools/perf/macos_scene_scroll_harness.py`.
+   - `uv run python main.py validate-app examples/full_suite_interactive --render web`
+4. `examples/full_suite_interactive` lists `macos`, `ios`, `android`, and `web`. Headless validation on Linux cannot pick one of those platforms. Use `--render web`, or another single platform target, for that app.
+5. Broader runtime checks should be chosen based on touched modules, for example macOS renderer tests for `luvatrix_core/platform/macos/*` changes or planes tests for `luvatrix_ui/planes_*` changes.
+6. Retained scene-scroll throughput: `uv run python tools/perf/macos_scene_scroll_harness.py`.
 
 ## Cursor Cloud specific instructions
 1. This repo pins Python `3.14+freethreaded` in `.python-version`. Ubuntu's system Python is too old. Install that interpreter with `uv python install 3.14+freethreaded`. Cloud Agent login shells do not load `~/.bashrc`, so `uv` and `uvx` must be on the default PATH (`/usr/local/bin`).

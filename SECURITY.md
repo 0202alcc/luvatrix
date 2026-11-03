@@ -7,7 +7,7 @@ Pull requests targeting `dev`, `staging`, or `main` run the required `security-r
 - `pip-audit` for known vulnerabilities in locked Python dependencies;
 - Bandit for high-confidence, high-severity Python findings;
 - Gitleaks for committed secrets;
-- zizmor for GitHub Actions workflow risks; and
+- zizmor, with the auditor persona, on `.github/workflows/security-review.yml`; and
 - validation of the provider-neutral agent-review contract.
 
 The final `security-review` job succeeds only when every layer succeeds. Repository branch rulesets should require that stable job name rather than individual scanner job names, allowing scanners to evolve without repeatedly changing protection rules.
