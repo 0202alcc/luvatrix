@@ -1,0 +1,20 @@
+{
+  "files": {
+    "Luvatrix/AppDelegate.swift": "ab4612f0d6a0370c25cbc42d088ebae12718f0c5d644ef4a7b3e79720f2777f3",
+    "Luvatrix/Assets.xcassets/AppIcon.appiconset/Contents.json": "13299eeb3b8f12d79b8aef018c23ac7d0c964bdeafdc7fe26044c26e2155f575",
+    "Luvatrix/Assets.xcassets/AppIcon.appiconset/icon.png": "5455482b00d9e2da8b0cf468dc830cf4b212bf56a7ca9f345f7ed446b5a1405f",
+    "Luvatrix/Assets.xcassets/Contents.json": "f5fb0e1f3a8142892ed092efb5955c1c2cc537003a89ad7bbdb9dade7fe8985f",
+    "Luvatrix/Info.plist": "e89fd3bf5b63b39d1f4cd553e065649c946b6be4c2b31544ea18c1afcfd83ca3",
+    "Luvatrix/Luvatrix-Bridging-Header.h": "14e56842b17703444fada7a6266cc06c0fa1a6691605c1d2864a06975d31a881",
+    "Luvatrix/Luvatrix.entitlements": "151797b6be37707d837f0a946124b4619cdb8093dc05ebae5f097621c2cc3057",
+    "Luvatrix/PythonBridge.h": "7f902ba317aff9903fe5c276277c884366fdae9588e0bcd29c9213016383b4aa",
+    "Luvatrix/PythonBridge.m": "712aa4786e54bbcd5ccf2a983cd2c58bc1e02c7112cd507b1b3da9fb6c55234f",
+    "Luvatrix/main.swift": "abb81b2bd3715628eb6d6932a360bb24c567b8a189ad8670825ff45fbb48220c",
+    "project.yml": "ece788db8c461a580958a0eb0fd87c2cbcf8ef7e3fab7010f65b5dc656e82601",
+    "scripts/setup_ios.sh": "582d6296bbc5fefaf5a6d1088770256a2f5078df932ff7c2a8638d43f058aaab"
+  },
+  "luvatrix_version": "0.2.10",
+  "pending_conflicts": [],
+  "schema_version": 1,
+  "target": "ios"
+}

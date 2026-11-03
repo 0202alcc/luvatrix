@@ -53,3 +53,12 @@ ios/Python/
 ios/Luvatrix.xcodeproj/xcuserdata/
 ios/Luvatrix.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcuserstate
+
+# examples/hello_ios native scaffold: setup_ios.sh, xcodegen, and xcodebuild outputs
+examples/hello_ios/ios/.build/
+examples/hello_ios/ios/.build*/
+examples/hello_ios/ios/PyPackages/
+examples/hello_ios/ios/PyPackages-device/
+examples/hello_ios/ios/PyPackages-simulator/
+examples/hello_ios/ios/Python/
+examples/hello_ios/ios/Luvatrix.xcodeproj/
