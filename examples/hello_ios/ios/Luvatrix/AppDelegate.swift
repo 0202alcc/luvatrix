@@ -451,18 +451,29 @@ final class LuvatrixTouchCaptureView: UIView {
 // MARK: - AppDelegate
 
 @objc class AppDelegate: UIResponder, UIApplicationDelegate {
-    // Owned strongly so UIWindow is not deallocated after applicationDidFinishLaunching.
+    // Owned strongly so the Python-created UIWindow is not deallocated after start(in:).
     // (Python also holds a reference via rubicon-objc, but keeping one here is defensive.)
     @objc var window: UIWindow?
     private var displayLinkTelemetry: LuvatrixDisplayLinkTelemetry?
+    private var started = false
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        let screen = UIScreen.main
-        let w = Int(screen.bounds.width)
-        let h = Int(screen.bounds.height)
+        return true
+    }
+
+    // Called by LuvatrixSceneDelegate once the window scene connects; Python's setup_ui
+    // attaches its UIWindow to that scene.
+    func start(in windowScene: UIWindowScene) {
+        if started {
+            return
+        }
+        started = true
+
+        let w = Int(windowScene.screen.bounds.width)
+        let h = Int(windowScene.screen.bounds.height)
 
         if ProcessInfo.processInfo.arguments.contains("--luvatrix-import-probe")
             || Bundle.main.path(forResource: "LuvatrixImportProbe", ofType: nil) != nil {
@@ -490,6 +501,7 @@ final class LuvatrixTouchCaptureView: UIView {
         displayLinkTelemetry?.start()
 
         if let keyWindow = currentKeyWindow() {
+            window = keyWindow
             let capture = LuvatrixTouchCaptureView(frame: keyWindow.bounds)
             keyWindow.addSubview(capture)
             print("[ios-hdi] native touch capture installed frame=\(keyWindow.bounds)")
@@ -514,17 +526,21 @@ final class LuvatrixTouchCaptureView: UIView {
         DispatchQueue.global(qos: .userInteractive).async {
             callPythonRunLoop(appDir: appDir)
         }
-
-        return true
     }
 
-    func applicationWillResignActive(_ application: UIApplication) {
+    func willResignActive() {
+        guard started else {
+            return
+        }
         setenv("LUVATRIX_IOS_APP_ACTIVE", "0", 1)
         callPythonSetAppActive(false)
         displayLinkTelemetry?.stop()
     }
 
-    func applicationDidBecomeActive(_ application: UIApplication) {
+    func didBecomeActive() {
+        guard started else {
+            return
+        }
         setenv("LUVATRIX_IOS_APP_ACTIVE", "1", 1)
         let restoreState = _appSignposter.beginInterval("foreground_restore")
         callPythonRestoreMetalLayerAfterForeground()
@@ -533,5 +549,38 @@ final class LuvatrixTouchCaptureView: UIView {
         // Reset the display link so measured_fps reflects post-foreground rate
         displayLinkTelemetry?.stop()
         displayLinkTelemetry?.start()
+    }
+}
+
+// MARK: - SceneDelegate
+
+// Apps built with the iOS 27 SDK must adopt the UIScene life cycle. The exported
+// name must match UISceneDelegateClassName in Info.plist and project.yml.
+@objc(LuvatrixSceneDelegate)
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+
+    private var appDelegate: AppDelegate? {
+        return UIApplication.shared.delegate as? AppDelegate
+    }
+
+    func scene(
+        _ scene: UIScene,
+        willConnectTo session: UISceneSession,
+        options connectionOptions: UIScene.ConnectionOptions
+    ) {
+        guard let windowScene = scene as? UIWindowScene else {
+            return
+        }
+        appDelegate?.start(in: windowScene)
+        window = appDelegate?.window
+    }
+
+    func sceneWillResignActive(_ scene: UIScene) {
+        appDelegate?.willResignActive()
+    }
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        appDelegate?.didBecomeActive()
     }
 }

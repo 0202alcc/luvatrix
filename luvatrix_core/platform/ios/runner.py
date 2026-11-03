@@ -103,6 +103,16 @@ def _setup_syslog_redirect() -> None:
         pass
 
 
+def _connected_window_scene(ObjCClass) -> object | None:
+    try:
+        scene = ObjCClass("UIApplication").sharedApplication.connectedScenes.anyObject()
+        if scene is not None and scene.isKindOfClass_(ObjCClass("UIWindowScene")):
+            return scene
+    except Exception as exc:
+        print(f"[ios] could not resolve connected UIWindowScene: {exc}", file=_sys.stderr, flush=True)
+    return None
+
+
 def setup_ui(width: int, height: int) -> None:
     """
     Called from Swift on the main thread before run_loop().
@@ -131,7 +141,12 @@ def setup_ui(width: int, height: int) -> None:
     backing_width = max(1, int(round(float(width) * scale)))
     backing_height = max(1, int(round(float(height) * scale)))
 
-    window = UIWindow.alloc().initWithFrame_(bounds)
+    # Under the UIScene life cycle a window is only displayed once it belongs to a scene.
+    window_scene = _connected_window_scene(ObjCClass)
+    if window_scene is not None:
+        window = UIWindow.alloc().initWithWindowScene_(window_scene)
+    else:
+        window = UIWindow.alloc().initWithFrame_(bounds)
     vc = UIViewController.alloc().init()
     window.rootViewController = vc
     window.makeKeyAndVisible()

@@ -28,6 +28,12 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UIRequiresFullScreen: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: LuvatrixSceneDelegate
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.luvatrix.app
