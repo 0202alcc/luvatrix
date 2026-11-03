@@ -11,10 +11,12 @@ from luvatrix.app import App
 
 from .document import BackAction, FigmaDocument, Frame, Hotspot, NavigateAction, UrlAction
 from .render import FigmaRenderer
+from .tour import Tour
 from .transitions import Transition
 
 TapHandler = Callable[["FigmaApp", str], Any]
 DRAG_THRESHOLD_PT = 6.0
+_SCRIPTED_POINTER = -2
 
 
 @dataclass
@@ -73,15 +75,22 @@ class FigmaApp(App):
         self._pointer = (0.0, 0.0)
         self._transition: Transition | None = None
         self._last_image: np.ndarray | None = None
+        self._tour: Tour | None = None
 
     def setup(self) -> None:
         self.set_continuous_render(False)
+        self._tour = Tour.from_env()
 
     # ── public API ───────────────────────────────────────────────────────────
 
     @property
     def current_frame_name(self) -> str:
         return self.document.frame(self.current_frame_id).name
+
+    @property
+    def busy(self) -> bool:
+        """True while a transition plays or the latest state has not been rendered yet."""
+        return self._transition is not None or self._render_requested
 
     def on_tap(self, node_name: str, handler: TapHandler) -> None:
         self._handlers[node_name] = handler
@@ -99,6 +108,30 @@ class FigmaApp(App):
             return
         frame_id, scroll, transition = self.history.pop()
         self._go(frame_id, scroll, transition, reverse=True)
+
+    def tap(self, node: str) -> None:
+        """Tap the center of a tappable layer (by name or id) through normal hit testing.
+
+        A layer outside the viewport is scrolled into view first. Raises KeyError
+        when the current frame has no visible tappable layer with that name.
+        """
+        spot = next((t for t in reversed(self._tap_targets()) if node in (t.node_name, t.node_id)), None)
+        if spot is None:
+            raise KeyError(node)
+        screen = self._screen(self.current_frame_id)
+        cx, cy = spot.x + spot.width / 2, spot.y + spot.height / 2
+        pinned = spot.fixed and screen.max_scroll > 0
+        if not pinned and not (spot.y >= self.scroll_y and spot.y + spot.height <= self.scroll_y + screen.viewport_h):
+            self._scroll_to(cy - screen.viewport_h / 2)
+        vy = cy if pinned else cy - self.scroll_y
+        kx, ky = self._display_to_matrix()
+        self._pointer = ((cx * screen.scale + screen.offset_x) / kx, (vy * screen.scale + screen.offset_y) / ky)
+        self._pointer_phase(_SCRIPTED_POINTER, "down")
+        self._pointer_phase(_SCRIPTED_POINTER, "up")
+
+    def scroll_by(self, dy: float) -> None:
+        """Scroll the current frame by `dy` design units, clamped to its content."""
+        self._scroll_to(self.scroll_y + dy)
 
     def text(self, node: str) -> str:
         return str(self._text_nodes(node)[0].get("characters", ""))
@@ -128,6 +161,8 @@ class FigmaApp(App):
         if self._transition is not None:
             self._transition.advance(dt)
             self.invalidate()
+        if self._tour is not None:
+            self._tour.tick(self, dt)
 
     def render(self) -> None:
         if self._transition is not None:
