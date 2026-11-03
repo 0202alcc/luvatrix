@@ -85,6 +85,7 @@ def run_ios_tour(
     with open(out / "console.log", "w", buffering=1) as console:
         proc = popen(cmd, env=env, stdout=console, stderr=subprocess.STDOUT)
         container: Path | None = None
+        pinned = False
         shot = 0
         done_steps: set[int] = set()
         deadline = clock() + timeout
@@ -93,8 +94,12 @@ def run_ios_tour(
                 if clock() >= deadline:
                     summary.update(state="timeout", error=f"tour did not finish within {timeout:g}s")
                     break
-                container = container or _app_container(run, udid)
+                # Re-resolve until this run's status shows up: before run-app reinstalls
+                # the app, simctl still reports the previous install's data container.
+                if not pinned:
+                    container = _app_container(run, udid)
                 status = _read_status(container, run_id) if container else None
+                pinned = pinned or status is not None
                 if status is not None and status.get("state") == "capture" and status.get("step") not in done_steps:
                     sleep(settle)
                     name = _safe_name(str(status.get("capture", "capture")))

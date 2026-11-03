@@ -25,6 +25,7 @@ class _FakeSimulator:
         self.env: dict[str, str] = {}
         self.launch_cmd: list[str] = []
         self.log_show_cmd: list[str] = []
+        self.previous_install: Path | None = None
         self.returncode: int | None = None
         self.terminated = False
         self.step = 0
@@ -40,6 +41,8 @@ class _FakeSimulator:
         if cmd[:3] == ["xcrun", "simctl", "get_app_container"]:
             assert cmd[3:] == [UDID, BUNDLE, "data"]
             if not self.container.exists():
+                if self.previous_install is not None:
+                    return SimpleNamespace(returncode=0, stdout=f"{self.previous_install}\n", stderr="")
                 return SimpleNamespace(returncode=2, stdout="", stderr="not installed")
             return SimpleNamespace(returncode=0, stdout=f"{self.container}\n", stderr="")
         if cmd[:4] == ["xcrun", "simctl", "io", UDID]:
@@ -176,6 +179,18 @@ def test_ios_tour_ignores_status_from_a_previous_run(tmp_path: Path) -> None:
 
     assert code == 0
     assert (tmp_path / "out" / "00_welcome.png").exists()
+
+
+def test_ios_tour_follows_the_new_container_when_run_app_reinstalls_the_app(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome")])
+    sim.previous_install = tmp_path / "old-container"
+    (sim.previous_install / "tmp" / "luvatrix_tour").mkdir(parents=True)
+
+    code = _run(tmp_path, sim)
+
+    assert code == 0
+    assert (tmp_path / "out" / "00_welcome.png").exists()
+    assert (sim.status_dir / "ack_0").exists()
 
 
 def test_ios_tour_fails_when_the_app_reports_an_error(tmp_path: Path) -> None:
