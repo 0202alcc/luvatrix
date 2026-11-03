@@ -60,7 +60,7 @@ def test_design_is_a_four_screen_prototype_starting_at_welcome() -> None:
 
 
 def test_runtime_renders_the_welcome_screen_as_ios() -> None:
-    matrix = WindowMatrix(393, 852)
+    matrix = WindowMatrix(852, 393)
     runtime = AppRuntime(
         matrix=matrix,
         hdi=HDIThread(source=_NoopHDISource()),
