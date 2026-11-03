@@ -79,7 +79,7 @@ def test_connection_call_routes_by_id_across_sessions() -> None:
     ws = _FakeWS(
         [
             {"method": "Page.frameStartedLoading", "sessionId": "s1"},
-            {"id": 7, "result": {"frameId": "f"}},
+            {"id": 1, "result": {"frameId": "f"}},
         ]
     )
 
@@ -162,8 +162,8 @@ def test_launch_reads_the_ws_url_from_stderr(tmp_path: Path) -> None:
         argv.append(list(args))
         return proc
 
-    with patch.object(cdp.subprocess, "Popen", fake_popen):
-        chrome = cdp.Chrome.launch(["/opt/chrome"], user_data_dir=tmp_path)
+    with patch("subprocess.Popen", fake_popen):
+            chrome = cdp.Chrome.launch("/opt/chrome", user_data_dir=tmp_path)
 
     assert chrome.ws_url == "ws://127.0.0.1:9/devtools/browser/x"
     assert chrome.proc is proc
