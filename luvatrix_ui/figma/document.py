@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 from typing import Any
@@ -22,6 +22,7 @@ class FigmaFormatError(ValueError):
 @dataclass(frozen=True)
 class NavigateAction:
     destination_id: str
+    transition: dict[str, Any] | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ class Frame:
     origin_y: float
     width: float
     height: float
+    scrolls_vertically: bool = False
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,7 @@ class Hotspot:
     width: float
     height: float
     action: Action | None
+    fixed: bool = False
 
     def contains(self, x: float, y: float) -> bool:
         return self.x <= x <= self.x + self.width and self.y <= y <= self.y + self.height
@@ -179,6 +182,7 @@ class FigmaDocument:
             origin_y=float(bbox.get("y", 0.0)),
             width=max(1.0, width),
             height=max(1.0, height),
+            scrolls_vertically=str(node.get("overflowDirection", "NONE")) in {"VERTICAL_SCROLLING", "HORIZONTAL_AND_VERTICAL_SCROLLING"},
         )
         self.frames.append(frame)
         stack = [node]
@@ -230,31 +234,56 @@ class FigmaDocument:
                 return candidate
         return None
 
-    def hotspots(self, frame_id: str) -> list[Hotspot]:
-        cached = self._hotspots.get(frame_id)
-        if cached is not None:
-            return cached
+    def fixed_child_ids(self, frame_id: str) -> set[str]:
+        """Ids of the frame's children that stay put while it scrolls (the topmost N)."""
         frame = self.frame(frame_id)
+        count = int(frame.node.get("numberOfFixedChildren", 0) or 0)
+        children = [c for c in frame.node.get("children") or () if isinstance(c, dict)]
+        if count <= 0:
+            return set()
+        return {str(c.get("id", "")) for c in children[-count:]}
+
+    def fixed_node_ids(self, frame_id: str) -> set[str]:
+        ids: set[str] = set()
+        stack = [self._nodes[i] for i in self.fixed_child_ids(frame_id) if i in self._nodes]
+        while stack:
+            current = stack.pop()
+            ids.add(str(current.get("id", "")))
+            stack.extend(c for c in current.get("children") or () if isinstance(c, dict))
+        return ids
+
+    def node_bounds(self, frame_id: str, node_ids: set[str]) -> dict[str, tuple[float, float, float, float]]:
+        """Frame-local (x0, y0, x1, y1) bounds of the given visible nodes."""
+        out: dict[str, tuple[float, float, float, float]] = {}
+        for node, tf in walk(self.frame(frame_id)):
+            node_id = str(node.get("id", ""))
+            if node_id in node_ids:
+                width, height = node_size(node)
+                out[node_id] = tf.bounds(0.0, 0.0, width, height)
+        return out
+
+    def targets(self, frame_id: str, names: frozenset[str] = frozenset()) -> list[Hotspot]:
+        """Tappable nodes in paint order: prototype hotspots plus nodes named in `names`."""
+        frame = self.frame(frame_id)
+        fixed = self.fixed_node_ids(frame_id)
         spots: list[Hotspot] = []
         for node, tf in walk(frame):
             action = self._tap_action(node)
-            if action is None:
+            name = str(node.get("name", ""))
+            if action is None and name not in names:
                 continue
             width, height = node_size(node)
             x0, y0, x1, y1 = tf.bounds(0.0, 0.0, width, height)
-            spots.append(
-                Hotspot(
-                    node_id=str(node.get("id", "")),
-                    node_name=str(node.get("name", "")),
-                    x=x0,
-                    y=y0,
-                    width=x1 - x0,
-                    height=y1 - y0,
-                    action=action,
-                )
-            )
-        self._hotspots[frame_id] = spots
+            node_id = str(node.get("id", ""))
+            spots.append(Hotspot(node_id, name, x0, y0, x1 - x0, y1 - y0, action, node_id in fixed))
         return spots
+
+    def hotspots(self, frame_id: str) -> list[Hotspot]:
+        cached = self._hotspots.get(frame_id)
+        if cached is None:
+            cached = self.targets(frame_id)
+            self._hotspots[frame_id] = cached
+        return cached
 
     def hit_test(self, frame_id: str, x: float, y: float) -> Hotspot | None:
         for spot in reversed(self.hotspots(frame_id)):
@@ -273,7 +302,9 @@ class FigmaDocument:
                     return resolved
         legacy = node.get("transitionNodeID")
         if legacy:
-            return self._navigate_to(str(legacy))
+            duration = float(node.get("transitionDuration", 0.0) or 0.0) / 1000.0
+            transition = {"type": "DISSOLVE", "duration": duration, "easing": {"type": node.get("transitionEasing", "EASE_OUT")}}
+            return self._navigate_to(str(legacy), transition if duration > 0 else None)
         return None
 
     def _resolve_action(self, action: dict[str, Any]) -> Action | None:
@@ -284,9 +315,9 @@ class FigmaDocument:
             return UrlAction(str(action["url"]))
         if kind == "NODE" and action.get("destinationId"):
             if action.get("navigation", "NAVIGATE") in {"NAVIGATE", "SWAP", "OVERLAY"}:
-                return self._navigate_to(str(action["destinationId"]))
+                return self._navigate_to(str(action["destinationId"]), action.get("transition"))
         return None
 
-    def _navigate_to(self, node_id: str) -> NavigateAction | None:
+    def _navigate_to(self, node_id: str, transition: dict[str, Any] | None = None) -> NavigateAction | None:
         frame_id = self._owner_frame.get(node_id)
-        return NavigateAction(frame_id) if frame_id is not None else None
+        return NavigateAction(frame_id, transition) if frame_id is not None else None

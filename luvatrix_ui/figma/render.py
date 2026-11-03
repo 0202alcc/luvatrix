@@ -86,13 +86,36 @@ class FigmaRenderer:
         self.fonts = fonts or FontLibrary(dirs)
         self.images = ImageCache(doc.image_path)
 
-    def render(self, frame_id: str, scale: float = 1.0, *, background: tuple[float, float, float, float] | None = None) -> np.ndarray:
+    def render(
+        self,
+        frame_id: str,
+        scale: float = 1.0,
+        *,
+        background: tuple[float, float, float, float] | None = None,
+        skip_ids: Iterable[str] = (),
+        only_ids: Iterable[str] | None = None,
+        transparent: bool = False,
+    ) -> np.ndarray:
+        """Rasterize a frame to (H, W, 4) uint8 RGBA.
+
+        `skip_ids` drops those subtrees; `only_ids` draws just those subtrees (the
+        frame's own fills included only if its id is listed). With `transparent`
+        the result keeps straight alpha instead of being flattened onto a background.
+        """
         frame = self.doc.frame(frame_id)
         width = max(1, int(round(frame.width * scale)))
         height = max(1, int(round(frame.height * scale)))
         canvas = np.zeros((height, width, 4), dtype=np.float32)
         self._root = Affine.scale(width / frame.width, height / frame.height)
-        self._draw_node(frame.node, Affine(), Affine(), Clip((0, 0, width, height)), canvas, frame)
+        self._skip = frozenset(skip_ids)
+        self._only = None if only_ids is None else frozenset(only_ids)
+        included = self._only is None or str(frame.node.get("id")) in self._only
+        self._draw_node(frame.node, Affine(), Affine(), Clip((0, 0, width, height)), canvas, frame, included)
+        if transparent:
+            alpha = canvas[..., 3:4]
+            straight = np.where(alpha > 1e-6, canvas / np.maximum(alpha, 1e-6), 0.0)
+            straight[..., 3:4] = alpha
+            return np.clip(np.rint(straight * 255.0), 0, 255).astype(np.uint8)
         bg = background or self.doc.background_rgba or (1.0, 1.0, 1.0, 1.0)
         bg_pre = np.array([bg[0], bg[1], bg[2], 1.0], dtype=np.float32)
         out = canvas + bg_pre * (1.0 - canvas[..., 3:4])
@@ -108,7 +131,10 @@ class FigmaRenderer:
         clip: Clip,
         canvas: np.ndarray,
         frame: Frame,
+        included: bool = True,
     ) -> None:
+        if str(node.get("id")) in self._skip:
+            return
         if clip.rect[2] <= clip.rect[0] or clip.rect[3] <= clip.rect[1]:
             return
         opacity = float(node.get("opacity", 1.0))
@@ -123,14 +149,14 @@ class FigmaRenderer:
         content_shadow = bool(children) and not has_fill and any(e.get("type") == "DROP_SHADOW" for e in effects)
         if children and (opacity < 1.0 or content_shadow):
             layer = np.zeros_like(canvas)
-            self._draw_contents(node, children, tf, container, clip, layer, frame, effects, opacity=1.0, shadow_from_layer=content_shadow)
+            self._draw_contents(node, children, tf, container, clip, layer, frame, effects, included, opacity=1.0, shadow_from_layer=content_shadow)
             if content_shadow:
                 for effect in effects:
                     if effect.get("type") == "DROP_SHADOW":
                         self._drop_shadow(canvas, _alpha_coverage(layer, clip.rect), effect, self._root @ tf, clip)
             _composite_layer(canvas, layer, clip.rect, opacity)
             return
-        self._draw_contents(node, children, tf, container, clip, canvas, frame, effects, opacity=opacity, shadow_from_layer=False)
+        self._draw_contents(node, children, tf, container, clip, canvas, frame, effects, included, opacity=opacity, shadow_from_layer=False)
 
     def _draw_contents(
         self,
@@ -142,6 +168,7 @@ class FigmaRenderer:
         target: np.ndarray,
         frame: Frame,
         effects: list[dict[str, Any]],
+        included: bool,
         *,
         opacity: float,
         shadow_from_layer: bool,
@@ -150,22 +177,8 @@ class FigmaRenderer:
         shape = self._shape(node)
         size = node_size(node)
         node_type = node.get("type")
-        if node_type == "TEXT":
-            self._draw_text(node, tf, size, clip, target, effects, opacity)
-        elif shape is not None:
-            fill_cov = shape.coverage(tf, clip.rect)
-            if not shadow_from_layer:
-                for effect in effects:
-                    if effect.get("type") == "DROP_SHADOW":
-                        self._drop_shadow(target, self._shadow_coverage(shape, tf, effect, clip), effect, tf, clip)
-            for effect in effects:
-                if effect.get("type") == "BACKGROUND_BLUR" and fill_cov is not None:
-                    _background_blur(target, clip.restrict(fill_cov), float(effect.get("radius", 0.0)) * tf.mean_scale)
-            if fill_cov is not None:
-                self._fill(target, clip.restrict(fill_cov), node.get("fills"), tf, size, opacity)
-                for effect in effects:
-                    if effect.get("type") == "INNER_SHADOW":
-                        self._inner_shadow(target, shape, fill_cov, effect, tf, clip, opacity)
+        if included:
+            self._draw_self(node, shape, tf, size, clip, target, effects, opacity=opacity, shadow_from_layer=shadow_from_layer)
         child_container = container if node_type in TRANSPARENT_CONTAINERS else local
         child_clip = clip
         if node.get("clipsContent") and shape is not None:
@@ -180,9 +193,43 @@ class FigmaRenderer:
                 cov = child_shape.coverage(self._root @ child_tf, active.rect) if child_shape is not None else None
                 mask_clip = active.narrowed(cov, exact=True)
                 continue
-            self._draw_node(child, child_tf, child_container, active, target, frame)
-        if shape is not None and node_type != "TEXT":
+            child_included = included or (self._only is not None and str(child.get("id")) in self._only)
+            self._draw_node(child, child_tf, child_container, active, target, frame, child_included)
+        if included and shape is not None and node_type != "TEXT":
             self._strokes(node, shape, tf, size, clip, target, opacity)
+
+    def _draw_self(
+        self,
+        node: dict[str, Any],
+        shape: Shape | None,
+        tf: Affine,
+        size: tuple[float, float],
+        clip: Clip,
+        target: np.ndarray,
+        effects: list[dict[str, Any]],
+        *,
+        opacity: float,
+        shadow_from_layer: bool,
+    ) -> None:
+        if node.get("type") == "TEXT":
+            self._draw_text(node, tf, size, clip, target, effects, opacity)
+            return
+        if shape is None:
+            return
+        fill_cov = shape.coverage(tf, clip.rect)
+        if not shadow_from_layer:
+            for effect in effects:
+                if effect.get("type") == "DROP_SHADOW":
+                    self._drop_shadow(target, self._shadow_coverage(shape, tf, effect, clip), effect, tf, clip)
+        if fill_cov is None:
+            return
+        for effect in effects:
+            if effect.get("type") == "BACKGROUND_BLUR":
+                _background_blur(target, clip.restrict(fill_cov), float(effect.get("radius", 0.0)) * tf.mean_scale)
+        self._fill(target, clip.restrict(fill_cov), node.get("fills"), tf, size, opacity)
+        for effect in effects:
+            if effect.get("type") == "INNER_SHADOW":
+                self._inner_shadow(target, shape, fill_cov, effect, tf, clip, opacity)
 
     # ── shapes ───────────────────────────────────────────────────────────────
 
@@ -196,8 +243,10 @@ class FigmaRenderer:
                 return Ellipse(width, height)
             return path_shape_from_geometry(node.get("fillGeometry") or ())
         if node_type in VECTOR_TYPES:
-            return path_shape_from_geometry(node.get("fillGeometry") or ()) or (
-                _LineShape(width, height) if node_type == "LINE" else None
+            return (
+                path_shape_from_geometry(node.get("fillGeometry") or ())
+                or path_shape_from_geometry(node.get("vectorPaths") or ())
+                or (_LineShape(width, height) if node_type == "LINE" else None)
             )
         if node_type == "TEXT":
             return RoundedRect(width, height)
@@ -456,6 +505,11 @@ def render_frame(
     *,
     font_dirs: Iterable[str] = (),
     background: tuple[float, float, float, float] | None = None,
+    skip_ids: Iterable[str] = (),
+    only_ids: Iterable[str] | None = None,
+    transparent: bool = False,
 ) -> np.ndarray:
-    """Rasterize one top-level frame to an opaque (H, W, 4) uint8 RGBA array."""
-    return FigmaRenderer(doc, font_dirs=font_dirs).render(frame_id, scale, background=background)
+    """Rasterize one top-level frame to an (H, W, 4) uint8 RGBA array."""
+    return FigmaRenderer(doc, font_dirs=font_dirs).render(
+        frame_id, scale, background=background, skip_ids=skip_ids, only_ids=only_ids, transparent=transparent
+    )
