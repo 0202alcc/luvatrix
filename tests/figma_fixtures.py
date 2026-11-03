@@ -251,6 +251,59 @@ def overlay_file(*, interaction: str | None = None, sheet_height: float = 120) -
     }
 
 
+def smart_animate_file() -> dict[str, Any]:
+    """Two screens whose "Card" layer moves and grows between them.
+
+    The Card carries a SMART_ANIMATE link, and "Static" sits at the same
+    position on both screens so tweening can be told apart from a crossfade.
+    """
+    transition = {"type": "SMART_ANIMATE", "duration": 0.2, "easing": {"type": "LINEAR"}}
+    link = [{"trigger": {"type": "ON_CLICK"}, "actions": [{"type": "NODE", "destinationId": "2:1", "navigation": "NAVIGATE", "transition": transition}]}]
+    source = node(
+        "1:1",
+        "FRAME",
+        "A",
+        0,
+        0,
+        100,
+        100,
+        fills=[solid(1, 1, 1)],
+        children=[
+            node("1:2", "RECTANGLE", "Card", 0, 0, 20, 20, fills=[solid(1, 0, 0)], interactions=link),
+            node("1:3", "RECTANGLE", "Static", 60, 0, 20, 20, fills=[solid(0, 0, 1)]),
+        ],
+    )
+    target = node(
+        "2:1",
+        "FRAME",
+        "B",
+        200,
+        0,
+        100,
+        100,
+        fills=[solid(1, 1, 1)],
+        children=[
+            node("2:2", "RECTANGLE", "Card", 60, 60, 40, 40, fills=[solid(1, 0, 0)]),
+            node("2:3", "RECTANGLE", "Static", 260, 0, 20, 20, fills=[solid(0, 0, 1)]),
+        ],
+    )
+    return {
+        "name": "Smart Animate",
+        "document": {
+            "id": "0:0",
+            "type": "DOCUMENT",
+            "children": [
+                {
+                    "id": "0:1",
+                    "type": "CANVAS",
+                    "name": "Page",
+                    "children": [source, target],
+                }
+            ],
+        },
+    }
+
+
 def single_frame(children: list[dict[str, Any]], *, w: float = 100, h: float = 100, **frame_extra: Any) -> dict[str, Any]:
     frame = node("9:0", "FRAME", "Frame", 0, 0, w, h, children=children, **frame_extra)
     frame.setdefault("fills", [solid(1, 1, 1)])
