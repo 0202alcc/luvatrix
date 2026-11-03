@@ -41,6 +41,65 @@ ZERO_AREA = 0.05
 FetchImage = Callable[[str], bytes | None]
 RasterizeSvg = Callable[[dict[str, float]], bytes | None]
 
+# Injected into the page after each DOMSnapshot: DOMSnapshot never includes
+# ::before / ::after boxes, so this walk collects their computed styles keyed
+# by element-child path ("0.2.1" = ordinals among element children, "" = root).
+# `parent` carries the anchor element's padding/border widths, which position
+# static pseudo boxes at the content-box origin.
+PSEUDO_SCAN_JS = """(() => {
+  const PICK = ["content", "display", "position", "visibility", "top", "left", "right", "bottom",
+    "width", "height", "background-color", "background-image", "color",
+    "font-family", "font-size", "font-weight", "font-style", "line-height", "letter-spacing",
+    "text-align", "text-transform", "text-decoration", "opacity", "transform", "box-shadow",
+    "border-top-width", "border-top-style", "border-top-color",
+    "border-right-width", "border-right-style", "border-right-color",
+    "border-bottom-width", "border-bottom-style", "border-bottom-color",
+    "border-left-width", "border-left-style", "border-left-color",
+    "border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius"];
+  const PARENT_PICK = ["padding-top", "padding-right", "padding-bottom", "padding-left",
+    "border-top-width", "border-right-width", "border-bottom-width", "border-left-width"];
+  const root = document.documentElement;
+  if (!root) return [];
+  const out = [];
+  const pathOf = (el) => {
+    const parts = [];
+    let n = el;
+    while (n && n !== root) {
+      let ordinal = 0;
+      for (let s = n.previousElementSibling; s; s = s.previousElementSibling) ordinal += 1;
+      parts.unshift(ordinal);
+      n = n.parentElement;
+    }
+    return parts.join(".");
+  };
+  const pick = (cs, keys) => {
+    const o = {};
+    for (const key of keys) o[key] = cs.getPropertyValue(key);
+    return o;
+  };
+  const walk = (el) => {
+    const own = getComputedStyle(el);
+    if (own.display !== "none" && own.visibility !== "hidden") {
+      for (const name of ["::before", "::after"]) {
+        const cs = getComputedStyle(el, name);
+        const content = cs.content;
+        if (content && content !== "none" && content !== "normal") {
+          out.push({
+            path: pathOf(el),
+            tag: el.tagName.toLowerCase(),
+            pseudo: name.slice(2),
+            styles: pick(cs, PICK),
+            parent: pick(own, PARENT_PICK),
+          });
+        }
+      }
+    }
+    for (const child of el.children) walk(child);
+  };
+  walk(root);
+  return out;
+})()"""
+
 
 class CaptureError(RuntimeError):
     pass
@@ -157,6 +216,7 @@ class _PageCompiler:
         fetcher: FetchImage | None,
         rasterize: RasterizeSvg | None,
         images: dict[str, dict[str, Any]] | None = None,
+        pseudo_entries: Sequence[dict[str, Any]] | None = None,
     ) -> None:
         self.model = model
         self.page_index = page_index
@@ -174,6 +234,8 @@ class _PageCompiler:
         self.image_failures: list[str] = []
         self.emitted: dict[str, dict[str, Any]] = {}
         self.svg_placeholders: list[tuple[dict[str, Any], dict[str, float]]] = []
+        self.pseudo_paths = self._node_paths()
+        self.pseudo_by_node = self._group_pseudo_entries(pseudo_entries or ())
 
     def node_id(self, node: int) -> str:
         backend = self.model.backend[node] if node < len(self.model.backend) else node
@@ -255,6 +317,188 @@ class _PageCompiler:
         return out
 
     def build_node(self, node: int, inside_text: bool = False) -> list[dict[str, Any]]:
+        nodes = self._build_node_inner(node, inside_text)
+        return self._with_pseudos(node, nodes)
+
+    def _with_pseudos(self, node: int, nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Attach ::before / ::after children around a node's own emission."""
+        entries = self.pseudo_by_node.get(node)
+        if not entries:
+            return nodes
+        box = self.model.box(node)
+        styles = self.model.style(node)
+        if (
+            box is None
+            or box[2] <= ZERO_AREA
+            or box[3] <= ZERO_AREA
+            or styles.get("visibility", "visible") == "hidden"
+            or styles.get("display", "block") in {"none", "contents"}
+        ):
+            return nodes
+        before: list[dict[str, Any]] = []
+        after: list[dict[str, Any]] = []
+        for raw in entries:
+            built = self._pseudo_node(node, raw, box)
+            if built is not None:
+                (before if raw.get("pseudo") == "before" else after).append(built)
+        if not before and not after:
+            return nodes
+        if not nodes:
+            return [self._pseudo_container(node, box, styles, before + after)]
+        if len(nodes) == 1 and nodes[0].get("type") == "FRAME":
+            nodes[0]["children"] = before + (nodes[0].get("children") or []) + after
+            return nodes
+        if len(nodes) == 1 and nodes[0].get("type") == "RECTANGLE":
+            nodes[0]["type"] = "FRAME"
+            nodes[0]["clipsContent"] = False
+            nodes[0]["children"] = before + after
+            self.counts["rectangles"] -= 1
+            self.counts["frames"] += 1
+            return nodes
+        return [self._pseudo_container(node, box, styles, before + nodes + after)]
+
+    def _pseudo_container(self, node: int, box: list[float], styles: dict[str, str], children: list[dict[str, Any]]) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "id": f"{self.node_id(node)}:wrap",
+            "type": "FRAME",
+            "name": self.node_name(node),
+            "absoluteBoundingBox": self.local_box(box),
+            "clipsContent": False,
+            "children": children,
+        }
+        paint = _background_fills(styles, self, self.fetcher, box)
+        if paint:
+            out["fills"] = paint
+        border = _border_info(styles)
+        if border:
+            out.update(border)
+        self.counts["frames"] += 1
+        return out
+
+    def _pseudo_node(self, node: int, raw: dict[str, Any], box: list[float]) -> dict[str, Any] | None:
+        st: dict[str, str] = raw.get("styles") or {}
+        if st.get("display", "inline") == "none":
+            return None
+        if st.get("visibility", "visible") == "hidden" or _number(st.get("opacity", "1"), 1.0) <= 0.0:
+            return None
+        content = _pseudo_content(st.get("content", "none"))
+        if content is _PSEUDO_UNSUPPORTED:
+            self.unsupported_css("pseudo-counter")
+            return None
+        bg = _background_fills(st, self, self.fetcher, box)
+        border = _border_info(st)
+        font_size = _length(st.get("font-size", "16px")) or 16.0
+        width, height = _pseudo_size(st, content, font_size, box)
+        if content is None and not bg and border is None:
+            return None
+        if width <= ZERO_AREA or height <= ZERO_AREA:
+            self.unsupported_css("pseudo-auto-size")
+            return None
+        x, y = _pseudo_origin(raw, st, box, width, height)
+        pseudo_box = [x, y, width, height]
+        suffix = "before" if raw.get("pseudo") == "before" else "after"
+        if st.get("transform", "none") != "none":
+            self.unsupported_css("pseudo-transform")
+        if content and not bg and border is None:
+            out = self._pseudo_text_node(st, content, pseudo_box, f"{self.node_id(node)}:{suffix}", f"{self.node_name(node)}::{suffix}")
+        elif content:
+            frame: dict[str, Any] = {
+                "id": f"{self.node_id(node)}:{suffix}",
+                "type": "FRAME",
+                "name": f"{self.node_name(node)}::{suffix}",
+                "absoluteBoundingBox": self.local_box(pseudo_box),
+                "clipsContent": False,
+                "fills": bg,
+            }
+            if border:
+                frame.update(border)
+            radius = _corner_radii(st, pseudo_box)
+            if radius:
+                frame.update(radius)
+            effects = _effects(st, self)
+            if effects:
+                frame["effects"] = effects
+            line_height = _length(st.get("line-height", ""), font_size) or font_size * 1.21
+            text_w = min(width, max(font_size * 0.62 * len(content), 1.0))
+            frame["children"] = [
+                self._pseudo_text_node(
+                    st,
+                    content,
+                    [x + (width - text_w) / 2, y + (height - line_height) / 2, text_w, line_height],
+                    f"{self.node_id(node)}:{suffix}:t1",
+                    "label",
+                )
+            ]
+            out = frame
+            self.counts["frames"] += 1
+        else:
+            out = {
+                "id": f"{self.node_id(node)}:{suffix}",
+                "type": "RECTANGLE",
+                "name": f"{self.node_name(node)}::{suffix}",
+                "absoluteBoundingBox": self.local_box(pseudo_box),
+                "fills": bg,
+            }
+            if border:
+                out.update(border)
+            radius = _corner_radii(st, pseudo_box)
+            if radius:
+                out.update(radius)
+            effects = _effects(st, self)
+            if effects:
+                out["effects"] = effects
+            self.counts["rectangles"] += 1
+        self.counts["pseudos"] = self.counts.get("pseudos", 0) + 1
+        return out
+
+    def _pseudo_text_node(
+        self, st: dict[str, str], content: str, pseudo_box: list[float], node_id: str, name: str
+    ) -> dict[str, Any]:
+        self.counts["texts"] += 1
+        return {
+            "id": node_id,
+            "type": "TEXT",
+            "name": name,
+            "absoluteBoundingBox": self.local_box(pseudo_box),
+            "characters": content,
+            "style": _text_style(st),
+            "fills": _solid_fills(st.get("color"), self) or [solid_paint(0, 0, 0)],
+        }
+
+    def _group_pseudo_entries(self, entries: Sequence[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
+        grouped: dict[int, list[dict[str, Any]]] = {}
+        for raw in entries:
+            node = self.pseudo_paths.get(str(raw.get("path", "")))
+            if node is None or self.model.tag[node].lower() != str(raw.get("tag", "")).lower():
+                self.unsupported_css("pseudo-unmatched")
+                continue
+            grouped.setdefault(node, []).append(raw)
+        return grouped
+
+    def _node_paths(self) -> dict[str, int]:
+        """Map element-child ordinal paths ("" = root) to snapshot node indexes."""
+        paths: dict[str, int] = {}
+        root = self._html_root()
+
+        def walk(node: int, path: str) -> None:
+            paths[path] = node
+            ordinal = 0
+            for child in self.model.children(node):
+                if self.model.node_type[child] != 1:
+                    continue
+                walk(child, f"{path}.{ordinal}" if path else str(ordinal))
+                ordinal += 1
+
+        walk(root, "")
+        return paths
+
+    def _html_root(self) -> int:
+        for node, tag in enumerate(self.model.tag):
+            if tag.upper() == "HTML" and self.model.node_type[node] == 1:
+                return node
+        return self._root_node()
+
+    def _build_node_inner(self, node: int, inside_text: bool = False) -> list[dict[str, Any]]:
         model = self.model
         if model.node_type[node] != 1:
             return []
@@ -864,6 +1108,118 @@ def solid_paint(r: float, g: float, b: float, a: float = 1.0) -> dict[str, Any]:
     return {"type": "SOLID", "color": {"r": r, "g": g, "b": b, "a": a}}
 
 
+_PSEUDO_UNSUPPORTED = object()
+_PSEUDO_STRING = re.compile(r'"((?:[^"\\]|\\.)*)"|\'((?:[^\'\\]|\\.)*)\'')
+
+
+def _pseudo_content(value: str) -> str | object:
+    """Resolve a computed `content` value; _PSEUDO_UNSUPPORTED when not plain text."""
+    text = (value or "").strip()
+    if text in {"", "none", "normal"}:
+        return None
+    quoted = _PSEUDO_STRING.findall(text)
+    residue = _PSEUDO_STRING.sub(" ", text).strip()
+    if re.search(r"counter\(|counters\(|attr\(|url\(|open-quote|close-quote|no-|-quote", residue, re.IGNORECASE):
+        return _PSEUDO_UNSUPPORTED
+    if residue and not quoted:
+        return _PSEUDO_UNSUPPORTED
+    parts = [a or b for a, b in quoted]
+    if residue:
+        # Unquoted tokens left over are keywords we cannot resolve as text.
+        return _PSEUDO_UNSUPPORTED
+    return "".join(_pseudo_unescape(part) for part in parts)
+
+
+def _pseudo_unescape(text: str) -> str:
+    def hex_repl(match: re.Match[str]) -> str:
+        return chr(int(match.group(1), 16))
+
+    text = re.sub(r"\\([0-9a-fA-F]{1,6})\s?", hex_repl, text)
+    return text.replace("\\ ", " ").replace('\\"', '"').replace("\\'", "'").replace("\\\\", "\\")
+
+
+def _auto_length(value: str | None) -> float | None:
+    """Parse a px length, returning None for `auto` / empty values."""
+    text = (value or "").strip()
+    if not text or text == "auto":
+        return None
+    return _length(text)
+
+
+def _pseudo_size(
+    st: dict[str, str], content: str | object, font_size: float, parent_box: list[float]
+) -> tuple[float, float]:
+    width = _pseudo_dimension(st.get("width"), parent_box[2])
+    height = _pseudo_dimension(st.get("height"), parent_box[3])
+    line_height = _length(st.get("line-height", ""), font_size) or font_size * 1.21
+    if content and width is None:
+        width = max(font_size * 0.62 * len(str(content)), 1.0)
+    if height is None:
+        height = line_height if content else 0.0
+    return width or 0.0, height or 0.0
+
+
+def _pseudo_dimension(value: str | None, base: float) -> float | None:
+    text = (value or "").strip()
+    if not text or text == "auto":
+        return None
+    if text.endswith("%"):
+        try:
+            return base * float(text[:-1]) / 100.0
+        except ValueError:
+            return None
+    return _length(text)
+
+
+def _pseudo_origin(
+    raw: dict[str, Any], st: dict[str, str], box: list[float], width: float, height: float
+) -> tuple[float, float]:
+    """Pseudo box origin in page coordinates.
+
+    Absolute pseudos anchor to the parent's padding box using computed
+    top/left/right/bottom (approximation: the containing block is always the
+    anchor element). Static pseudos anchor to the parent's content-box origin,
+    which is exact for the common `padding-left` bullet/badge case and an
+    approximation whenever the pseudo flows after real content.
+    """
+    parent: dict[str, str] = raw.get("parent") or {}
+    bl = _length(parent.get("border-left-width", "0px"))
+    br = _length(parent.get("border-right-width", "0px"))
+    bt = _length(parent.get("border-top-width", "0px"))
+    bb = _length(parent.get("border-bottom-width", "0px"))
+    position = st.get("position", "static")
+    if position in {"absolute", "fixed"}:
+        px0 = box[0] + bl
+        py0 = box[1] + bt
+        pw = max(box[2] - bl - br, 0.0)
+        ph = max(box[3] - bt - bb, 0.0)
+        left = _auto_length(st.get("left"))
+        right = _auto_length(st.get("right"))
+        top = _auto_length(st.get("top"))
+        bottom = _auto_length(st.get("bottom"))
+        resolved_w, resolved_h = width, height
+        if width <= 0 and left is not None and right is not None:
+            resolved_w = max(pw - left - right, 0.0)
+        if height <= 0 and top is not None and bottom is not None:
+            resolved_h = max(ph - top - bottom, 0.0)
+        if left is not None:
+            x = px0 + left
+        elif right is not None:
+            x = px0 + pw - right - resolved_w
+        else:
+            x = px0
+        if top is not None:
+            y = py0 + top
+        elif bottom is not None:
+            y = py0 + ph - bottom - resolved_h
+        else:
+            y = py0
+        return x, y
+    pl = _length(parent.get("padding-left", "0px"))
+    pt = _length(parent.get("padding-top", "0px"))
+    return box[0] + bl + pl, box[1] + bt + pt
+
+
 def _background_fills(
     styles: dict[str, str],
     compiler: "_PageCompiler",
@@ -1385,6 +1741,7 @@ def compile_snapshots(
     rasterize: RasterizeSvg | None = None,
     click_map: dict[str, str] | None = None,
     props: Sequence[str] = STYLE_PROPS,
+    pseudos: Sequence[Sequence[dict[str, Any]]] | None = None,
 ) -> CaptureResult:
     """Compile captured DOMSnapshot payloads into a Figma file payload."""
     clickables: list[dict[str, Any]] = []
@@ -1393,10 +1750,19 @@ def compile_snapshots(
     compilers: list[_PageCompiler] = []
     frames: list[dict[str, Any]] = []
     offset_x = 0.0
+    pseudo_lists = list(pseudos) if pseudos is not None else []
     for page_index, (path, snapshot) in enumerate(pages):
         model = SnapshotModel(snapshot, props)
         report_page: dict[str, Any] = {"path": path, "title": model.title}
-        compiler = _PageCompiler(model, page_index=page_index, path=path, fetcher=fetcher, rasterize=rasterize, images=images)
+        compiler = _PageCompiler(
+            model,
+            page_index=page_index,
+            path=path,
+            fetcher=fetcher,
+            rasterize=rasterize,
+            images=images,
+            pseudo_entries=pseudo_lists[page_index] if page_index < len(pseudo_lists) else (),
+        )
         frame = compiler.build()
         width = frame["absoluteBoundingBox"]["width"]
         frame["absoluteBoundingBox"]["x"] = offset_x
@@ -1413,6 +1779,7 @@ def compile_snapshots(
                 "skipped": dict(compiler.skipped),
                 "unsupported": dict(compiler.unsupported),
                 "images": {"downloaded": len(compiler.images), "failed": list(compiler.image_failures)},
+                "PSEUDO_COUNT": compiler.counts.get("pseudos", 0),
             }
         )
         page_reports.append(report_page)
@@ -1450,6 +1817,7 @@ def compile_snapshots(
     }
     report = {
         "pages": page_reports,
+        "PSEUDO_COUNT": sum(int(page.get("PSEUDO_COUNT", 0)) for page in page_reports),
         "images": {
             "downloaded": len(images),
             "failed": sorted({url for page in page_reports for url in page.get("images", {}).get("failed", ())}),
@@ -1737,6 +2105,7 @@ def capture_design(
             page = await cdp.CDPPage.attach(conn)
             await page.set_viewport(width, height, scale)
             snapshots = []
+            pseudos: list[list[dict[str, Any]]] = []
             for path, target in _page_targets(url, pages):
                 await page.navigate(target)
                 await page.ready(timeout=max(wait + 10.0, 12.0), extra_delay=wait)
@@ -1747,7 +2116,12 @@ def capture_design(
                     await _grow_viewport_to_content(page, width, scale)
                     await _sleep(wait)
                 snapshots.append((path, await page.capture_snapshot()))
-            result = compile_snapshots(snapshots, click_map=click_map, fetcher=_http_fetcher(url))
+                try:
+                    raw = await page.evaluate(PSEUDO_SCAN_JS)
+                except Exception:
+                    raw = None
+                pseudos.append(list(raw) if isinstance(raw, list) else [])
+            result = compile_snapshots(snapshots, click_map=click_map, fetcher=_http_fetcher(url), pseudos=pseudos)
             await _rasterize_placeholders(page, result)
             return result
         finally:
