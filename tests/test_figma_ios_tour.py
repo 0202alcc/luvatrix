@@ -25,6 +25,9 @@ class _FakeSimulator:
         self.env: dict[str, str] = {}
         self.launch_cmd: list[str] = []
         self.log_show_cmd: list[str] = []
+        self.launch_commands: list[tuple[list[str], dict[str, str] | None]] = []
+        self.open_commands: list[list[str]] = []
+        self.fail_device_open = False
         self.previous_install: Path | None = None
         self.returncode: int | None = None
         self.terminated = False
@@ -50,6 +53,16 @@ class _FakeSimulator:
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if cmd[:3] == ["xcrun", "simctl", "terminate"]:
             self.terminated = True
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd[:3] == ["xcrun", "simctl", "launch"]:
+            assert cmd[3:] == [UDID, BUNDLE]
+            self.launch_commands.append((cmd, _kwargs.get("env")))
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd[:1] == ["open"]:
+            if self.fail_device_open and "-CurrentDeviceUDID" in cmd:
+                self.open_commands.append(cmd)
+                return SimpleNamespace(returncode=1, stdout="", stderr="no such device")
+            self.open_commands.append(cmd)
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if cmd[:6] == ["xcrun", "simctl", "spawn", UDID, "log", "show"]:
             self.log_show_cmd = cmd
@@ -235,3 +248,69 @@ def test_ios_tour_rejects_a_malformed_tour_before_launching(tmp_path: Path) -> N
     with pytest.raises(ValueError):
         run_ios_tour(tmp_path / "app", '[{"jump": 1}]', tmp_path / "out", run=sim.run, popen=sim.popen, sleep=sim.sleep, clock=sim.clock)
     assert sim.launch_cmd == []
+
+
+def test_ios_tour_keep_open_relaunches_fresh_and_opens_the_simulator(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sim = _FakeSimulator(tmp_path, [("sign_in", "Sign In")])
+    monkeypatch.setenv("SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR", "leaked")
+    monkeypatch.setenv("LUVATRIX_RENDER_MODE", "matrix")
+
+    code = _run(tmp_path, sim, keep_open=True)
+
+    summary = json.loads((tmp_path / "out" / "summary.json").read_text())
+    assert code == 0
+    assert summary["state"] == "done"
+    assert summary["kept_open"] is True
+    # The tour app instance is not terminated; only the console parent is.
+    assert not sim.terminated
+    assert sim.returncode is not None
+    # Detached relaunch: bare simctl launch, no --console, with the render env
+    # the runner normally sets and without any tour env.
+    assert len(sim.launch_commands) == 1
+    launch_cmd, launch_env = sim.launch_commands[0]
+    assert launch_cmd == ["xcrun", "simctl", "launch", UDID, BUNDLE]
+    assert launch_env is not None
+    assert launch_env["SIMCTL_CHILD_LUVATRIX_IOS_RENDER_SCALE"] == "3"
+    assert launch_env["SIMCTL_CHILD_LUVATRIX_RENDER_MODE"] == "matrix"
+    assert "SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR" not in launch_env
+    assert "SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_RUN" not in launch_env
+    assert "SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_ACK_TIMEOUT" not in launch_env
+    assert sim.open_commands == [["open", "-a", "Simulator", "--args", "-CurrentDeviceUDID", UDID]]
+
+
+def test_ios_tour_keep_open_falls_back_to_plain_simulator_open(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("sign_in", "Sign In")])
+    sim.fail_device_open = True
+
+    _run(tmp_path, sim, keep_open=True)
+
+    assert sim.open_commands == [
+        ["open", "-a", "Simulator", "--args", "-CurrentDeviceUDID", UDID],
+        ["open", "-a", "Simulator"],
+    ]
+
+
+def test_ios_tour_keep_open_relaunches_even_when_the_app_exited_early(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("sign_in", "Sign In")], exit_early=True)
+
+    code = _run(tmp_path, sim, keep_open=True)
+
+    summary = json.loads((tmp_path / "out" / "summary.json").read_text())
+    assert code == 1
+    assert summary["state"] == "app_exited"
+    assert summary["kept_open"] is True
+    assert len(sim.launch_commands) == 1
+    assert not sim.terminated
+
+
+def test_ios_tour_without_keep_open_terminates_and_never_relaunches(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("sign_in", "Sign In")])
+
+    code = _run(tmp_path, sim)
+
+    summary = json.loads((tmp_path / "out" / "summary.json").read_text())
+    assert code == 0
+    assert "kept_open" not in summary
+    assert sim.terminated
+    assert sim.launch_commands == []
+    assert sim.open_commands == []
