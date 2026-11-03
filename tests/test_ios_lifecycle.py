@@ -36,7 +36,7 @@ class IOSLifecycleTests(unittest.TestCase):
             project = app / ".luvatrix" / "ios"
             project.mkdir(parents=True)
 
-            self.assertEqual(_resolve_ios_project(app), project)
+            self.assertEqual(_resolve_ios_project(app), project.resolve())
 
     def test_resolve_ios_project_requires_scaffold(self) -> None:
         with tempfile.TemporaryDirectory() as td:
