@@ -66,7 +66,7 @@ def test_solid_boxes_become_frames_and_rectangles() -> None:
     assert root["absoluteBoundingBox"] == {"x": 0.0, "y": 0.0, "width": 393.0, "height": 852.0}
     assert root["fills"] == [solid(1.0, 1.0, 1.0)]
     header, main = root["children"][0], root["children"][1]
-    assert header["type"] == "FRAME"
+    assert header["type"] == "RECTANGLE"
     assert header["absoluteBoundingBox"] == {"x": 0.0, "y": 0.0, "width": 393.0, "height": 56.0}
     assert header["fills"] == [solid(17 / 255, 24 / 255, 39 / 255)]
     assert main["type"] == "FRAME"
@@ -163,3 +163,28 @@ def test_node_ids_are_unique_across_pages() -> None:
     for frame in result.file["document"]["children"][0]["children"]:
         collect(frame)
     assert len(ids) == len(set(ids))
+
+def test_title_index_and_layout_text_wire_variants() -> None:
+    """Chrome encodes doc title as a string index and text content in layout.text."""
+    b = SnapshotBuilder(title="Encoded")
+    body = b.element("BODY")
+    b.layout(body, 0, 0, 393, 852, **{"background-color": "rgb(255, 255, 255)"})
+    heading = b.element("H1", parent=body)
+    b.layout(heading, 0, 0, 200, 30, **{"color": "rgb(17, 24, 39)"})
+    t = b.text("Orbit", parent=heading)
+    li = b.layout(t, 0, 0, 80, 30)
+    b.text_box(li, 0, 0, 80, 30)
+
+    snapshot = b.build()
+    snapshot["documents"][0]["nodes"]["textValue"] = {"index": [], "value": []}
+    strings = snapshot["strings"]
+    snapshot["documents"][0]["title"] = strings.index("Encoded")
+
+    result = compile_snapshots([("/", snapshot)])
+
+    frame = result.file["document"]["children"][0]["children"][0]
+    assert frame["name"] == "Encoded"
+    text = frame["children"][0]
+    assert text["type"] == "TEXT"
+    assert text["characters"] == "Orbit"
+    assert result.report["pages"][0]["title"] == "Encoded"
