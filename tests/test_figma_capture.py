@@ -178,7 +178,8 @@ def test_title_index_and_layout_text_wire_variants() -> None:
     snapshot = b.build()
     snapshot["documents"][0]["nodes"]["textValue"] = {"index": [], "value": []}
     strings = snapshot["strings"]
-    snapshot["documents"][0]["title"] = strings.index("Encoded")
+    strings.append("Encoded")
+    snapshot["documents"][0]["title"] = len(strings) - 1
 
     result = compile_snapshots([("/", snapshot)])
 

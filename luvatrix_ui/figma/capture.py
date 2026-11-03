@@ -74,6 +74,8 @@ class SnapshotModel:
             raise CaptureError("DOMSnapshot payload has no documents")
         self.doc = documents[0]
         self.strings = snapshot.get("strings") or []
+        raw_title = self.doc.get("title")
+        self.title = _s(self.strings, raw_title) if isinstance(raw_title, int) else str(raw_title or "")
         nodes = self.doc.get("nodes") or {}
         self.parent: list[int] = list(nodes.get("parentIndex") or ())
         self.node_type: list[int] = list(nodes.get("nodeType") or ())
@@ -237,7 +239,7 @@ class _PageCompiler:
         return 0
 
     def frame_name(self) -> str:
-        title = str(self.model.doc.get("title") or "").strip()
+        title = self.model.title.strip()
         if title:
             return title
         segment = [part for part in self.path.split("/") if part]
@@ -464,7 +466,11 @@ class _PageCompiler:
             kind = self.model.node_type[child]
             if kind == 3:
                 li = self.model.layout_index(child)
-                text = self.model.node_text(child)
+                text = ""
+                if li is not None and li < len(self.model.layout_text):
+                    text = self.model.layout_text[li]
+                if not text:
+                    text = self.model.node_text(child)
                 if not text.strip():
                     continue
                 boxes = [entry["bounds"] for entry in self.model.text_boxes.get(li, ())] if li is not None else []
@@ -1298,7 +1304,7 @@ def compile_snapshots(
     offset_x = 0.0
     for page_index, (path, snapshot) in enumerate(pages):
         model = SnapshotModel(snapshot, props)
-        report_page: dict[str, Any] = {"path": path, "title": str(model.doc.get("title") or "")}
+        report_page: dict[str, Any] = {"path": path, "title": model.title}
         compiler = _PageCompiler(model, page_index=page_index, path=path, fetcher=fetcher, rasterize=rasterize, images=images)
         frame = compiler.build()
         width = frame["absoluteBoundingBox"]["width"]
