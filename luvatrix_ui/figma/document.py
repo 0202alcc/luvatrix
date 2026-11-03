@@ -69,6 +69,7 @@ class Frame:
     width: float
     height: float
     scrolls_vertically: bool = False
+    scrolls_horizontally: bool = False
 
 
 @dataclass(frozen=True)
@@ -199,6 +200,7 @@ class FigmaDocument:
     def _add_frame(self, node: dict[str, Any]) -> None:
         bbox = node.get("absoluteBoundingBox") or {}
         width, height = node_size(node)
+        overflow = str(node.get("overflowDirection", "NONE")).upper()
         frame = Frame(
             id=str(node.get("id", f"frame-{len(self.frames)}")),
             name=str(node.get("name", "")),
@@ -207,7 +209,8 @@ class FigmaDocument:
             origin_y=float(bbox.get("y", 0.0)),
             width=max(1.0, width),
             height=max(1.0, height),
-            scrolls_vertically=str(node.get("overflowDirection", "NONE")) in {"VERTICAL_SCROLLING", "HORIZONTAL_AND_VERTICAL_SCROLLING"},
+            scrolls_vertically=overflow in {"VERTICAL_SCROLLING", "HORIZONTAL_AND_VERTICAL_SCROLLING", "TOP_BOTTOM_SCROLLING"},
+            scrolls_horizontally=overflow in {"HORIZONTAL_SCROLLING", "HORIZONTAL_AND_VERTICAL_SCROLLING", "LEFT_RIGHT_SCROLLING"},
         )
         self.frames.append(frame)
         self._index_tree(node, frame.id)

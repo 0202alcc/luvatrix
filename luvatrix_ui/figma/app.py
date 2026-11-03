@@ -38,10 +38,12 @@ class _Screen:
     offset_x: int
     offset_y: int
     viewport_h: float
+    viewport_w: float
     max_scroll: float
+    max_scroll_x: float
     content: np.ndarray
     overlay: np.ndarray | None
-    overlay_rows: tuple[int, int]
+    overlay_window: tuple[int, int, int, int]
     letterbox: tuple[int, int, int, int]
 
 
@@ -75,6 +77,7 @@ class _Press:
     start: tuple[float, float]
     start_scroll: float
     target: Hotspot | None
+    start_scroll_x: float = 0.0
     overlay: int = -1
     outside: bool = False
     dragging: bool = False
@@ -101,7 +104,8 @@ class FigmaApp(App):
         self.document = design if isinstance(design, FigmaDocument) else FigmaDocument.load(design, start=start)
         self.current_frame_id = self.document.find_frame(start).id if start else self.document.start_frame_id
         self.scroll_y = 0.0
-        self.history: list[tuple[str, float, dict[str, Any] | None]] = []
+        self.scroll_x = 0.0
+        self.history: list[tuple[str, float, float, dict[str, Any] | None]] = []
         self._background = background
         self._variant_overrides: dict[str, str] = {}
         self._renderer = FigmaRenderer(self.document, font_dirs=font_dirs, variant_overrides=self._variant_overrides)
@@ -150,8 +154,8 @@ class FigmaApp(App):
         if target == self.current_frame_id:
             return
         self._overlays.clear()
-        self.history.append((self.current_frame_id, self.scroll_y, transition))
-        self._go(target, 0.0, transition, reverse=False)
+        self.history.append((self.current_frame_id, self.scroll_y, self.scroll_x, transition))
+        self._go(target, 0.0, 0.0, transition, reverse=False)
 
     def open_overlay(
         self,
@@ -206,8 +210,8 @@ class FigmaApp(App):
             return
         if not self.history:
             return
-        frame_id, scroll, transition = self.history.pop()
-        self._go(frame_id, scroll, transition, reverse=True)
+        frame_id, scroll, scroll_x, transition = self.history.pop()
+        self._go(frame_id, scroll, scroll_x, transition, reverse=True)
 
     def tap(self, node: str) -> None:
         """Tap the center of a tappable layer (by name or id) through normal hit testing.
@@ -243,18 +247,22 @@ class FigmaApp(App):
             raise KeyError(node)
         screen = self._screen(self.current_frame_id)
         cx, cy = spot.x + spot.width / 2, spot.y + spot.height / 2
-        pinned = spot.fixed and screen.max_scroll > 0
-        if not pinned and not (spot.y >= self.scroll_y and spot.y + spot.height <= self.scroll_y + screen.viewport_h):
-            self._scroll_to(cy - screen.viewport_h / 2)
-        vy = cy if pinned else cy - self.scroll_y
+        pinned = spot.fixed and (screen.max_scroll > 0 or screen.max_scroll_x > 0)
+        if not pinned:
+            if not (spot.y >= self.scroll_y and spot.y + spot.height <= self.scroll_y + screen.viewport_h):
+                self._scroll_to(cy - screen.viewport_h / 2)
+            if not (spot.x >= self.scroll_x and spot.x + spot.width <= self.scroll_x + screen.viewport_w):
+                self._scroll_to(self.scroll_y, cx - screen.viewport_w / 2)
+        vx = cx if pinned and screen.max_scroll_x > 0 else cx - self.scroll_x
+        vy = cy if pinned and screen.max_scroll > 0 else cy - self.scroll_y
         kx, ky = self._display_to_matrix()
-        self._pointer = ((cx * screen.scale + screen.offset_x) / kx, (vy * screen.scale + screen.offset_y) / ky)
+        self._pointer = ((vx * screen.scale + screen.offset_x) / kx, (vy * screen.scale + screen.offset_y) / ky)
         self._pointer_phase(_SCRIPTED_POINTER, "down")
         self._pointer_phase(_SCRIPTED_POINTER, "up")
 
-    def scroll_by(self, dy: float) -> None:
-        """Scroll the current frame by `dy` design units, clamped to its content."""
-        self._scroll_to(self.scroll_y + dy)
+    def scroll_by(self, dy: float, dx: float = 0.0) -> None:
+        """Scroll the current frame by `dy`/`dx` design units, clamped to its content."""
+        self._scroll_to(self.scroll_y + dy, self.scroll_x + dx)
 
     def text(self, node: str) -> str:
         return str(self._text_nodes(node)[0].get("characters", ""))
@@ -314,27 +322,41 @@ class FigmaApp(App):
             return screen
         frame = self.document.frame(frame_id)
         fit_width = width / frame.width
-        scrolls = frame.scrolls_vertically and frame.height * fit_width > height + 0.5
-        scale = fit_width if scrolls else min(fit_width, height / frame.height)
+        fit_height = height / frame.height
+        scrolls_v = frame.scrolls_vertically and frame.height * fit_width > height + 0.5
+        scrolls_h = frame.scrolls_horizontally and frame.width * fit_height > width + 0.5
+        if scrolls_v:
+            scale = fit_width
+        elif scrolls_h:
+            scale = fit_height
+        else:
+            scale = min(fit_width, fit_height)
+        scrolls = scrolls_v or scrolls_h
         fixed = self.document.fixed_child_ids(frame_id) if scrolls else set()
         content = self._renderer.render(frame_id, scale, skip_ids=fixed | skip_ids)
         overlay = None
-        rows = (0, 0)
+        window = (0, 0, 0, 0)
         if fixed:
             overlay = self._renderer.render(frame_id, scale, only_ids=fixed, transparent=True)
-            visible = np.nonzero(overlay[..., 3].any(axis=1))[0]
-            rows = (int(visible.min()), int(visible.max()) + 1) if len(visible) else (0, 0)
+            rows = np.nonzero(overlay[..., 3].any(axis=1))[0]
+            cols = np.nonzero(overlay[..., 3].any(axis=0))[0]
+            r = (int(rows.min()), int(rows.max()) + 1) if len(rows) else (0, 0)
+            c = (int(cols.min()), int(cols.max()) + 1) if len(cols) else (0, 0)
+            window = (r[0], r[1], c[0], c[1])
         dh, dw = content.shape[:2]
         viewport_h = height / scale
+        viewport_w = width / scale
         screen = _Screen(
             scale=scale,
-            offset_x=(width - dw) // 2,
-            offset_y=0 if scrolls else (height - dh) // 2,
+            offset_x=0 if scrolls_h else (width - dw) // 2,
+            offset_y=0 if scrolls_v else (height - dh) // 2,
             viewport_h=viewport_h,
-            max_scroll=max(0.0, frame.height - viewport_h) if scrolls else 0.0,
+            viewport_w=viewport_w,
+            max_scroll=max(0.0, frame.height - viewport_h) if scrolls_v else 0.0,
+            max_scroll_x=max(0.0, frame.width - viewport_w) if scrolls_h else 0.0,
             content=content,
             overlay=overlay,
-            overlay_rows=rows,
+            overlay_window=window,
             letterbox=self._letterbox_color(frame),
         )
         self._screens[key] = screen
@@ -345,16 +367,18 @@ class FigmaApp(App):
         screen = self._screen(frame_id, skip_ids)
         image = np.empty((height, width, 4), dtype=np.uint8)
         image[...] = np.asarray(screen.letterbox, dtype=np.uint8)
-        top = int(round(scroll * screen.scale))
-        content = screen.content[top : top + height]
+        top = int(round(self.scroll_y * screen.scale))
+        left = int(round(self.scroll_x * screen.scale))
+        content = screen.content[top : top + height, left : left + width]
         ch, cw = content.shape[:2]
         image[screen.offset_y : screen.offset_y + ch, screen.offset_x : screen.offset_x + cw] = content
         if screen.overlay is not None:
-            r0, r1 = screen.overlay_rows
+            r0, r1, c0, c1 = screen.overlay_window
             r1 = min(r1, height - screen.offset_y)
-            if r1 > r0:
-                src = screen.overlay[r0:r1].astype(np.float32)
-                region = image[screen.offset_y + r0 : screen.offset_y + r1, screen.offset_x : screen.offset_x + cw]
+            c1 = min(c1, width - screen.offset_x)
+            if r1 > r0 and c1 > c0:
+                src = screen.overlay[r0:r1, c0:c1].astype(np.float32)
+                region = image[screen.offset_y + r0 : screen.offset_y + r1, screen.offset_x + c0 : screen.offset_x + c1]
                 alpha = src[..., 3:4] / 255.0
                 mixed = src[..., :3] * alpha + region[..., :3].astype(np.float32) * (1 - alpha)
                 region[..., :3] = np.rint(mixed).astype(np.uint8)
@@ -436,11 +460,12 @@ class FigmaApp(App):
 
     # ── navigation ───────────────────────────────────────────────────────────
 
-    def _go(self, frame_id: str, scroll: float, transition: dict[str, Any] | None, *, reverse: bool) -> None:
+    def _go(self, frame_id: str, scroll: float, scroll_x: float, transition: dict[str, Any] | None, *, reverse: bool) -> None:
         source_frame_id = self.current_frame_id
         source = self._last_image
         self.current_frame_id = frame_id
         self.scroll_y = scroll
+        self.scroll_x = scroll_x
         self._press = None
         if not hasattr(self, "ctx"):
             return
@@ -451,7 +476,7 @@ class FigmaApp(App):
             target = self._compose(frame_id, scroll)
             if target.shape == source.shape:
                 self._transition = self._build_transition(
-                    transition, source, target, source_frame_id, frame_id, scroll, reverse=reverse
+                    transition, source, target, source_frame_id, frame_id, scroll, scroll_x, reverse=reverse
                 )
         if self._transition is not None:
             self.set_continuous_render(True)
@@ -465,11 +490,12 @@ class FigmaApp(App):
         source_frame_id: str,
         frame_id: str,
         scroll: float,
+        scroll_x: float,
         *,
         reverse: bool,
     ) -> Transition | None:
         if str(transition.get("type", "")).upper() == "SMART_ANIMATE" and not reverse:
-            built = self._build_smart_animate(transition, source_frame_id, frame_id, scroll)
+            built = self._build_smart_animate(transition, source_frame_id, frame_id, scroll, scroll_x)
             if built is not None:
                 return built
         return Transition.from_figma(transition, source, target, reverse=reverse)
@@ -480,6 +506,7 @@ class FigmaApp(App):
         source_frame_id: str,
         frame_id: str,
         scroll: float,
+        scroll_x: float,
     ) -> SmartAnimateTransition | None:
         duration = float(transition.get("duration", 0.0) or 0.0)
         if duration <= 0:
@@ -514,7 +541,7 @@ class FigmaApp(App):
                     src=src_geom,
                     dst=dst_geom,
                     render=lambda: self._renderer.render(raster_frame_id, raster_scale, only_ids=(raster_only,), transparent=True),
-                    paste_x=screen.offset_x,
+                    paste_x=screen.offset_x - int(round(scroll_x * scale)),
                     paste_y=screen.offset_y - int(round(scroll * scale)),
                 )
             )
@@ -559,19 +586,22 @@ class FigmaApp(App):
         screen = self._screen(self.current_frame_id)
         return (x * kx - screen.offset_x) / screen.scale, (y * ky - screen.offset_y) / screen.scale
 
-    def _scroll_to(self, value: float) -> None:
+    def _scroll_to(self, y: float, x: float | None = None) -> None:
         screen = self._screen(self.current_frame_id)
-        clamped = min(max(0.0, value), screen.max_scroll)
-        if clamped != self.scroll_y:
-            self.scroll_y = clamped
+        clamped_y = min(max(0.0, y), screen.max_scroll)
+        clamped_x = min(max(0.0, self.scroll_x if x is None else x), screen.max_scroll_x)
+        if clamped_y != self.scroll_y or clamped_x != self.scroll_x:
+            self.scroll_y = clamped_y
+            self.scroll_x = clamped_x
             self.invalidate()
 
-    def _scroll_surface(self, overlay_idx: int, value: float) -> None:
+    def _scroll_surface(self, overlay_idx: int, y: float, x: float | None = None) -> None:
         if overlay_idx < 0:
-            self._scroll_to(value)
+            self._scroll_to(y, x)
             return
         overlay = self._overlays[overlay_idx]
-        clamped = min(max(0.0, value), self._overlay_surface(overlay).max_scroll)
+        surface = self._overlay_surface(overlay)
+        clamped = min(max(0.0, y), surface.max_scroll)
         if clamped != overlay.scroll_y:
             overlay.scroll_y = clamped
             self.invalidate()
@@ -591,10 +621,19 @@ class FigmaApp(App):
         if "x" in payload and "y" in payload:
             self._pointer = (float(payload["x"]), float(payload["y"]))
         if device in {"mouse", "trackpad"} and kind == "scroll":
-            _, ky = self._display_to_matrix()
+            kx, ky = self._display_to_matrix()
             idx = len(self._overlays) - 1 if self._overlays else -1
-            current = self._overlays[-1].scroll_y if idx >= 0 else self.scroll_y
-            self._scroll_surface(idx, current - float(payload.get("delta_y", 0.0) or 0.0) * ky / self._surface_scale(idx))
+            scale = self._surface_scale(idx)
+            if idx >= 0:
+                current_y = self._overlays[-1].scroll_y
+                current_x = 0.0
+            else:
+                current_y, current_x = self.scroll_y, self.scroll_x
+            self._scroll_surface(
+                idx,
+                current_y - float(payload.get("delta_y", 0.0) or 0.0) * ky / scale,
+                current_x - float(payload.get("delta_x", 0.0) or 0.0) * kx / scale,
+            )
             return
         if device == "touch" and kind == "touch":
             pointer_id, phase = int(payload.get("touch_id", 0)), str(payload.get("phase", ""))
@@ -611,8 +650,8 @@ class FigmaApp(App):
             return
         press = self._press
         if phase == "down":
-            spot, overlay_idx, outside, start_scroll = self._press_target()
-            self._press = _Press(pointer_id, self._pointer, start_scroll, spot, overlay_idx, outside)
+            spot, overlay_idx, outside, start_scroll, start_scroll_x = self._press_target()
+            self._press = _Press(pointer_id, self._pointer, start_scroll, spot, start_scroll_x, overlay_idx, outside)
             return
         if press is None or press.pointer_id != pointer_id:
             return
@@ -620,8 +659,13 @@ class FigmaApp(App):
         if not press.dragging and max(abs(dx), abs(dy)) > DRAG_THRESHOLD_PT:
             press.dragging = True
         if press.dragging:
-            _, ky = self._display_to_matrix()
-            self._scroll_surface(press.overlay, press.start_scroll - dy * ky / self._surface_scale(press.overlay))
+            kx, ky = self._display_to_matrix()
+            scale = self._surface_scale(press.overlay)
+            self._scroll_surface(
+                press.overlay,
+                press.start_scroll - dy * ky / scale,
+                press.start_scroll_x - dx * kx / scale,
+            )
         if phase == "cancel":
             self._press = None
         elif phase == "up":
@@ -637,12 +681,12 @@ class FigmaApp(App):
                 ):
                     self.close_overlay()
                 return
-            spot, overlay_idx, _outside, _scroll = self._press_target()
+            spot, overlay_idx, _outside, _scroll_y, _scroll_x = self._press_target()
             if spot is not None and overlay_idx == press.overlay and spot.node_id == press.target.node_id:
                 self._activate(spot)
 
-    def _press_target(self) -> tuple[Hotspot | None, int, bool, float]:
-        """Hotspot under the pointer, its overlay index (-1 = base), and press-outside state."""
+    def _press_target(self) -> tuple[Hotspot | None, int, bool, float, float]:
+        """Hotspot under the pointer, its overlay index (-1 = base), and press state."""
         if self._overlays:
             overlay = self._overlays[-1]
             surface = self._overlay_surface(overlay)
@@ -652,8 +696,9 @@ class FigmaApp(App):
             frame = self.document.frame(overlay.frame_id)
             outside = not (0.0 <= lx <= frame.width and 0.0 <= ly <= frame.height)
             spot = None if outside else self._hit_overlay(overlay, lx, ly)
-            return spot, len(self._overlays) - 1, outside, overlay.scroll_y
-        return self._hit(*self._to_view(*self._pointer)), -1, False, self.scroll_y
+            return spot, len(self._overlays) - 1, outside, overlay.scroll_y, 0.0
+        spot = self._hit(*self._to_view(*self._pointer))
+        return spot, -1, False, self.scroll_y, self.scroll_x
 
     def _hit_overlay(self, overlay: _Overlay, lx: float, ly: float) -> Hotspot | None:
         y = ly + overlay.scroll_y
@@ -661,11 +706,14 @@ class FigmaApp(App):
 
     def _hit(self, vx: float, vy: float) -> Hotspot | None:
         targets = self._tap_targets()
-        scrolling = self._screen(self.current_frame_id).max_scroll > 0
+        screen = self._screen(self.current_frame_id)
+        scrolling = screen.max_scroll > 0 or screen.max_scroll_x > 0
         if scrolling and any(x0 <= vx <= x1 and y0 <= vy <= y1 for x0, y0, x1, y1 in self._fixed_regions()):
             return next((t for t in reversed(targets) if t.fixed and t.contains(vx, vy)), None)
-        y = vy + self.scroll_y
-        return next((t for t in reversed(targets) if not (scrolling and t.fixed) and t.contains(vx, y)), None)
+        return next(
+            (t for t in reversed(targets) if not (scrolling and t.fixed) and t.contains(vx + self.scroll_x, vy + self.scroll_y)),
+            None,
+        )
 
     def _fixed_regions(self) -> list[tuple[float, float, float, float]]:
         frame_id = self.current_frame_id

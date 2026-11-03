@@ -78,6 +78,7 @@ def test_horizontal_scroll_is_clamped_to_the_content() -> None:
 
     _drag_x(ctx, 100, 50, 250)
     _drag_x(ctx, 100, 50, 250)
+    _drag_x(ctx, 100, 50, 250)
     app.loop(ctx, 0.016)
     assert app.scroll_x == 0
 
@@ -108,9 +109,9 @@ def test_renderer_can_split_horizontal_fixed_and_scrolling_layers() -> None:
     content = render_frame(doc, "4:1", skip_ids={"4:9"})
     overlay = render_frame(doc, "4:1", only_ids={"4:9"}, transparent=True)
 
-    assert _px(content, 220, 100) == GREEN
-    assert _px(overlay, 60, 100) == YELLOW
-    assert overlay[10, 60, 3] == 0
+    assert _px(content, 110, 50) == GREEN
+    assert _px(overlay, 30, 50) == YELLOW
+    assert overlay[10, 30, 3] == 0
 
 
 def test_navigation_resets_horizontal_scroll_and_back_restores_it() -> None:
