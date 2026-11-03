@@ -200,6 +200,36 @@ def test_navigate_by_name_and_unknown_names_raise() -> None:
         app.navigate("Nope")
 
 
+def test_set_text_rerenders_the_bound_text_layer() -> None:
+    data = two_screen_file()
+    home = data["document"]["children"][0]["children"][1]
+    home["children"].append(
+        {
+            "id": "1:9",
+            "type": "TEXT",
+            "name": "Counter",
+            "absoluteBoundingBox": {"x": 1010, "y": 20, "width": 80, "height": 40},
+            "characters": "",
+            "characterStyleOverrides": [],
+            "style": {"fontFamily": "Inter", "fontSize": 30, "lineHeightPx": 36},
+            "fills": [{"type": "SOLID", "color": {"r": 0, "g": 0, "b": 0, "a": 1}}],
+        }
+    )
+    ctx = _FakeCtx(100, 200)
+    app = FigmaApp(FigmaDocument.from_dict(data))
+    app.init(ctx)
+    app.loop(ctx, 0.016)
+    assert not (ctx.frames[-1][20:60, 10:90, 0] < 128).any()
+
+    app.set_text("Counter", "42")
+    app.loop(ctx, 0.016)
+
+    assert app.text("Counter") == "42"
+    assert (ctx.frames[-1][20:60, 10:90, 0] < 128).any()
+    with pytest.raises(KeyError):
+        app.set_text("Missing", "x")
+
+
 def test_app_loads_a_design_path_relative_to_its_module(tmp_path: Path) -> None:
     path = tmp_path / "design.json"
     path.write_text(json.dumps(two_screen_file()), encoding="utf-8")
