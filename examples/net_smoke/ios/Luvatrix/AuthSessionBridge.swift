@@ -23,8 +23,16 @@ func luvatrixPythonStringLiteral(_ value: String) -> String {
 }
 
 // Delivers the web-auth result to the waiting Python sign-in flow:
-// the callback URL on success, nil when the user cancelled.
+// the callback URL on success, nil when the user cancelled. The completion
+// handler fires on the main queue and the Python side performs the token
+// exchange over the network, so the hop into Python runs in the background.
 func callPythonAuthSessionCallback(_ callbackURL: String?) {
+    DispatchQueue.global(qos: .userInitiated).async {
+        callPythonAuthSessionCallbackSync(callbackURL)
+    }
+}
+
+private func callPythonAuthSessionCallbackSync(_ callbackURL: String?) {
     let gstate = LuvatrixPyGILStateEnsure()
     defer { LuvatrixPyGILStateRelease(gstate) }
 

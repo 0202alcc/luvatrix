@@ -1,10 +1,10 @@
 {
   "files": {
-    "Luvatrix/AppDelegate.swift": "9ad65f6918d494ba466a00c6db82dafd63e4d761ad128ac803d2a11283621c42",
+    "Luvatrix/AppDelegate.swift": "0fc1e1f79aefb8b611eb3e1a92f81306903e5ecb3ecd471f12346724ced9345b",
     "Luvatrix/Assets.xcassets/AppIcon.appiconset/Contents.json": "13299eeb3b8f12d79b8aef018c23ac7d0c964bdeafdc7fe26044c26e2155f575",
     "Luvatrix/Assets.xcassets/AppIcon.appiconset/icon.png": "5455482b00d9e2da8b0cf468dc830cf4b212bf56a7ca9f345f7ed446b5a1405f",
     "Luvatrix/Assets.xcassets/Contents.json": "f5fb0e1f3a8142892ed092efb5955c1c2cc537003a89ad7bbdb9dade7fe8985f",
-    "Luvatrix/AuthSessionBridge.swift": "b444cd0682596bb07635b4ba6885d3fa96fda2559766a13df692e3e2d38c5a3e",
+    "Luvatrix/AuthSessionBridge.swift": "083b1c80f1f61b9aed2001aacad4b3b2289996968e9224f966180df8b4322fdd",
     "Luvatrix/Info.plist": "46b7f30e107dc1a82fcc54335e386ad4880f89ed2acfdff75ffea8a80810a995",
     "Luvatrix/KeychainBridge.swift": "a18bdb0de7b545a59043751ecef1a0713af1031ee6ac99318585d7071a9d99e3",
     "Luvatrix/Luvatrix-Bridging-Header.h": "14e56842b17703444fada7a6266cc06c0fa1a6691605c1d2864a06975d31a881",

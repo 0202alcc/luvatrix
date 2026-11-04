@@ -263,6 +263,14 @@ except BaseException as e:
 }
 
 private func callPythonHandleOpenURL(_ url: URL) {
+    // openURLContexts fires on the main queue and the Python side may run a
+    // token exchange over the network, so hop to a background queue.
+    DispatchQueue.global(qos: .userInitiated).async {
+        callPythonHandleOpenURLSync(url)
+    }
+}
+
+private func callPythonHandleOpenURLSync(_ url: URL) {
     let gstate = LuvatrixPyGILStateEnsure()
     defer { LuvatrixPyGILStateRelease(gstate) }
 
