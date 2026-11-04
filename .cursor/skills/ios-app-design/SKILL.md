@@ -79,10 +79,10 @@ Liquid Glass is the material Apple introduced in iOS 26 and refined in iOS 27. I
 
 | Device | Points (portrait) | Source |
 |---|---|---|
-| iPhone 17, iPhone 17 Pro | 402×874 pt (1206×2622 px @3x) | [S-LAYOUT-ARCHIVE] |
+| iPhone 17, iPhone 17 Pro (our design frame) | 402×874 pt (1206×2622 px @3x) | [S-LAYOUT-ARCHIVE] |
 | iPhone Air | 420×912 pt | [S-LAYOUT-ARCHIVE] |
 | iPhone 17 Pro Max | 440×956 pt | [S-LAYOUT-ARCHIVE] |
-| iPhone 16 / 15 / 15 Pro / 14 Pro (our current design frame) | 393×852 pt | [S-LAYOUT-ARCHIVE] |
+| iPhone 16 / 15 / 15 Pro / 14 Pro | 393×852 pt | [S-LAYOUT-ARCHIVE] |
 | iPhone Duo outer display | Apple: 1398×2034 px at 460 ppi; points not published by Apple | [S-DUO-SPECS] |
 | iPhone Duo inner display | Apple: 1878×2670 px at 430 ppi; points not published by Apple | [S-DUO-SPECS] |
 
@@ -195,10 +195,10 @@ Third-party simulator measurements report 466×678 pt (outer) and 951×669 pt (i
   - Bars are the frame's **last N children**, with `numberOfFixedChildren: N`.
 - **Glass approximation:**
   - Use a translucent `fills` color with a `cornerRadius` capsule and a `BACKGROUND_BLUR` effect.
-  - **Limit:** on a **scrolling** frame, the runtime renders fixed children into a separate transparent overlay, so `BACKGROUND_BLUR` on a fixed bar has nothing to blur. Only the translucent fill shows the content through.
-  - Blur behind a bar works only on non-scrolling frames, and on in-flow (non-fixed) nodes.
+  - On a **scrolling** frame, `FigmaApp` blurs the scrolled content under each fixed `BACKGROUND_BLUR` shape every time the scroll offset changes, then composites the bar's fill over it. On non-scrolling frames and in-flow nodes the renderer blurs what is drawn beneath the node.
+  - There is no refraction, specular motion, or luminosity adaptation; it is a blur plus a tint.
 - **Letterboxing:** the iOS presenter letterboxes the fixed `native_width×native_height` matrix into the device drawable, filling the bars with `bar_color_rgba`.
-  - A 393×852 design runs on iPhone 17 with thin bars.
+  - A design sized to the device (402×874 on iPhone 17) has no bars. A 393×852 design on iPhone 17 gets thin ones.
   - There is no dynamic resizing, so iPhone Duo layout adaptation isn't possible today.
 - **Verify** with `uv run python main.py figma ios-tour <app> --tour <app>/tour.json --out <dir> --simulator "iPhone 17" --native-project <app>/ios`, or by pushing a `feature/**` branch. The `iOS Simulator Tour` workflow uploads the `ios-tour-<slug>-<run_id>` artifact.
 
@@ -209,7 +209,7 @@ Run this against every `NN_<capture>.png` in the `ios-tour` artifact. The screen
 Layout and safe area
 - [ ] No text or control sits under the status bar or Dynamic Island. The top safe area is about 62 pt on iPhone 17 [T-SAFEAREA].
 - [ ] No tappable element or label sits in the bottom 34 pt home-indicator zone, except the bar's own background [T-SAFEAREA].
-- [ ] Letterbox bars from a 393×852 design on a 402×874 device are invisible, or blend in. Check that the `bar_color_rgba` color matches the adjacent content.
+- [ ] Letterbox bars (from a design not sized 402×874) are invisible, or blend in. Check that the `bar_color_rgba` color matches the adjacent content.
 - [ ] Content reaches the screen edges behind the bars. There's no hard band where the content stops above the tab bar.
 - [ ] Every tappable element is at least 44×44 pt, measured as a 132×132 px hit area in the screenshot [S-BUTTONS].
 

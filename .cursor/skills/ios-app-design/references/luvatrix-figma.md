@@ -4,7 +4,7 @@ Read this before editing `examples/nomic_ios/assemble_capture.py` or any Figma d
 
 ## How a screen becomes pixels
 
-1. `examples/nomic_ios/assemble_capture.py` turns captured web frames into `design/figma_file.json`. It shifts content down by `STATUS_CLEAR_PT` and appends a tab bar from `build_tab_bar_node` as the last child of each screen.
+1. `examples/nomic_ios/assemble_capture.py` turns captured web frames (`figma capture --viewport 402x874@3`) into `design/figma_file.json`. It shifts content down by `STATUS_CLEAR_PT` and appends fixed children to each screen: a top scroll edge fade, then the floating tab bar from `build_tab_bar_node`. On Conversation it also pins the composer above the bar.
 2. `luvatrix_ui/figma/document.py` loads the document and resolves prototype interactions, overlays, and transitions.
 3. `luvatrix_ui/figma/render.py` rasterizes nodes. `luvatrix_ui/figma/app.py` (`FigmaApp`) composes screens, scrolls them, and runs transitions.
 4. On iOS, the Metal presenter letterboxes the app's fixed `native_width×native_height` matrix into the device drawable (scale = the smaller of the two axis ratios) and fills the leftover bars with `[display] bar_color_rgba` from `app.toml`.
@@ -14,18 +14,17 @@ Fix design problems in the **builder** (`assemble_capture.py`), then regenerate 
 ## JSON patterns
 
 **Screen frame**
-- One top-level `FRAME` per screen, with `absoluteBoundingBox` width equal to the viewport width (393 today).
-- `app.toml` `[display] native_width/native_height` sets the viewport (393×852 today). This is the iPhone 16 point size [S-LAYOUT-ARCHIVE], not the iPhone 17 size of 402×874 pt.
+- One top-level `FRAME` per screen, with `absoluteBoundingBox` width equal to the viewport width (402 today).
+- `app.toml` `[display] native_width/native_height` sets the viewport (402×874 today, the iPhone 17 point size [S-LAYOUT-ARCHIVE]), so the iPhone 17 simulator shows no letterbox.
 - Content taller than the viewport needs `overflowDirection: "VERTICAL_SCROLLING"`. `FigmaApp._screen` only treats a frame as scrolling when its scaled height exceeds the matrix height.
 
 **Fixed bars (tab bar, top toolbar, floating buttons)**
 - Fixed children are the frame's **last N children**, where N is `numberOfFixedChildren`. Put bars at the end of `children`.
-- Position fixed children in frame coordinates for the viewport, for example the tab bar at `y = VIEWPORT_H - bar height`.
+- Position fixed children in frame coordinates for the viewport. The Nomic floating bar sits at `y = VIEWPORT_H - 34 - bar height`, clear of the home indicator.
 
-**Safe areas in a 393×852 frame** (iPhone 16 insets [T-SAFEAREA])
-- Top: keep text and controls below 59 pt. `STATUS_CLEAR_PT = 59.0` does this.
-- Bottom: keep labels and tap targets above 818 pt (852 − 34). Only the bar's background should extend into the home-indicator zone.
-- If the frame moves to 402×874 for iPhone 17, the insets become 62 pt top and 34 pt bottom [T-SAFEAREA], so the bottom limit becomes 840 pt.
+**Safe areas in a 402×874 frame** (iPhone 17 insets [T-SAFEAREA])
+- Top: keep text and controls below 62 pt. `STATUS_CLEAR_PT = 62.0` does this.
+- Bottom: keep labels and tap targets above 840 pt (874 − 34). The Nomic bar sits entirely above it (778–840 pt).
 
 **Approximating a Liquid Glass tab bar**
 
@@ -48,7 +47,7 @@ Apple publishes no point dimensions for the floating tab bar (height, side inset
 | `cornerRadius`, per-corner `rectangleCornerRadii` | Supported | `render.py` `corner_radii` |
 | `DROP_SHADOW`, `INNER_SHADOW`, `LAYER_BLUR` | Supported | `render.py` |
 | `BACKGROUND_BLUR` on in-flow nodes, or fixed nodes on non-scrolling frames | Supported: blurs what is already drawn beneath the node, before its fill | `render.py` `_draw_self` |
-| `BACKGROUND_BLUR` on a fixed child of a **scrolling** frame | **Doesn't work.** See below. | `app.py` `_screen` |
+| `BACKGROUND_BLUR` on a fixed child of a **scrolling** frame | Supported: blurs the scrolled content under the node at the current offset. See below. | `app.py` `_blur_backdrops`, `render.py` `backdrop_blur` |
 | Node and paint `blendMode` | Supported | `render.py` |
 | Prototype transitions: `DISSOLVE`, `SMART_ANIMATE`, `SCROLL_ANIMATE`, `PUSH`, `MOVE_IN`, `MOVE_OUT`, `SLIDE_IN`, `SLIDE_OUT` | Supported | `transitions.py`, `smart_animate.py` |
 | Overlays (`overlayPositionType`, `overlayBackground`, close on click outside) | Supported, through `FigmaApp.open_overlay` | `document.py`, `app.py` |
@@ -57,7 +56,7 @@ Apple publishes no point dimensions for the floating tab bar (height, side inset
 | Dark Mode or Dynamic Type switching | **Not supported.** The document has one fixed appearance and fixed sizes. | — |
 | Resizing to the device (iPhone 17, iPhone Duo) | **Not supported.** The matrix is fixed and letterboxed. | `app.toml`, Metal presenter |
 
-**Why `BACKGROUND_BLUR` fails on scrolling bars.** For a scrolling frame, `FigmaApp._screen` renders the content with the fixed children skipped, then renders the fixed children alone (`only_ids=fixed, transparent=True`) into a separate overlay. `_compose` pastes that overlay over the scrolled content. When the bar's blur runs, the overlay canvas beneath it is empty, so there's nothing to blur. A translucent fill still composites correctly over the content. Real blur behind a scrolling bar needs a renderer change that blurs the composed content inside the overlay window each frame.
+**How `BACKGROUND_BLUR` works on scrolling bars.** For a scrolling frame, `FigmaApp._screen` renders the content with the fixed children skipped, then renders the fixed children alone (`only_ids=fixed, transparent=True`) into a separate overlay. That overlay pass records each `BACKGROUND_BLUR` shape (coverage and radius) instead of blurring its empty canvas. `_compose` pastes the scrolled content, blurs it inside each recorded shape, then composites the overlay (the bar's translucent fill, strokes, and children) on top. Only the shape's bounds are blurred, and wide blurs run on a block-averaged copy. The blurred patch is cached until the scroll offset changes; on this Linux VM a 370×62 pt bar at 3x costs about 17 ms per new offset.
 
 **Fonts.** `luvatrix_ui/figma/text.py` resolves a family from `LUVATRIX_FONT_DIRS`, then the bundled `luvatrix_ui/figma/fonts` (Inter Regular, Medium, SemiBold, and Bold), then system font directories. An unknown family falls back to Inter. Apple tells apps not to embed system fonts [S-TYPOGRAPHY], so use Inter as the SF Pro stand-in. Use the Dynamic Type Large sizes from SKILL.md, and draw icons as vector paths in the style of SF Symbols (filled for tab bars [S-TABBARS]).
 
@@ -80,4 +79,4 @@ Apple publishes no point dimensions for the floating tab bar (height, side inset
    On Linux, push a `feature/**` or `dev-alec/**` branch instead. The `iOS Simulator Tour` workflow (`.github/workflows/ios-sim-tour.yml`) runs the same command on a macOS runner and uploads the artifact `ios-tour-<slug>-<run_id>`. Download it with `gh run download <run_id>`.
 4. Read the output: `NN_<capture>.png` screenshots, `summary.json`, `console.log`, and `app_log.txt`.
 5. Screenshots are 1206×2622 px on iPhone 17 at 3x [S-IPHONE17-SPECS]. Divide pixel coordinates by 3 to get points, then run the checklist in SKILL.md.
-6. Remember the letterbox: a 393×852 matrix scales by about 1.023 into 402×874, leaving about 1.25 pt of `bar_color_rgba` at the top and bottom. Design coordinates map to device points as `device = design × 1.023 + 1.25` on the y axis.
+6. A 402×874 design maps 1:1 to iPhone 17 points. For a design of another size, remember the letterbox: a 393×852 matrix scales by about 1.023 into 402×874, leaving about 1.25 pt of `bar_color_rgba` at the top and bottom.

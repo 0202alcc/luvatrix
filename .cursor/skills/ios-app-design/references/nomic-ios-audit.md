@@ -2,6 +2,20 @@
 
 Audit date: **November 4, 2026**, against the generated `examples/nomic_ios/design/figma_file.json`, `assemble_capture.py`, `app.toml`, and `ios/project.yml`. Nothing here has been changed in the app; these are recorded deviations to fix in later work. Fix them in `assemble_capture.py` (`build_tab_bar_node`, `assemble_screen`, and the constants at the top), not in the generated JSON.
 
+## Status after the floating glass tab bar change
+
+Later the same day, the app was recaptured at 402×874@3 and rebuilt. Deviations 1–6, 11, and 12 below are fixed:
+
+- The tab bar is a floating capsule: 370×62 pt at y = 778, 16 pt side insets, radius 31. It uses real background blur (the renderer now blurs scrolled content under fixed layers), a 72% light tint, a hairline edge, a top highlight, and a soft shadow.
+- Labels are 11 pt and the whole bar ends at 840 pt, above the home indicator. Tab slots are 90.5×54 pt.
+- Icons are filled glyphs. Symbols and labels are monochrome (selected 24, unselected 102 gray), and the selected tab gets a concentric radius-27 pill.
+- The frame is 402×874, so there's no letterbox. The Conversation composer is pinned above the bar, and a top scroll edge fade keeps scrolled content out from under the status bar.
+- `Info.plist` pins dark status bar content and the Light appearance, and the category is productivity with the game-mode keys removed.
+
+Deviations 7 (Dark Mode), 8 (SF Pro and Dynamic Type), 9 (layered icon), and 10 (iPhone Duo) remain open. The bar metrics are chosen, not measured; replace them with iOS 27 Figma kit values.
+
+The original audit follows unchanged.
+
 Where a finding depends on what the simulator shows rather than on the JSON, it says "verify in a screenshot."
 
 ## The design as built
