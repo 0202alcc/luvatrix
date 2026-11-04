@@ -7,11 +7,18 @@ app content below the status bar, running edge to edge underneath a floating
 Liquid Glass-style tab bar that is the frame's fixed child.
 
     python assemble_capture.py --captures assistant=/tmp/... --out design/
+    python assemble_capture.py --captures assistant=/tmp/light/... \
+        --dark-captures assistant=/tmp/dark/... --out design/
+
+Light captures build `design/figma_file.json`; adding `--dark-captures` (the
+same screens captured with the site in dark mode) also writes
+`design/figma_file.dark.json` with a dark glass tab bar and scroll-edge fade.
 """
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import json
 import re
 from pathlib import Path
@@ -44,6 +51,72 @@ GLASS_BLUR_PT = 12.0
 TAB_SELECTED = (24, 24, 24)
 TAB_UNSELECTED = (102, 102, 102)
 SELECTION_PILL_OPACITY = 0.07
+
+
+@dataclass(frozen=True)
+class BarTheme:
+    """Per-appearance colors for the floating glass tab bar and canvas.
+
+    Glass has no color of its own; symbols and labels stay monochrome, darker
+    over light content and lighter over dark content [S-COLOR]. Geometry never
+    changes between appearances.
+    """
+
+    tint: tuple[int, int, int]
+    tint_opacity: float
+    selected: tuple[int, int, int]
+    unselected: tuple[int, int, int]
+    pill_rgb: tuple[int, int, int]
+    pill_opacity: float
+    stroke_rgb: tuple[int, int, int]
+    stroke_opacity: float
+    highlight_alpha: float
+    shadow_alpha: float
+    canvas_background: tuple[float, float, float]
+    scroll_edge_fallback: tuple[float, float, float]
+
+
+BAR_THEMES = {
+    "light": BarTheme(
+        tint=GLASS_TINT,
+        tint_opacity=GLASS_TINT_OPACITY,
+        selected=TAB_SELECTED,
+        unselected=TAB_UNSELECTED,
+        pill_rgb=(0, 0, 0),
+        pill_opacity=SELECTION_PILL_OPACITY,
+        stroke_rgb=(0, 0, 0),
+        stroke_opacity=0.08,
+        highlight_alpha=0.9,
+        shadow_alpha=0.1,
+        canvas_background=(1.0, 1.0, 1.0),
+        scroll_edge_fallback=(1.0, 1.0, 1.0),
+    ),
+    # Dark values are chosen, not measured, pending the iOS 27 Figma kit
+    # [S-DESIGNKITS]: a dark translucent tint, light monochrome symbols, and a
+    # white selection wash over the same blurred glass.
+    "dark": BarTheme(
+        tint=(26, 26, 28),
+        tint_opacity=0.66,
+        selected=(248, 248, 248),
+        unselected=(170, 170, 170),
+        pill_rgb=(255, 255, 255),
+        pill_opacity=0.14,
+        stroke_rgb=(255, 255, 255),
+        stroke_opacity=0.14,
+        highlight_alpha=0.22,
+        shadow_alpha=0.35,
+        canvas_background=(0.0, 0.0, 0.0),
+        scroll_edge_fallback=(0.0, 0.0, 0.0),
+    ),
+}
+
+
+def bar_theme(appearance: str) -> BarTheme:
+    try:
+        return BAR_THEMES[appearance]
+    except KeyError:
+        names = ", ".join(sorted(BAR_THEMES))
+        raise ValueError(f"unknown appearance {appearance!r}; expected one of: {names}") from None
 
 # Captured-layout heuristics: the top band where the web header lives, and the
 # tallest block that still counts as the chat composer control.
@@ -235,15 +308,19 @@ def _label_node(node_id: str, text: str, *, x: float, y: float, width: float, co
     }
 
 
-def build_tab_bar_node(tabs: list[tuple[str, str, str]], active: str | None = None) -> dict[str, Any]:
+def build_tab_bar_node(
+    tabs: list[tuple[str, str, str]], active: str | None = None, *, appearance: str = "light"
+) -> dict[str, Any]:
     """Build the floating glass tab bar; ``tabs`` is (label, icon kind, destination id).
 
     The bar is a capsule inset from the screen edges, sitting just above the
     home-indicator zone. Each tab fills an equal slot inside the capsule's
     padding, so the selected tab's pill is concentric with the bar: its radius
     is the bar radius minus the padding [S-WWDC25-356]. ``active`` names the
-    icon kind of the selected tab.
+    icon kind of the selected tab. ``appearance`` picks the glass theme; the
+    geometry is identical in light and dark.
     """
+    theme = bar_theme(appearance)
     bar_x, bar_w, bar_h = TAB_BAR_INSET_PT, FRAME_W - 2 * TAB_BAR_INSET_PT, TAB_BAR_HEIGHT_PT
     pad = TAB_BAR_PADDING_PT
     slot_w = (bar_w - 2 * pad) / len(tabs)
@@ -253,7 +330,7 @@ def build_tab_bar_node(tabs: list[tuple[str, str, str]], active: str | None = No
     for index, (label, kind, destination) in enumerate(tabs):
         x = bar_x + pad + index * slot_w
         is_active = kind == active
-        color = TAB_SELECTED if is_active else TAB_UNSELECTED
+        color = theme.selected if is_active else theme.unselected
         parts: list[dict[str, Any]] = []
         if is_active:
             parts.append(
@@ -263,7 +340,7 @@ def build_tab_bar_node(tabs: list[tuple[str, str, str]], active: str | None = No
                     "name": "selection",
                     "absoluteBoundingBox": {"x": x, "y": slot_y, "width": slot_w, "height": slot_h},
                     "cornerRadius": bar_h / 2 - pad,
-                    "fills": [_solid((0, 0, 0), SELECTION_PILL_OPACITY)],
+                    "fills": [_solid(theme.pill_rgb, theme.pill_opacity)],
                 }
             )
         parts.append(
@@ -308,14 +385,14 @@ def build_tab_bar_node(tabs: list[tuple[str, str, str]], active: str | None = No
         "absoluteBoundingBox": {"x": bar_x, "y": TAB_BAR_Y, "width": bar_w, "height": bar_h},
         "cornerRadius": bar_h / 2,
         "clipsContent": False,
-        "fills": [_solid(GLASS_TINT, GLASS_TINT_OPACITY)],
-        "strokes": [_solid((0, 0, 0), 0.08)],
+        "fills": [_solid(theme.tint, theme.tint_opacity)],
+        "strokes": [_solid(theme.stroke_rgb, theme.stroke_opacity)],
         "strokeWeight": 0.5,
         "strokeAlign": "INSIDE",
         "effects": [
-            {"type": "DROP_SHADOW", "color": {"r": 0, "g": 0, "b": 0, "a": 0.1}, "offset": {"x": 0, "y": 4}, "radius": 16, "visible": True},
+            {"type": "DROP_SHADOW", "color": {"r": 0, "g": 0, "b": 0, "a": theme.shadow_alpha}, "offset": {"x": 0, "y": 4}, "radius": 16, "visible": True},
             {"type": "BACKGROUND_BLUR", "radius": GLASS_BLUR_PT, "visible": True},
-            {"type": "INNER_SHADOW", "color": {"r": 1, "g": 1, "b": 1, "a": 0.9}, "offset": {"x": 0, "y": 1}, "radius": 1, "visible": True},
+            {"type": "INNER_SHADOW", "color": {"r": 1, "g": 1, "b": 1, "a": theme.highlight_alpha}, "offset": {"x": 0, "y": 1}, "radius": 1, "visible": True},
         ],
         "children": children,
     }
@@ -329,6 +406,7 @@ def assemble_screen(
     *,
     name: str,
     tab_bar: dict[str, Any],
+    appearance: str = "light",
 ) -> dict[str, Any]:
     """Turn one captured 402x874 frame into an app screen.
 
@@ -358,20 +436,21 @@ def assemble_screen(
         if isinstance(rel, list) and len(rel) == 2 and "size" in node:
             rel[1][2] = float(rel[1][2]) + STATUS_CLEAR_PT
     children = capture_frame.setdefault("children", [])
-    children.append(build_scroll_edge_node(capture_frame))
+    children.append(build_scroll_edge_node(capture_frame, appearance=appearance))
     children.append(tab_bar)
     capture_frame["numberOfFixedChildren"] = 2
     return capture_frame
 
 
-def build_scroll_edge_node(screen: dict[str, Any]) -> dict[str, Any]:
+def build_scroll_edge_node(screen: dict[str, Any], *, appearance: str = "light") -> dict[str, Any]:
     """A top scroll edge effect: content fades out under the status bar.
 
     Floating UI over a scroll view separates itself from content with a scroll
     edge effect rather than an opaque band [S-LAYOUT], [S-SCROLLVIEWS]. At rest
     it matches the screen background, so it is invisible until content scrolls.
     """
-    color = {"r": 1.0, "g": 1.0, "b": 1.0}
+    fallback = bar_theme(appearance).scroll_edge_fallback
+    color = {"r": fallback[0], "g": fallback[1], "b": fallback[2]}
     for paint in screen.get("fills") or ():
         if paint.get("type") == "SOLID":
             color = {k: float(paint["color"][k]) for k in ("r", "g", "b")}
@@ -513,8 +592,9 @@ def remap_ids(node: dict[str, Any], prefix: str) -> None:
         remap_ids(child, prefix)
 
 
-def merge_captures(frames: list[tuple[dict[str, Any], str]], title: str) -> dict[str, Any]:
+def merge_captures(frames: list[tuple[dict[str, Any], str]], title: str, *, appearance: str = "light") -> dict[str, Any]:
     """One canvas, one renamed screen frame per capture, in tour order."""
+    theme = bar_theme(appearance)
     renamed: list[dict[str, Any]] = []
     for frame, name in frames:
         frame["name"] = name
@@ -523,7 +603,7 @@ def merge_captures(frames: list[tuple[dict[str, Any], str]], title: str) -> dict
         "id": "0:1",
         "type": "CANVAS",
         "name": title,
-        "backgroundColor": {"r": 1, "g": 1, "b": 1, "a": 1},
+        "backgroundColor": {"r": theme.canvas_background[0], "g": theme.canvas_background[1], "b": theme.canvas_background[2], "a": 1},
         "flowStartingPoints": [{"nodeId": renamed[0]["id"], "name": "Start"}],
         "children": renamed,
     }
@@ -550,18 +630,13 @@ TABS = [
 ]
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--captures", action="append", required=True, help="name=path/to/capture-dir")
-    parser.add_argument("--out", type=Path, required=True, help="Design dir for figma_file.json")
-    parser.add_argument("--click-map", type=Path, default=None, help="JSON: hotspot needle -> {name, frame}")
-    args = parser.parse_args()
-
-    captures: dict[str, Path] = {}
-    for spec in args.captures:
-        key, _, value = spec.partition("=")
-        captures[key.strip()] = Path(value.strip())
-
+def assemble_design(
+    captures: dict[str, Path],
+    *,
+    click_map: dict[str, Any] | None = None,
+    appearance: str = "light",
+) -> dict[str, Any]:
+    """Build one design document from per-screen capture dirs for one appearance."""
     frames: list[tuple[dict[str, Any], str]] = []
     ids: dict[str, str] = {}
     for index, (key, name, _height) in enumerate(SCREEN_SPECS):
@@ -577,36 +652,71 @@ def main() -> None:
     for (_key, name, _height), (frame, _original) in zip(SCREEN_SPECS, frames):
         tabs = [(label, kind, ids[dest_name]) for label, kind, dest_name in TABS]
         active = next((kind for _label, kind, dest_name in TABS if dest_name == name), None)
-        bar = build_tab_bar_node(tabs, active=active)
-        screens.append(assemble_screen(frame, name=name, tab_bar=bar))
+        bar = build_tab_bar_node(tabs, active=active, appearance=appearance)
+        screens.append(assemble_screen(frame, name=name, tab_bar=bar, appearance=appearance))
 
-    if args.click_map:
-        wanted = json.loads(args.click_map.read_text(encoding="utf-8"))
-        for needle, spec in wanted.items():
+    if click_map:
+        for needle, spec in click_map.items():
             screen = screens[order.index(spec["screen"])]
             if not wire_content_hotspot(screen, needle, spec["name"], ids[spec["destination"]]):
-                print(f"[nomic_ios] warning: hotspot text not found: {needle!r}")
+                print(f"[nomic_ios:{appearance}] warning: hotspot text not found: {needle!r}")
 
     for name in ("Assistant", "Conversation"):
         if not rename_composer_chip(screens[order.index(name)]):
-            print(f"[nomic_ios] warning: composer mode chip not found on {name}")
+            print(f"[nomic_ios:{appearance}] warning: composer mode chip not found on {name}")
     for name in order:
         dropped = drop_misplaced_header_widgets(screens[order.index(name)])
         if dropped:
-            print(f"[nomic_ios] dropped {dropped} misplaced header widget(s) on {name}")
+            print(f"[nomic_ios:{appearance}] dropped {dropped} misplaced header widget(s) on {name}")
     if not pin_composer_above_tab_bar(screens[order.index("Conversation")], COMPOSER_NEEDLE):
-        print("[nomic_ios] warning: composer not found on Conversation")
+        print(f"[nomic_ios:{appearance}] warning: composer not found on Conversation")
 
-    payload = merge_captures([(screen, name) for screen, name in zip(screens, order)], title="Nomic iOS")
+    payload = merge_captures(
+        [(screen, name) for screen, name in zip(screens, order)], title="Nomic iOS", appearance=appearance
+    )
     # Artifact cleanup + clip reconciliation run per assembled screen.
     removed = drop_css_artifact_texts(payload)
     reconciled = reconcile_clips(payload)
-    print(f"[nomic_ios] removed {removed} css artifact text(s), reconciled {reconciled} clip(s)")
+    print(f"[nomic_ios:{appearance}] removed {removed} css artifact text(s), reconciled {reconciled} clip(s)")
+    return payload
+
+
+def _capture_specs(specs: list[str]) -> dict[str, Path]:
+    captures: dict[str, Path] = {}
+    for spec in specs:
+        key, _, value = spec.partition("=")
+        captures[key.strip()] = Path(value.strip())
+    return captures
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--captures", action="append", required=True, help="name=path/to/capture-dir (light appearance)"
+    )
+    parser.add_argument(
+        "--dark-captures",
+        action="append",
+        default=None,
+        help="name=path/to/capture-dir for the dark appearance; also writes figma_file.dark.json",
+    )
+    parser.add_argument("--out", type=Path, required=True, help="Design dir for figma_file.json")
+    parser.add_argument("--click-map", type=Path, default=None, help="JSON: hotspot needle -> {name, frame}")
+    args = parser.parse_args()
+
+    click_map = json.loads(args.click_map.read_text(encoding="utf-8")) if args.click_map else None
+
+    variants: list[tuple[str, dict[str, Path], str]] = [("light", _capture_specs(args.captures), "figma_file.json")]
+    if args.dark_captures:
+        variants.append(("dark", _capture_specs(args.dark_captures), "figma_file.dark.json"))
 
     args.out.mkdir(parents=True, exist_ok=True)
-    design = args.out / "figma_file.json"
-    design.write_text(json.dumps(payload), encoding="utf-8")
-    print(f"[nomic_ios] wrote {design} with {len(screens)} screens")
+    for appearance, captures, filename in variants:
+        payload = assemble_design(captures, click_map=click_map, appearance=appearance)
+        design = args.out / filename
+        design.write_text(json.dumps(payload), encoding="utf-8")
+        screens = payload["document"]["children"][0]["children"]
+        print(f"[nomic_ios:{appearance}] wrote {design} with {len(screens)} screens")
 
 
 if __name__ == "__main__":
