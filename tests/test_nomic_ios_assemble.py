@@ -191,6 +191,7 @@ def test_tab_bar_approximates_regular_liquid_glass(asm) -> None:
 
     fills = bar["fills"]
     assert len(fills) == 1 and fills[0]["type"] == "SOLID"
+    assert _rgb(fills[0]) == (250, 250, 249), "light glass tint is the Nomic gray-50 canvas"
     assert 0.0 < fills[0]["opacity"] < 1.0
     blurs = [e for e in bar["effects"] if e["type"] == "BACKGROUND_BLUR"]
     assert blurs and blurs[0]["radius"] > 0
@@ -241,7 +242,9 @@ def test_tab_labels_meet_the_ios_minimum_size(asm) -> None:
         assert _tab_parts(tab)["label"]["style"]["fontSize"] >= 11
 
 
-def test_tab_symbols_and_labels_are_monochrome(asm) -> None:
+def test_tab_symbols_and_labels_use_the_nomic_light_grays(asm) -> None:
+    # Nomic grays are teal-tinted (hue ~153), never neutral; values come from
+    # the drive-next globals.css tokens (gray-700 selected, gray-500 unselected).
     bar = _bar(asm, active="drive")
     colors = set()
     for tab in bar["children"]:
@@ -249,9 +252,12 @@ def test_tab_symbols_and_labels_are_monochrome(asm) -> None:
         icon_rgb = _rgb(parts["icon"]["fills"][0])
         label_rgb = _rgb(parts["label"]["fills"][0])
         assert icon_rgb == label_rgb, "one color per tab state"
-        assert icon_rgb[0] == icon_rgb[1] == icon_rgb[2], "bar symbols carry no hue"
         colors.add(icon_rgb)
-    assert len(colors) == 2
+    assert colors == {(38, 43, 39), (77, 82, 79)}
+    selected = _rgb(_tab_parts(bar["children"][1])["icon"]["fills"][0])
+    unselected = _rgb(_tab_parts(bar["children"][0])["icon"]["fills"][0])
+    assert selected == (38, 43, 39)
+    assert unselected == (77, 82, 79)
 
 
 def test_selected_tab_gets_a_concentric_selection_pill(asm) -> None:
@@ -289,13 +295,16 @@ def test_dark_tab_bar_uses_a_dark_translucent_tint(asm) -> None:
 
     fills = bar["fills"]
     assert len(fills) == 1 and fills[0]["type"] == "SOLID"
+    assert _rgb(fills[0]) == (25, 29, 26), "dark glass tint is the teal-leaning Nomic gray-900, never blue or black"
     assert max(_rgb(fills[0])) < 80, "dark glass tints the bar, not lightens it"
     assert 0.0 < fills[0]["opacity"] < 1.0
     blurs = [e for e in bar["effects"] if e["type"] == "BACKGROUND_BLUR"]
     assert blurs and blurs[0]["radius"] > 0
 
 
-def test_dark_tab_symbols_and_labels_are_light_monochrome(asm) -> None:
+def test_dark_tab_symbols_and_labels_use_the_nomic_dark_grays(asm) -> None:
+    # Dark-mode grays are the teal-tinted Nomic tokens (gray-100 selected,
+    # gray-400 unselected), not neutral ramps.
     bar = _bar(asm, active="drive", appearance="dark")
     colors = set()
     for tab in bar["children"]:
@@ -303,13 +312,14 @@ def test_dark_tab_symbols_and_labels_are_light_monochrome(asm) -> None:
         icon_rgb = _rgb(parts["icon"]["fills"][0])
         label_rgb = _rgb(parts["label"]["fills"][0])
         assert icon_rgb == label_rgb, "one color per tab state"
-        assert icon_rgb[0] == icon_rgb[1] == icon_rgb[2], "bar symbols carry no hue"
         colors.add(icon_rgb)
-    assert len(colors) == 2
+    assert colors == {(241, 241, 234), (145, 148, 146)}
     assert min(rgb[0] for rgb in colors) >= 120, "dark-mode bar symbols stay legible on dark glass"
     # Selected reads stronger than unselected in both appearances.
     selected = _rgb(_tab_parts(bar["children"][1])["icon"]["fills"][0])
     unselected = _rgb(_tab_parts(bar["children"][0])["icon"]["fills"][0])
+    assert selected == (241, 241, 234)
+    assert unselected == (145, 148, 146)
     assert selected[0] > unselected[0]
 
 
@@ -341,6 +351,19 @@ def test_dark_scroll_edge_fades_from_the_dark_screen_background(asm) -> None:
     assert paint["gradientStops"][-1]["color"]["a"] == 0.0
 
 
+def test_scroll_edge_falls_back_to_the_theme_canvas_without_a_screen_fill(asm) -> None:
+    screen = _capture_frame()
+    screen["fills"] = []
+    for appearance, expected in (("light", (0.980, 0.980, 0.976)), ("dark", (0.098, 0.114, 0.102))):
+        edge = asm.build_scroll_edge_node(screen, appearance=appearance)
+        first = edge["fills"][0]["gradientStops"][0]["color"]
+        assert (first["r"], first["g"], first["b"]) == (
+            pytest.approx(expected[0], abs=1e-3),
+            pytest.approx(expected[1], abs=1e-3),
+            pytest.approx(expected[2], abs=1e-3),
+        ), appearance
+
+
 def test_main_writes_light_and_dark_design_documents(asm, tmp_path, monkeypatch) -> None:
     import json
     import sys
@@ -370,9 +393,20 @@ def test_main_writes_light_and_dark_design_documents(asm, tmp_path, monkeypatch)
         assert bar["name"] == "Tab Bar"
         tint = max(_rgb(bar["fills"][0]))
         assert tint < 80 if dark_mode else tint > 200
-    # Light stays the default document; dark rides alongside.
-    assert light["document"]["children"][0]["backgroundColor"]["r"] > 0.9
-    assert dark["document"]["children"][0]["backgroundColor"]["r"] < 0.1
+    # Light stays the default document; dark rides alongside. The canvas is the
+    # Nomic token canvas, never pure white or pure black.
+    light_bg = light["document"]["children"][0]["backgroundColor"]
+    assert (light_bg["r"], light_bg["g"], light_bg["b"]) == (
+        pytest.approx(0.980, abs=1e-3),
+        pytest.approx(0.980, abs=1e-3),
+        pytest.approx(0.976, abs=1e-3),
+    )
+    dark_bg = dark["document"]["children"][0]["backgroundColor"]
+    assert (dark_bg["r"], dark_bg["g"], dark_bg["b"]) == (
+        pytest.approx(0.098, abs=1e-3),
+        pytest.approx(0.114, abs=1e-3),
+        pytest.approx(0.102, abs=1e-3),
+    )
 
 
 # ── screen assembly ───────────────────────────────────────────────────────────
