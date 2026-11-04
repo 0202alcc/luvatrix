@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 import shutil
 
+from luvatrix_core.platform.ios.bundle_id import ios_bundle_id, sync_project_bundle_id
+
 
 APP_TEMPLATES = ("basic", "full-suite", "camera")
 NATIVE_TARGETS = ("android", "ios")
@@ -76,6 +78,8 @@ def init_native_project(
             native_path,
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"),
         )
+    if target == "ios":
+        sync_project_bundle_id(native_path, ios_bundle_id(app_path))
     _write_native_scaffold_metadata(
         native_path,
         target=target,

@@ -1,0 +1,101 @@
+{
+ "pages": [
+  {
+   "path": "/",
+   "title": "Basecamp",
+   "frameId": "1:0",
+   "counts": {
+    "frames": 792,
+    "rectangles": 190,
+    "texts": 686,
+    "vectors": 18,
+    "images": 0,
+    "transforms": 14,
+    "pseudos": 41,
+    "textOverflow": 9,
+    "svgPlaceholders": 60,
+    "conicRaster": 2
+   },
+   "skipped": {
+    "hidden": 2,
+    "zeroSize": 68,
+    "noLayout": 16,
+    "empty": 18
+   },
+   "unsupported": {
+    "pseudo-unmatched": 32,
+    "pseudo-transform": 6,
+    "conic-color": 2
+   },
+   "images": {
+    "downloaded": 52,
+    "failed": []
+   },
+   "PSEUDO_COUNT": 41
+  },
+  {
+   "path": "/projects",
+   "title": "Basecamp \u2014 Project management examples for every kind of team",
+   "frameId": "2:0",
+   "counts": {
+    "frames": 20,
+    "rectangles": 2,
+    "texts": 10,
+    "vectors": 15,
+    "images": 0,
+    "transforms": 3,
+    "pseudos": 2
+   },
+   "skipped": {
+    "hidden": 0,
+    "zeroSize": 3,
+    "noLayout": 10,
+    "empty": 4
+   },
+   "unsupported": {},
+   "images": {
+    "downloaded": 52,
+    "failed": []
+   },
+   "PSEUDO_COUNT": 2
+  },
+  {
+   "path": "/customers",
+   "title": "Basecamp \u2014 Customer testimonials",
+   "frameId": "3:0",
+   "counts": {
+    "frames": 3167,
+    "rectangles": 3,
+    "texts": 5686,
+    "vectors": 7,
+    "images": 0,
+    "transforms": 5,
+    "pseudos": 2033,
+    "textOverflow": 2
+   },
+   "skipped": {
+    "hidden": 1,
+    "zeroSize": 3,
+    "noLayout": 7,
+    "empty": 1364
+   },
+   "unsupported": {
+    "pseudo-transform": 1
+   },
+   "images": {
+    "downloaded": 52,
+    "failed": []
+   },
+   "PSEUDO_COUNT": 2033
+  }
+ ],
+ "PSEUDO_COUNT": 2076,
+ "images": {
+  "downloaded": 52,
+  "failed": []
+ },
+ "interactions": {
+  "mapped": 4,
+  "unmatched": []
+ }
+}

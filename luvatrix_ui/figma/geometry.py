@@ -367,6 +367,53 @@ def polyline_coverage(polys: list[np.ndarray], width_px: float, clip: Rect) -> C
     return Coverage(x0, y0, cov)
 
 
+def dashed_polyline_coverage(polys: list[np.ndarray], width_px: float, pattern: list[float], clip: Rect) -> Coverage | None:
+    """Stroke `polys` with a dash/gap pattern (device-pixel lengths, dash first)."""
+    if len(pattern) < 2 or all(v <= 0 for v in pattern[::2]):
+        return polyline_coverage(polys, width_px, clip)
+    if len(pattern) % 2 == 1:
+        pattern = pattern + pattern
+    dashed: list[np.ndarray] = []
+    for poly in polys:
+        if len(poly) >= 2:
+            dashed.extend(_dash_one(poly, pattern))
+    return polyline_coverage(dashed, width_px, clip)
+
+
+def _dash_one(poly: np.ndarray, pattern: list[float]) -> list[np.ndarray]:
+    # Closed contours keep their duplicated endpoint so the pattern wraps the seam.
+    pts = poly.astype(np.float64)
+    distances = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(pts, axis=0).T))])
+    total = float(distances[-1])
+    out: list[np.ndarray] = []
+    t, index = 0.0, 0
+    while t < total - 1e-9:
+        step = pattern[index % len(pattern)]
+        end = min(total, t + step)
+        if index % 2 == 0:
+            segment = _slice_polyline(pts, distances, t, end)
+            if len(segment) >= 2:
+                out.append(segment)
+        t = end
+        index += 1
+    return out
+
+
+def _slice_polyline(pts: np.ndarray, distances: np.ndarray, t0: float, t1: float) -> np.ndarray:
+    def point_at(t: float) -> np.ndarray:
+        if t <= distances[0]:
+            return pts[0]
+        if t >= distances[-1]:
+            return pts[-1]
+        k = min(int(np.searchsorted(distances, t, side="right")) - 1, len(pts) - 2)
+        span = distances[k + 1] - distances[k]
+        f = 0.0 if span <= 1e-12 else (t - distances[k]) / span
+        return pts[k] * (1.0 - f) + pts[k + 1] * f
+
+    inner = pts[(distances > t0 + 1e-9) & (distances < t1 - 1e-9)]
+    return np.vstack([point_at(t0), inner, point_at(t1)]) if len(inner) else np.array([point_at(t0), point_at(t1)])
+
+
 # ── Primitive shapes ──────────────────────────────────────────────────────────
 
 def _grid(rect: Rect) -> tuple[np.ndarray, np.ndarray]:

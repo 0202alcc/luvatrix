@@ -135,6 +135,15 @@ def back() -> list[dict[str, Any]]:
     return [{"trigger": {"type": "ON_CLICK"}, "actions": [{"type": "BACK"}]}]
 
 
+def open_overlay(dest: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "trigger": {"type": "ON_CLICK"},
+            "actions": [{"type": "NODE", "destinationId": dest, "navigation": "OVERLAY", "transition": None}],
+        }
+    ]
+
+
 LEAF = ("M12 2C6 2 3 7 3 12c0 3 1 5 3 7 1-5 4-9 9-11-4 3-6 6-7 11 1 1 3 1 4 1 6 0 9-5 9-11V2h-9Z")
 HEART = ("M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3.1 4 7 4c2.1 0 3.6 1.2 5 3 1.4-1.8 2.9-3 5-3 3.9 0 6.1 4.4 4.6 "
          "7.8C19.5 16.4 12 21 12 21Z")
@@ -203,7 +212,7 @@ def welcome(ids: dict[str, str]) -> dict[str, Any]:
         "gradientHandlePositions": [{"x": 0.5, "y": 0.5}, {"x": 1, "y": 0.5}, {"x": 0.5, "y": 1}],
         "gradientStops": [{"position": 0, "color": rgba((0.55, 0.85, 0.62), 0.55)},
                           {"position": 1, "color": rgba((0.55, 0.85, 0.62), 0.0)}],
-    }])
+    }], effects=[{"type": "LAYER_BLUR", "visible": True, "radius": 48, "blendMode": "NORMAL"}])
     badge = b.node("FRAME", "Logo Badge", 136, 250, 120, 120, fills=[linear((0.27, 0.66, 0.45), GREEN)],
                    cornerRadius=36, effects=[shadow(16, 32, 0.25)], children=[
                        icon(b, "Logo Leaf", LEAF, 30, 30, WHITE, parent=(136, 250), size=60),
@@ -248,7 +257,7 @@ def home(ids: dict[str, str]) -> dict[str, Any]:
                         b.node("ELLIPSE", "Lens", 16, 15, 16, 16, (24, 168), strokes=[solid(MUTED)], strokeWeight=2),
                     ])
     reminder = b.node("FRAME", "Reminder", 24, 240, 345, 96, fills=[linear((0.27, 0.66, 0.45), GREEN, start=(0, 0), end=(1, 1))],
-                      cornerRadius=24, effects=[shadow(12, 28, 0.25)], children=[
+                      cornerRadius=24, effects=[shadow(12, 28, 0.25)], interactions=open_overlay(ids["Water Sheet"]), children=[
                           b.node("ELLIPSE", "Drop Bg", 20, 24, 48, 48, (24, 240), fills=[solid(WHITE, 0.2)]),
                           icon(b, "Drop", DROP, 32, 36, WHITE, parent=(24, 240)),
                           b.text("Reminder Title", "3 plants need water", 84, 26, 240, 22, size=17, weight=600,
@@ -266,7 +275,8 @@ def home(ids: dict[str, str]) -> dict[str, Any]:
         search,
         reminder,
         b.text("Section", "My plants", 24, 362, 200, 24, size=20, weight=700),
-        b.text("See All", "See all", 289, 365, 80, 20, size=15, weight=600, color=GREEN, align="RIGHT"),
+        b.text("See All", "See all", 289, 365, 80, 20, size=15, weight=600, color=GREEN, align="RIGHT",
+               interactions=navigate(ids["Gallery"], "DISSOLVE")),
         plant_card(b, "Monstera", "Monstera deliciosa", 24, 402, (0.8, 0.9, 0.8), ids["Detail"]),
         plant_card(b, "Snake Plant", "Dracaena trifasciata", 203, 402, (0.85, 0.92, 0.78), None),
         plant_card(b, "Fern", "Nephrolepis exaltata", 24, 632, (0.78, 0.9, 0.86), None),
@@ -306,11 +316,14 @@ def detail(ids: dict[str, str]) -> dict[str, Any]:
                        stat(b, "Water", "250 ml", DROP, 24, 116, (0, 380)),
                        stat(b, "Light", "Indirect", SUN, 144, 116, (0, 380)),
                        stat(b, "Humidity", "60%", LEAF, 264, 116, (0, 380)),
-                       b.text("About Title", "About", 24, 252, 200, 24, size=20, weight=700, parent=(0, 380)),
-                       b.text("About Body", "Known for its dramatic split leaves, the Monstera thrives in bright, indirect "
-                              "light. Water when the top few centimetres of soil feel dry and wipe the leaves "
-                              "monthly to keep them glossy.", 24, 284, 345, 88, size=15, color=MUTED, line=22,
-                              parent=(0, 380)),
+                       b.node("LINE", "Dashed Rule", 24, 236, 345, 0, (0, 380), strokes=[solid(MUTED, opacity=0.5)],
+                              strokeWeight=1, strokeDashes=[4, 4]),
+                       moisture_instance(b, ids),
+                       b.text("About Title", "About", 24, 304, 200, 24, size=20, weight=700, parent=(0, 380)),
+                       truncated_text(b, "About Body", "Known for its dramatic split leaves, the Monstera thrives in "
+                                      "bright, indirect light. Water when the top few centimetres of soil feel dry "
+                                      "and wipe the leaves monthly to keep them glossy.",
+                                      24, 336, 345, 48, max_lines=2, size=15, color=MUTED, line=22, parent=(0, 380)),
                        b.node("FRAME", "Water Now", 24, 392, 345, 56, (0, 380), fills=[solid(GREEN)], cornerRadius=28,
                               effects=[shadow(10, 22, 0.25)], children=[
                                   b.text("Water Label", "Water now", 0, 17, 345, 22, size=17, weight=600, color=WHITE,
@@ -318,6 +331,111 @@ def detail(ids: dict[str, str]) -> dict[str, Any]:
                               ]),
                    ])
     return b.frame("Plant Detail", [photo, scrim, back_btn, fav, sheet], [solid(CREAM)])
+
+
+def moisture_instance(b: Builder, ids: dict[str, str]) -> dict[str, Any]:
+    """An instance of the Moisture component set showing the dry variant.
+
+    The instance mirrors the dry variant's pill fill, the way Figma materializes
+    instance properties; switching variants swaps in the wet subtree.
+    """
+    return b.node(
+        "INSTANCE",
+        "Moisture Badge",
+        24,
+        252,
+        140,
+        40,
+        (0, 380),
+        componentId=ids["Variant Dry"],
+        cornerRadius=20,
+        fills=[solid((0.9, 0.94, 0.9))],
+        interactions=[{
+            "trigger": {"type": "ON_CLICK"},
+            "actions": [{"type": "CHANGE_TO", "destinationId": ids["Variant Wet"]}],
+        }],
+        children=[
+            b.text("Badge Label", "Soil is dry", 0, 10, 140, 20, size=13, weight=600, color=MUTED,
+                   align="CENTER", parent=(24, 632)),
+        ],
+    )
+
+
+def truncated_text(b: Builder, name: str, chars: str, x: float, y: float, w: float, h: float, *, max_lines: int,
+                   **kw: Any) -> dict[str, Any]:
+    """A text layer whose style carries maxLines/textTruncation for ENDING truncation."""
+    node_dict = b.text(name, chars, x, y, w, h, **kw)
+    node_dict["style"]["maxLines"] = max_lines
+    node_dict["style"]["textTruncation"] = "ENDING"
+    return node_dict
+
+
+def moisture_set(ids: dict[str, str]) -> dict[str, Any]:
+    """A COMPONENT_SET with a dry and a wet variant of the moisture badge."""
+    b = Builder(3000)
+
+    def variant(vid: str, name: str, y: float, fill: tuple[float, float, float], label: str, color) -> dict[str, Any]:
+        v = b.node("COMPONENT", name, 0, y, 140, 40, fills=[solid(fill)], cornerRadius=20)
+        v["id"] = vid
+        v["children"] = [
+            b.text("Badge Label", label, 0, 10, 140, 20, size=13, weight=600, color=color, align="CENTER", parent=(0, y))
+        ]
+        return v
+
+    return b.node("COMPONENT_SET", "Moisture", 0, 0, 140, 88, children=[
+        variant(ids["Variant Dry"], "State=Dry", 0, (0.9, 0.94, 0.9), "Soil is dry", MUTED),
+        variant(ids["Variant Wet"], "State=Wet", 48, (0.45, 0.75, 0.9), "Soil is wet", (0.1, 0.3, 0.45)),
+    ])
+
+
+def water_sheet(ids: dict[str, str]) -> dict[str, Any]:
+    """A modal overlay opened from the Home reminder card."""
+    b = Builder(2000)
+    close = b.node("FRAME", "Close Sheet", 24, 336, 297, 56, fills=[solid(DARK)], cornerRadius=28,
+                   interactions=back(), children=[
+                       b.text("Close Label", "Close", 0, 18, 297, 20, size=17, weight=600, color=WHITE,
+                              align="CENTER", parent=(24, 336)),
+                   ])
+    return b.frame("Water Sheet", [
+        b.text("Sheet Title", "Watering", 24, 32, 200, 30, size=24, weight=700),
+        b.text("Sheet Body", "Log moisture, set a reminder and track how much each plant drank today.",
+               24, 76, 297, 44, size=15, color=MUTED, line=22),
+        b.node("ELLIPSE", "Ripple", 88, 160, 170, 140, fills=[solid((0.55, 0.85, 0.62), 0.9)], blendMode="MULTIPLY"),
+        b.text("Sheet Hint", "Tap anywhere outside to stay, or close to return.", 24, 240, 297, 40, size=14,
+               color=MUTED, align="CENTER", line=20),
+        close,
+    ], [solid(CREAM)], height=420)
+
+
+def gallery(ids: dict[str, str]) -> dict[str, Any]:
+    """A wide horizontally scrolling strip of plant photos with a pinned header."""
+    b = Builder(3600)
+    plants = (("Monstera", "Monstera deliciosa"), ("Snake Plant", "Dracaena trifasciata"),
+              ("Fern", "Nephrolepis exaltata"), ("Pothos", "Epipremnum aureum"),
+              ("Calathea", "Goeppertia orbifolia"))
+    cards = []
+    for i, (name, latin) in enumerate(plants):
+        x = 24 + i * 250
+        cards.append(b.node("FRAME", f"Gallery Card {name}", x, 168, 220, 300, fills=[solid(WHITE)], cornerRadius=24,
+                            effects=[shadow()], children=[
+                                b.node("RECTANGLE", "Photo", 12, 12, 196, 220, (x, 168), cornerRadius=16,
+                                       fills=[{"type": "IMAGE", "scaleMode": "FILL", "imageRef": PHOTO_REF}]),
+                                b.text("Card Name", name, 12, 244, 196, 22, size=16, weight=600, parent=(x, 168)),
+                                truncated_text(b, "Card Latin", latin, 12, 268, 110, 18, max_lines=1, size=13,
+                                               color=MUTED, parent=(x, 168)),
+                            ]))
+    header = b.node("FRAME", "Gallery Header", 0, 0, 1200, 120, fills=[solid(CREAM)], children=[
+        b.node("FRAME", "Gallery Back", 24, 56, 44, 44, fills=[solid(WHITE, opacity=0.9)], cornerRadius=22,
+               effects=[shadow(4, 12, 0.15)], interactions=back(), children=[
+                   chevron(b, "Chevron", 9, 10, DARK, parent=(24, 56)),
+               ]),
+        b.text("Gallery Title", "All plants", 84, 62, 300, 34, size=28, weight=700),
+    ])
+    frame = b.node("FRAME", "Gallery", 0, 0, 1200, 852, clipsContent=True, fills=[solid(CREAM)],
+                   overflowDirection="HORIZONTAL_SCROLLING", numberOfFixedChildren=1, children=[*cards, header])
+    frame["relativeTransform"] = [[1, 0, b.origin_x], [0, 1, 0]]
+    frame["background"] = [solid(CREAM)]
+    return frame
 
 
 def profile(ids: dict[str, str]) -> dict[str, Any]:
@@ -381,10 +499,11 @@ def make_photo(path: Path) -> None:
 def main() -> None:
     ids: dict[str, str] = {}
     # Frame ids are needed before the frames exist, so reserve them up front.
-    for name in ("Welcome", "Home", "Detail", "Profile"):
+    for name in ("Welcome", "Home", "Detail", "Profile", "Water Sheet", "Gallery", "Moisture Set", "Variant Dry",
+                 "Variant Wet"):
         ids[name] = f"{next(_ids)}:{next(_ids)}"
-    frames = [welcome(ids), home(ids), detail(ids), profile(ids)]
-    for frame, key in zip(frames, ("Welcome", "Home", "Detail", "Profile")):
+    frames = [welcome(ids), home(ids), detail(ids), profile(ids), water_sheet(ids), gallery(ids)]
+    for frame, key in zip(frames, ("Welcome", "Home", "Detail", "Profile", "Water Sheet", "Gallery")):
         frame["id"] = ids[key]
     document = {
         "name": "Luvatrix Plant Care",
@@ -402,7 +521,7 @@ def main() -> None:
                 "backgroundColor": rgba((0.12, 0.12, 0.12)),
                 "flowStartingPoints": [{"nodeId": ids["Welcome"], "name": "Onboarding"}],
                 "prototypeStartNodeID": ids["Welcome"],
-                "children": frames,
+                "children": [*frames, moisture_set(ids)],
             }],
         },
         "components": {},

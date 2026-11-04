@@ -1,0 +1,1322 @@
+[
+ {
+  "nodeId": "1:228",
+  "name": "a",
+  "selector": "a.skip-link",
+  "page": "/",
+  "x": 75.53125,
+  "y": -26.4375,
+  "width": 128.5625,
+  "height": 30.375
+ },
+ {
+  "nodeId": "1:266",
+  "name": "Basecamp",
+  "selector": "a[href=/]",
+  "page": "/",
+  "x": 196.5,
+  "y": 28.0,
+  "width": 40,
+  "height": 33.25
+ },
+ {
+  "nodeId": "1:293",
+  "name": "Open navigation",
+  "selector": "button.menu-toggle",
+  "page": "/",
+  "x": 363.0,
+  "y": 30.0,
+  "width": 36,
+  "height": 36
+ },
+ {
+  "nodeId": "1:14",
+  "name": "a",
+  "selector": "a.button",
+  "page": "/",
+  "x": 101.3671875,
+  "y": 326.96875,
+  "width": 137.328125,
+  "height": 32.5
+ },
+ {
+  "nodeId": "1:567",
+  "name": "button",
+  "selector": "button.hero__tour-button",
+  "page": "/",
+  "x": 269.1640625,
+  "y": 326.96875,
+  "width": 182.265625,
+  "height": 32.5
+ },
+ {
+  "nodeId": "1:655",
+  "name": "Back",
+  "selector": "button.hero__browser-back",
+  "page": "/",
+  "x": 69.25,
+  "y": 385.21875,
+  "width": 14.21875,
+  "height": 12
+ },
+ {
+  "nodeId": "1:3079",
+  "name": "a",
+  "selector": "a[href=/projects]",
+  "page": "/",
+  "x": 196.4921875,
+  "y": 747.484375,
+  "width": 172.296875,
+  "height": 30.40625
+ },
+ {
+  "nodeId": "1:3101",
+  "name": "a",
+  "selector": "a[href=/projects]",
+  "page": "/",
+  "x": 264.921875,
+  "y": 922.75,
+  "width": 48.5,
+  "height": 15.34375
+ },
+ {
+  "nodeId": "1:3116",
+  "name": "a",
+  "selector": "a[href=/reliable]",
+  "page": "/",
+  "x": 223.0546875,
+  "y": 1223.046875,
+  "width": 43.921875,
+  "height": 15.3125
+ },
+ {
+  "nodeId": "1:3119",
+  "name": "a",
+  "selector": "a[href=/5]",
+  "page": "/",
+  "x": 195.5,
+  "y": 1288.8671875,
+  "width": 287.53125,
+  "height": 35.765625
+ },
+ {
+  "nodeId": "1:3125",
+  "name": "a",
+  "selector": "a[href=/customers]",
+  "page": "/",
+  "x": 246.25,
+  "y": 1391.640625,
+  "width": 81.3125,
+  "height": 15.59375
+ },
+ {
+  "nodeId": "1:3128",
+  "name": "a",
+  "selector": "a[href=/projects]",
+  "page": "/",
+  "x": 187.5078125,
+  "y": 1401.4296875,
+  "width": 269.953125,
+  "height": 35.640625
+ },
+ {
+  "nodeId": "1:3142",
+  "name": "a",
+  "selector": "a[href=mailto:jason@basecamp.com]",
+  "page": "/",
+  "x": 212.3671875,
+  "y": 1574.9765625,
+  "width": 115.984375,
+  "height": 14.828125
+ },
+ {
+  "nodeId": "1:3321",
+  "name": "a",
+  "selector": "a[href=/customers]",
+  "page": "/",
+  "x": 196.5,
+  "y": 3044.890625,
+  "width": 313,
+  "height": 32.5
+ },
+ {
+  "nodeId": "1:3381",
+  "name": "a",
+  "selector": "a.live__card",
+  "page": "/",
+  "x": 196.5,
+  "y": 3895.9921875,
+  "width": 353,
+  "height": 359.453125
+ },
+ {
+  "nodeId": "1:3711",
+  "name": "a",
+  "selector": "a[href=https://www.37status.com]",
+  "page": "/",
+  "x": 248.84375,
+  "y": 4469.46875,
+  "width": 111.21875,
+  "height": 27.5
+ },
+ {
+  "nodeId": "1:3849",
+  "name": "a",
+  "selector": "a.data-classes__class",
+  "page": "/",
+  "x": 192.953125,
+  "y": 5850.34375,
+  "width": 143,
+  "height": 33
+ },
+ {
+  "nodeId": "1:3873",
+  "name": "a",
+  "selector": "a.data-classes__class",
+  "page": "/",
+  "x": 187.921875,
+  "y": 5898.34375,
+  "width": 132.9375,
+  "height": 33
+ },
+ {
+  "nodeId": "1:3897",
+  "name": "a",
+  "selector": "a.data-classes__class",
+  "page": "/",
+  "x": 190.03125,
+  "y": 5946.34375,
+  "width": 137.15625,
+  "height": 33
+ },
+ {
+  "nodeId": "1:3921",
+  "name": "a",
+  "selector": "a.data-classes__class",
+  "page": "/",
+  "x": 192.953125,
+  "y": 5994.34375,
+  "width": 143,
+  "height": 33
+ },
+ {
+  "nodeId": "1:3945",
+  "name": "a",
+  "selector": "a.data-classes__class",
+  "page": "/",
+  "x": 196.5,
+  "y": 6042.34375,
+  "width": 150.09375,
+  "height": 33
+ },
+ {
+  "nodeId": "1:3969",
+  "name": "a",
+  "selector": "a.data-classes__class",
+  "page": "/",
+  "x": 190.03125,
+  "y": 6090.34375,
+  "width": 137.15625,
+  "height": 33
+ },
+ {
+  "nodeId": "1:22",
+  "name": "input",
+  "selector": "input",
+  "page": "/",
+  "x": -4899.625,
+  "y": 6435.171875,
+  "width": 160.75,
+  "height": 32.625
+ },
+ {
+  "nodeId": "1:23",
+  "name": "Your email address",
+  "selector": "input",
+  "page": "/",
+  "x": 153.890625,
+  "y": 6433.46875,
+  "width": 267.78125,
+  "height": 32.625
+ },
+ {
+  "nodeId": "1:4034",
+  "name": "button",
+  "selector": "button.button",
+  "page": "/",
+  "x": 330.890625,
+  "y": 6433.46875,
+  "width": 86.21875,
+  "height": 34.625
+ },
+ {
+  "nodeId": "1:4058",
+  "name": "a",
+  "selector": "a[href=/5]",
+  "page": "/",
+  "x": 98.1484375,
+  "y": 6489.59375,
+  "width": 116.390625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4066",
+  "name": "a",
+  "selector": "a[href=/agents]",
+  "page": "/",
+  "x": 257.21875,
+  "y": 6489.59375,
+  "width": 191.625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4074",
+  "name": "a",
+  "selector": "a[href=/about]",
+  "page": "/",
+  "x": 129.8828125,
+  "y": 6518.28125,
+  "width": 126.671875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4078",
+  "name": "a",
+  "selector": "a[href=/features]",
+  "page": "/",
+  "x": 262.359375,
+  "y": 6518.28125,
+  "width": 128.15625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4082",
+  "name": "a",
+  "selector": "a[href=/reliable]",
+  "page": "/",
+  "x": 118.171875,
+  "y": 6546.96875,
+  "width": 116.125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4086",
+  "name": "a",
+  "selector": "a[href=/support]",
+  "page": "/",
+  "x": 257.09375,
+  "y": 6546.96875,
+  "width": 151.59375,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4090",
+  "name": "a",
+  "selector": "a[href=/paths]",
+  "page": "/",
+  "x": 124.5625,
+  "y": 6575.65625,
+  "width": 177.96875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4094",
+  "name": "a",
+  "selector": "a[href=/apps]",
+  "page": "/",
+  "x": 288.015625,
+  "y": 6575.65625,
+  "width": 138.8125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4098",
+  "name": "a",
+  "selector": "a[href=/integrations]",
+  "page": "/",
+  "x": 109.6015625,
+  "y": 6604.34375,
+  "width": 79.046875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4102",
+  "name": "a",
+  "selector": "a[href=/customers]",
+  "page": "/",
+  "x": 238.546875,
+  "y": 6604.34375,
+  "width": 168.71875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4106",
+  "name": "a",
+  "selector": "a[href=/learn]",
+  "page": "/",
+  "x": 119.3671875,
+  "y": 6633.03125,
+  "width": 102.234375,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4110",
+  "name": "a",
+  "selector": "a[href=/yes]",
+  "page": "/",
+  "x": 250.140625,
+  "y": 6633.03125,
+  "width": 149.1875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4114",
+  "name": "a",
+  "selector": "a[href=/small]",
+  "page": "/",
+  "x": 109.96875,
+  "y": 6661.71875,
+  "width": 126.78125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4118",
+  "name": "a",
+  "selector": "a[href=/underdogs]",
+  "page": "/",
+  "x": 262.421875,
+  "y": 6661.71875,
+  "width": 168,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4122",
+  "name": "a",
+  "selector": "a[href=/cloud-exit]",
+  "page": "/",
+  "x": 123.8125,
+  "y": 6690.40625,
+  "width": 110.1875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4126",
+  "name": "a",
+  "selector": "a[href=/guides/how-we-make-decisions]",
+  "page": "/",
+  "x": 254.125,
+  "y": 6690.40625,
+  "width": 140.3125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4130",
+  "name": "a",
+  "selector": "a[href=/guides/group-chat-problems]",
+  "page": "/",
+  "x": 129.6796875,
+  "y": 6719.09375,
+  "width": 126.609375,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4134",
+  "name": "a",
+  "selector": "a[href=/guides/why-we-choose-profit]",
+  "page": "/",
+  "x": 262.3359375,
+  "y": 6719.09375,
+  "width": 128.578125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4138",
+  "name": "a",
+  "selector": "a[href=/guides/seven-shipping-principles]",
+  "page": "/",
+  "x": 127.8515625,
+  "y": 6747.78125,
+  "width": 150.203125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4142",
+  "name": "a",
+  "selector": "a[href=/guides/how-we-communicate]",
+  "page": "/",
+  "x": 274.125,
+  "y": 6747.78125,
+  "width": 132.21875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4146",
+  "name": "a",
+  "selector": "a[href=/before-and-after]",
+  "page": "/",
+  "x": 98.265625,
+  "y": 6776.46875,
+  "width": 76.40625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4150",
+  "name": "a",
+  "selector": "a[href=/bootstrapped]",
+  "page": "/",
+  "x": 237.2265625,
+  "y": 6776.46875,
+  "width": 191.390625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4154",
+  "name": "a",
+  "selector": "a[href=/community]",
+  "page": "/",
+  "x": 144.1484375,
+  "y": 6805.15625,
+  "width": 132.453125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4158",
+  "name": "a",
+  "selector": "a[href=/classes]",
+  "page": "/",
+  "x": 265.2578125,
+  "y": 6805.15625,
+  "width": 99.640625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4162",
+  "name": "a",
+  "selector": "a[href=/books]",
+  "page": "/",
+  "x": 82.0703125,
+  "y": 6833.84375,
+  "width": 119.578125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4166",
+  "name": "a",
+  "selector": "a[href=/overkill]",
+  "page": "/",
+  "x": 182.8515625,
+  "y": 6833.84375,
+  "width": 71.859375,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4170",
+  "name": "a",
+  "selector": "a[href=/breakfast]",
+  "page": "/",
+  "x": 297.28125,
+  "y": 6833.84375,
+  "width": 146.875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4174",
+  "name": "a",
+  "selector": "a[href=/help]",
+  "page": "/",
+  "x": 88.875,
+  "y": 6862.53125,
+  "width": 95.71875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4178",
+  "name": "Discounts for teachers, students, & non-profits",
+  "selector": "a[href=/discounts]",
+  "page": "/",
+  "x": 175.671875,
+  "y": 6862.53125,
+  "width": 67.75,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4182",
+  "name": "a",
+  "selector": "a[href=/accessibility]",
+  "page": "/",
+  "x": 283.2890625,
+  "y": 6862.53125,
+  "width": 137.359375,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4186",
+  "name": "a",
+  "selector": "a[href=/keyboard]",
+  "page": "/",
+  "x": 129.546875,
+  "y": 6891.21875,
+  "width": 117.875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4190",
+  "name": "a",
+  "selector": "a[href=/newsletter]",
+  "page": "/",
+  "x": 257.96875,
+  "y": 6891.21875,
+  "width": 128.84375,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4194",
+  "name": "a",
+  "selector": "a[href=/hill-charts]",
+  "page": "/",
+  "x": 118.234375,
+  "y": 6919.90625,
+  "width": 178.78125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4198",
+  "name": "a",
+  "selector": "a[href=/gettingreal]",
+  "page": "/",
+  "x": 252.7578125,
+  "y": 6919.90625,
+  "width": 80.140625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4202",
+  "name": "a",
+  "selector": "a[href=/shapeup]",
+  "page": "/",
+  "x": 331.0234375,
+  "y": 6919.90625,
+  "width": 66.265625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4206",
+  "name": "a",
+  "selector": "a[href=/managers]",
+  "page": "/",
+  "x": 131.90625,
+  "y": 6948.59375,
+  "width": 112.5,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4210",
+  "name": "a",
+  "selector": "a[href=/handbook]",
+  "page": "/",
+  "x": 255.28125,
+  "y": 6948.59375,
+  "width": 124.125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "1:4219",
+  "name": "Basecamp",
+  "selector": "a.icon",
+  "page": "/",
+  "x": 111.4765625,
+  "y": 6992.46875,
+  "width": 80.921875,
+  "height": 19.125
+ },
+ {
+  "nodeId": "1:9",
+  "name": "37signals",
+  "selector": "a.icon",
+  "page": "/",
+  "x": 84.453125,
+  "y": 7011.59375,
+  "width": 72.75,
+  "height": 19.125
+ },
+ {
+  "nodeId": "1:4249",
+  "name": "HEY",
+  "selector": "a.icon",
+  "page": "/",
+  "x": 247.1640625,
+  "y": 7011.59375,
+  "width": 45.640625,
+  "height": 19.125
+ },
+ {
+  "nodeId": "1:4263",
+  "name": "Fizzy",
+  "selector": "a.icon",
+  "page": "/",
+  "x": 320.9609375,
+  "y": 7011.59375,
+  "width": 49.859375,
+  "height": 19.125
+ },
+ {
+  "nodeId": "1:4278",
+  "name": "Status",
+  "selector": "a[href=https://www.37status.com]",
+  "page": "/",
+  "x": 56.515625,
+  "y": 7039.265625,
+  "width": 38.75,
+  "height": 24
+ },
+ {
+  "nodeId": "1:4284",
+  "name": "a",
+  "selector": "a[href=/support]",
+  "page": "/",
+  "x": 104.9609375,
+  "y": 7039.265625,
+  "width": 37.140625,
+  "height": 24
+ },
+ {
+  "nodeId": "1:4288",
+  "name": "a",
+  "selector": "a[href=https://37signals.com/policies]",
+  "page": "/",
+  "x": 151.28125,
+  "y": 7039.265625,
+  "width": 34.5,
+  "height": 24
+ },
+ {
+  "nodeId": "1:4292",
+  "name": "a",
+  "selector": "a[href=/privacy]",
+  "page": "/",
+  "x": 195.4296875,
+  "y": 7039.265625,
+  "width": 32.796875,
+  "height": 24
+ },
+ {
+  "nodeId": "1:4296",
+  "name": "a",
+  "selector": "a[href=/security]",
+  "page": "/",
+  "x": 241.1484375,
+  "y": 7039.265625,
+  "width": 37.640625,
+  "height": 24
+ },
+ {
+  "nodeId": "1:4300",
+  "name": "a",
+  "selector": "a[href=/reliable]",
+  "page": "/",
+  "x": 292.2578125,
+  "y": 7039.265625,
+  "width": 43.578125,
+  "height": 24
+ },
+ {
+  "nodeId": "1:4304",
+  "name": "a",
+  "selector": "a[href=https://launchpad.37signals.com/signin]",
+  "page": "/",
+  "x": 340.1953125,
+  "y": 7039.265625,
+  "width": 31.296875,
+  "height": 24
+ },
+ {
+  "nodeId": "1:4316",
+  "name": "a",
+  "selector": "a.button",
+  "page": "/",
+  "x": 196.5,
+  "y": 7179.125,
+  "width": 138.46875,
+  "height": 29.25
+ },
+ {
+  "nodeId": "2:27634",
+  "name": "a",
+  "selector": "a.skip-link",
+  "page": "/projects",
+  "x": 75.53125,
+  "y": -26.4375,
+  "width": 128.5625,
+  "height": 30.375
+ },
+ {
+  "nodeId": "2:27672",
+  "name": "Basecamp",
+  "selector": "a[href=/]",
+  "page": "/projects",
+  "x": 196.5,
+  "y": 28.0,
+  "width": 40,
+  "height": 33.25
+ },
+ {
+  "nodeId": "2:27715",
+  "name": "Grid",
+  "selector": "button.view-toggle__button",
+  "page": "/projects",
+  "x": 321.0625,
+  "y": 89.953125,
+  "width": 24.375,
+  "height": 23.125
+ },
+ {
+  "nodeId": "2:27724",
+  "name": "List",
+  "selector": "button.view-toggle__button",
+  "page": "/projects",
+  "x": 343.4375,
+  "y": 89.953125,
+  "width": 24.375,
+  "height": 23.125
+ },
+ {
+  "nodeId": "2:27735",
+  "name": "Cards",
+  "selector": "button.view-toggle__button",
+  "page": "/projects",
+  "x": 365.8125,
+  "y": 89.953125,
+  "width": 24.375,
+  "height": 23.125
+ },
+ {
+  "nodeId": "2:169210",
+  "name": "a",
+  "selector": "a.button",
+  "page": "/projects",
+  "x": 196.5,
+  "y": 365369.125,
+  "width": 138.46875,
+  "height": 29.25
+ },
+ {
+  "nodeId": "3:169430",
+  "name": "a",
+  "selector": "a.skip-link",
+  "page": "/customers",
+  "x": 75.53125,
+  "y": -26.4375,
+  "width": 128.5625,
+  "height": 30.375
+ },
+ {
+  "nodeId": "3:169468",
+  "name": "Basecamp",
+  "selector": "a[href=/]",
+  "page": "/customers",
+  "x": 196.5,
+  "y": 28.0,
+  "width": 40,
+  "height": 33.25
+ },
+ {
+  "nodeId": "3:185567",
+  "name": "button",
+  "selector": "button.button",
+  "page": "/customers",
+  "x": 330.890625,
+  "y": 108301.59375,
+  "width": 86.21875,
+  "height": 34.625
+ },
+ {
+  "nodeId": "3:185591",
+  "name": "a",
+  "selector": "a[href=/5]",
+  "page": "/customers",
+  "x": 98.1484375,
+  "y": 108357.71875,
+  "width": 116.390625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185599",
+  "name": "a",
+  "selector": "a[href=/agents]",
+  "page": "/customers",
+  "x": 257.21875,
+  "y": 108357.71875,
+  "width": 191.625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185607",
+  "name": "a",
+  "selector": "a[href=/about]",
+  "page": "/customers",
+  "x": 129.8828125,
+  "y": 108386.40625,
+  "width": 126.671875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185611",
+  "name": "a",
+  "selector": "a[href=/features]",
+  "page": "/customers",
+  "x": 262.359375,
+  "y": 108386.40625,
+  "width": 128.15625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185615",
+  "name": "a",
+  "selector": "a[href=/reliable]",
+  "page": "/customers",
+  "x": 118.171875,
+  "y": 108415.09375,
+  "width": 116.125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185619",
+  "name": "a",
+  "selector": "a[href=/support]",
+  "page": "/customers",
+  "x": 257.09375,
+  "y": 108415.09375,
+  "width": 151.59375,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185623",
+  "name": "a",
+  "selector": "a[href=/paths]",
+  "page": "/customers",
+  "x": 124.5625,
+  "y": 108443.78125,
+  "width": 177.96875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:169232",
+  "name": "a",
+  "selector": "a[href=/apps]",
+  "page": "/customers",
+  "x": 288.015625,
+  "y": 108443.78125,
+  "width": 138.8125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185630",
+  "name": "a",
+  "selector": "a[href=/integrations]",
+  "page": "/customers",
+  "x": 109.6015625,
+  "y": 108472.46875,
+  "width": 79.046875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185634",
+  "name": "a",
+  "selector": "a[href=/customers]",
+  "page": "/customers",
+  "x": 238.546875,
+  "y": 108472.46875,
+  "width": 168.71875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185638",
+  "name": "a",
+  "selector": "a[href=/learn]",
+  "page": "/customers",
+  "x": 119.3671875,
+  "y": 108501.15625,
+  "width": 102.234375,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185642",
+  "name": "a",
+  "selector": "a[href=/yes]",
+  "page": "/customers",
+  "x": 250.140625,
+  "y": 108501.15625,
+  "width": 149.1875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185646",
+  "name": "a",
+  "selector": "a[href=/small]",
+  "page": "/customers",
+  "x": 109.96875,
+  "y": 108529.84375,
+  "width": 126.78125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185650",
+  "name": "a",
+  "selector": "a[href=/underdogs]",
+  "page": "/customers",
+  "x": 262.421875,
+  "y": 108529.84375,
+  "width": 168,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185654",
+  "name": "a",
+  "selector": "a[href=/cloud-exit]",
+  "page": "/customers",
+  "x": 123.8125,
+  "y": 108558.53125,
+  "width": 110.1875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185658",
+  "name": "a",
+  "selector": "a[href=/guides/how-we-make-decisions]",
+  "page": "/customers",
+  "x": 254.125,
+  "y": 108558.53125,
+  "width": 140.3125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185662",
+  "name": "a",
+  "selector": "a[href=/guides/group-chat-problems]",
+  "page": "/customers",
+  "x": 129.6796875,
+  "y": 108587.21875,
+  "width": 126.609375,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185666",
+  "name": "a",
+  "selector": "a[href=/guides/why-we-choose-profit]",
+  "page": "/customers",
+  "x": 262.3359375,
+  "y": 108587.21875,
+  "width": 128.578125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185670",
+  "name": "a",
+  "selector": "a[href=/guides/seven-shipping-principles]",
+  "page": "/customers",
+  "x": 127.8515625,
+  "y": 108615.90625,
+  "width": 150.203125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185674",
+  "name": "a",
+  "selector": "a[href=/guides/how-we-communicate]",
+  "page": "/customers",
+  "x": 274.125,
+  "y": 108615.90625,
+  "width": 132.21875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185678",
+  "name": "a",
+  "selector": "a[href=/before-and-after]",
+  "page": "/customers",
+  "x": 98.265625,
+  "y": 108644.59375,
+  "width": 76.40625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185682",
+  "name": "a",
+  "selector": "a[href=/bootstrapped]",
+  "page": "/customers",
+  "x": 237.2265625,
+  "y": 108644.59375,
+  "width": 191.390625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185686",
+  "name": "a",
+  "selector": "a[href=/community]",
+  "page": "/customers",
+  "x": 144.1484375,
+  "y": 108673.28125,
+  "width": 132.453125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185690",
+  "name": "a",
+  "selector": "a[href=/classes]",
+  "page": "/customers",
+  "x": 265.2578125,
+  "y": 108673.28125,
+  "width": 99.640625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185694",
+  "name": "a",
+  "selector": "a[href=/books]",
+  "page": "/customers",
+  "x": 82.0703125,
+  "y": 108701.96875,
+  "width": 119.578125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185698",
+  "name": "a",
+  "selector": "a[href=/overkill]",
+  "page": "/customers",
+  "x": 182.8515625,
+  "y": 108701.96875,
+  "width": 71.859375,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185702",
+  "name": "a",
+  "selector": "a[href=/breakfast]",
+  "page": "/customers",
+  "x": 297.28125,
+  "y": 108701.96875,
+  "width": 146.875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185706",
+  "name": "a",
+  "selector": "a[href=/help]",
+  "page": "/customers",
+  "x": 88.875,
+  "y": 108730.65625,
+  "width": 95.71875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185710",
+  "name": "Discounts for teachers, students, & non-profits",
+  "selector": "a[href=/discounts]",
+  "page": "/customers",
+  "x": 175.671875,
+  "y": 108730.65625,
+  "width": 67.75,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185714",
+  "name": "a",
+  "selector": "a[href=/accessibility]",
+  "page": "/customers",
+  "x": 283.2890625,
+  "y": 108730.65625,
+  "width": 137.359375,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185718",
+  "name": "a",
+  "selector": "a[href=/keyboard]",
+  "page": "/customers",
+  "x": 129.546875,
+  "y": 108759.34375,
+  "width": 117.875,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185722",
+  "name": "a",
+  "selector": "a[href=/newsletter]",
+  "page": "/customers",
+  "x": 257.96875,
+  "y": 108759.34375,
+  "width": 128.84375,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185726",
+  "name": "a",
+  "selector": "a[href=/hill-charts]",
+  "page": "/customers",
+  "x": 118.234375,
+  "y": 108788.03125,
+  "width": 178.78125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185730",
+  "name": "a",
+  "selector": "a[href=/gettingreal]",
+  "page": "/customers",
+  "x": 252.7578125,
+  "y": 108788.03125,
+  "width": 80.140625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185734",
+  "name": "a",
+  "selector": "a[href=/shapeup]",
+  "page": "/customers",
+  "x": 331.0234375,
+  "y": 108788.03125,
+  "width": 66.265625,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185738",
+  "name": "a",
+  "selector": "a[href=/managers]",
+  "page": "/customers",
+  "x": 131.90625,
+  "y": 108816.71875,
+  "width": 112.5,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185742",
+  "name": "a",
+  "selector": "a[href=/handbook]",
+  "page": "/customers",
+  "x": 255.28125,
+  "y": 108816.71875,
+  "width": 124.125,
+  "height": 23.625
+ },
+ {
+  "nodeId": "3:185751",
+  "name": "Basecamp",
+  "selector": "a.icon",
+  "page": "/customers",
+  "x": 111.4765625,
+  "y": 108860.59375,
+  "width": 80.921875,
+  "height": 19.125
+ },
+ {
+  "nodeId": "3:185765",
+  "name": "37signals",
+  "selector": "a.icon",
+  "page": "/customers",
+  "x": 84.453125,
+  "y": 108879.71875,
+  "width": 72.75,
+  "height": 19.125
+ },
+ {
+  "nodeId": "3:185782",
+  "name": "HEY",
+  "selector": "a.icon",
+  "page": "/customers",
+  "x": 247.1640625,
+  "y": 108879.71875,
+  "width": 45.640625,
+  "height": 19.125
+ },
+ {
+  "nodeId": "3:185796",
+  "name": "Fizzy",
+  "selector": "a.icon",
+  "page": "/customers",
+  "x": 320.9609375,
+  "y": 108879.71875,
+  "width": 49.859375,
+  "height": 19.125
+ },
+ {
+  "nodeId": "3:185811",
+  "name": "Status",
+  "selector": "a[href=https://www.37status.com]",
+  "page": "/customers",
+  "x": 56.515625,
+  "y": 108907.390625,
+  "width": 38.75,
+  "height": 24
+ },
+ {
+  "nodeId": "3:185817",
+  "name": "a",
+  "selector": "a[href=/support]",
+  "page": "/customers",
+  "x": 104.9609375,
+  "y": 108907.390625,
+  "width": 37.140625,
+  "height": 24
+ },
+ {
+  "nodeId": "3:185821",
+  "name": "a",
+  "selector": "a[href=https://37signals.com/policies]",
+  "page": "/customers",
+  "x": 151.28125,
+  "y": 108907.390625,
+  "width": 34.5,
+  "height": 24
+ },
+ {
+  "nodeId": "3:185825",
+  "name": "a",
+  "selector": "a[href=/privacy]",
+  "page": "/customers",
+  "x": 195.4296875,
+  "y": 108907.390625,
+  "width": 32.796875,
+  "height": 24
+ },
+ {
+  "nodeId": "3:185829",
+  "name": "a",
+  "selector": "a[href=/security]",
+  "page": "/customers",
+  "x": 241.1484375,
+  "y": 108907.390625,
+  "width": 37.640625,
+  "height": 24
+ },
+ {
+  "nodeId": "3:185833",
+  "name": "a",
+  "selector": "a[href=/reliable]",
+  "page": "/customers",
+  "x": 292.2578125,
+  "y": 108907.390625,
+  "width": 43.578125,
+  "height": 24
+ },
+ {
+  "nodeId": "3:185837",
+  "name": "a",
+  "selector": "a[href=https://launchpad.37signals.com/signin]",
+  "page": "/customers",
+  "x": 340.1953125,
+  "y": 108907.390625,
+  "width": 31.296875,
+  "height": 24
+ },
+ {
+  "nodeId": "3:185850",
+  "name": "a",
+  "selector": "a.button",
+  "page": "/customers",
+  "x": 196.5,
+  "y": 365369.125,
+  "width": 138.46875,
+  "height": 29.25
+ }
+]

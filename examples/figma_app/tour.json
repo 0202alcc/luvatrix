@@ -8,8 +8,17 @@
   {"capture": "plant_detail"},
   {"tap": "Water Now"},
   {"capture": "plant_watered"},
+  {"tap": "Moisture Badge"},
+  {"capture": "plant_wet"},
   {"tap": "Back Button"},
   {"capture": "home_again"},
+  {"tap": "Reminder"},
+  {"capture": "water_sheet"},
+  {"tap": "Close Sheet"},
+  {"capture": "home_after_sheet"},
+  {"tap": "See All"},
+  {"capture": "gallery"},
+  {"tap": "Gallery Back"},
   {"tap": "Tab Profile"},
   {"capture": "profile"}
 ]

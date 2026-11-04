@@ -1,0 +1,12 @@
+[
+  {"capture": "assistant"},
+  {"tap": "Drive Tab"},
+  {"capture": "drive"},
+  {"tap": "Projects Tab"},
+  {"capture": "projects"},
+  {"tap": "Profile Tab"},
+  {"capture": "profile"},
+  {"tap": "Assistant Tab"},
+  {"tap": "Conversation Link"},
+  {"capture": "conversation"}
+]

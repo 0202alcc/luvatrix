@@ -1,0 +1,11 @@
+[
+  {"capture": "sign_in"},
+  {"tap": "Sign In Button"},
+  {"capture": "home"},
+  {"tap": "Drive Link"},
+  {"capture": "drive"},
+  {"tap": "Projects Link"},
+  {"capture": "projects"},
+  {"tap": "Assistant Link"},
+  {"capture": "home_again"}
+]
