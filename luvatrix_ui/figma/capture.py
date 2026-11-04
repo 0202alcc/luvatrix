@@ -2813,11 +2813,20 @@ def capture_design(
     full_page: bool = False,
     chrome_path: str | None = None,
     cookies: Sequence[tuple[str, str]] = (),
+    color_scheme: str | None = None,
 ) -> CaptureResult:
-    """Capture `url` (plus extra pages) with headless Chrome and compile to Figma."""
+    """Capture `url` (plus extra pages) with headless Chrome and compile to Figma.
+
+    `color_scheme` ("light" or "dark") emulates prefers-color-scheme for the
+    whole session, so sites keyed off the media query (next-themes system
+    mode, plain CSS) render that theme.
+    """
     import asyncio
 
     from . import cdp
+
+    if color_scheme is not None and color_scheme not in ("light", "dark"):
+        raise ValueError(f"unsupported color scheme: {color_scheme!r}")
 
     width, height, scale = parse_viewport(viewport)
     click_map = _load_click_map(click_map_path)
@@ -2828,6 +2837,11 @@ def capture_design(
             conn = await cdp.CDPConnection.connect(chrome.ws_url)
             page = await cdp.CDPPage.attach(conn)
             await page.set_viewport(width, height, scale)
+            if color_scheme is not None:
+                await page.call(
+                    "Emulation.setEmulatedMedia",
+                    {"features": [{"name": "prefers-color-scheme", "value": color_scheme}]},
+                )
             if cookies:
                 await page.set_cookies(cookies, url=url)
             snapshots = []

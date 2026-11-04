@@ -251,6 +251,10 @@ def _fake_cdp_module(monkeypatch: Any, page: _FakeCDPPage) -> None:
     fake.CDPConnection = type("CDPConnection", (), {"connect": staticmethod(_connect)})  # type: ignore[attr-defined]
     fake.CDPPage = type("CDPPage", (), {"attach": staticmethod(_attach)})  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "luvatrix_ui.figma.cdp", fake)
+    # `from . import cdp` resolves the attribute on the already-imported package.
+    import luvatrix_ui.figma
+
+    monkeypatch.setattr(luvatrix_ui.figma, "cdp", fake)
 
 
 def _one_page_snapshot() -> dict[str, Any]:
