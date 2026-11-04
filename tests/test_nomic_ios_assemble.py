@@ -132,8 +132,8 @@ TABS = [
 ]
 
 
-def _bar(asm, active: str | None = "drive") -> dict:
-    return asm.build_tab_bar_node(TABS, active=active)
+def _bar(asm, active: str | None = "drive", **kwargs) -> dict:
+    return asm.build_tab_bar_node(TABS, active=active, **kwargs)
 
 
 def _box(node: dict) -> tuple[float, float, float, float]:
@@ -267,6 +267,112 @@ def test_selected_tab_gets_a_concentric_selection_pill(asm) -> None:
     assert by + bh - (py + ph) == pytest.approx(padding)
     assert pill["cornerRadius"] == pytest.approx(bar["cornerRadius"] - padding)
     assert tabs["Drive Tab"]["label"]["style"]["fontWeight"] > tabs["Assistant Tab"]["label"]["style"]["fontWeight"]
+
+
+# ── dark appearance ───────────────────────────────────────────────────────────
+
+
+def test_dark_tab_bar_keeps_the_light_geometry(asm) -> None:
+    light = _bar(asm)
+    dark = _bar(asm, appearance="dark")
+
+    assert _box(dark) == _box(light)
+    assert dark["cornerRadius"] == light["cornerRadius"]
+    for light_tab, dark_tab in zip(light["children"], dark["children"]):
+        assert _box(dark_tab) == _box(light_tab)
+        for light_part, dark_part in zip(light_tab["children"], dark_tab["children"]):
+            assert _box(dark_part) == _box(light_part)
+
+
+def test_dark_tab_bar_uses_a_dark_translucent_tint(asm) -> None:
+    bar = _bar(asm, appearance="dark")
+
+    fills = bar["fills"]
+    assert len(fills) == 1 and fills[0]["type"] == "SOLID"
+    assert max(_rgb(fills[0])) < 80, "dark glass tints the bar, not lightens it"
+    assert 0.0 < fills[0]["opacity"] < 1.0
+    blurs = [e for e in bar["effects"] if e["type"] == "BACKGROUND_BLUR"]
+    assert blurs and blurs[0]["radius"] > 0
+
+
+def test_dark_tab_symbols_and_labels_are_light_monochrome(asm) -> None:
+    bar = _bar(asm, active="drive", appearance="dark")
+    colors = set()
+    for tab in bar["children"]:
+        parts = _tab_parts(tab)
+        icon_rgb = _rgb(parts["icon"]["fills"][0])
+        label_rgb = _rgb(parts["label"]["fills"][0])
+        assert icon_rgb == label_rgb, "one color per tab state"
+        assert icon_rgb[0] == icon_rgb[1] == icon_rgb[2], "bar symbols carry no hue"
+        colors.add(icon_rgb)
+    assert len(colors) == 2
+    assert min(rgb[0] for rgb in colors) >= 120, "dark-mode bar symbols stay legible on dark glass"
+    # Selected reads stronger than unselected in both appearances.
+    selected = _rgb(_tab_parts(bar["children"][1])["icon"]["fills"][0])
+    unselected = _rgb(_tab_parts(bar["children"][0])["icon"]["fills"][0])
+    assert selected[0] > unselected[0]
+
+
+def test_dark_selection_pill_is_a_light_wash_with_the_same_shape(asm) -> None:
+    light = _bar(asm, active="drive")
+    dark = _bar(asm, active="drive", appearance="dark")
+    dark_tabs = {tab["name"]: _tab_parts(tab) for tab in dark["children"]}
+
+    pill = dark_tabs["Drive Tab"]["selection"]
+    fill = pill["fills"][0]
+    assert _rgb(fill) == (255, 255, 255), "dark selection is a white wash, not a black one"
+    assert 0.0 < fill["opacity"] < 0.5
+    light_pill = {tab["name"]: _tab_parts(tab) for tab in light["children"]}["Drive Tab"]["selection"]
+    assert _box(pill) == _box(light_pill)
+    assert pill["cornerRadius"] == light_pill["cornerRadius"]
+
+
+def test_dark_scroll_edge_fades_from_the_dark_screen_background(asm) -> None:
+    capture = _capture_frame()
+    capture["fills"] = [{"type": "SOLID", "color": {"r": 0.06, "g": 0.06, "b": 0.07}, "opacity": 1}]
+    screen = asm.assemble_screen(capture, name="Drive", tab_bar=_bar(asm, appearance="dark"), appearance="dark")
+
+    edge = screen["children"][-2]
+    paint = edge["fills"][0]
+    assert paint["type"] == "GRADIENT_LINEAR"
+    first = paint["gradientStops"][0]["color"]
+    assert max(first["r"], first["g"], first["b"]) < 0.2, "the fade matches the dark background"
+    assert first["a"] == 1.0
+    assert paint["gradientStops"][-1]["color"]["a"] == 0.0
+
+
+def test_main_writes_light_and_dark_design_documents(asm, tmp_path, monkeypatch) -> None:
+    import json
+    import sys
+
+    keys = [key for key, _name, _height in asm.SCREEN_SPECS]
+    for variant in ("light", "dark"):
+        for key in keys:
+            capture_dir = tmp_path / f"{variant}-{key}"
+            capture_dir.mkdir()
+            payload = {"document": {"children": [{"children": [_capture_frame()]}]}}
+            (capture_dir / "figma_file.json").write_text(json.dumps(payload), encoding="utf-8")
+    out = tmp_path / "design"
+    argv = ["assemble_capture.py"]
+    argv += [f"--captures={key}={tmp_path / f'light-{key}'}" for key in keys]
+    argv += [f"--dark-captures={key}={tmp_path / f'dark-{key}'}" for key in keys]
+    argv += [f"--out={out}"]
+    monkeypatch.setattr(sys, "argv", argv)
+
+    asm.main()
+
+    light = json.loads((out / "figma_file.json").read_text(encoding="utf-8"))
+    dark = json.loads((out / "figma_file.dark.json").read_text(encoding="utf-8"))
+    for payload, dark_mode in ((light, False), (dark, True)):
+        canvas = payload["document"]["children"][0]
+        assert [f["name"] for f in canvas["children"]] == [name for _k, name, _h in asm.SCREEN_SPECS]
+        bar = canvas["children"][0]["children"][-1]
+        assert bar["name"] == "Tab Bar"
+        tint = max(_rgb(bar["fills"][0]))
+        assert tint < 80 if dark_mode else tint > 200
+    # Light stays the default document; dark rides alongside.
+    assert light["document"]["children"][0]["backgroundColor"]["r"] > 0.9
+    assert dark["document"]["children"][0]["backgroundColor"]["r"] < 0.1
 
 
 # ── screen assembly ───────────────────────────────────────────────────────────
