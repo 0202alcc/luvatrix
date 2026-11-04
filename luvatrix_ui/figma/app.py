@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,10 @@ TapHandler = Callable[["FigmaApp", str], Any]
 DRAG_THRESHOLD_PT = 6.0
 _SCRIPTED_POINTER = -2
 DEFAULT_SCRIM = (0.0, 0.0, 0.0, 0.4)
+# Explicit host-appearance override (tests, headless renders); beats everything.
+APPEARANCE_ENV = "LUVATRIX_APPEARANCE"
+# The iOS bridge reports UITraitCollection.userInterfaceStyle through this one.
+TRAIT_APPEARANCE_ENV = "LUVATRIX_IOS_USER_INTERFACE_STYLE"
 
 
 @dataclass
@@ -92,26 +97,39 @@ class FigmaApp(App):
     """Runs a Figma prototype: renders the current frame and follows tap interactions.
 
     `design` is a FigmaDocument or a path to a Figma REST JSON export (images and
-    fonts are looked up in `images/` and `fonts/` next to it). Frames with
-    vertical overflow scroll by drag or wheel while their fixed children stay
-    pinned. Tap handlers registered with `on_tap` run before the prototype
-    action; returning False suppresses that action.
+    fonts are looked up in `images/` and `fonts/` next to it); `dark` is the
+    matching dark-appearance variant of the same prototype. The app starts in
+    the `appearance` it is pinned to, else follows `LUVATRIX_APPEARANCE`, the
+    platform trait bridge, or light. Frames with vertical overflow scroll by
+    drag or wheel while their fixed children stay pinned. Tap handlers
+    registered with `on_tap` run before the prototype action; returning False
+    suppresses that action.
     """
 
     def __init__(
         self,
         design: FigmaDocument | str | Path,
         *,
+        dark: FigmaDocument | str | Path | None = None,
+        appearance: str | None = None,
         start: str | None = None,
         background: tuple[int, int, int, int] | None = None,
         font_dirs: tuple[str, ...] = (),
     ) -> None:
-        self.document = design if isinstance(design, FigmaDocument) else FigmaDocument.load(design, start=start)
+        self._documents: dict[str, FigmaDocument] = {
+            "light": design if isinstance(design, FigmaDocument) else FigmaDocument.load(design, start=start)
+        }
+        if dark is not None:
+            self._documents["dark"] = dark if isinstance(dark, FigmaDocument) else FigmaDocument.load(dark, start=start)
+        self._explicit_appearance = appearance is not None
+        self._appearance = self._initial_appearance(appearance)
+        self.document = self._documents[self._appearance]
         self.current_frame_id = self.document.find_frame(start).id if start else self.document.start_frame_id
         self.scroll_y = 0.0
         self.scroll_x = 0.0
         self.history: list[tuple[str, float, float, dict[str, Any] | None]] = []
         self._background = background
+        self._font_dirs = tuple(font_dirs)
         self._variant_overrides: dict[str, str] = {}
         self._renderer = FigmaRenderer(self.document, font_dirs=font_dirs, variant_overrides=self._variant_overrides)
         self._handlers: dict[str, TapHandler] = {}
@@ -149,6 +167,80 @@ class FigmaApp(App):
     def busy(self) -> bool:
         """True while a transition plays or the latest state has not been rendered yet."""
         return self._transition is not None or self._render_requested
+
+    @property
+    def appearance(self) -> str:
+        """The appearance of the design currently rendered: "light" or "dark"."""
+        return self._appearance
+
+    def set_appearance(self, name: str) -> bool:
+        """Swap the rendered design to the `light`/`dark` variant; False on a no-op.
+
+        The current screen, back history, and scroll position carry over by
+        frame name (a screen missing from the variant falls back to its start
+        frame); open overlays and any running transition are dropped.
+        """
+        target = self._documents.get(str(name).strip().lower())
+        if target is None or target is self.document:
+            return False
+        source = self.document
+        self.document = target
+        self._appearance = str(name).strip().lower()
+        self.current_frame_id = self._remap_frame_id(source, target, self.current_frame_id)
+        self.history = [
+            (self._remap_frame_id(source, target, frame_id), scroll, scroll_x, transition)
+            for frame_id, scroll, scroll_x, transition in self.history
+        ]
+        self._overlays.clear()
+        if self._transition is not None:
+            self._transition.restore()
+            self._transition = None
+            self.set_continuous_render(False)
+        self._screens.clear()
+        self._overlay_cache.clear()
+        self._targets.clear()
+        self._fixed_bounds.clear()
+        self._press = None
+        self._renderer = FigmaRenderer(self.document, font_dirs=self._font_dirs, variant_overrides=self._variant_overrides)
+        if hasattr(self, "ctx"):
+            self._scroll_to(self.scroll_y, self.scroll_x)
+        self.invalidate()
+        return True
+
+    def _initial_appearance(self, pinned: str | None) -> str:
+        candidates: list[str | None] = [pinned, os.environ.get(APPEARANCE_ENV)]
+        if pinned is None:
+            candidates.append(os.environ.get(TRAIT_APPEARANCE_ENV))
+        candidates.append("light")
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            name = str(candidate).strip().lower()
+            if name in self._documents:
+                return name
+        return "light"
+
+    @staticmethod
+    def _remap_frame_id(source: FigmaDocument, target: FigmaDocument, frame_id: str) -> str:
+        """The frame in `target` matching `frame_id` in `source`, by name."""
+        try:
+            name = source.frame(frame_id).name
+        except KeyError:
+            return target.start_frame_id
+        try:
+            return target.frame_by_name(name).id
+        except KeyError:
+            return target.start_frame_id
+
+    def _poll_appearance_override(self) -> None:
+        forced = os.environ.get(APPEARANCE_ENV)
+        if forced:
+            self.set_appearance(forced)
+            return
+        if not self._explicit_appearance:
+            reported = os.environ.get(TRAIT_APPEARANCE_ENV)
+            if reported:
+                self.set_appearance(reported)
 
     def on_tap(self, node_name: str, handler: TapHandler) -> None:
         self._handlers[node_name] = handler
@@ -292,6 +384,7 @@ class FigmaApp(App):
     # ── app loop ─────────────────────────────────────────────────────────────
 
     def update(self, dt: float) -> None:
+        self._poll_appearance_override()
         for event in self.input.raw_events():
             self._handle_event(event)
         if self._transition is not None:
