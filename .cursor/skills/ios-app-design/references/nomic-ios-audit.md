@@ -1,0 +1,48 @@
+# examples/nomic_ios: known deviations
+
+Audit date: **November 4, 2026**, against the generated `examples/nomic_ios/design/figma_file.json`, `assemble_capture.py`, `app.toml`, and `ios/project.yml`. Nothing here has been changed in the app; these are recorded deviations to fix in later work. Fix them in `assemble_capture.py` (`build_tab_bar_node`, `assemble_screen`, and the constants at the top), not in the generated JSON.
+
+Where a finding depends on what the simulator shows rather than on the JSON, it says "verify in a screenshot."
+
+## The design as built
+
+- Five screens: Assistant, Conversation, Drive, Projects, and Profile. Each is a 393×991 `FRAME` with `overflowDirection: "VERTICAL_SCROLLING"` and `numberOfFixedChildren: 1`.
+- The viewport is 393×852 (`FRAME_W`, `VIEWPORT_H`, and `app.toml` `native_width/native_height`).
+- Content is shifted down by `STATUS_CLEAR_PT = 59.0`.
+- The fixed child is `tab:bar`: a 393×80 frame at y = 772 with an opaque black `SOLID` fill, no `cornerRadius`, and no effects. It has four 98.25×80 tab slots (Assistant, Drive, Projects, Profile), each with a 24 pt outline vector icon at y + 16 and an Inter 10 pt label at y + 50.
+- Screen backgrounds are white, so the app is light content over a black bar.
+- `app.toml` sets `bar_color_rgba = [0, 0, 0, 255]`.
+
+## Deviations, highest impact first
+
+1. **The tab bar is an opaque full-width slab, not a floating glass control.** The iOS tab bar floats above content on Liquid Glass [S-TABBARS], content should extend under it [S-LAYOUT], and controls should be separated from content with a scroll edge effect rather than a solid background [S-LAYOUT]. Ours is edge-to-edge, square-cornered, fully opaque, and hides everything under it. Fix direction: an inset capsule (`cornerRadius` = height / 2) with a translucent fill; see `luvatrix-figma.md`.
+
+2. **Tab labels are 10 pt, below the 11 pt iOS minimum** [S-TYPOGRAPHY]. All 20 label nodes (4 per screen) use `fontSize: 10`.
+
+3. **Tab labels sit in the home-indicator zone.** Labels span y = 822–834. The bottom 34 pt (818–852) on a 393×852 frame is the home-indicator safe area [T-SAFEAREA]. Icons (788–812) are clear of it. Only the bar's background should reach into that zone.
+
+4. **The design frame is iPhone 16, but CI runs iPhone 17.** 393×852 pt is the iPhone 16 size; iPhone 17 is 402×874 pt [S-LAYOUT-ARCHIVE]. The Metal presenter scales by about 1.023 and leaves about 1.25 pt of black letterbox at the top and bottom over white content. The content top lands at about 61.6 device pt, close to iPhone 17's 62 pt top inset [T-SAFEAREA], so the status-bar clearance is roughly right by accident. Verify in a screenshot that the thin black bands at the top and bottom edges aren't visible against white content.
+
+5. **Tab icons are custom outline strokes, not filled SF Symbol-style glyphs.** Apple prefers filled SF Symbols in tab bars [S-TABBARS]. Ours are 1.8-weight strokes on a 24-unit grid.
+
+6. **Selected-tab color is not monochrome.** The active tab uses the accent (94, 92, 230) for the icon and white for the label; inactive tabs use gray (152, 152, 159). Apple's default for bar symbols and text is monochrome, with color applied sparingly [S-COLOR]. A single distinct accent for the selection is defensible, but mixing accent icons with white labels is two colors for one state.
+
+7. **Light appearance only; no Dark Mode.** Apps should support both appearances [S-DARKMODE]. The document has one white-background appearance, and the renderer can't switch appearances. `Info.plist` sets neither `UIUserInterfaceStyle` nor `UIStatusBarStyle`, so when the simulator is in Dark Mode the system status bar may draw white text over our white content. Verify in a screenshot with the simulator in each appearance.
+
+8. **Fonts aren't SF Pro, and there's no Dynamic Type.** The JSON uses `switzer` (69 text nodes) and `Inter` (20). Only Inter is bundled (`luvatrix_ui/figma/fonts`), and unknown families fall back to Inter, so switzer text almost certainly renders as Inter on iOS. Verify in a screenshot. Sizes are fixed (10, 12, 13, 14, 16, 18, and 24 pt; 14 pt is the most common, on 42 nodes) and don't follow the Dynamic Type Large sizes, where body text is 17 pt [S-TYPOGRAPHY]. Apple asks apps to support text enlargement to at least 200% [S-ACCESSIBILITY]; the renderer can't.
+
+9. **The app icon is one opaque 1024×1024 bitmap.** `AppIcon` has a single universal `icon.png`. A bitmap is allowed, but the preferred format is a layered Icon Composer file, and without supplied variants the system generates the dark, clear, and tinted appearances and tries to segment the bitmap itself [S-APPICONS]. Check that the icon has no baked-in rounded corners, shadows, or text.
+
+10. **No iPhone Duo support.** The app is portrait-only with `UIRequiresFullScreen: true`, renders a fixed 393×852 matrix, and draws its own tab bar instead of a system `UITabBar`. Vertical bars on iPhone Duo come only from standard system components built with the iOS 27.1 SDK [S-HIG-DUO], [S-DUO-PREPARE], so this app would keep a horizontal bar and letterbox on both iPhone Duo displays. Apple also says not to lay out from fixed screen sizes [S-DUO-PREPARE]. This is a renderer-architecture limit, not a quick fix.
+
+11. **Adding `BACKGROUND_BLUR` to the bar would do nothing today.** All five screens scroll, and fixed children of scrolling frames render into a separate transparent overlay (`luvatrix_ui/figma/app.py` `_screen`), so a background blur on `tab:bar` has nothing to blur. A translucent fill would still show content.
+
+12. **Minor: the App Store category is games.** `ios/project.yml` sets `LSApplicationCategoryType: public.app-category.games`, which doesn't match a productivity app. This isn't a HIG rule.
+
+## What already conforms
+
+- **Touch targets.** Each tab slot is 98.25×80 pt, well above 44×44 pt [S-BUTTONS].
+- **Tab count.** Four tabs, so there's no More overflow; Apple's guidance aims for five or fewer by default [S-TABBARS].
+- **Tab labels** are single words [S-TABBARS].
+- **Bar contrast.** Computed with the WCAG relative-luminance formula against the black bar: inactive gray is about 7.2:1, the active white label 21:1, and the accent icon about 4.1:1. Labels meet 4.5:1 [S-ACCESSIBILITY]. The accent icon would fail 4.5:1 if used for small text; for icons it clears WCAG's 3:1 non-text contrast criterion (WCAG 2.1, 1.4.11, https://www.w3.org/TR/WCAG21/#non-text-contrast), which is a WCAG rule rather than a HIG number.
+- **Top clearance.** 59 pt matches the iPhone 16 top inset [T-SAFEAREA], and with the letterbox it lands near iPhone 17's 62 pt.
