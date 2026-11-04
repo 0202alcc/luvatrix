@@ -49,13 +49,15 @@ def test_app_is_categorized_as_productivity_not_a_game() -> None:
     assert not any("GameMode" in key for key in plist)
 
 
-def test_status_bar_draws_dark_content_over_the_light_ui() -> None:
+def test_appearance_is_unpinned_and_the_status_bar_follows_the_trait() -> None:
     spec = _spec()
     plist = _plist()
-    # The design has a light appearance only, so the system chrome is pinned to it.
-    assert re.search(r"^\s+UIStatusBarStyle: UIStatusBarStyleDarkContent$", spec, re.MULTILINE)
+    # The app supports light and dark, so nothing pins the interface style.
+    assert "UIUserInterfaceStyle" not in spec
+    assert "UIUserInterfaceStyle" not in plist
+    # UIStatusBarStyleDefault draws dark content in light mode and light
+    # content in dark mode automatically.
+    assert re.search(r"^\s+UIStatusBarStyle: UIStatusBarStyleDefault$", spec, re.MULTILINE)
     assert re.search(r"^\s+UIViewControllerBasedStatusBarAppearance: false$", spec, re.MULTILINE)
-    assert re.search(r"^\s+UIUserInterfaceStyle: Light$", spec, re.MULTILINE)
-    assert plist["UIStatusBarStyle"] == "UIStatusBarStyleDarkContent"
+    assert plist["UIStatusBarStyle"] == "UIStatusBarStyleDefault"
     assert plist["UIViewControllerBasedStatusBarAppearance"] is False
-    assert plist["UIUserInterfaceStyle"] == "Light"
