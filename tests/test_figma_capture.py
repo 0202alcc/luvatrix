@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
+import types
 from typing import Any
+
+import pytest
 
 from luvatrix_ui.figma import capture
 from luvatrix_ui.figma.capture import compile_snapshots
@@ -189,3 +193,92 @@ def test_title_index_and_layout_text_wire_variants() -> None:
     assert text["type"] == "TEXT"
     assert text["characters"] == "Orbit"
     assert result.report["pages"][0]["title"] == "Encoded"
+
+
+# ── color scheme emulation ───────────────────────────────────────────────────
+
+
+class _FakeCDPPage:
+    """A CDP page double that records raw calls and serves one canned snapshot."""
+
+    def __init__(self, snapshot: dict[str, Any]) -> None:
+        self.calls: list[tuple[str, Any]] = []
+        self._snapshot = snapshot
+
+    async def call(self, method: str, params: Any = None) -> Any:
+        self.calls.append((method, params))
+        return {}
+
+    async def set_viewport(self, width: int, height: int, scale: float = 3.0) -> None:
+        self.calls.append(("set_viewport", (width, height, scale)))
+
+    async def set_cookies(self, cookies: Any, url: str) -> None:
+        self.calls.append(("set_cookies", url))
+
+    async def navigate(self, url: str) -> None:
+        self.calls.append(("navigate", url))
+
+    async def ready(self, timeout: float = 10.0, *, extra_delay: float = 0.0) -> bool:
+        _ = (timeout, extra_delay)
+        return True
+
+    async def evaluate(self, expression: str) -> Any:
+        _ = expression
+        return None
+
+    async def capture_snapshot(self, style_props: Any = None) -> dict[str, Any]:
+        _ = style_props
+        return self._snapshot
+
+
+def _fake_cdp_module(monkeypatch: Any, page: _FakeCDPPage) -> None:
+    class _Chrome:
+        ws_url = "ws://fake"
+
+        def close(self) -> None:
+            pass
+
+    async def _connect(ws_url: str) -> object:
+        _ = ws_url
+        return object()
+
+    async def _attach(conn: object) -> _FakeCDPPage:
+        _ = conn
+        return page
+
+    fake = types.ModuleType("luvatrix_ui.figma.cdp")
+    fake.Chrome = type("Chrome", (), {"launch": staticmethod(lambda path=None: _Chrome())})  # type: ignore[attr-defined]
+    fake.CDPConnection = type("CDPConnection", (), {"connect": staticmethod(_connect)})  # type: ignore[attr-defined]
+    fake.CDPPage = type("CDPPage", (), {"attach": staticmethod(_attach)})  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "luvatrix_ui.figma.cdp", fake)
+
+
+def _one_page_snapshot() -> dict[str, Any]:
+    builder = SnapshotBuilder(title="Home")
+    body = builder.element("BODY")
+    builder.layout(body, 0, 0, 393, 852, **{"background-color": "rgb(0, 0, 0)"})
+    return builder.build()
+
+
+def test_capture_design_emulates_the_requested_color_scheme(tmp_path: Path, monkeypatch: Any) -> None:
+    page = _FakeCDPPage(_one_page_snapshot())
+    _fake_cdp_module(monkeypatch, page)
+
+    capture.capture_design("http://localhost:3000/", tmp_path, viewport="393x852@3", wait=0.0, color_scheme="dark")
+
+    emulations = [params for method, params in page.calls if method == "Emulation.setEmulatedMedia"]
+    assert emulations == [{"features": [{"name": "prefers-color-scheme", "value": "dark"}]}]
+
+
+def test_capture_design_leaves_the_color_scheme_alone_by_default(tmp_path: Path, monkeypatch: Any) -> None:
+    page = _FakeCDPPage(_one_page_snapshot())
+    _fake_cdp_module(monkeypatch, page)
+
+    capture.capture_design("http://localhost:3000/", tmp_path, viewport="393x852@3", wait=0.0)
+
+    assert not [params for method, params in page.calls if method == "Emulation.setEmulatedMedia"]
+
+
+def test_capture_design_rejects_an_unknown_color_scheme(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="color scheme"):
+        capture.capture_design("http://localhost:3000/", tmp_path, color_scheme="sepia")
