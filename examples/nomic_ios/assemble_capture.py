@@ -43,13 +43,17 @@ TAB_LABEL_PT = 11.0  # Caption 2, the iOS minimum text size [S-TYPOGRAPHY]
 
 # Regular glass approximation: background blur, a translucent light tint, a
 # hairline edge, a top specular highlight, and a soft float shadow.
-GLASS_TINT = (250, 250, 252)
+# Authored bar colors derive from the Nomic palette in drive-next
+# apps/drive-next/src/app/globals.css: the grays lean teal (hue ~153) and the
+# canvas is never pure black or white. The bar stays monochrome [S-COLOR]; the
+# teal accent is deliberately unused here.
+GLASS_TINT = (250, 250, 249)  # gray-50
 GLASS_TINT_OPACITY = 0.72
 GLASS_BLUR_PT = 12.0
 # Monochrome bar symbols and labels [S-COLOR]; the selection is carried by
 # weight, a darker shade, and a concentric pill rather than a hue.
-TAB_SELECTED = (24, 24, 24)
-TAB_UNSELECTED = (102, 102, 102)
+TAB_SELECTED = (38, 43, 39)  # gray-700
+TAB_UNSELECTED = (77, 82, 79)  # gray-500
 SELECTION_PILL_OPACITY = 0.07
 
 
@@ -88,25 +92,26 @@ BAR_THEMES = {
         stroke_opacity=0.08,
         highlight_alpha=0.9,
         shadow_alpha=0.1,
-        canvas_background=(1.0, 1.0, 1.0),
-        scroll_edge_fallback=(1.0, 1.0, 1.0),
+        canvas_background=(0.980, 0.980, 0.976),  # gray-50, normalized
+        scroll_edge_fallback=(0.980, 0.980, 0.976),
     ),
-    # Dark values are chosen, not measured, pending the iOS 27 Figma kit
-    # [S-DESIGNKITS]: a dark translucent tint, light monochrome symbols, and a
-    # white selection wash over the same blurred glass.
+    # Dark values come from the same globals.css tokens (gray-900 tint and
+    # canvas, gray-100/400 symbols): teal-leaning, never blue, never pure
+    # black. Opacities remain chosen, pending the iOS 27 Figma kit
+    # [S-DESIGNKITS]: a white selection wash over the same blurred glass.
     "dark": BarTheme(
-        tint=(26, 26, 28),
+        tint=(25, 29, 26),  # gray-900
         tint_opacity=0.66,
-        selected=(248, 248, 248),
-        unselected=(170, 170, 170),
+        selected=(241, 241, 234),  # gray-100
+        unselected=(145, 148, 146),  # gray-400
         pill_rgb=(255, 255, 255),
         pill_opacity=0.14,
         stroke_rgb=(255, 255, 255),
         stroke_opacity=0.14,
         highlight_alpha=0.22,
         shadow_alpha=0.35,
-        canvas_background=(0.0, 0.0, 0.0),
-        scroll_edge_fallback=(0.0, 0.0, 0.0),
+        canvas_background=(0.098, 0.114, 0.102),  # gray-900, normalized
+        scroll_edge_fallback=(0.098, 0.114, 0.102),
     ),
 }
 
