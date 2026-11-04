@@ -1,0 +1,237 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from luvatrix_ui.figma.ios_tour import run_ios_tour
+
+UDID = "UDID-17"
+BUNDLE = "com.luvatrix.app"
+
+
+class _FakeSimulator:
+    """Stands in for xcrun simctl and the app: emits tour statuses and waits for acks."""
+
+    def __init__(self, root: Path, captures: list[tuple[str, str]], *, final: str = "done", exit_early: bool = False) -> None:
+        self.container = root / "container"
+        self.status_dir = self.container / "tmp" / "luvatrix_tour"
+        self.captures = captures
+        self.final = final
+        self.exit_early = exit_early
+        self.commands: list[list[str]] = []
+        self.env: dict[str, str] = {}
+        self.launch_cmd: list[str] = []
+        self.log_show_cmd: list[str] = []
+        self.previous_install: Path | None = None
+        self.returncode: int | None = None
+        self.terminated = False
+        self.step = 0
+        self.ticks = 0
+        self.now = 0.0
+
+    def run(self, cmd, **_kwargs):
+        cmd = [str(c) for c in cmd]
+        self.commands.append(cmd)
+        if cmd[:4] == ["xcrun", "simctl", "list", "devices"]:
+            devices = {"devices": {"iOS": [{"name": "iPhone 17", "udid": UDID, "state": "Booted", "isAvailable": True}]}}
+            return SimpleNamespace(returncode=0, stdout=json.dumps(devices), stderr="")
+        if cmd[:3] == ["xcrun", "simctl", "get_app_container"]:
+            assert cmd[3:] == [UDID, BUNDLE, "data"]
+            if not self.container.exists():
+                if self.previous_install is not None:
+                    return SimpleNamespace(returncode=0, stdout=f"{self.previous_install}\n", stderr="")
+                return SimpleNamespace(returncode=2, stdout="", stderr="not installed")
+            return SimpleNamespace(returncode=0, stdout=f"{self.container}\n", stderr="")
+        if cmd[:4] == ["xcrun", "simctl", "io", UDID]:
+            Path(cmd[-1]).write_bytes(b"\x89PNG fake")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd[:3] == ["xcrun", "simctl", "terminate"]:
+            self.terminated = True
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd[:6] == ["xcrun", "simctl", "spawn", UDID, "log", "show"]:
+            self.log_show_cmd = cmd
+            return SimpleNamespace(returncode=0, stdout="Luvatrix: [figma-tour] run=run-xyz\n", stderr="")
+        raise AssertionError(f"unexpected command {cmd}")
+
+    def popen(self, cmd, *, env, stdout, stderr, **_kwargs):
+        self.launch_cmd = [str(c) for c in cmd]
+        self.env = env
+        stdout.write("[ios] launching com.luvatrix.app\n")
+        return self
+
+    # subprocess.Popen surface
+    def poll(self):
+        return self.returncode
+
+    def terminate(self):
+        self.returncode = -15
+
+    def kill(self):
+        self.returncode = -9
+
+    def wait(self, timeout=None):
+        _ = timeout
+        return self.returncode
+
+    def clock(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+        self.ticks += 1
+        if self.ticks == 3:
+            self.container.mkdir(parents=True, exist_ok=True)
+        if self.ticks < 5:
+            return
+        if self.exit_early:
+            self.returncode = 1
+            return
+        self._advance_app()
+
+    def _advance_app(self) -> None:
+        run = self.env["SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_RUN"]
+        self.status_dir.mkdir(parents=True, exist_ok=True)
+        status_path = self.status_dir / "status.json"
+        if self.step < len(self.captures):
+            if (self.status_dir / f"ack_{self.step}").exists():
+                self.step += 1
+                return
+            name, frame = self.captures[self.step]
+            status = {"run": run, "step": self.step, "state": "capture", "capture": name, "frame": frame, "timed_out": []}
+        else:
+            status = {"run": run, "step": self.step, "state": self.final, "frame": "Home", "timed_out": []}
+            if self.final == "error":
+                status["error"] = "no tappable layer named 'Nope'"
+        status_path.write_text(json.dumps(status))
+
+
+def _run(tmp_path: Path, sim: _FakeSimulator, **kwargs) -> int:
+    tour = json.dumps([{"capture": name} for name, _ in sim.captures])
+    return run_ios_tour(
+        tmp_path / "app",
+        tour,
+        tmp_path / "out",
+        simulator="iPhone 17",
+        native_project=tmp_path / "app" / "ios",
+        render_scale=3.0,
+        run_id="run-xyz",
+        run=sim.run,
+        popen=sim.popen,
+        sleep=sim.sleep,
+        clock=sim.clock,
+        **kwargs,
+    )
+
+
+def test_ios_tour_screenshots_each_capture_and_writes_a_summary(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome"), ("home", "Home")])
+
+    code = _run(tmp_path, sim)
+
+    out = tmp_path / "out"
+    assert code == 0
+    assert (out / "00_welcome.png").read_bytes().startswith(b"\x89PNG")
+    assert (out / "01_home.png").exists()
+    summary = json.loads((out / "summary.json").read_text())
+    assert summary["state"] == "done"
+    assert [(c["name"], c["frame"], c["file"]) for c in summary["captures"]] == [
+        ("welcome", "Welcome", "00_welcome.png"),
+        ("home", "Home", "01_home.png"),
+    ]
+    assert "[ios] launching" in (out / "console.log").read_text()
+    assert "[figma-tour] run=run-xyz" in (out / "app_log.txt").read_text()
+    assert 'process == "Luvatrix"' in sim.log_show_cmd
+    assert sim.terminated
+
+
+def test_ios_tour_launches_run_app_with_the_tour_in_the_simulator_env(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome")])
+
+    _run(tmp_path, sim)
+
+    args = sim.launch_cmd[sim.launch_cmd.index("run-app") :]
+    assert args == [
+        "run-app",
+        str(tmp_path / "app"),
+        "--render",
+        "ios-simulator",
+        "--simulator",
+        "iPhone 17",
+        "--render-scale",
+        "3",
+        "--native-project",
+        str(tmp_path / "app" / "ios"),
+    ]
+    assert json.loads(sim.env["SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR"]) == [{"capture": "welcome"}]
+    assert sim.env["SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_RUN"] == "run-xyz"
+    assert sim.env["PYTHONUNBUFFERED"] == "1"
+
+
+def test_ios_tour_ignores_status_from_a_previous_run(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome")])
+    sim.status_dir.mkdir(parents=True)
+    (sim.status_dir / "status.json").write_text(json.dumps({"run": "old", "step": 0, "state": "done"}))
+
+    code = _run(tmp_path, sim)
+
+    assert code == 0
+    assert (tmp_path / "out" / "00_welcome.png").exists()
+
+
+def test_ios_tour_follows_the_new_container_when_run_app_reinstalls_the_app(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome")])
+    sim.previous_install = tmp_path / "old-container"
+    (sim.previous_install / "tmp" / "luvatrix_tour").mkdir(parents=True)
+
+    code = _run(tmp_path, sim)
+
+    assert code == 0
+    assert (tmp_path / "out" / "00_welcome.png").exists()
+    assert (sim.status_dir / "ack_0").exists()
+
+
+def test_ios_tour_fails_when_the_app_reports_an_error(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome")], final="error")
+
+    code = _run(tmp_path, sim)
+
+    summary = json.loads((tmp_path / "out" / "summary.json").read_text())
+    assert code == 1
+    assert summary["state"] == "error"
+    assert "Nope" in summary["error"]
+
+
+def test_ios_tour_fails_when_run_app_exits_before_the_tour_finishes(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome")], exit_early=True)
+
+    code = _run(tmp_path, sim)
+
+    summary = json.loads((tmp_path / "out" / "summary.json").read_text())
+    assert code == 1
+    assert summary["state"] == "app_exited"
+    assert "1" in summary["error"]
+
+
+def test_ios_tour_times_out_and_stops_the_app(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome")])
+    sim.sleep = lambda seconds: setattr(sim, "now", sim.now + seconds)  # app never starts
+
+    code = _run(tmp_path, sim, timeout=5.0)
+
+    summary = json.loads((tmp_path / "out" / "summary.json").read_text())
+    assert code == 1
+    assert summary["state"] == "timeout"
+    assert sim.returncode is not None
+    assert sim.terminated
+    assert "[figma-tour]" in (tmp_path / "out" / "app_log.txt").read_text()
+
+
+def test_ios_tour_rejects_a_malformed_tour_before_launching(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [])
+
+    with pytest.raises(ValueError):
+        run_ios_tour(tmp_path / "app", '[{"jump": 1}]', tmp_path / "out", run=sim.run, popen=sim.popen, sleep=sim.sleep, clock=sim.clock)
+    assert sim.launch_cmd == []

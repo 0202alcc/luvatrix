@@ -35,7 +35,7 @@ concurrency:
 jobs:
   tour:
     name: Tour ${{ inputs.app_dir || 'examples/nomic_ios' }} in iOS Simulator
-    # A smoke dispatch never tours; pushes always tour (when the app exists).
+    # A smoke dispatch never tours; pushes always tour (when a tour app exists).
     if: ${{ vars.LUVATRIX_IOS_SIM_RUNNER == '1' && (github.event_name == 'push' || inputs.smoke_net_url == '') }}
     runs-on: [self-hosted, macOS, ios-sim]
     timeout-minutes: 45
@@ -56,18 +56,25 @@ jobs:
       - name: Resolve app
         id: app
         run: |
-          slug="$(basename "$APP_DIR")"
+          app_dir="$APP_DIR"
+          # Push events tour whatever this ref actually has: the requested app
+          # (nomic_ios by default) once it lands, the figma tour app until then.
+          if [ ! -f "$app_dir/tour.json" ] && [ "${GITHUB_EVENT_NAME}" = "push" ] && [ -f "examples/figma_app/tour.json" ]; then
+            echo "No $app_dir/tour.json on this ref; touring examples/figma_app instead."
+            app_dir="examples/figma_app"
+          fi
+          slug="$(basename "$app_dir")"
           keep_open=""
-          if [ -n "$KEEP_OPEN_VAR" ] && { [ "$KEEP_OPEN_VAR" = "$APP_DIR" ] || [ "$KEEP_OPEN_VAR" = "$slug" ]; }; then
+          if [ -n "$KEEP_OPEN_VAR" ] && { [ "$KEEP_OPEN_VAR" = "$app_dir" ] || [ "$KEEP_OPEN_VAR" = "$slug" ]; }; then
             keep_open="1"
           fi
-          # The tour app only exists on some branches; skip quietly elsewhere.
           present=""
-          if [ -f "$APP_DIR/tour.json" ]; then
+          if [ -f "$app_dir/tour.json" ]; then
             present="1"
           else
-            echo "No $APP_DIR/tour.json on this ref; skipping the tour."
+            echo "No $app_dir/tour.json on this ref; skipping the tour."
           fi
+          echo "dir=$app_dir" >> "$GITHUB_OUTPUT"
           echo "slug=$slug" >> "$GITHUB_OUTPUT"
           echo "keep_open=$keep_open" >> "$GITHUB_OUTPUT"
           echo "present=$present" >> "$GITHUB_OUTPUT"
@@ -89,23 +96,24 @@ jobs:
 
       - name: Prepare embedded iOS Python
         if: ${{ steps.app.outputs.present == '1' }}
-        working-directory: ${{ env.APP_DIR }}
+        working-directory: ${{ steps.app.outputs.dir }}
         run: uv run bash ios/scripts/setup_ios.sh
 
       - name: Run tour
         if: ${{ steps.app.outputs.present == '1' }}
         env:
           KEEP_OPEN: ${{ steps.app.outputs.keep_open }}
+          TOUR_APP_DIR: ${{ steps.app.outputs.dir }}
         run: |
           keep_open_args=()
           if [ -n "$KEEP_OPEN" ]; then
             keep_open_args=(--keep-open)
           fi
-          caffeinate -dims uv run python main.py figma ios-tour "$APP_DIR" \
-            --tour "${TOUR:-$APP_DIR/tour.json}" \
+          caffeinate -dims uv run python main.py figma ios-tour "$TOUR_APP_DIR" \
+            --tour "${TOUR:-$TOUR_APP_DIR/tour.json}" \
             --out "$RUNNER_TEMP/ios-tour" \
             --simulator "$SIMULATOR" \
-            --native-project "$APP_DIR/ios" \
+            --native-project "$TOUR_APP_DIR/ios" \
             "${keep_open_args[@]}"
 
       - name: Upload screenshots and logs
