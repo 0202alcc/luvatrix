@@ -23,6 +23,18 @@ from .sign_in import (
     PlatformGoogleAuthSession,
     SecureTokenStore,
 )
+from .workos import (
+    InMemoryWorkosTokenStore,
+    SecureWorkosTokenStore,
+    WorkosAuthError,
+    WorkosAuthorizationRequest,
+    WorkosConnectClient,
+    WorkosConnectConfig,
+    WorkosIdentity,
+    WorkosSessionExpiredError,
+    WorkosToken,
+    WorkosTokenStore,
+)
 
 __all__ = [
     "GoogleCalendarClient",
@@ -42,4 +54,14 @@ __all__ = [
     "SecureTokenStore",
     "InMemoryTokenStore",
     "TokenStore",
+    "InMemoryWorkosTokenStore",
+    "SecureWorkosTokenStore",
+    "WorkosAuthError",
+    "WorkosAuthorizationRequest",
+    "WorkosConnectClient",
+    "WorkosConnectConfig",
+    "WorkosIdentity",
+    "WorkosSessionExpiredError",
+    "WorkosToken",
+    "WorkosTokenStore",
 ]
