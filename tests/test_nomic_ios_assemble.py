@@ -357,6 +357,67 @@ def test_org_switcher_button_is_dropped_from_the_drive_header(asm) -> None:
     assert all(node is not switcher for node in asm._walk_all(screen))
 
 
+def test_select_controls_below_the_header_survive_widget_cleanup(asm) -> None:
+    capture = _capture_frame()
+    theme = {
+        "id": "1:8",
+        "type": "FRAME",
+        "name": "button.data-[placeholder]:text-muted-foreground",
+        "absoluteBoundingBox": {"x": 221, "y": 524, "width": 144, "height": 32},
+        "children": [_text_node("System")],
+    }
+    capture["children"].append(theme)
+    screen = asm.assemble_screen(capture, name="Profile", tab_bar=_bar(asm, active="profile"))
+
+    assert asm.drop_misplaced_header_widgets(screen) == 0
+    assert any(node is theme for node in asm._walk_all(screen))
+
+
+def _composer_capture() -> tuple[dict, dict, dict]:
+    capture = _capture_frame()
+    label = _text_node("Integrations/MCPs", {"x": 85, "y": 807, "width": 105, "height": 15})
+    composer = {
+        "id": "1:358",
+        "type": "FRAME",
+        "name": "div.relative",
+        "absoluteBoundingBox": {"x": 16, "y": 744, "width": 370, "height": 114},
+        "children": [label],
+    }
+    thread = {
+        "id": "1:337",
+        "type": "FRAME",
+        "name": "div.flex",
+        "clipsContent": True,
+        "absoluteBoundingBox": {"x": 0, "y": 114, "width": 402, "height": 760},
+        "children": [_text_node("Cure requirements", {"x": 24, "y": 130, "width": 300, "height": 20}), composer],
+    }
+    capture["children"].append(thread)
+    return capture, thread, composer
+
+
+def test_conversation_composer_pins_above_the_floating_tab_bar(asm) -> None:
+    capture, thread, composer = _composer_capture()
+    bar = _bar(asm, active="assistant")
+    screen = asm.assemble_screen(capture, name="Conversation", tab_bar=bar)
+
+    assert asm.pin_composer_above_tab_bar(screen, "Integrations/MCPs")
+
+    assert screen["numberOfFixedChildren"] == 2
+    assert screen["children"][-2] is composer and screen["children"][-1] is bar
+    assert composer not in thread["children"]
+    _x, y, _w, h = _box(composer)
+    assert y + h == pytest.approx(asm.TAB_BAR_Y)
+    label_y = composer["children"][0]["absoluteBoundingBox"]["y"]
+    assert label_y - y == pytest.approx(807 - 744)
+
+
+def test_pinning_reports_a_missing_composer(asm) -> None:
+    screen = asm.assemble_screen(_capture_frame(), name="Conversation", tab_bar=_bar(asm))
+
+    assert not asm.pin_composer_above_tab_bar(screen, "Integrations/MCPs")
+    assert screen["numberOfFixedChildren"] == 1
+
+
 def test_merge_captures_renames_and_orders_frames(asm) -> None:
     frames = [
         ({"id": "S0:1:0", "type": "FRAME", "name": "Nomic", "absoluteBoundingBox": {"x": 0, "y": 0, "width": 402, "height": 874}, "children": []}, "Assistant"),
