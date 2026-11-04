@@ -35,6 +35,13 @@ from .workos import (
     WorkosToken,
     WorkosTokenStore,
 )
+from .workos_sign_in import (
+    WorkosAuthSession,
+    WorkosSignInConfig,
+    WorkosSignInCoordinator,
+    WorkosSignInState,
+    load_workos_sign_in_config,
+)
 
 __all__ = [
     "GoogleCalendarClient",
@@ -64,4 +71,9 @@ __all__ = [
     "WorkosSessionExpiredError",
     "WorkosToken",
     "WorkosTokenStore",
+    "WorkosAuthSession",
+    "WorkosSignInConfig",
+    "WorkosSignInCoordinator",
+    "WorkosSignInState",
+    "load_workos_sign_in_config",
 ]

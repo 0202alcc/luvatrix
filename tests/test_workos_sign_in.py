@@ -47,6 +47,18 @@ def _token_payload(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def _queue_exchange(transport: "FakeTransport", coordinator: "WorkosSignInCoordinator") -> None:
+    """Queue a token response whose ID token carries the flow's nonce."""
+    transport.queue(
+        200,
+        _token_payload(
+            id_token=_id_token(
+                {"email": "ada@example.com", "name": "Ada Lovelace", "nonce": coordinator.pending_nonce}
+            )
+        ),
+    )
+
+
 class FakeTransport:
     def __init__(self) -> None:
         self.requests: list[HttpRequest] = []
@@ -271,7 +283,7 @@ class PkceFlowTests(unittest.TestCase):
 
         state = _begin(coordinator, session)
         self.assertIs(coordinator.state, WorkosSignInState.WAITING)
-        transport.queue(200, _token_payload(nonce=coordinator.pending_nonce))
+        _queue_exchange(transport, coordinator)
         session.deliver(_callback_url(state, code="code-1"))
 
         self.assertIs(coordinator.state, WorkosSignInState.SIGNED_IN)
@@ -372,7 +384,7 @@ class ExpiredSessionRecoveryTests(unittest.TestCase):
         coordinator.access_token()
 
         state = parse_qs(urlparse(session.opened[-1]).query)["state"][0]
-        transport.queue(200, _token_payload(nonce=coordinator.pending_nonce))
+        _queue_exchange(transport, coordinator)
         session.deliver(_callback_url(state, code="code-2"))
 
         self.assertIs(coordinator.state, WorkosSignInState.SIGNED_IN)
@@ -415,7 +427,7 @@ class IOSBoundaryIntegrationTests(unittest.TestCase):
 
         coordinator.begin_sign_in()
         state = parse_qs(urlparse(session._bridge.started[-1][0]).query)["state"][0]
-        transport.queue(200, _token_payload(nonce=coordinator.pending_nonce))
+        _queue_exchange(transport, coordinator)
 
         handled = router.handle_open_url(_callback_url(state, code="code-1"))
 
