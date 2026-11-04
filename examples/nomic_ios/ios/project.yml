@@ -20,6 +20,7 @@ targets:
     info:
       path: Luvatrix/Info.plist
       properties:
+        CFBundleDisplayName: Nomic
         UILaunchScreen: {}
         LSApplicationCategoryType: public.app-category.games
         LSSupportsGameMode: true
