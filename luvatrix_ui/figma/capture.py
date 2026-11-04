@@ -152,6 +152,25 @@ class SnapshotModel:
         self.layout_of_node = {int(n): li for li, n in enumerate(layout.get("nodeIndex") or ())}
         self.bounds: list[list[float]] = [list(b) for b in layout.get("bounds") or ()]
         self.layout_text = [_s(self.strings, v) for v in layout.get("text") or ()]
+        # Chrome reports textBoxes offsets into the rendered text, where CSS
+        # white-space collapsing folds markup whitespace runs into single
+        # spaces. Keep a collapsed form with single boundary spaces preserved
+        # so fragment slicing lines up with those offsets.
+        self.rendered_text: list[str] = []
+        for raw in self.layout_text:
+            rendered: list[str] = []
+            pending_space = False
+            for char in raw:
+                if char.isspace():
+                    pending_space = True
+                    continue
+                if pending_space:
+                    rendered.append(" ")
+                    pending_space = False
+                rendered.append(char)
+            if pending_space:
+                rendered.append(" ")
+            self.rendered_text.append("".join(rendered))
         self.styles: dict[int, dict[str, str]] = {}
         for li, raw in enumerate(layout.get("styles") or ()):
             self.styles[li] = dict(zip(props, (_s(self.strings, v) for v in raw)))
@@ -963,7 +982,7 @@ class _PageCompiler:
                 li = self.model.layout_index(child)
                 text = ""
                 if li is not None and li < len(self.model.layout_text):
-                    text = self.model.layout_text[li]
+                    text = self.model.rendered_text[li]
                 if not text:
                     text = self.model.node_text(child)
                 if not text.strip():
@@ -1175,6 +1194,12 @@ class _PageCompiler:
             single_line = total_w <= union_w * 1.12 + 2.0
         else:
             single_line = total_w <= available
+        if not single_line and union_h <= line_height * 1.5 and total_w <= available * 1.03 + 1.0:
+            # The captured ink is one line tall and only a font-metric sliver
+            # wider than its box. Re-wrapping it would emit a "\\n" plus an
+            # orphaned word that paints on top of the next captured line —
+            # keep it as a single (possibly overflowing) line instead.
+            single_line = True
         if single_line:
             width = max(total_w, union_w)
             if align == "RIGHT":

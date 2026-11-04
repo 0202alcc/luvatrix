@@ -15,6 +15,9 @@ from .geometry import Affine, Coverage, Rect, intersect
 
 BUNDLED_FONT_DIR = Path(__file__).resolve().parent / "fonts"
 DEFAULT_FAMILY = "Inter"
+# Below this overflow the clipped-away part is a glyph sliver; an ellipsis
+# (which drops a whole word) reads worse than the shave.
+_ELLIPSIS_MIN_OVERFLOW_PX = 12.0
 SYSTEM_FONT_DIRS = (
     "/System/Library/Fonts",
     "/System/Library/Fonts/Supplemental",
@@ -165,6 +168,28 @@ def _make_style(base: dict[str, Any], override: dict[str, Any] | None, node_fill
     )
 
 
+def truncate_pieces_to_width(
+    pieces: list[_Piece],
+    avail: float,
+    ellipsis: _Piece,
+) -> list[_Piece]:
+    """Fit styled pieces into ``avail`` device px, ending with ``ellipsis``.
+
+    Drops whole trailing pieces (never splits a piece) until the ellipsis
+    fits. Returns ``pieces`` unchanged when the line already fits, ``[]`` when
+    even the ellipsis alone does not fit.
+    """
+    total = sum(piece.width for piece in pieces)
+    if total <= avail:
+        return pieces
+    kept = list(pieces)
+    while kept and sum(piece.width for piece in kept) + ellipsis.width > avail:
+        kept.pop()
+    if not kept and ellipsis.width > avail:
+        return []
+    return [*kept, ellipsis]
+
+
 def _fit_line_count(metrics: list[tuple[float, float, float, float]], box_px: float) -> int:
     """How many lines fit in a fixed-height box (at least one)."""
     total = 0.0
@@ -295,6 +320,7 @@ def text_coverages(
 
     valign = str(base.get("textAlignVertical", "TOP"))
     halign = str(base.get("textAlignHorizontal", "LEFT"))
+    aligned_tf = abs(tf.b) < 1e-6 and abs(tf.c) < 1e-6
     pad = int(math.ceil(max(st.size for st in style_cache.values()) * s)) + 2
     img_w = int(math.ceil(box_w * s)) + 2 * pad
     img_h = int(math.ceil(max(box_h * s, total_h))) + 2 * pad
@@ -311,6 +337,17 @@ def text_coverages(
             visible[-1] = _Piece(stripped, last.style, measure(stripped, last.style))
         line_w = sum(p.width for p in visible)
         x = {"CENTER": (box_w * s - line_w) / 2, "RIGHT": box_w * s - line_w}.get(halign, 0.0)
+        if aligned_tf and visible:
+            # The compiled text box can be wider than the clip ancestor
+            # (nowrap spans in flex/table rows); truncate with an ellipsis at
+            # the clip boundary instead of cutting a glyph mid-stroke. The
+            # draw offset x is already in device px, so the glyphs start at
+            # tf.tx + x.
+            start_dev = tf.tx + x
+            if start_dev + line_w > clip[2] + _ELLIPSIS_MIN_OVERFLOW_PX:
+                ellipsis_style = visible[-1].style
+                ellipsis = _Piece("…", ellipsis_style, measure("…", ellipsis_style))
+                visible = truncate_pieces_to_width(visible, clip[2] - start_dev, ellipsis) or visible
         baseline = y + (lh - (asc + desc)) / 2 + asc
         for piece in visible:
             if piece.style.fills_key not in layers:
