@@ -45,33 +45,40 @@ TAB_LABEL_PT = 11.0  # Caption 2, the iOS minimum text size [S-TYPOGRAPHY]
 # hairline edge, a top specular highlight, and a soft float shadow.
 # Authored bar colors derive from the Nomic palette in drive-next
 # apps/drive-next/src/app/globals.css: the grays lean teal (hue ~153) and the
-# canvas is never pure black or white. The bar stays monochrome [S-COLOR]; the
-# teal accent is deliberately unused here.
+# canvas is never pure black or white.
 GLASS_TINT = (250, 250, 249)  # gray-50
 GLASS_TINT_OPACITY = 0.72
 GLASS_BLUR_PT = 12.0
-# Monochrome bar symbols and labels [S-COLOR]; the selection is carried by
-# weight, a darker shade, and a concentric pill rather than a hue.
-TAB_SELECTED = (38, 43, 39)  # gray-700
+# Selection is carried by a single accent tint on the symbol and label, the way
+# Apple's own tab bars do it [S-TABBARS], [S-COLOR]; there is no selection
+# pill. The light accent is teal-600 (oklch(55.8% 0.068 169) = 73,129,109),
+# the same token the product uses for its active sidebar item on a light
+# canvas: 4.3:1 on gray-50, on par with Apple's system-blue labels. The dark
+# accent is teal-400: 6.3:1 on the gray-900 glass [S-ACCESSIBILITY].
+TAB_ACCENT_LIGHT = (73, 129, 109)  # teal-600
+TAB_ACCENT_DARK = (122, 167, 151)  # teal-400
 TAB_UNSELECTED = (77, 82, 79)  # gray-500
-SELECTION_PILL_OPACITY = 0.07
+TAB_UNSELECTED_DARK = (145, 148, 146)  # gray-400
+
+# Two floating controls never touch: the pinned composer hovers this far above
+# the glass capsule.
+COMPOSER_BAR_GAP_PT = 10.0
 
 
 @dataclass(frozen=True)
 class BarTheme:
     """Per-appearance colors for the floating glass tab bar and canvas.
 
-    Glass has no color of its own; symbols and labels stay monochrome, darker
-    over light content and lighter over dark content [S-COLOR]. Geometry never
-    changes between appearances.
+    Glass has no color of its own; unselected symbols and labels stay
+    monochrome, darker over light content and lighter over dark content
+    [S-COLOR], and the selected tab takes the accent. Geometry never changes
+    between appearances.
     """
 
     tint: tuple[int, int, int]
     tint_opacity: float
     selected: tuple[int, int, int]
     unselected: tuple[int, int, int]
-    pill_rgb: tuple[int, int, int]
-    pill_opacity: float
     stroke_rgb: tuple[int, int, int]
     stroke_opacity: float
     highlight_alpha: float
@@ -84,10 +91,8 @@ BAR_THEMES = {
     "light": BarTheme(
         tint=GLASS_TINT,
         tint_opacity=GLASS_TINT_OPACITY,
-        selected=TAB_SELECTED,
+        selected=TAB_ACCENT_LIGHT,
         unselected=TAB_UNSELECTED,
-        pill_rgb=(0, 0, 0),
-        pill_opacity=SELECTION_PILL_OPACITY,
         stroke_rgb=(0, 0, 0),
         stroke_opacity=0.08,
         highlight_alpha=0.9,
@@ -96,16 +101,14 @@ BAR_THEMES = {
         scroll_edge_fallback=(0.980, 0.980, 0.976),
     ),
     # Dark values come from the same globals.css tokens (gray-900 tint and
-    # canvas, gray-100/400 symbols): teal-leaning, never blue, never pure
-    # black. Opacities remain chosen, pending the iOS 27 Figma kit
-    # [S-DESIGNKITS]: a white selection wash over the same blurred glass.
+    # canvas, gray-400 symbols, teal-400 accent): teal-leaning, never blue,
+    # never pure black. Opacities remain chosen, pending the iOS 27 Figma kit
+    # [S-DESIGNKITS].
     "dark": BarTheme(
         tint=(25, 29, 26),  # gray-900
         tint_opacity=0.66,
-        selected=(241, 241, 234),  # gray-100
-        unselected=(145, 148, 146),  # gray-400
-        pill_rgb=(255, 255, 255),
-        pill_opacity=0.14,
+        selected=TAB_ACCENT_DARK,
+        unselected=TAB_UNSELECTED_DARK,
         stroke_rgb=(255, 255, 255),
         stroke_opacity=0.14,
         highlight_alpha=0.22,
@@ -168,6 +171,71 @@ def drop_css_artifact_texts(payload: dict[str, Any]) -> int:
     for canvas in payload.get("document", {}).get("children", ()):  # type: ignore[union-attr]
         total += prune(canvas)
     return total
+
+
+def drop_sr_only_texts(payload: dict[str, Any]) -> int:
+    """Remove screen-reader-only TEXT nodes in place; returns how many.
+
+    The web hides `sr-only` spans visually, but the capture compiler emits them
+    as real text. Clipped inside their tiny buttons they render as stray ink
+    fragments (the "..." blob under the sidebar toggle on every screen).
+    """
+
+    def prune(node: dict[str, Any]) -> int:
+        removed = 0
+        children = node.get("children")
+        if children is None:
+            return 0
+        kept = []
+        for child in children:
+            if child.get("type") == "TEXT" and "sr-only" in str(child.get("name", "")):
+                removed += 1
+                continue
+            kept.append(child)
+            removed += prune(child)
+        node["children"] = kept
+        return removed
+
+    total = 0
+    for canvas in payload.get("document", {}).get("children", ()):  # type: ignore[union-attr]
+        total += prune(canvas)
+    return total
+
+
+def _solid_rgb(paint: dict[str, Any]) -> tuple[int, int, int]:
+    color = paint["color"]
+    return (round(color["r"] * 255), round(color["g"] * 255), round(color["b"] * 255))
+
+
+def recolor_dark_icons(screen: dict[str, Any]) -> int:
+    """Recolor near-black vector glyphs to the dark foreground; returns how many.
+
+    The dark capture themes text and gray icons correctly but leaves
+    `currentColor` svg glyphs pure black, which is invisible on the gray-900
+    canvas (the wordmark measures 1.1:1). They map to gray-100, the same token
+    the capture uses for dark foreground text. Glyphs on colorful surfaces
+    (the teal Dictate/Upload buttons) stay black, as on the real site.
+    """
+    recolored = 0
+
+    def walk(node: dict[str, Any], colorful_ancestor: bool) -> None:
+        nonlocal recolored
+        colorful = colorful_ancestor
+        for paint in node.get("fills") or ():
+            if paint.get("type") == "SOLID":
+                rgb = _solid_rgb(paint)
+                if max(rgb) - min(rgb) > 24:
+                    colorful = True
+        if node.get("type") == "VECTOR" and not colorful:
+            for paint in node.get("fills") or ():
+                if paint.get("type") == "SOLID" and max(_solid_rgb(paint)) <= 12:
+                    paint["color"] = {"r": 241 / 255, "g": 241 / 255, "b": 234 / 255}
+                    recolored += 1
+        for child in node.get("children") or ():
+            walk(child, colorful)
+
+    walk(screen, False)
+    return recolored
 
 
 def reconcile_clips(payload: dict[str, Any], max_grow: float = 40.0) -> int:
@@ -320,10 +388,11 @@ def build_tab_bar_node(
 
     The bar is a capsule inset from the screen edges, sitting just above the
     home-indicator zone. Each tab fills an equal slot inside the capsule's
-    padding, so the selected tab's pill is concentric with the bar: its radius
-    is the bar radius minus the padding [S-WWDC25-356]. ``active`` names the
-    icon kind of the selected tab. ``appearance`` picks the glass theme; the
-    geometry is identical in light and dark.
+    padding. The selected tab takes the accent tint on its symbol and label
+    (plus a heavier label weight); iOS tab bars have no selection pill
+    [S-TABBARS]. ``active`` names the icon kind of the selected tab.
+    ``appearance`` picks the glass theme; the geometry is identical in light
+    and dark.
     """
     theme = bar_theme(appearance)
     bar_x, bar_w, bar_h = TAB_BAR_INSET_PT, FRAME_W - 2 * TAB_BAR_INSET_PT, TAB_BAR_HEIGHT_PT
@@ -337,17 +406,6 @@ def build_tab_bar_node(
         is_active = kind == active
         color = theme.selected if is_active else theme.unselected
         parts: list[dict[str, Any]] = []
-        if is_active:
-            parts.append(
-                {
-                    "id": f"tab:{kind}:selection",
-                    "type": "RECTANGLE",
-                    "name": "selection",
-                    "absoluteBoundingBox": {"x": x, "y": slot_y, "width": slot_w, "height": slot_h},
-                    "cornerRadius": bar_h / 2 - pad,
-                    "fills": [_solid(theme.pill_rgb, theme.pill_opacity)],
-                }
-            )
         parts.append(
             _vector_node(
                 f"tab:{kind}:icon",
@@ -518,7 +576,8 @@ def pin_composer_above_tab_bar(screen: dict[str, Any], needle: str) -> bool:
     status-bar shift pushes under the tab bar. The tab bar must stay visible
     [S-TABBARS], so the composer block (the largest ancestor of the ``needle``
     text short enough to be a control) moves out of the scrolling content and
-    becomes a fixed child whose bottom meets the bar's top edge.
+    becomes a fixed child hovering ``COMPOSER_BAR_GAP_PT`` above the bar — two
+    floating controls never touch.
     """
     path = _path_to_text(screen, needle)
     if path is None:
@@ -530,10 +589,30 @@ def pin_composer_above_tab_bar(screen: dict[str, Any], needle: str) -> bool:
     parent = path[path.index(block) - 1]
     parent["children"] = [c for c in parent["children"] if c is not block]
     box = block["absoluteBoundingBox"]
-    _translate_y(block, TAB_BAR_Y - (float(box["y"]) + float(box["height"])))
+    _translate_y(block, TAB_BAR_Y - COMPOSER_BAR_GAP_PT - (float(box["y"]) + float(box["height"])))
     fixed = int(screen.get("numberOfFixedChildren", 0))
     screen["children"].insert(len(screen["children"]) - fixed, block)
     screen["numberOfFixedChildren"] = fixed + 1
+    return True
+
+
+def sync_composer_gap(screen: dict[str, Any], needle: str | None = None) -> bool:
+    """Re-seat an already-pinned composer ``COMPOSER_BAR_GAP_PT`` above the bar.
+
+    Used when refreshing an assembled design: the composer is already a direct
+    child of the screen, so only the vertical offset needs correcting.
+    """
+    path = _path_to_text(screen, needle or COMPOSER_NEEDLE)
+    if path is None or len(path) < 2:
+        return False
+    block = path[1]
+    if block not in screen.get("children", ()):
+        return False
+    box = block["absoluteBoundingBox"]
+    dy = TAB_BAR_Y - COMPOSER_BAR_GAP_PT - (float(box["y"]) + float(box["height"]))
+    if abs(dy) < 0.01:
+        return False
+    _translate_y(block, dy)
     return True
 
 
@@ -633,6 +712,15 @@ TABS = [
     ("Projects", "projects", "Projects"),
     ("Profile", "profile", "Profile"),
 ]
+# Screens that are not tab destinations but belong to a tab's flow: iOS keeps
+# the originating tab selected on detail screens [S-TABBARS].
+ACTIVE_TAB_OVERRIDES = {"Conversation": "assistant"}
+
+
+def active_tab_for(screen_name: str) -> str | None:
+    """The selected tab's icon kind for a screen: its own tab, or its flow's."""
+    own = next((kind for _label, kind, dest_name in TABS if dest_name == screen_name), None)
+    return own or ACTIVE_TAB_OVERRIDES.get(screen_name)
 
 
 def assemble_design(
@@ -656,8 +744,7 @@ def assemble_design(
     screens: list[dict[str, Any]] = []
     for (_key, name, _height), (frame, _original) in zip(SCREEN_SPECS, frames):
         tabs = [(label, kind, ids[dest_name]) for label, kind, dest_name in TABS]
-        active = next((kind for _label, kind, dest_name in TABS if dest_name == name), None)
-        bar = build_tab_bar_node(tabs, active=active, appearance=appearance)
+        bar = build_tab_bar_node(tabs, active=active_tab_for(name), appearance=appearance)
         screens.append(assemble_screen(frame, name=name, tab_bar=bar, appearance=appearance))
 
     if click_map:
@@ -681,8 +768,13 @@ def assemble_design(
     )
     # Artifact cleanup + clip reconciliation run per assembled screen.
     removed = drop_css_artifact_texts(payload)
+    sr_dropped = drop_sr_only_texts(payload)
     reconciled = reconcile_clips(payload)
     print(f"[nomic_ios:{appearance}] removed {removed} css artifact text(s), reconciled {reconciled} clip(s)")
+    print(f"[nomic_ios:{appearance}] dropped {sr_dropped} sr-only text(s)")
+    if appearance == "dark":
+        recolored = sum(recolor_dark_icons(screen) for screen in payload["document"]["children"][0]["children"])
+        print(f"[nomic_ios:dark] recolored {recolored} black icon(s) to gray-100")
     return payload
 
 
@@ -694,10 +786,43 @@ def _capture_specs(specs: list[str]) -> dict[str, Path]:
     return captures
 
 
+def refresh_design(payload: dict[str, Any], *, appearance: str) -> dict[str, Any]:
+    """Re-apply the builder's authored chrome to an already-assembled design.
+
+    The committed design documents are build artifacts of this module; when the
+    builder changes and no raw capture session is at hand, refreshing rewrites
+    them through the same code paths that a fresh assembly would use: authored
+    tab bars (with per-screen selection), artifact drops, dark icon recolor,
+    and the composer gap. Captured content itself is left untouched.
+    """
+    canvas = payload["document"]["children"][0]
+    screens = canvas["children"]
+    ids = {screen["name"]: screen["id"] for screen in screens}
+    for screen in screens:
+        tabs = [(label, kind, ids[dest_name]) for label, kind, dest_name in TABS]
+        screen["children"][-1] = build_tab_bar_node(tabs, active=active_tab_for(screen["name"]), appearance=appearance)
+    dropped = drop_sr_only_texts(payload)
+    print(f"[nomic_ios:{appearance}] refresh: dropped {dropped} sr-only text(s)")
+    if appearance == "dark":
+        recolored = sum(recolor_dark_icons(screen) for screen in screens)
+        print(f"[nomic_ios:dark] refresh: recolored {recolored} black icon(s) to gray-100")
+    convo = next((screen for screen in screens if screen["name"] == "Conversation"), None)
+    if convo is not None and sync_composer_gap(convo):
+        print(f"[nomic_ios:{appearance}] refresh: composer gap set to {COMPOSER_BAR_GAP_PT} pt")
+    return payload
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--captures", action="append", required=True, help="name=path/to/capture-dir (light appearance)"
+        "--refresh",
+        type=Path,
+        default=None,
+        metavar="DESIGN_DIR",
+        help="rewrite figma_file.json (and figma_file.dark.json when present) through the current builder",
+    )
+    parser.add_argument(
+        "--captures", action="append", required=False, help="name=path/to/capture-dir (light appearance)"
     )
     parser.add_argument(
         "--dark-captures",
@@ -705,9 +830,23 @@ def main() -> None:
         default=None,
         help="name=path/to/capture-dir for the dark appearance; also writes figma_file.dark.json",
     )
-    parser.add_argument("--out", type=Path, required=True, help="Design dir for figma_file.json")
+    parser.add_argument("--out", type=Path, required=False, help="Design dir for figma_file.json")
     parser.add_argument("--click-map", type=Path, default=None, help="JSON: hotspot needle -> {name, frame}")
     args = parser.parse_args()
+
+    if args.refresh is not None:
+        for filename, appearance in (("figma_file.json", "light"), ("figma_file.dark.json", "dark")):
+            design = args.refresh / filename
+            if not design.exists():
+                continue
+            payload = json.loads(design.read_text(encoding="utf-8"))
+            refresh_design(payload, appearance=appearance)
+            design.write_text(json.dumps(payload), encoding="utf-8")
+            print(f"[nomic_ios:{appearance}] refreshed {design}")
+        return
+
+    if not args.captures or not args.out:
+        parser.error("--captures and --out are required unless --refresh is given")
 
     click_map = json.loads(args.click_map.read_text(encoding="utf-8")) if args.click_map else None
 
