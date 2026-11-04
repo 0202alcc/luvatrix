@@ -286,3 +286,67 @@ def test_capture_design_leaves_the_color_scheme_alone_by_default(tmp_path: Path,
 def test_capture_design_rejects_an_unknown_color_scheme(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="color scheme"):
         capture.capture_design("http://localhost:3000/", tmp_path, color_scheme="sepia")
+
+
+# ── modern CSS color functions (Chrome reports lab()/oklab() computed colors) ─
+
+
+def _composite_over(color: tuple[float, float, float, float], dst: tuple[float, float, float]) -> tuple[int, int, int]:
+    r, g, b, a = color
+    return tuple(round((c * a + d * (1 - a)) * 255) for c, d in zip((r, g, b), dst))
+
+
+def test_parse_css_color_reads_lab_colors() -> None:
+    cases = {
+        "lab(10.2077 -2.43652 1.36734)": (25, 29, 26),
+        "lab(98.2685 -0.0967681 0.365055)": (250, 250, 249),
+        "lab(94.9733 -0.904739 3.28048)": (241, 241, 234),
+        "lab(16.962 -2.9885 1.82864)": (38, 43, 39),
+        "lab(34.3366 -2.56333 1.01902)": (77, 82, 79),
+        "lab(59.7139 -20.1565 3.34306)": (105, 154, 137),
+        "lab(100 0 0)": (255, 255, 255),
+        "lab(0 0 0)": (0, 0, 0),
+        "lab(50% 20 -30)": (133, 108, 170),
+    }
+    for value, expected in cases.items():
+        color = capture.parse_css_color(value)
+        assert color is not None, value
+        assert _composite_over(color, (0.0, 0.0, 0.0)) == pytest.approx(expected, abs=2)
+        assert color[3] == pytest.approx(1.0)
+
+
+def test_parse_css_color_reads_oklab_colors() -> None:
+    cases = {
+        "oklab(0.955998 -0.00264055 0.00862867)": (241, 241, 234),
+        "oklab(1 0 0)": (255, 255, 255),
+        "oklab(0 0 0)": (0, 0, 0),
+        "oklab(50% 0.1 -0.1)": (129, 69, 154),
+    }
+    for value, expected in cases.items():
+        color = capture.parse_css_color(value)
+        assert color is not None, value
+        assert _composite_over(color, (0.0, 0.0, 0.0)) == pytest.approx(expected, abs=2)
+        assert color[3] == pytest.approx(1.0)
+
+
+def test_parse_css_color_reads_lch_and_oklch_colors() -> None:
+    blue = capture.parse_css_color("oklch(0.7 0.15 250)")
+    assert blue is not None
+    assert _composite_over(blue, (0.0, 0.0, 0.0)) == pytest.approx((75, 163, 247), abs=2)
+    red = capture.parse_css_color("lch(50% 40 30)")
+    assert red is not None
+    assert _composite_over(red, (0.0, 0.0, 0.0)) == pytest.approx((178, 93, 87), abs=2)
+
+
+def test_parse_css_color_reads_lab_and_oklab_alpha() -> None:
+    color = capture.parse_css_color("lab(49.6289 -23.2687 4.76264 / 0.08)")
+    assert color is not None
+    assert color[3] == pytest.approx(0.08, abs=0.01)
+    assert _composite_over(color, (0.0, 0.0, 0.0)) == pytest.approx((6, 10, 9), abs=2)
+    assert _composite_over(color, (1.0, 1.0, 1.0)) == pytest.approx((241, 245, 244), abs=2)
+
+    color = capture.parse_css_color("oklab(0.909741 0.0000415742 0.0000181794 / 0.2)")
+    assert color is not None
+    assert color[3] == pytest.approx(0.2, abs=0.01)
+    assert _composite_over(color, (0.0, 0.0, 0.0)) == pytest.approx((45, 45, 45), abs=2)
+    assert _composite_over(color, (1.0, 1.0, 1.0)) == pytest.approx((249, 249, 249), abs=2)
