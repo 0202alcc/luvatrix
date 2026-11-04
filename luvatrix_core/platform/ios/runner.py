@@ -196,6 +196,14 @@ def setup_ui(width: int, height: int) -> None:
     _layer_scale = scale
     _layer_width = backing_width
     _layer_height = backing_height
+    # Report the host appearance so apps start in the right theme; the native
+    # scaffold forwards later traitCollectionDidChange callbacks.
+    try:
+        from luvatrix_core.platform.ios.appearance import set_user_interface_style
+
+        set_user_interface_style(int(window.traitCollection.userInterfaceStyle))
+    except Exception:
+        pass
     LOGGER.info(
         "setup_ui done logical=%dx%d backing=%dx%d scale=%.2f",
         _logical_width,
@@ -289,6 +297,16 @@ def _make_touch_view_class(UIView):
         def touchesCancelled_withEvent_(self, touches: ObjCInstance, event: ObjCInstance) -> None:
             _ = event
             _enqueue_touches(self, touches, "click", "cancel")
+
+        @objc_method
+        def traitCollectionDidChange_(self, previous: ObjCInstance) -> None:
+            _ = previous
+            try:
+                from luvatrix_core.platform.ios.appearance import set_user_interface_style
+
+                set_user_interface_style(int(self.traitCollection.userInterfaceStyle))
+            except Exception:
+                pass
 
     _make_touch_view_class._cached = LuvatrixTouchView
     return LuvatrixTouchView
@@ -815,6 +833,8 @@ def _run_ios_simulator(
         launch_env["SIMCTL_CHILD_LUVATRIX_IOS_PRESENT_FPS"] = str(present_fps or target_fps or ios_fps_default)
         if os.environ.get("LUVATRIX_IOS_ENABLE_HDI") == "1":
             launch_env["SIMCTL_CHILD_LUVATRIX_IOS_ENABLE_HDI"] = "1"
+        if os.environ.get("LUVATRIX_APPEARANCE"):
+            launch_env["SIMCTL_CHILD_LUVATRIX_APPEARANCE"] = os.environ["LUVATRIX_APPEARANCE"]
         _launch_simulator_app(udid, bundle_id, launch_env)
     except KeyboardInterrupt:
         subprocess.run(["xcrun", "simctl", "terminate", udid, bundle_id], capture_output=True)
@@ -938,6 +958,8 @@ def _write_ios_launch_config(
         launch_config["LUVATRIX_IMPORT_PROBE"] = "1"
     if os.environ.get("LUVATRIX_IOS_ENABLE_HDI") == "1":
         launch_config["LUVATRIX_IOS_ENABLE_HDI"] = "1"
+    if os.environ.get("LUVATRIX_APPEARANCE"):
+        launch_config["LUVATRIX_APPEARANCE"] = os.environ["LUVATRIX_APPEARANCE"]
     if os.environ.get("LUVATRIX_FSI_DEBUG"):
         launch_config["LUVATRIX_FSI_DEBUG"] = os.environ["LUVATRIX_FSI_DEBUG"]
     (packages_dir / "luvatrix_ios_launch_config.json").write_text(

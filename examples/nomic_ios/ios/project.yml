@@ -24,9 +24,8 @@ targets:
         UILaunchScreen: {}
         LSApplicationCategoryType: public.app-category.productivity
         CADisableMinimumFrameDurationOnPhone: true
-        UIStatusBarStyle: UIStatusBarStyleDarkContent
+        UIStatusBarStyle: UIStatusBarStyleDefault
         UIViewControllerBasedStatusBarAppearance: false
-        UIUserInterfaceStyle: Light
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UIRequiresFullScreen: true
