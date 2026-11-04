@@ -53,7 +53,8 @@ Apple publishes no point dimensions for the floating tab bar (height, side inset
 | Overlays (`overlayPositionType`, `overlayBackground`, close on click outside) | Supported, through `FigmaApp.open_overlay` | `document.py`, `app.py` |
 | Specular highlights, refraction, live glass, scroll edge effect | **Not supported** | — |
 | SF Pro, SF Symbols | **Not available.** See Fonts. | — |
-| Dark Mode or Dynamic Type switching | **Not supported.** The document has one fixed appearance and fixed sizes. | — |
+| Dark Mode switching | Supported: `FigmaApp(design, dark=...)` holds a variant per appearance and swaps on `set_appearance`, `LUVATRIX_APPEARANCE`, or the iOS `userInterfaceStyle` trait. The current screen, back history, and scroll position carry over by frame name. | `app.py`, `luvatrix_core/platform/ios/appearance.py` |
+| Dynamic Type | **Not supported.** Text sizes are fixed at capture time. | — |
 | Resizing to the device (iPhone 17, iPhone Duo) | **Not supported.** The matrix is fixed and letterboxed. | `app.toml`, Metal presenter |
 
 **How `BACKGROUND_BLUR` works on scrolling bars.** For a scrolling frame, `FigmaApp._screen` renders the content with the fixed children skipped, then renders the fixed children alone (`only_ids=fixed, transparent=True`) into a separate overlay. That overlay pass records each `BACKGROUND_BLUR` shape (coverage and radius) instead of blurring its empty canvas. `_compose` pastes the scrolled content, blurs it inside each recorded shape, then composites the overlay (the bar's translucent fill, strokes, and children) on top. Only the shape's bounds are blurred, and wide blurs run on a block-averaged copy. The blurred patch is cached until the scroll offset changes; on this Linux VM a 370×62 pt bar at 3x costs about 17 ms per new offset.
@@ -64,7 +65,7 @@ Apple publishes no point dimensions for the floating tab bar (height, side inset
 
 ## Verification loop
 
-1. Regenerate the document: `uv run python examples/nomic_ios/assemble_capture.py --captures <name>=<capture-dir> ... --out examples/nomic_ios/design`, adding `--renders` and `--click-map` as needed.
+1. Regenerate the documents: `uv run python examples/nomic_ios/assemble_capture.py --captures <name>=<capture-dir> ... --out examples/nomic_ios/design`, adding `--dark-captures <name>=<dark-capture-dir>` (writes `figma_file.dark.json` alongside the light document), `--renders`, and `--click-map` as needed.
 2. Validate the app: `uv run python main.py validate-app examples/nomic_ios --render ios-simulator`.
 3. Run the simulator tour on macOS with Xcode:
 

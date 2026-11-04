@@ -2,6 +2,18 @@
 
 Audit date: **November 4, 2026**, against the generated `examples/nomic_ios/design/figma_file.json`, `assemble_capture.py`, `app.toml`, and `ios/project.yml`. Nothing here has been changed in the app; these are recorded deviations to fix in later work. Fix them in `assemble_capture.py` (`build_tab_bar_node`, `assemble_screen`, and the constants at the top), not in the generated JSON.
 
+## Status after the Dark Mode change
+
+Later the same day, the app gained a real second appearance. Deviation 7 below is fixed:
+
+- All five screens were recaptured in both appearances at 402×874@3 (`figma capture --color-scheme dark` drives next-themes via `prefers-color-scheme` emulation). The assembler emits `design/figma_file.json` (light) and `design/figma_file.dark.json`; frame ids are stable across appearances, so navigation maps 1:1.
+- The dark tab bar keeps the glass-branch geometry with a dark translucent tint ((26, 26, 28) at 66%), light monochrome symbols (selected 248, unselected 170), a white selection wash at 14%, and a dark scroll edge fade. The dark values are chosen, not measured, pending the iOS 27 Figma kit [S-DESIGNKITS].
+- `FigmaApp` holds light and dark design variants and switches on `set_appearance`, the `LUVATRIX_APPEARANCE` override, or the iOS `UITraitCollection.userInterfaceStyle` trait (bridged through the runner; the Swift shell forwards `traitCollectionDidChange`). The current screen, back history, and scroll position carry over by frame name.
+- `Info.plist` and `project.yml` no longer pin `UIUserInterfaceStyle: Light`; the status bar uses `UIStatusBarStyleDefault`, so it draws light content in Dark Mode and dark content in Light Mode automatically. The category is still productivity.
+- `bar_color_rgba` stays white: the 402×874 design maps 1:1 to iPhone 17 points, so there are no letterbox bars in either appearance. Revisit if the design size ever differs from the device.
+
+Deviations 8 (SF Pro and Dynamic Type), 9 (layered icon), and 10 (iPhone Duo) remain open. The dark bar metrics are chosen, not measured; replace them with iOS 27 Figma kit values.
+
 ## Status after the floating glass tab bar change
 
 Later the same day, the app was recaptured at 402×874@3 and rebuilt. Deviations 1–6, 11, and 12 below are fixed:
@@ -10,9 +22,9 @@ Later the same day, the app was recaptured at 402×874@3 and rebuilt. Deviations
 - Labels are 11 pt and the whole bar ends at 840 pt, above the home indicator. Tab slots are 90.5×54 pt.
 - Icons are filled glyphs. Symbols and labels are monochrome (selected 24, unselected 102 gray), and the selected tab gets a concentric radius-27 pill.
 - The frame is 402×874, so there's no letterbox. The Conversation composer is pinned above the bar, and a top scroll edge fade keeps scrolled content out from under the status bar.
-- `Info.plist` pins dark status bar content and the Light appearance, and the category is productivity with the game-mode keys removed.
+- `Info.plist` pins dark status bar content and the Light appearance (superseded by the Dark Mode change above: the pin is gone and the status bar follows the trait), and the category is productivity with the game-mode keys removed.
 
-Deviations 7 (Dark Mode), 8 (SF Pro and Dynamic Type), 9 (layered icon), and 10 (iPhone Duo) remain open. The bar metrics are chosen, not measured; replace them with iOS 27 Figma kit values.
+Deviations 7 (Dark Mode), 8 (SF Pro and Dynamic Type), 9 (layered icon), and 10 (iPhone Duo) remain open. The bar metrics are chosen, not measured; replace them with iOS 27 Figma kit values. (Deviation 7 was fixed by the Dark Mode change above.)
 
 The original audit follows unchanged.
 
