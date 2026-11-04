@@ -41,6 +41,8 @@ jobs:
             slug: captured_site
           - app: examples/nomic_app
             slug: nomic_app
+          - app: examples/nomic_ios
+            slug: nomic_ios
     env:
       APP_DIR: ${{ inputs.app_dir || matrix.app }}
       TOUR: ${{ inputs.tour }}
