@@ -1,6 +1,6 @@
 """Stdlib-only networking for Luvatrix apps (HTTP, JSON, SSE)."""
 
-from .client import ApiError, HttpClient, encode_multipart
+from .client import ApiError, BearerToken, HttpClient, encode_multipart
 from .sse import Event, SseParser, stream_events
 from .transport import (
     HttpRequest,
@@ -13,6 +13,7 @@ from .transport import (
 
 __all__ = [
     "ApiError",
+    "BearerToken",
     "Event",
     "HttpClient",
     "HttpRequest",
