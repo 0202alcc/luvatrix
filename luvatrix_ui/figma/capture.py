@@ -2302,7 +2302,119 @@ def parse_css_color(value: str) -> tuple[float, float, float, float] | None:
         if len(channels) == 3:
             rgb = tuple(_component(c, 255.0) for c in channels)
             return (rgb[0], rgb[1], rgb[2], max(0.0, min(1.0, alpha)))
+    match = re.match(r"((?:ok)?lab|(?:ok)?lch)\(([^)]+)\)", value)
+    if match:
+        return _parse_lab_family(match.group(1), match.group(2))
     return None
+
+
+def _parse_lab_family(kind: str, body: str) -> tuple[float, float, float, float] | None:
+    """Parse lab()/lch() (CIE, D50) and oklab()/oklch() into sRGB (r, g, b, a)."""
+    alpha = 1.0
+    if "/" in body:
+        body, alpha_part = body.split("/", 1)
+        alpha = _component(alpha_part.strip(), 1.0, alpha=True)
+    parts = [part for part in re.split(r"[,\s]+", body.strip()) if part]
+    if len(parts) != 3:
+        return None
+    try:
+        if kind == "lab":
+            rgb = _lab_to_srgb(
+                _scaled_component(parts[0], 100.0),
+                _scaled_component(parts[1], 125.0),
+                _scaled_component(parts[2], 125.0),
+            )
+        elif kind == "lch":
+            lightness = _scaled_component(parts[0], 100.0)
+            chroma = _scaled_component(parts[1], 150.0)
+            hue = math.radians(_hue_degrees(parts[2]))
+            rgb = _lab_to_srgb(lightness, chroma * math.cos(hue), chroma * math.sin(hue))
+        elif kind == "oklab":
+            rgb = _oklab_to_srgb(
+                _scaled_component(parts[0], 1.0),
+                _scaled_component(parts[1], 0.4),
+                _scaled_component(parts[2], 0.4),
+            )
+        else:
+            lightness = _scaled_component(parts[0], 1.0)
+            chroma = _scaled_component(parts[1], 0.4)
+            hue = math.radians(_hue_degrees(parts[2]))
+            rgb = _oklab_to_srgb(lightness, chroma * math.cos(hue), chroma * math.sin(hue))
+    except ValueError:
+        return None
+    return (rgb[0], rgb[1], rgb[2], max(0.0, min(1.0, alpha)))
+
+
+def _scaled_component(token: str, scale: float) -> float:
+    token = token.strip()
+    if token.endswith("%"):
+        return float(token[:-1]) / 100.0 * scale
+    return float(token)
+
+
+def _hue_degrees(token: str) -> float:
+    token = token.strip().lower()
+    for suffix, factor in (("deg", 1.0), ("grad", 0.9), ("rad", 180.0 / math.pi), ("turn", 360.0)):
+        if token.endswith(suffix):
+            return float(token[: -len(suffix)]) * factor
+    return float(token)
+
+
+def _lab_to_srgb(lightness: float, a: float, b: float) -> tuple[float, float, float]:
+    """CIE Lab (D50) to gamma-encoded sRGB, via XYZ and Bradford adaptation."""
+    fy = (lightness + 16.0) / 116.0
+    fx = fy + a / 500.0
+    fz = fy - b / 200.0
+    epsilon = 216.0 / 24389.0
+    kappa = 24389.0 / 27.0
+    xr = fx**3 if fx**3 > epsilon else (116.0 * fx - 16.0) / kappa
+    yr = fy**3 if lightness > kappa * epsilon else lightness / kappa
+    zr = fz**3 if fz**3 > epsilon else (116.0 * fz - 16.0) / kappa
+    # D50 reference white.
+    x, y, z = xr * 0.96422, yr, zr * 0.82521
+    # Bradford-adapt D50 to D65, then XYZ to linear sRGB (CSS Color 4 matrices).
+    x, y, z = _mat3(_D50_TO_D65, x, y, z)
+    return _xyz_d65_to_srgb(x, y, z)
+
+
+def _oklab_to_srgb(lightness: float, a: float, b: float) -> tuple[float, float, float]:
+    """Oklab to gamma-encoded sRGB via XYZ D65 (CSS Color 4 matrices)."""
+    l_ = lightness + 0.3963377774 * a + 0.2158037573 * b
+    m_ = lightness - 0.1055613458 * a - 0.0638541728 * b
+    s_ = lightness - 0.0894841775 * a - 1.2914855480 * b
+    long, mid, short = l_**3, m_**3, s_**3
+    x = 1.2270138511 * long - 0.5577999807 * mid + 0.2812561490 * short
+    y = -0.0405801784 * long + 1.1122568696 * mid - 0.0716766787 * short
+    z = -0.0763812845 * long - 0.4214819784 * mid + 1.5861632204 * short
+    return _xyz_d65_to_srgb(x, y, z)
+
+
+_D50_TO_D65 = (
+    (0.9554734527042182, -0.023098536874261423, 0.0632593086610217),
+    (-0.028369706963208136, 1.0099954580058226, 0.021041398966943008),
+    (0.012314001688319899, -0.020507696433477912, 1.3303659366080753),
+)
+
+_XYZ_D65_TO_LINEAR_SRGB = (
+    (3.240969941904521, -1.537383177570093, -0.498610760293),
+    (-0.96924363628087, 1.87596750150772, 0.041555057407175),
+    (0.055630079696993, -0.20397695888897, 1.056971514242878),
+)
+
+
+def _mat3(matrix: tuple[tuple[float, float, float], ...], x: float, y: float, z: float) -> tuple[float, float, float]:
+    return tuple(row[0] * x + row[1] * y + row[2] * z for row in matrix)  # type: ignore[return-value]
+
+
+def _xyz_d65_to_srgb(x: float, y: float, z: float) -> tuple[float, float, float]:
+    return tuple(_srgb_gamma(c) for c in _mat3(_XYZ_D65_TO_LINEAR_SRGB, x, y, z))  # type: ignore[return-value]
+
+
+def _srgb_gamma(channel: float) -> float:
+    channel = max(0.0, min(1.0, channel))
+    if channel <= 0.0031308:
+        return 12.92 * channel
+    return 1.055 * channel ** (1.0 / 2.4) - 0.055
 
 
 def _component(value: str, scale: float, *, alpha: bool = False) -> float:
