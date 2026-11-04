@@ -262,6 +262,25 @@ except BaseException as e:
     }
 }
 
+private func callPythonHandleOpenURL(_ url: URL) {
+    let gstate = LuvatrixPyGILStateEnsure()
+    defer { LuvatrixPyGILStateRelease(gstate) }
+
+    let script = """
+try:
+    from luvatrix_core.platform.ios.url_router import handle_open_url
+    handled = handle_open_url(\(luvatrixPythonStringLiteral(url.absoluteString)))
+    print("[ios-url] open url handled=" + str(handled), flush=True)
+except BaseException as e:
+    import sys, traceback
+    print("PYTHON ERROR in iOS URL router (" + type(e).__name__ + "):", flush=True)
+    traceback.print_exc(file=sys.stdout)
+"""
+    if LuvatrixPyRunSimpleString(script) != 0 {
+        LuvatrixPyErrPrint()
+    }
+}
+
 private func currentKeyWindow() -> UIWindow? {
     return UIApplication.shared.connectedScenes
         .compactMap { $0 as? UIWindowScene }
@@ -574,6 +593,18 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
         appDelegate?.start(in: windowScene)
         window = appDelegate?.window
+        // Cold start through a custom-scheme URL (e.g. ainomic://auth/callback):
+        // start(in:) has initialized Python, so the router can buffer the URL
+        // until the app's sign-in flow registers its handler.
+        for context in connectionOptions.urlContexts {
+            callPythonHandleOpenURL(context.url)
+        }
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        for context in URLContexts {
+            callPythonHandleOpenURL(context.url)
+        }
     }
 
     func sceneWillResignActive(_ scene: UIScene) {

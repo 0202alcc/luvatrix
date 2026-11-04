@@ -62,3 +62,12 @@ examples/hello_ios/ios/PyPackages-device/
 examples/hello_ios/ios/PyPackages-simulator/
 examples/hello_ios/ios/Python/
 examples/hello_ios/ios/Luvatrix.xcodeproj/
+
+# examples/net_smoke native scaffold: setup_ios.sh, xcodegen, and xcodebuild outputs
+examples/net_smoke/ios/.build/
+examples/net_smoke/ios/.build*/
+examples/net_smoke/ios/PyPackages/
+examples/net_smoke/ios/PyPackages-device/
+examples/net_smoke/ios/PyPackages-simulator/
+examples/net_smoke/ios/Python/
+examples/net_smoke/ios/Luvatrix.xcodeproj/

@@ -21,6 +21,10 @@ targets:
       path: Luvatrix/Info.plist
       properties:
         UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleURLName: ai.nomic.auth
+            CFBundleURLSchemes:
+              - ainomic
         LSApplicationCategoryType: public.app-category.games
         LSSupportsGameMode: true
         GCSupportsGameMode: true
