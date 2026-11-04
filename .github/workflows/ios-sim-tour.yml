@@ -17,6 +17,13 @@ on:
       simulator:
         description: Simulator device name
         default: iPhone 17
+      smoke_net_url:
+        description: >-
+          Optional HTTPS URL for the net smoke job (e.g.
+          https://app.nomic.ai/api/v0/openapi.json). When set, the tour is
+          skipped and examples/net_smoke runs one GET through UrllibTransport
+          in the simulator, writing status/bytes/TLS version to status.json.
+        default: ""
 
 permissions:
   contents: read
@@ -28,7 +35,8 @@ concurrency:
 jobs:
   tour:
     name: Tour ${{ inputs.app_dir || 'examples/nomic_ios' }} in iOS Simulator
-    if: ${{ vars.LUVATRIX_IOS_SIM_RUNNER == '1' }}
+    # A smoke dispatch never tours; pushes always tour (when the app exists).
+    if: ${{ vars.LUVATRIX_IOS_SIM_RUNNER == '1' && (github.event_name == 'push' || inputs.smoke_net_url == '') }}
     runs-on: [self-hosted, macOS, ios-sim]
     timeout-minutes: 45
     env:
@@ -53,8 +61,76 @@ jobs:
           if [ -n "$KEEP_OPEN_VAR" ] && { [ "$KEEP_OPEN_VAR" = "$APP_DIR" ] || [ "$KEEP_OPEN_VAR" = "$slug" ]; }; then
             keep_open="1"
           fi
+          # The tour app only exists on some branches; skip quietly elsewhere.
+          present=""
+          if [ -f "$APP_DIR/tour.json" ]; then
+            present="1"
+          else
+            echo "No $APP_DIR/tour.json on this ref; skipping the tour."
+          fi
           echo "slug=$slug" >> "$GITHUB_OUTPUT"
           echo "keep_open=$keep_open" >> "$GITHUB_OUTPUT"
+          echo "present=$present" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        if: ${{ steps.app.outputs.present == '1' }}
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
+
+      - name: Check Xcode toolchain
+        if: ${{ steps.app.outputs.present == '1' }}
+        run: |
+          xcodebuild -version
+          xcodegen --version
+          xcrun simctl list devices available | grep -F -- "$SIMULATOR"
+
+      - name: Sync deps
+        if: ${{ steps.app.outputs.present == '1' }}
+        run: uv sync --frozen
+
+      - name: Prepare embedded iOS Python
+        if: ${{ steps.app.outputs.present == '1' }}
+        working-directory: ${{ env.APP_DIR }}
+        run: uv run bash ios/scripts/setup_ios.sh
+
+      - name: Run tour
+        if: ${{ steps.app.outputs.present == '1' }}
+        env:
+          KEEP_OPEN: ${{ steps.app.outputs.keep_open }}
+        run: |
+          keep_open_args=()
+          if [ -n "$KEEP_OPEN" ]; then
+            keep_open_args=(--keep-open)
+          fi
+          caffeinate -dims uv run python main.py figma ios-tour "$APP_DIR" \
+            --tour "${TOUR:-$APP_DIR/tour.json}" \
+            --out "$RUNNER_TEMP/ios-tour" \
+            --simulator "$SIMULATOR" \
+            --native-project "$APP_DIR/ios" \
+            "${keep_open_args[@]}"
+
+      - name: Upload screenshots and logs
+        if: ${{ always() && steps.app.outputs.present == '1' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-tour-${{ steps.app.outputs.slug }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/ios-tour
+          if-no-files-found: warn
+          retention-days: 14
+
+  smoke-net:
+    name: HTTPS smoke in iOS Simulator
+    # Opt-in only: manual dispatch with smoke_net_url set.
+    if: ${{ vars.LUVATRIX_IOS_SIM_RUNNER == '1' && github.event_name == 'workflow_dispatch' && inputs.smoke_net_url != '' }}
+    runs-on: [self-hosted, macOS, ios-sim]
+    timeout-minutes: 45
+    env:
+      APP_DIR: examples/net_smoke
+      SIMULATOR: ${{ inputs.simulator || 'iPhone 17' }}
+      SMOKE_URL: ${{ inputs.smoke_net_url }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
@@ -72,26 +148,65 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: uv run bash ios/scripts/setup_ios.sh
 
-      - name: Run tour
+      - name: Run net smoke in simulator
         env:
-          KEEP_OPEN: ${{ steps.app.outputs.keep_open }}
+          # run-app copies the environment into simctl launch, and simctl
+          # strips the SIMCTL_CHILD_ prefix for the child process.
+          SIMCTL_CHILD_LUVATRIX_SMOKE_NET_URL: ${{ env.SMOKE_URL }}
         run: |
-          keep_open_args=()
-          if [ -n "$KEEP_OPEN" ]; then
-            keep_open_args=(--keep-open)
-          fi
-          caffeinate -dims uv run python main.py figma ios-tour "$APP_DIR" \
-            --tour "${TOUR:-$APP_DIR/tour.json}" \
-            --out "$RUNNER_TEMP/ios-tour" \
+          # The app writes status.json and exits; the watchdog keeps a wedged
+          # launch from burning the whole job timeout.
+          ( sleep 900; pkill -f "run-app.*net_smoke" || true ) &
+          watchdog=$!
+          caffeinate -dims uv run python main.py run-app "$APP_DIR" \
+            --render ios-simulator \
             --simulator "$SIMULATOR" \
-            --native-project "$APP_DIR/ios" \
-            "${keep_open_args[@]}"
+            --native-project "$APP_DIR/ios" || true
+          kill $watchdog 2>/dev/null || true
 
-      - name: Upload screenshots and logs
+      - name: Collect status.json from the app container
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/net-smoke"
+          udid=$(xcrun simctl list devices --json | uv run python -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          name = '$SIMULATOR'
+          booted = available = None
+          for devices in data.get('devices', {}).values():
+              for device in devices:
+                  if device.get('name') != name or not device.get('isAvailable', False):
+                      continue
+                  if device.get('state') == 'Booted':
+                      booted = device['udid']
+                  elif available is None:
+                      available = device['udid']
+          print(booted or available or '')
+          ")
+          if [ -z "$udid" ]; then
+            echo "Simulator '$SIMULATOR' not found after the smoke run"
+            exit 1
+          fi
+          container=$(xcrun simctl get_app_container "$udid" com.luvatrix.app data)
+          cp "$container/Documents/status.json" "$RUNNER_TEMP/net-smoke/status.json"
+          cat "$RUNNER_TEMP/net-smoke/status.json"
+
+      - name: Verify smoke result
+        run: |
+          uv run python -c "
+          import json, sys
+          with open('$RUNNER_TEMP/net-smoke/status.json', encoding='utf-8') as fh:
+              payload = json.load(fh)
+          if not payload.get('ok'):
+              sys.exit('net smoke failed — see status.json above')
+          print('net smoke ok:', payload.get('status'), payload.get('bytes'), 'bytes,', payload.get('tls_version'))
+          "
+
+      - name: Upload smoke artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ios-tour-${{ steps.app.outputs.slug }}-${{ github.run_id }}
-          path: ${{ runner.temp }}/ios-tour
+          name: ios-net-smoke-${{ github.run_id }}
+          path: ${{ runner.temp }}/net-smoke
           if-no-files-found: warn
           retention-days: 14

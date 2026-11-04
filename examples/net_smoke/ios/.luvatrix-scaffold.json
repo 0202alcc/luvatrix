@@ -1,0 +1,22 @@
+{
+  "files": {
+    "Luvatrix/AppDelegate.swift": "0fc1e1f79aefb8b611eb3e1a92f81306903e5ecb3ecd471f12346724ced9345b",
+    "Luvatrix/Assets.xcassets/AppIcon.appiconset/Contents.json": "13299eeb3b8f12d79b8aef018c23ac7d0c964bdeafdc7fe26044c26e2155f575",
+    "Luvatrix/Assets.xcassets/AppIcon.appiconset/icon.png": "5455482b00d9e2da8b0cf468dc830cf4b212bf56a7ca9f345f7ed446b5a1405f",
+    "Luvatrix/Assets.xcassets/Contents.json": "f5fb0e1f3a8142892ed092efb5955c1c2cc537003a89ad7bbdb9dade7fe8985f",
+    "Luvatrix/AuthSessionBridge.swift": "083b1c80f1f61b9aed2001aacad4b3b2289996968e9224f966180df8b4322fdd",
+    "Luvatrix/Info.plist": "46b7f30e107dc1a82fcc54335e386ad4880f89ed2acfdff75ffea8a80810a995",
+    "Luvatrix/KeychainBridge.swift": "a18bdb0de7b545a59043751ecef1a0713af1031ee6ac99318585d7071a9d99e3",
+    "Luvatrix/Luvatrix-Bridging-Header.h": "14e56842b17703444fada7a6266cc06c0fa1a6691605c1d2864a06975d31a881",
+    "Luvatrix/Luvatrix.entitlements": "151797b6be37707d837f0a946124b4619cdb8093dc05ebae5f097621c2cc3057",
+    "Luvatrix/PythonBridge.h": "7f902ba317aff9903fe5c276277c884366fdae9588e0bcd29c9213016383b4aa",
+    "Luvatrix/PythonBridge.m": "712aa4786e54bbcd5ccf2a983cd2c58bc1e02c7112cd507b1b3da9fb6c55234f",
+    "Luvatrix/main.swift": "abb81b2bd3715628eb6d6932a360bb24c567b8a189ad8670825ff45fbb48220c",
+    "project.yml": "a4e9d5fe0f88da62d3f007a5176d0762c933946b37bb57014eefadd7d6cb36e1",
+    "scripts/setup_ios.sh": "582d6296bbc5fefaf5a6d1088770256a2f5078df932ff7c2a8638d43f058aaab"
+  },
+  "luvatrix_version": "0.2.10",
+  "pending_conflicts": [],
+  "schema_version": 1,
+  "target": "ios"
+}

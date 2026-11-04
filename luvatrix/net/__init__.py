@@ -1,6 +1,7 @@
 """Stdlib-only networking for Luvatrix apps (HTTP, JSON, SSE)."""
 
 from .client import ApiError, BearerToken, HttpClient, encode_multipart
+from .smoke import resolve_smoke_net_url, run_smoke_net
 from .sse import Event, SseParser, stream_events
 from .transport import (
     HttpRequest,
@@ -24,5 +25,7 @@ __all__ = [
     "TransportError",
     "UrllibTransport",
     "encode_multipart",
+    "resolve_smoke_net_url",
+    "run_smoke_net",
     "stream_events",
 ]
