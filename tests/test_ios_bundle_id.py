@@ -20,9 +20,12 @@ from luvatrix_core.scaffold import init_native_project
 UDID = "UDID-17"
 
 
+_APP_COUNTER = iter(range(1000))
+
+
 def _app_with_id(tmp_path: Path, app_id: str | None) -> Path:
-    app = tmp_path / "app"
-    app.mkdir()
+    app = tmp_path / f"app-{next(_APP_COUNTER)}"
+    app.mkdir(exist_ok=True)
     if app_id is not None:
         (app / "app.toml").write_text(f'app_id = "{app_id}"\n', encoding="utf-8")
     return app
@@ -56,7 +59,7 @@ def test_ios_simulator_launch_and_interrupt_terminate_use_the_derived_bundle_id(
 
     app = _app_with_id(tmp_path, "figma.nomic_app")
     (app / "app_main.py").write_text("def create(): pass\n", encoding="utf-8")
-    ios_dir = app / "ios"
+    ios_dir = app / ".luvatrix" / "ios"
     (ios_dir / "Luvatrix").mkdir(parents=True)
     (ios_dir / "PyPackages").mkdir()
 
@@ -98,7 +101,7 @@ def test_run_ios_simulator_terminates_the_derived_bundle_id_on_interrupt(
 
     app = _app_with_id(tmp_path, "figma.nomic_app")
     (app / "app_main.py").write_text("def create(): pass\n", encoding="utf-8")
-    ios_dir = app / "ios"
+    ios_dir = app / ".luvatrix" / "ios"
     (ios_dir / "Luvatrix").mkdir(parents=True)
     (ios_dir / "PyPackages").mkdir()
 
@@ -124,8 +127,7 @@ def test_run_ios_simulator_terminates_the_derived_bundle_id_on_interrupt(
     monkeypatch.setattr(runner.subprocess, "run", fake_run)
     monkeypatch.setattr(runner, "_sync_luvatrix_packages", lambda packages_dir: None)
 
-    with pytest.raises(KeyboardInterrupt):
-        runner._run_ios_simulator(app, "iPhone 17")
+    runner._run_ios_simulator(app, "iPhone 17")
 
     terminates = [cmd for cmd in commands if cmd[:3] == ["xcrun", "simctl", "terminate"]]
     assert terminates == [["xcrun", "simctl", "terminate", UDID, "com.luvatrix.app.nomic-app"]]
@@ -139,7 +141,7 @@ def test_run_ios_simulator_launches_legacy_bundle_id_without_app_id(
     app = tmp_path / "app"
     app.mkdir()
     (app / "app_main.py").write_text("def create(): pass\n", encoding="utf-8")
-    ios_dir = app / "ios"
+    ios_dir = app / ".luvatrix" / "ios"
     (ios_dir / "Luvatrix").mkdir(parents=True)
     (ios_dir / "PyPackages").mkdir()
 
@@ -207,6 +209,23 @@ def test_sync_project_bundle_id_is_a_noop_when_already_current(tmp_path: Path) -
     _sync_project_bundle_id(ios_dir, LEGACY_BUNDLE_ID)
 
     assert path.read_text(encoding="utf-8") == before
+
+
+def test_sync_project_bundle_id_leaves_an_already_derived_id_alone(tmp_path: Path) -> None:
+    ios_dir = tmp_path / "ios"
+    ios_dir.mkdir()
+    path = ios_dir / "project.yml"
+    path.write_text(
+        "PRODUCT_BUNDLE_IDENTIFIER: com.luvatrix.app.nomic-app\n"
+        'PRODUCT_BUNDLE_IDENTIFIER="${PRODUCT_BUNDLE_IDENTIFIER:-com.luvatrix.app}"\n',
+        encoding="utf-8",
+    )
+
+    _sync_project_bundle_id(ios_dir, "com.luvatrix.app.nomic-app")
+
+    text = path.read_text(encoding="utf-8")
+    assert "com.luvatrix.app.nomic-app.nomic-app" not in text
+    assert text.count("com.luvatrix.app.nomic-app") == 2
 
 
 def test_init_native_ios_project_emits_the_derived_bundle_id(tmp_path: Path) -> None:

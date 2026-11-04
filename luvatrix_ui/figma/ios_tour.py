@@ -24,8 +24,8 @@ from pathlib import Path
 from typing import Any
 
 from .tour import STATUS_FILE, TOUR_ACK_TIMEOUT_ENV, TOUR_ENV, TOUR_RUN_ENV, load_tour_steps
+from luvatrix_core.platform.ios.bundle_id import ios_bundle_id
 
-BUNDLE_ID = "com.luvatrix.app"
 APP_PROCESS = "Luvatrix"
 POLL_SECONDS = 0.25
 
@@ -53,6 +53,7 @@ def run_ios_tour(
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     run_id = run_id or uuid.uuid4().hex[:12]
+    bundle_id = ios_bundle_id(app_dir)
     summary: dict[str, Any] = {"run": run_id, "simulator": simulator, "state": "starting", "captures": [], "error": None}
 
     udid = _simulator_udid(run, simulator)
@@ -98,7 +99,7 @@ def run_ios_tour(
                 # Re-resolve until this run's status shows up: before run-app reinstalls
                 # the app, simctl still reports the previous install's data container.
                 if not pinned:
-                    container = _app_container(run, udid)
+                    container = _app_container(run, udid, bundle_id)
                 status = _read_status(container, run_id) if container else None
                 pinned = pinned or status is not None
                 if status is not None and status.get("state") == "capture" and status.get("step") not in done_steps:
@@ -125,9 +126,9 @@ def run_ios_tour(
             _write_app_log(run, udid, log_start, out)
             if keep_open:
                 summary["kept_open"] = True
-                _relaunch_for_user(run, udid, render_scale)
+                _relaunch_for_user(run, udid, render_scale, bundle_id, out)
             else:
-                run(["xcrun", "simctl", "terminate", udid, BUNDLE_ID], capture_output=True)
+                run(["xcrun", "simctl", "terminate", udid, bundle_id], capture_output=True)
             if proc.poll() is None:
                 proc.terminate()
                 try:
@@ -137,22 +138,24 @@ def run_ios_tour(
     return _finish(out, summary)
 
 
-def _relaunch_for_user(run: Callable[..., Any], udid: str, render_scale: float) -> None:
+def _relaunch_for_user(run: Callable[..., Any], udid: str, render_scale: float, bundle_id: str, out: Path) -> None:
     """Relaunch the app detached, without tour env, and surface the simulator window.
 
     The tour instance may still be foregrounded, so the bare ``simctl launch``
     activates (or fresh-starts) the app without ``--console``: whatever survives
-    is owned by the simulator, not by this exiting launcher.
+    is owned by the simulator, not by this exiting launcher. The verification
+    screenshot records which app is actually on screen.
     """
     env = os.environ.copy()
     for key in (f"SIMCTL_CHILD_{TOUR_ENV}", f"SIMCTL_CHILD_{TOUR_RUN_ENV}", f"SIMCTL_CHILD_{TOUR_ACK_TIMEOUT_ENV}"):
         env.pop(key, None)
     env["SIMCTL_CHILD_LUVATRIX_IOS_RENDER_SCALE"] = f"{render_scale:.6g}"
     env["SIMCTL_CHILD_LUVATRIX_RENDER_MODE"] = os.environ.get("LUVATRIX_RENDER_MODE", "auto")
-    run(["xcrun", "simctl", "launch", udid, BUNDLE_ID], capture_output=True, env=env)
+    run(["xcrun", "simctl", "launch", udid, bundle_id], capture_output=True, env=env)
     opened = run(["open", "-a", "Simulator", "--args", "-CurrentDeviceUDID", udid], capture_output=True)
     if opened.returncode != 0:
         run(["open", "-a", "Simulator"], capture_output=True)
+    run(["xcrun", "simctl", "io", udid, "screenshot", str(out / "kept_open.png")], capture_output=True)
 
 
 def _finish(out: Path, summary: dict[str, Any]) -> int:
@@ -171,8 +174,8 @@ def _simulator_udid(run: Callable[..., Any], name: str) -> str | None:
     return _find_simulator_udid(json.loads(result.stdout), name)
 
 
-def _app_container(run: Callable[..., Any], udid: str) -> Path | None:
-    result = run(["xcrun", "simctl", "get_app_container", udid, BUNDLE_ID, "data"], capture_output=True, text=True)
+def _app_container(run: Callable[..., Any], udid: str, bundle_id: str) -> Path | None:
+    result = run(["xcrun", "simctl", "get_app_container", udid, bundle_id, "data"], capture_output=True, text=True)
     if result.returncode != 0 or not result.stdout.strip():
         return None
     return Path(result.stdout.strip())

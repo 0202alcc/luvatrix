@@ -15,6 +15,11 @@ import threading
 import time
 from pathlib import Path
 
+from luvatrix_core.platform.ios.bundle_id import (
+    LEGACY_BUNDLE_ID,
+    ios_bundle_id,
+    sync_project_bundle_id,
+)
 from luvatrix_core.platform.package_sync import copy_package_tree_for_target
 from luvatrix_core.scaffold import resolve_native_project_dir
 
@@ -720,6 +725,8 @@ def _run_ios_simulator(
 
     ios_dir = _resolve_ios_project(app_dir, native_project_dir)
     derived_data_dir = ios_dir / ".build"
+    bundle_id = ios_bundle_id(app_dir)
+    _sync_project_bundle_id(ios_dir, bundle_id)
     packages_dir = _ios_packages_dir(ios_dir, "simulator")
     _ensure_ios_numpy_available(ios_dir, "simulator")
     _sync_luvatrix_packages(packages_dir)
@@ -798,7 +805,7 @@ def _run_ios_simulator(
 
     # Install and launch, streaming output to the terminal.
     subprocess.run(["xcrun", "simctl", "install", udid, str(app_path)], check=True)
-    print(f"[ios] launching com.luvatrix.app on {simulator_name} ({udid})")
+    print(f"[ios] launching {bundle_id} on {simulator_name} ({udid})")
     try:
         launch_env = os.environ.copy()
         launch_env["SIMCTL_CHILD_LUVATRIX_IOS_RENDER_SCALE"] = f"{render_scale:.6g}"
@@ -808,13 +815,20 @@ def _run_ios_simulator(
         launch_env["SIMCTL_CHILD_LUVATRIX_IOS_PRESENT_FPS"] = str(present_fps or target_fps or ios_fps_default)
         if os.environ.get("LUVATRIX_IOS_ENABLE_HDI") == "1":
             launch_env["SIMCTL_CHILD_LUVATRIX_IOS_ENABLE_HDI"] = "1"
-        subprocess.run(
-            ["xcrun", "simctl", "launch", "--console", udid, "com.luvatrix.app"],
-            check=True,
-            env=launch_env,
-        )
+        _launch_simulator_app(udid, bundle_id, launch_env)
     except KeyboardInterrupt:
-        subprocess.run(["xcrun", "simctl", "terminate", udid, "com.luvatrix.app"], capture_output=True)
+        subprocess.run(["xcrun", "simctl", "terminate", udid, bundle_id], capture_output=True)
+
+
+def _launch_simulator_app(udid: str, bundle_id: str, launch_env: dict[str, str]) -> None:
+    subprocess.run(
+        ["xcrun", "simctl", "launch", "--console", udid, bundle_id],
+        check=True,
+        env=launch_env,
+    )
+
+
+_sync_project_bundle_id = sync_project_bundle_id
 
 
 def _open_simulator_app(udid: str) -> bool:
@@ -1324,10 +1338,9 @@ def _describe_ios_mobileprovision_candidates(bundle_id: str) -> str:
     return "\n".join(lines) if lines else "  - none"
 
 
-def _write_ios_app_entitlements(app_path: Path, team_id: str, profile: dict | None = None) -> Path:
+def _write_ios_app_entitlements(app_path: Path, team_id: str, profile: dict | None = None, bundle_id: str = LEGACY_BUNDLE_ID) -> Path:
     import plistlib
 
-    bundle_id = "com.luvatrix.app"
     entitlements = dict((profile or {}).get("Entitlements", {}))
     if not entitlements:
         entitlements = {
@@ -1430,6 +1443,8 @@ def _run_ios_device(
 
     ios_dir = _resolve_ios_project(app_dir, native_project_dir)
     packages_dir = _ios_packages_dir(ios_dir, "device")
+    bundle_id = ios_bundle_id(app_dir)
+    _sync_project_bundle_id(ios_dir, bundle_id)
     _ensure_ios_numpy_available(ios_dir, "device")
 
     # Find the connected device before building. If CoreDevice cannot open the
@@ -1472,7 +1487,7 @@ def _run_ios_device(
         print("[ios] install failed; uninstalling existing app and retrying once…")
         subprocess.run(
             ["xcrun", "devicectl", "device", "uninstall", "app",
-             "--device", device_id, "com.luvatrix.app"],
+             "--device", device_id, bundle_id],
             capture_output=True,
         )
         subprocess.run(install_command, check=True)
@@ -1502,7 +1517,7 @@ def _run_ios_device(
             else:
                 print("[ios] could not determine local IP — use Console.app to see logs", flush=True)
 
-    print(f"[ios] launching com.luvatrix.app on {display_name}")
+    print(f"[ios] launching {bundle_id} on {display_name}")
     launch_ok = False
     launch_command = [
         "xcrun", "devicectl", "device", "process", "--timeout", "20", "launch",
@@ -1515,7 +1530,7 @@ def _run_ios_device(
         launch_env["LUVATRIX_MAC_LOG_PORT"] = str(udp_port)
     if launch_env:
         launch_command.extend(["--environment-variables", json.dumps(launch_env)])
-    launch_command.append("com.luvatrix.app")
+    launch_command.append(bundle_id)
     if import_probe:
         launch_command.append("--luvatrix-import-probe")
     try:
@@ -1567,7 +1582,7 @@ def _run_ios_device(
                 )
         if import_probe:
             time.sleep(3.0)
-            _copy_ios_import_probe_report(device_id, ios_dir / ".build-device")
+            _copy_ios_import_probe_report(device_id, ios_dir / ".build-device", bundle_id=bundle_id)
         launch_ok = True
         if log_thread is not None:
             log_thread.join()  # Block until stream exits or Ctrl+C
@@ -1576,7 +1591,7 @@ def _run_ios_device(
             log_proc.terminate()
         subprocess.run(
             ["xcrun", "devicectl", "device", "process", "terminate",
-             "--device", device_id, "--bundle-id", "com.luvatrix.app"],
+             "--device", device_id, "--bundle-id", bundle_id],
             capture_output=True,
         )
     finally:
@@ -1712,14 +1727,14 @@ def _get_mac_local_ip() -> str:
         return ""
 
 
-def _copy_ios_import_probe_report(device_id: str, tmp_dir: Path) -> None:
+def _copy_ios_import_probe_report(device_id: str, tmp_dir: Path, *, bundle_id: str = LEGACY_BUNDLE_ID) -> None:
     report_dst = tmp_dir / "luvatrix_import_probe.txt"
     result = subprocess.run(
         [
             "xcrun", "devicectl", "device", "copy", "from",
             "--device", device_id,
             "--domain-type", "appDataContainer",
-            "--domain-identifier", "com.luvatrix.app",
+            "--domain-identifier", bundle_id,
             "--source", "Documents/luvatrix_import_probe.txt",
             "--destination", str(report_dst),
         ],
