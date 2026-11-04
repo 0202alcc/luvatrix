@@ -1,0 +1,88 @@
+{
+ "pages": [
+  {
+   "path": "/assistant",
+   "title": "Nomic",
+   "frameId": "1:0",
+   "counts": {
+    "frames": 69,
+    "rectangles": 1,
+    "texts": 15,
+    "vectors": 22,
+    "images": 0,
+    "pseudos": 1
+   },
+   "skipped": {
+    "hidden": 0,
+    "zeroSize": 5,
+    "noLayout": 13,
+    "empty": 8
+   },
+   "unsupported": {},
+   "images": {
+    "downloaded": 0,
+    "failed": []
+   },
+   "PSEUDO_COUNT": 1
+  },
+  {
+   "path": "/drive",
+   "title": "Nomic",
+   "frameId": "2:0",
+   "counts": {
+    "frames": 94,
+    "rectangles": 3,
+    "texts": 13,
+    "vectors": 30,
+    "images": 0,
+    "pseudos": 1
+   },
+   "skipped": {
+    "hidden": 0,
+    "zeroSize": 5,
+    "noLayout": 41,
+    "empty": 13
+   },
+   "unsupported": {},
+   "images": {
+    "downloaded": 0,
+    "failed": []
+   },
+   "PSEUDO_COUNT": 1
+  },
+  {
+   "path": "/projects",
+   "title": "Nomic",
+   "frameId": "3:0",
+   "counts": {
+    "frames": 52,
+    "rectangles": 1,
+    "texts": 12,
+    "vectors": 20,
+    "images": 0,
+    "pseudos": 1
+   },
+   "skipped": {
+    "hidden": 0,
+    "zeroSize": 5,
+    "noLayout": 20,
+    "empty": 5
+   },
+   "unsupported": {},
+   "images": {
+    "downloaded": 0,
+    "failed": []
+   },
+   "PSEUDO_COUNT": 1
+  }
+ ],
+ "PSEUDO_COUNT": 3,
+ "images": {
+  "downloaded": 0,
+  "failed": []
+ },
+ "interactions": {
+  "mapped": 6,
+  "unmatched": []
+ }
+}

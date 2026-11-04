@@ -177,4 +177,24 @@ def test_main_cli_figma_ios_tour_passes_options_and_exits_with_the_tour_result(t
         native_project=Path("examples/figma_app/ios"),
         render_scale=2.0,
         timeout=120.0,
+        keep_open=False,
     )
+
+
+def test_main_cli_figma_ios_tour_forwards_keep_open(tmp_path: Path) -> None:
+    from main import main
+
+    tour = tmp_path / "tour.json"
+    tour.write_text('[{"capture": "start"}]', encoding="utf-8")
+    argv = [
+        "luvatrix", "figma", "ios-tour", "examples/nomic_app",
+        "--tour", str(tour), "--out", str(tmp_path / "shots"),
+        "--keep-open",
+    ]
+
+    with patch.object(sys, "argv", argv), patch("luvatrix_ui.figma.ios_tour.run_ios_tour", return_value=0) as run:
+        with pytest.raises(SystemExit) as exit_info:
+            main()
+
+    assert exit_info.value.code == 0
+    assert run.call_args.kwargs["keep_open"] is True

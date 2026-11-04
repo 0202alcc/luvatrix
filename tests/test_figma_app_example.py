@@ -50,12 +50,13 @@ def test_validates_for_ios_simulator_and_device() -> None:
         assert validate_app_install(APP_DIR, render=render).ok
 
 
-def test_design_is_a_four_screen_prototype_starting_at_welcome() -> None:
+def test_design_covers_every_prototype_feature_starting_at_welcome() -> None:
     doc = FigmaDocument.load(DESIGN)
 
-    assert [f.name for f in doc.frames] == ["Welcome", "Home", "Plant Detail", "Profile"]
+    assert [f.name for f in doc.frames] == ["Welcome", "Home", "Plant Detail", "Profile", "Water Sheet", "Gallery"]
     assert doc.frame(doc.start_frame_id).name == "Welcome"
     assert doc.frame_by_name("Home").scrolls_vertically
+    assert doc.frame_by_name("Gallery").scrolls_horizontally
     assert any(p.suffix == ".png" for p in (DESIGN.parent / "images").iterdir())
 
 
@@ -138,5 +139,17 @@ def test_example_tour_visits_every_screen_and_waters_the_plant(tmp_path: Path, m
             break
 
     assert status["state"] == "done", status
-    assert [frame for _, frame in captures] == ["Welcome", "Home", "Home", "Plant Detail", "Plant Detail", "Home", "Profile"]
+    assert [frame for _, frame in captures] == [
+        "Welcome",
+        "Home",
+        "Home",
+        "Plant Detail",
+        "Plant Detail",
+        "Plant Detail",
+        "Home",
+        "Home",
+        "Home",
+        "Gallery",
+        "Profile",
+    ]
     assert app.text("Water Label") == "Watered today"

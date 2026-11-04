@@ -183,6 +183,217 @@ def scrolling_file(transition: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
+def overlay_file(*, interaction: str | None = None, sheet_height: float = 120) -> dict[str, Any]:
+    """Home is a scrolling feed whose "Open Sheet" button opens a modal overlay.
+
+    `interaction` sets the destination frame's `overlayBackgroundInteraction`
+    (CLOSE_ON_CLICK_OUTSIDE dismisses on scrim taps; anything else blocks them).
+    """
+    open_action = [
+        {
+            "trigger": {"type": "ON_CLICK"},
+            "actions": [{"type": "NODE", "destinationId": "3:1", "navigation": "OVERLAY", "transition": None}],
+        }
+    ]
+    home = node(
+        "1:1",
+        "FRAME",
+        "Home",
+        0,
+        0,
+        100,
+        400,
+        fills=[solid(1, 1, 1)],
+        clipsContent=True,
+        overflowDirection="VERTICAL_SCROLLING",
+        children=[
+            node("1:2", "RECTANGLE", "Blocked Link", 0, 0, 100, 50, fills=[solid(0, 1, 0)], interactions=navigate("2:1")),
+            node("1:3", "RECTANGLE", "Open Sheet", 0, 150, 100, 30, fills=[solid(1, 0, 0)], interactions=open_action),
+            node("1:4", "RECTANGLE", "Tail", 0, 350, 100, 50, fills=[solid(1, 1, 0)]),
+        ],
+    )
+    other = node("2:1", "FRAME", "Other", 300, 0, 100, 200, fills=[solid(0, 0, 1)], children=[])
+    sheet_extra: dict[str, Any] = {}
+    if interaction is not None:
+        sheet_extra["overlayBackgroundInteraction"] = interaction
+        sheet_extra["overlayBackground"] = {"color": {"r": 0, "g": 0, "b": 0, "a": 0.5}}
+    sheet = node(
+        "3:1",
+        "FRAME",
+        "Sheet",
+        600,
+        0,
+        100,
+        sheet_height,
+        fills=[solid(0, 0, 1)],
+        clipsContent=True,
+        children=[
+            node("3:2", "RECTANGLE", "Close", 600, 0, 100, 30, fills=[solid(1, 1, 0)], interactions=back()),
+        ],
+        **sheet_extra,
+    )
+    return {
+        "name": "Overlays",
+        "document": {
+            "id": "0:0",
+            "type": "DOCUMENT",
+            "children": [
+                {
+                    "id": "0:1",
+                    "type": "CANVAS",
+                    "name": "Page",
+                    "backgroundColor": {"r": 0.9, "g": 0.9, "b": 0.9, "a": 1},
+                    "flowStartingPoints": [{"nodeId": "1:1", "name": "Flow 1"}],
+                    "children": [sheet, other, home],
+                }
+            ],
+        },
+    }
+
+
+def smart_animate_file() -> dict[str, Any]:
+    """Two screens whose "Card" layer moves and grows between them.
+
+    The Card carries a SMART_ANIMATE link, and "Static" sits at the same
+    position on both screens so tweening can be told apart from a crossfade.
+    """
+    transition = {"type": "SMART_ANIMATE", "duration": 0.2, "easing": {"type": "LINEAR"}}
+    link = [{"trigger": {"type": "ON_CLICK"}, "actions": [{"type": "NODE", "destinationId": "2:1", "navigation": "NAVIGATE", "transition": transition}]}]
+    source = node(
+        "1:1",
+        "FRAME",
+        "A",
+        0,
+        0,
+        100,
+        100,
+        fills=[solid(1, 1, 1)],
+        children=[
+            node("1:2", "RECTANGLE", "Card", 0, 0, 20, 20, fills=[solid(1, 0, 0)], interactions=link),
+            node("1:3", "RECTANGLE", "Static", 60, 0, 20, 20, fills=[solid(0, 0, 1)]),
+        ],
+    )
+    target = node(
+        "2:1",
+        "FRAME",
+        "B",
+        200,
+        0,
+        100,
+        100,
+        fills=[solid(1, 1, 1)],
+        children=[
+            node("2:2", "RECTANGLE", "Card", 260, 60, 40, 40, fills=[solid(1, 0, 0)]),
+            node("2:3", "RECTANGLE", "Static", 260, 0, 20, 20, fills=[solid(0, 0, 1)]),
+        ],
+    )
+    return {
+        "name": "Smart Animate",
+        "document": {
+            "id": "0:0",
+            "type": "DOCUMENT",
+            "children": [
+                {
+                    "id": "0:1",
+                    "type": "CANVAS",
+                    "name": "Page",
+                    "children": [source, target],
+                }
+            ],
+        },
+    }
+
+
+def variant_file() -> dict[str, Any]:
+    """A component set with two variants plus an instance that switches between them.
+
+    The instance carries a CHANGE_TO interaction to the "State=Wet" variant and
+    carries a copy of the dry variant's subtree, mirroring how Figma REST
+    materializes instance children.
+    """
+    dry_child = node("5:3", "RECTANGLE", "Fill", 600, 0, 40, 40, fills=[solid(1, 0, 0)], relativeTransform=[[1, 0, 0], [0, 1, 0]], size={"x": 40, "y": 40})
+    wet_child = node("5:4", "RECTANGLE", "Fill", 600, 60, 40, 40, fills=[solid(0, 1, 0)], relativeTransform=[[1, 0, 0], [0, 1, 0]], size={"x": 40, "y": 40})
+    component_set = node(
+        "5:0",
+        "COMPONENT_SET",
+        "Moisture",
+        600,
+        0,
+        100,
+        100,
+        children=[
+            node("5:1", "COMPONENT", "State=Dry", 600, 0, 40, 40, children=[dry_child]),
+            node("5:2", "COMPONENT", "State=Wet", 600, 60, 40, 40, children=[wet_child]),
+        ],
+    )
+    instance = node(
+        "4:2",
+        "INSTANCE",
+        "Moisture Badge",
+        20,
+        20,
+        40,
+        40,
+        componentId="5:1",
+        interactions=[{"trigger": {"type": "ON_CLICK"}, "actions": [{"type": "CHANGE_TO", "destinationId": "5:2"}]}],
+        children=[node("4:4", "RECTANGLE", "Fill", 20, 20, 40, 40, fills=[solid(1, 0, 0)])],
+    )
+    frame = node("4:1", "FRAME", "Detail", 0, 0, 100, 100, fills=[solid(1, 1, 1)], children=[instance])
+    return {
+        "name": "Variants",
+        "document": {
+            "id": "0:0",
+            "type": "DOCUMENT",
+            "children": [
+                {
+                    "id": "0:1",
+                    "type": "CANVAS",
+                    "name": "Page",
+                    "children": [component_set, frame],
+                }
+            ],
+        },
+    }
+
+
+def horizontal_file() -> dict[str, Any]:
+    """A 400x100 horizontal strip shown on a 100x200 device, with a pinned badge.
+
+    The strip is 400 design units wide but only 50 are visible at once, so it
+    scrolls horizontally by drag or wheel while its fixed child stays put.
+    """
+    link = navigate("5:1")
+    strip = node(
+        "4:1",
+        "FRAME",
+        "Strip",
+        0,
+        0,
+        400,
+        100,
+        fills=[solid(1, 1, 1)],
+        clipsContent=True,
+        overflowDirection="HORIZONTAL_SCROLLING",
+        numberOfFixedChildren=1,
+        children=[
+            node("4:2", "RECTANGLE", "Start", 0, 0, 100, 100, fills=[solid(1, 0, 0)]),
+            node("4:3", "RECTANGLE", "Mid Link", 100, 0, 100, 100, fills=[solid(0, 1, 0)], interactions=link),
+            node("4:4", "RECTANGLE", "End", 200, 0, 100, 100, fills=[solid(0, 0, 1)]),
+            node("4:8", "RECTANGLE", "Far", 300, 0, 100, 100, fills=[solid(1, 0, 1)]),
+            node("4:9", "RECTANGLE", "Badge", 0, 25, 50, 50, fills=[solid(1, 1, 0)]),
+        ],
+    )
+    other = node("5:1", "FRAME", "Other", 500, 0, 100, 200, fills=[solid(0, 0, 1)], children=[])
+    return {
+        "name": "Horizontal",
+        "document": {
+            "id": "0:0",
+            "type": "DOCUMENT",
+            "children": [{"id": "0:1", "type": "CANVAS", "name": "Page", "children": [strip, other]}],
+        },
+    }
+
+
 def single_frame(children: list[dict[str, Any]], *, w: float = 100, h: float = 100, **frame_extra: Any) -> dict[str, Any]:
     frame = node("9:0", "FRAME", "Frame", 0, 0, w, h, children=children, **frame_extra)
     frame.setdefault("fills", [solid(1, 1, 1)])

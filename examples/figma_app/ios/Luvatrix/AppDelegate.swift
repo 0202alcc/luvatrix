@@ -244,6 +244,24 @@ except BaseException as e:
     }
 }
 
+private func callPythonSetUserInterfaceStyle(_ style: UIUserInterfaceStyle) {
+    let gstate = LuvatrixPyGILStateEnsure()
+    defer { LuvatrixPyGILStateRelease(gstate) }
+
+    let script = """
+try:
+    from luvatrix_core.platform.ios.appearance import set_user_interface_style
+    set_user_interface_style(\(style.rawValue))
+except BaseException as e:
+    import sys, traceback
+    print("PYTHON ERROR in iOS appearance bridge (" + type(e).__name__ + "):", flush=True)
+    traceback.print_exc(file=sys.stdout)
+"""
+    if LuvatrixPyRunSimpleString(script) != 0 {
+        LuvatrixPyErrPrint()
+    }
+}
+
 private func callPythonRestoreMetalLayerAfterForeground() {
     let gstate = LuvatrixPyGILStateEnsure()
     defer { LuvatrixPyGILStateRelease(gstate) }
@@ -445,6 +463,13 @@ final class LuvatrixTouchCaptureView: UIView {
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         emit(touches, phase: "cancel")
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if traitCollection.userInterfaceStyle != previousTraitCollection?.userInterfaceStyle {
+            callPythonSetUserInterfaceStyle(traitCollection.userInterfaceStyle)
+        }
     }
 }
 

@@ -17,11 +17,12 @@ from .geometry import (
     Shape,
     flatten,
     intersect,
+    dashed_polyline_coverage,
     path_shape_from_geometry,
     polyline_coverage,
     union,
 )
-from .paint import ImageCache, paint_field, visible_paints
+from .paint import NON_NORMAL_BLEND_MODES, ImageCache, blend_composite, paint_field, visible_paints
 from .text import FontLibrary, text_coverages
 
 BOX_TYPES = FRAME_TYPES | {"RECTANGLE", "SECTION"}
@@ -78,13 +79,22 @@ def _arc_is_full(node: dict[str, Any]) -> bool:
 
 
 class FigmaRenderer:
-    def __init__(self, doc: FigmaDocument, *, font_dirs: Iterable[str] = (), fonts: FontLibrary | None = None) -> None:
+    def __init__(
+        self,
+        doc: FigmaDocument,
+        *,
+        font_dirs: Iterable[str] = (),
+        fonts: FontLibrary | None = None,
+        variant_overrides: dict[str, str] | None = None,
+    ) -> None:
         self.doc = doc
         dirs = list(font_dirs)
         if doc.base_dir is not None:
             dirs.append(str(doc.base_dir / "fonts"))
         self.fonts = fonts or FontLibrary(dirs)
         self.images = ImageCache(doc.image_path)
+        self.variant_overrides: dict[str, str] = variant_overrides if variant_overrides is not None else {}
+        self._backdrops: list[tuple[Coverage, float]] | None = None
 
     def render(
         self,
@@ -95,13 +105,18 @@ class FigmaRenderer:
         skip_ids: Iterable[str] = (),
         only_ids: Iterable[str] | None = None,
         transparent: bool = False,
+        backdrops: list[tuple[Coverage, float]] | None = None,
     ) -> np.ndarray:
         """Rasterize a frame to (H, W, 4) uint8 RGBA.
 
         `skip_ids` drops those subtrees; `only_ids` draws just those subtrees (the
         frame's own fills included only if its id is listed). With `transparent`
         the result keeps straight alpha instead of being flattened onto a background.
+        When a `backdrops` list is given, BACKGROUND_BLUR effects are appended to it
+        as (coverage, radius in pixels) instead of blurring this canvas, so a caller
+        compositing the result over other content can blur that content instead.
         """
+        self._backdrops = backdrops
         frame = self.doc.frame(frame_id)
         width = max(1, int(round(frame.width * scale)))
         height = max(1, int(round(frame.height * scale)))
@@ -135,6 +150,7 @@ class FigmaRenderer:
     ) -> None:
         if str(node.get("id")) in self._skip:
             return
+        node = self._variant_node(node)
         if clip.rect[2] <= clip.rect[0] or clip.rect[3] <= clip.rect[1]:
             return
         opacity = float(node.get("opacity", 1.0))
@@ -147,16 +163,42 @@ class FigmaRenderer:
         effects = [e for e in node.get("effects") or () if isinstance(e, dict) and e.get("visible", True) is not False]
         has_fill = bool(visible_paints(node.get("fills")))
         content_shadow = bool(children) and not has_fill and any(e.get("type") == "DROP_SHADOW" for e in effects)
-        if children and (opacity < 1.0 or content_shadow):
+        blend = str(node.get("blendMode", "NORMAL")).upper()
+        if blend == "PASS_THROUGH":
+            blend = "NORMAL"
+        layer_blur = next((e for e in effects if e.get("type") == "LAYER_BLUR"), None)
+        if layer_blur is not None:
             layer = np.zeros_like(canvas)
-            self._draw_contents(node, children, tf, container, clip, layer, frame, effects, included, opacity=1.0, shadow_from_layer=content_shadow)
+            self._draw_contents(node, children, tf, container, clip, layer, frame, effects, included, opacity=1.0, shadow_from_layer=content_shadow, blend=blend)
+            if content_shadow:
+                for effect in effects:
+                    if effect.get("type") == "DROP_SHADOW":
+                        self._drop_shadow(layer, _alpha_coverage(layer, clip.rect), effect, self._root @ tf, clip)
+            radius = float(layer_blur.get("radius", 0.0) or 0.0) * (self._root @ tf).mean_scale
+            self._layer_blur(canvas, layer, clip.rect, radius, opacity, blend)
+            return
+        if children and (opacity < 1.0 or content_shadow or blend in NON_NORMAL_BLEND_MODES):
+            layer = np.zeros_like(canvas)
+            self._draw_contents(node, children, tf, container, clip, layer, frame, effects, included, opacity=1.0, shadow_from_layer=content_shadow, blend=blend)
             if content_shadow:
                 for effect in effects:
                     if effect.get("type") == "DROP_SHADOW":
                         self._drop_shadow(canvas, _alpha_coverage(layer, clip.rect), effect, self._root @ tf, clip)
-            _composite_layer(canvas, layer, clip.rect, opacity)
+            _composite_layer(canvas, layer, clip.rect, opacity, blend)
             return
-        self._draw_contents(node, children, tf, container, clip, canvas, frame, effects, included, opacity=opacity, shadow_from_layer=False)
+        self._draw_contents(node, children, tf, container, clip, canvas, frame, effects, included, opacity=opacity, shadow_from_layer=False, blend=blend)
+
+    def _variant_node(self, node: dict[str, Any]) -> dict[str, Any]:
+        """Substitute a component instance with its overridden variant, if any."""
+        if node.get("type") != "INSTANCE" or not self.variant_overrides:
+            return node
+        variant = self.doc.node_or_none(self.variant_overrides.get(str(node.get("id")), ""))
+        if variant is None:
+            return node
+        effective = dict(variant)
+        if "opacity" not in effective and "opacity" in node:
+            effective["opacity"] = node["opacity"]
+        return effective
 
     def _draw_contents(
         self,
@@ -172,13 +214,14 @@ class FigmaRenderer:
         *,
         opacity: float,
         shadow_from_layer: bool,
+        blend: str = "NORMAL",
     ) -> None:
         local, tf = tf, self._root @ tf
         shape = self._shape(node)
         size = node_size(node)
         node_type = node.get("type")
         if included:
-            self._draw_self(node, shape, tf, size, clip, target, effects, opacity=opacity, shadow_from_layer=shadow_from_layer)
+            self._draw_self(node, shape, tf, size, clip, target, effects, opacity=opacity, shadow_from_layer=shadow_from_layer, blend=blend)
         child_container = container if node_type in TRANSPARENT_CONTAINERS else local
         child_clip = clip
         if node.get("clipsContent") and shape is not None:
@@ -196,7 +239,7 @@ class FigmaRenderer:
             child_included = included or (self._only is not None and str(child.get("id")) in self._only)
             self._draw_node(child, child_tf, child_container, active, target, frame, child_included)
         if included and shape is not None and node_type != "TEXT":
-            self._strokes(node, shape, tf, size, clip, target, opacity)
+            self._strokes(node, shape, tf, size, clip, target, opacity, blend)
 
     def _draw_self(
         self,
@@ -210,9 +253,10 @@ class FigmaRenderer:
         *,
         opacity: float,
         shadow_from_layer: bool,
+        blend: str = "NORMAL",
     ) -> None:
         if node.get("type") == "TEXT":
-            self._draw_text(node, tf, size, clip, target, effects, opacity)
+            self._draw_text(node, tf, size, clip, target, effects, opacity, blend)
             return
         if shape is None:
             return
@@ -225,8 +269,13 @@ class FigmaRenderer:
             return
         for effect in effects:
             if effect.get("type") == "BACKGROUND_BLUR":
-                _background_blur(target, clip.restrict(fill_cov), float(effect.get("radius", 0.0)) * tf.mean_scale)
-        self._fill(target, clip.restrict(fill_cov), node.get("fills"), tf, size, opacity)
+                radius_px = float(effect.get("radius", 0.0)) * tf.mean_scale
+                region = clip.restrict(fill_cov)
+                if self._backdrops is None:
+                    _background_blur(target, region, radius_px)
+                elif region is not None and radius_px > 0.5:
+                    self._backdrops.append((region, radius_px))
+        self._fill(target, clip.restrict(fill_cov), node.get("fills"), tf, size, opacity, blend)
         for effect in effects:
             if effect.get("type") == "INNER_SHADOW":
                 self._inner_shadow(target, shape, fill_cov, effect, tf, clip, opacity)
@@ -252,14 +301,24 @@ class FigmaRenderer:
             return RoundedRect(width, height)
         return None
 
-    def _fill(self, target: np.ndarray, cov: Coverage | None, paints: Any, tf: Affine, size: tuple[float, float], opacity: float) -> None:
+    def _fill(
+        self,
+        target: np.ndarray,
+        cov: Coverage | None,
+        paints: Any,
+        tf: Affine,
+        size: tuple[float, float],
+        opacity: float,
+        blend: str = "NORMAL",
+    ) -> None:
         if cov is None:
             return
         rect = (cov.x0, cov.y0, cov.x1, cov.y1)
         for paint in visible_paints(paints):
             field = paint_field(paint, rect, tf, size, self.images, opacity=opacity)
             if field is not None:
-                _composite(target, cov, field)
+                paint_mode = str(paint.get("blendMode", "NORMAL")).upper()
+                _composite(target, cov, field, paint_mode if paint_mode in NON_NORMAL_BLEND_MODES else blend)
 
     def _strokes(
         self,
@@ -270,6 +329,7 @@ class FigmaRenderer:
         clip: Clip,
         target: np.ndarray,
         opacity: float,
+        blend: str = "NORMAL",
     ) -> None:
         paints = visible_paints(node.get("strokes"))
         weight = float(node.get("strokeWeight", 1.0) or 0.0)
@@ -278,7 +338,15 @@ class FigmaRenderer:
         cov: Coverage | None
         geometry = node.get("strokeGeometry")
         per_side = node.get("individualStrokeWeights")
-        if geometry:
+        dashes = node.get("strokeDashes") or node.get("dashPattern")
+        if dashes:
+            pattern = [float(d) * tf.mean_scale for d in dashes if float(d) > 0]
+            default = "INSIDE" if node.get("type") in BOX_TYPES | {"ELLIPSE"} else "CENTER"
+            align = str(node.get("strokeAlign", default))
+            w = weight * tf.mean_scale
+            offset = {"INSIDE": -w / 2, "OUTSIDE": w / 2}.get(align, 0.0)
+            cov = dashed_polyline_coverage(self._stroke_polylines(shape, tf, offset), w, pattern, clip.rect)
+        elif geometry:
             stroke_shape = path_shape_from_geometry(geometry)
             cov = stroke_shape.coverage(tf, clip.rect) if stroke_shape is not None else None
         elif isinstance(per_side, dict) and isinstance(shape, RoundedRect):
@@ -302,7 +370,7 @@ class FigmaRenderer:
         else:
             cov = None
         if cov is not None:
-            self._fill(target, clip.restrict(cov), paints, tf, size, opacity)
+            self._fill(target, clip.restrict(cov), paints, tf, size, opacity, blend)
 
     def _side_strokes(self, sides: dict[str, Any], size: tuple[float, float], tf: Affine, clip: Clip) -> Coverage | None:
         w, h = size
@@ -313,6 +381,29 @@ class FigmaRenderer:
             if sw > 0 and sh > 0:
                 merged = union(merged, RoundedRect(sw, sh).coverage(tf @ Affine.translate(x, y), clip.rect))
         return merged
+
+    def _stroke_polylines(self, shape: Shape, tf: Affine, offset_px: float = 0.0) -> list[np.ndarray]:
+        """Device-space outline polylines used for dash patterns.
+
+        Figma dashes follow the shape's centerline; SDF bands have no arc-length
+        parameterization, so dashed strokes are drawn from the flattened outline
+        (closed for box/ellipse shapes, offset per strokeAlign) via polyline
+        rasterization instead of the SDF band.
+        """
+        if isinstance(shape, (RoundedRect, Ellipse)):
+            polys = shape._offset_polygons(tf, offset_px) if offset_px else shape.polygons(tf)
+            return [np.vstack([poly, poly[:1]]) for poly in polys]
+        if isinstance(shape, _LineShape):
+            return [tf.apply_points(np.array([[0.0, 0.0], [shape.width, 0.0]]))]
+        if isinstance(shape, PathShape):
+            polys: list[np.ndarray] = []
+            for subpaths, _rule in shape.paths:
+                for sub, poly in zip(subpaths, _flatten_each(subpaths, tf)):
+                    if sub and sub[-1][0] == "Z":
+                        poly = np.vstack([poly, poly[:1]])
+                    polys.append(poly)
+            return polys
+        return [poly for poly in shape.polygons(tf) if len(poly) >= 2]
 
     # ── text ─────────────────────────────────────────────────────────────────
 
@@ -325,6 +416,7 @@ class FigmaRenderer:
         target: np.ndarray,
         effects: list[dict[str, Any]],
         opacity: float,
+        blend: str = "NORMAL",
     ) -> None:
         pieces = text_coverages(node, tf, size, clip.rect, self.fonts)
         for effect in effects:
@@ -332,9 +424,28 @@ class FigmaRenderer:
                 for cov, _fills in pieces:
                     self._drop_shadow(target, cov, effect, tf, clip)
         for cov, fills in pieces:
-            self._fill(target, clip.restrict(cov), list(fills), tf, size, opacity)
+            self._fill(target, clip.restrict(cov), list(fills), tf, size, opacity, blend)
 
     # ── effects ──────────────────────────────────────────────────────────────
+
+    def _layer_blur(
+        self, target: np.ndarray, layer: np.ndarray, rect: Rect, radius_px: float, opacity: float, blend: str = "NORMAL"
+    ) -> None:
+        """Blur a node's own rendered layer and composite it back over the backdrop."""
+        x0, y0, x1, y1 = rect
+        region = layer[y0:y1, x0:x1]
+        alpha = region[..., 3]
+        if not alpha.any():
+            return
+        ys, xs = np.nonzero(alpha)
+        pad = int(math.ceil(radius_px * 1.5)) + 2
+        ry0, ry1 = max(0, int(ys.min()) - pad), min(region.shape[0], int(ys.max()) + 1 + pad)
+        rx0, rx1 = max(0, int(xs.min()) - pad), min(region.shape[1], int(xs.max()) + 1 + pad)
+        sub = _blur_region(np.ascontiguousarray(region[ry0:ry1, rx0:rx1]), radius_px)
+        if opacity < 1.0:
+            sub = sub * opacity
+        dst = target[y0 + ry0 : y0 + ry1, x0 + rx0 : x0 + rx1]
+        blend_composite(dst, sub, blend)
 
     def _shadow_coverage(self, shape: Shape, tf: Affine, effect: dict[str, Any], clip: Clip) -> Coverage | None:
         spread = float(effect.get("spread", 0.0) or 0.0) * tf.mean_scale
@@ -422,7 +533,7 @@ def _flatten_each(subpaths: list, tf: Affine) -> list[np.ndarray]:
     return out
 
 
-def _composite(target: np.ndarray, cov: Coverage, field: np.ndarray) -> None:
+def _composite(target: np.ndarray, cov: Coverage, field: np.ndarray, mode: str = "NORMAL") -> None:
     region = target[cov.y0 : cov.y1, cov.x0 : cov.x1]
     if region.size == 0:
         return
@@ -431,16 +542,13 @@ def _composite(target: np.ndarray, cov: Coverage, field: np.ndarray) -> None:
     if field.shape[0] != 1:
         field = field[:h, :w]
     src = field * mask
-    region *= 1.0 - src[..., 3:4]
-    region += src
+    blend_composite(region, src, mode)
 
 
-def _composite_layer(target: np.ndarray, layer: np.ndarray, rect: Rect, opacity: float) -> None:
+def _composite_layer(target: np.ndarray, layer: np.ndarray, rect: Rect, opacity: float, mode: str = "NORMAL") -> None:
     x0, y0, x1, y1 = rect
     src = layer[y0:y1, x0:x1] * opacity
-    dst = target[y0:y1, x0:x1]
-    dst *= 1.0 - src[..., 3:4]
-    dst += src
+    blend_composite(target[y0:y1, x0:x1], src, mode)
 
 
 def _alpha_coverage(layer: np.ndarray, rect: Rect) -> Coverage | None:
@@ -496,6 +604,49 @@ def _background_blur(target: np.ndarray, cov: Coverage | None, radius_px: float)
     blurred = np.stack([gaussian_blur(region[..., ch], radius_px / 2) for ch in range(4)], axis=-1)
     mask = cov.mask[: region.shape[0], : region.shape[1], None]
     region[...] = region * (1 - mask) + blurred * mask
+
+
+def backdrop_blur(image: np.ndarray, rect: Rect, radius_px: float) -> np.ndarray:
+    """Blurred RGB (float32) of `image` inside `rect`, sampling a margin around it.
+
+    Wide blurs run on a block-averaged copy and are upsampled bilinearly: a
+    Gaussian of sigma >= 3 low-res pixels has no detail the downsample loses,
+    and it keeps per-frame glass blurs cheap at 3x device scale.
+    """
+    x0, y0, x1, y1 = rect
+    sigma = radius_px / 2.0
+    pad = int(math.ceil(sigma * 3))
+    h, w = image.shape[:2]
+    sx0, sy0, sx1, sy1 = max(0, x0 - pad), max(0, y0 - pad), min(w, x1 + pad), min(h, y1 + pad)
+    src = image[sy0:sy1, sx0:sx1, :3].astype(np.float32)
+    factor = max(1, min(8, int(sigma // 3)))
+    if factor == 1:
+        blurred = np.stack([gaussian_blur(src[..., c], sigma) for c in range(3)], axis=-1)
+    else:
+        sh, sw = src.shape[:2]
+        padded = np.pad(src, ((0, (-sh) % factor), (0, (-sw) % factor), (0, 0)), mode="edge")
+        small = padded.reshape(padded.shape[0] // factor, factor, padded.shape[1] // factor, factor, 3).mean(axis=(1, 3))
+        small = np.stack([gaussian_blur(small[..., c], sigma / factor) for c in range(3)], axis=-1)
+        blurred = _upsample_axis(_upsample_axis(small, factor, 0), factor, 1)[:sh, :sw]
+    return blurred[y0 - sy0 : y1 - sy0, x0 - sx0 : x1 - sx0]
+
+
+def _upsample_axis(arr: np.ndarray, factor: int, axis: int) -> np.ndarray:
+    n = arr.shape[axis]
+    pos = np.clip((np.arange(n * factor) + 0.5) / factor - 0.5, 0.0, n - 1)
+    lo = np.floor(pos).astype(np.intp)
+    hi = np.minimum(lo + 1, n - 1)
+    shape = [1] * arr.ndim
+    shape[axis] = -1
+    frac = (pos - lo).astype(np.float32).reshape(shape)
+    return np.take(arr, lo, axis=axis) * (1.0 - frac) + np.take(arr, hi, axis=axis) * frac
+
+
+def _blur_region(region: np.ndarray, radius_px: float) -> np.ndarray:
+    if radius_px <= 0.5:
+        return region
+    sigma = radius_px / 2.0
+    return np.stack([gaussian_blur(np.ascontiguousarray(region[..., ch]), sigma) for ch in range(4)], axis=-1)
 
 
 def render_frame(

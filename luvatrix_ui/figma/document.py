@@ -9,6 +9,9 @@ from typing import Any
 from .geometry import Affine
 
 FRAME_TYPES = frozenset({"FRAME", "COMPONENT", "COMPONENT_SET", "INSTANCE"})
+# Frames a prototype can start from or navigate between; component definitions
+# live on the canvas too but are not screens.
+TOP_FRAME_TYPES = frozenset({"FRAME", "INSTANCE"})
 # Groups and boolean operations do not establish a coordinate space: their
 # children's relativeTransform is relative to the nearest frame-like ancestor.
 TRANSPARENT_CONTAINERS = frozenset({"GROUP", "BOOLEAN_OPERATION"})
@@ -26,6 +29,17 @@ class NavigateAction:
 
 
 @dataclass(frozen=True)
+class OverlayAction:
+    """Open the destination frame as a modal layer over the current screen."""
+
+    destination_id: str
+    position: str = "CENTER"
+    background: tuple[float, float, float, float] | None = None
+    dismiss_on_click_outside: bool = False
+    transition: dict[str, Any] | None = field(default=None, compare=False)
+
+
+@dataclass(frozen=True)
 class BackAction:
     pass
 
@@ -35,7 +49,14 @@ class UrlAction:
     url: str
 
 
-Action = NavigateAction | BackAction | UrlAction
+@dataclass(frozen=True)
+class VariantAction:
+    """Swap a component instance on the current frame to another variant."""
+
+    destination_id: str
+
+
+Action = NavigateAction | OverlayAction | VariantAction | BackAction | UrlAction
 
 
 @dataclass(frozen=True)
@@ -48,6 +69,7 @@ class Frame:
     width: float
     height: float
     scrolls_vertically: bool = False
+    scrolls_horizontally: bool = False
 
 
 @dataclass(frozen=True)
@@ -111,6 +133,7 @@ class FigmaDocument:
         self.base_dir = Path(base_dir) if base_dir is not None else None
         self._nodes: dict[str, dict[str, Any]] = {}
         self._owner_frame: dict[str, str] = {}
+        self._parent: dict[str, str] = {}
         self._hotspots: dict[str, list[Hotspot]] = {}
         self.background_rgba: tuple[float, float, float, float] | None = None
         flow_ids: list[str] = []
@@ -166,14 +189,18 @@ class FigmaDocument:
         for child in root.get("children") or ():
             if not isinstance(child, dict) or not is_visible(child):
                 continue
-            if child.get("type") in FRAME_TYPES:
+            kind = child.get("type")
+            if kind in TOP_FRAME_TYPES:
                 yield child
-            elif child.get("type") in {"CANVAS", "DOCUMENT", "SECTION"}:
+            elif kind in {"COMPONENT", "COMPONENT_SET"}:
+                self._index_tree(child, None)
+            elif kind in {"CANVAS", "DOCUMENT", "SECTION"}:
                 yield from self._frames_under(child, flow_ids)
 
     def _add_frame(self, node: dict[str, Any]) -> None:
         bbox = node.get("absoluteBoundingBox") or {}
         width, height = node_size(node)
+        overflow = str(node.get("overflowDirection", "NONE")).upper()
         frame = Frame(
             id=str(node.get("id", f"frame-{len(self.frames)}")),
             name=str(node.get("name", "")),
@@ -182,17 +209,28 @@ class FigmaDocument:
             origin_y=float(bbox.get("y", 0.0)),
             width=max(1.0, width),
             height=max(1.0, height),
-            scrolls_vertically=str(node.get("overflowDirection", "NONE")) in {"VERTICAL_SCROLLING", "HORIZONTAL_AND_VERTICAL_SCROLLING"},
+            scrolls_vertically=overflow in {"VERTICAL_SCROLLING", "HORIZONTAL_AND_VERTICAL_SCROLLING", "TOP_BOTTOM_SCROLLING"},
+            scrolls_horizontally=overflow in {"HORIZONTAL_SCROLLING", "HORIZONTAL_AND_VERTICAL_SCROLLING", "LEFT_RIGHT_SCROLLING"},
         )
         self.frames.append(frame)
-        stack = [node]
+        self._index_tree(node, frame.id)
+
+    def _index_tree(self, root: dict[str, Any], owner: str | None) -> None:
+        stack = [root]
         while stack:
             current = stack.pop()
             node_id = current.get("id")
             if node_id is not None:
                 self._nodes[str(node_id)] = current
-                self._owner_frame[str(node_id)] = frame.id
-            stack.extend(child for child in current.get("children") or () if isinstance(child, dict))
+                if owner is not None:
+                    self._owner_frame[str(node_id)] = owner
+            for child in current.get("children") or ():
+                if not isinstance(child, dict):
+                    continue
+                child_id = child.get("id")
+                if node_id is not None and child_id is not None:
+                    self._parent[str(child_id)] = str(node_id)
+                stack.append(child)
 
     def _resolve_frame(self, key: str) -> Frame:
         if key in self._frames_by_id:
@@ -220,6 +258,40 @@ class FigmaDocument:
 
     def node(self, node_id: str) -> dict[str, Any]:
         return self._nodes[node_id]
+
+    def node_or_none(self, node_id: str) -> dict[str, Any] | None:
+        return self._nodes.get(node_id)
+
+    def component_set_of(self, node_id: str) -> str | None:
+        """Id of the COMPONENT_SET enclosing `node_id`, if any."""
+        current: str | None = node_id
+        while current is not None:
+            node = self._nodes.get(current)
+            if node is not None and node.get("type") == "COMPONENT_SET":
+                return current
+            current = self._parent.get(current)
+        return None
+
+    def instances_of_set(self, frame_id: str, set_id: str) -> list[dict[str, Any]]:
+        """INSTANCE nodes on `frame_id` whose component lives in the given set."""
+        members = self._component_ids_under(set_id)
+        if not members:
+            return []
+        return [
+            node
+            for node, _tf in walk(self.frame(frame_id))
+            if node.get("type") == "INSTANCE" and str(node.get("componentId", "")) in members
+        ]
+
+    def _component_ids_under(self, set_id: str) -> frozenset[str]:
+        out: set[str] = set()
+        stack = [self._nodes[set_id]] if set_id in self._nodes else []
+        while stack:
+            current = stack.pop()
+            if current.get("type") == "COMPONENT" and current.get("id") is not None:
+                out.add(str(current["id"]))
+            stack.extend(c for c in current.get("children") or () if isinstance(c, dict))
+        return frozenset(out)
 
     def find_nodes(self, key: str, *, node_type: str | None = None) -> list[dict[str, Any]]:
         """Nodes whose id or name equals `key`, optionally of one Figma node type."""
@@ -322,9 +394,38 @@ class FigmaDocument:
         if kind == "URL" and action.get("url"):
             return UrlAction(str(action["url"]))
         if kind == "NODE" and action.get("destinationId"):
-            if action.get("navigation", "NAVIGATE") in {"NAVIGATE", "SWAP", "OVERLAY"}:
+            navigation = action.get("navigation", "NAVIGATE")
+            if navigation in {"NAVIGATE", "SWAP"}:
                 return self._navigate_to(str(action["destinationId"]), action.get("transition"))
+            if navigation == "OVERLAY":
+                return self._overlay_to(str(action["destinationId"]), action.get("transition"), action.get("overlay"))
+        if kind == "CHANGE_TO" and action.get("destinationId"):
+            return VariantAction(str(action["destinationId"]))
         return None
+
+    def _overlay_to(
+        self, node_id: str, transition: dict[str, Any] | None, overlay: Any
+    ) -> OverlayAction | None:
+        frame_id = self._owner_frame.get(node_id)
+        if frame_id is None:
+            return None
+        spec = overlay if isinstance(overlay, dict) else {}
+        node = self._frames_by_id[frame_id].node
+        position = str(node.get("overlayPositionType") or spec.get("positionType") or "CENTER")
+        background_spec = node.get("overlayBackground") or spec.get("background") or {}
+        color = background_spec.get("color") if isinstance(background_spec, dict) else None
+        background = (
+            tuple(float(color.get(k, 1.0 if k == "a" else 0.0)) for k in "rgba") if isinstance(color, dict) else None
+        )
+        interaction = str(node.get("overlayBackgroundInteraction") or spec.get("backgroundInteraction") or "NONE")
+        dismiss = interaction.upper() == "CLOSE_ON_CLICK_OUTSIDE"
+        return OverlayAction(
+            frame_id,
+            position=position.upper(),
+            background=background,
+            dismiss_on_click_outside=dismiss,
+            transition=transition,
+        )
 
     def _navigate_to(self, node_id: str, transition: dict[str, Any] | None = None) -> NavigateAction | None:
         frame_id = self._owner_frame.get(node_id)

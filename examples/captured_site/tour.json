@@ -1,0 +1,9 @@
+[
+  {"capture": "home"},
+  {"tap": "Projects Link"},
+  {"capture": "projects"},
+  {"tap": "Home Link"},
+  {"capture": "home_again"},
+  {"tap": "Customers Link"},
+  {"capture": "customers"}
+]

@@ -32,6 +32,71 @@ def visible_paints(paints: Any) -> list[dict[str, Any]]:
     return [p for p in paints or () if isinstance(p, dict) and p.get("visible", True) is not False]
 
 
+NON_NORMAL_BLEND_MODES = frozenset(
+    {
+        "MULTIPLY",
+        "SCREEN",
+        "OVERLAY",
+        "DARKEN",
+        "LIGHTEN",
+        "COLOR_DODGE",
+        "COLOR_BURN",
+        "SOFT_LIGHT",
+        "DIFFERENCE",
+        "EXCLUSION",
+        "HARD_LIGHT",
+    }
+)
+
+
+def _blend(mode: str, d: np.ndarray, s: np.ndarray) -> np.ndarray:
+    """Separable blend formulas on straight (unpremultiplied) colors."""
+    if mode == "MULTIPLY":
+        return d * s
+    if mode == "SCREEN":
+        return d + s - d * s
+    if mode == "OVERLAY":
+        return np.where(d <= 0.5, 2.0 * d * s, 1.0 - 2.0 * (1.0 - d) * (1.0 - s))
+    if mode == "HARD_LIGHT":
+        return np.where(s <= 0.5, 2.0 * d * s, 1.0 - 2.0 * (1.0 - d) * (1.0 - s))
+    if mode == "DARKEN":
+        return np.minimum(d, s)
+    if mode == "LIGHTEN":
+        return np.maximum(d, s)
+    if mode == "COLOR_DODGE":
+        return np.where(s >= 1.0, 1.0, np.minimum(1.0, d / np.maximum(1.0 - s, 1e-6)))
+    if mode == "COLOR_BURN":
+        return np.where(s <= 0.0, 0.0, 1.0 - np.minimum(1.0, (1.0 - d) / np.maximum(s, 1e-6)))
+    if mode == "SOFT_LIGHT":
+        dd = np.where(d <= 0.25, ((16.0 * d - 12.0) * d + 4.0) * d, np.sqrt(np.maximum(d, 0.0)))
+        return np.where(s <= 0.5, d - (1.0 - 2.0 * s) * d * (1.0 - d), d + (2.0 * s - 1.0) * (dd - d))
+    if mode == "DIFFERENCE":
+        return np.abs(d - s)
+    if mode == "EXCLUSION":
+        return d + s - 2.0 * d * s
+    return s
+
+
+def blend_composite(dst: np.ndarray, src: np.ndarray, mode: str) -> None:
+    """In-place compositing of premultiplied `src` over premultiplied `dst`.
+
+    `mode` is a Figma blend mode name; PASS_THROUGH and unknown modes fall back
+    to normal source-over. Non-normal modes blend straight colors per the
+    W3C compositing model: co = αs(1−αb)·Cs + αs·αb·B(Cb,Cs) + (1−αs)·αb·Cb.
+    """
+    mode = mode.upper()
+    if mode not in NON_NORMAL_BLEND_MODES:
+        dst *= 1.0 - src[..., 3:4]
+        dst += src
+        return
+    sa, da = src[..., 3:4], dst[..., 3:4]
+    s = src[..., :3] / np.maximum(sa, 1e-6)
+    d = dst[..., :3] / np.maximum(da, 1e-6)
+    b = _blend(mode, d, s)
+    dst[..., :3] = sa * (1.0 - da) * s + sa * da * b + (1.0 - sa) * da * d
+    dst[..., 3:4] = sa + da * (1.0 - sa)
+
+
 class ImageCache:
     def __init__(self, resolve: Callable[[str], Path | None]) -> None:
         self._resolve = resolve

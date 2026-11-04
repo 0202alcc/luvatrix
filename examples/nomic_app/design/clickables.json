@@ -1,0 +1,512 @@
+[
+ {
+  "nodeId": "1:95",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/assistant",
+  "x": 28.0,
+  "y": 24.0,
+  "width": 40,
+  "height": 31
+ },
+ {
+  "nodeId": "1:108",
+  "name": "Search chats",
+  "selector": "button.inline-flex",
+  "page": "/assistant",
+  "x": 205.0,
+  "y": 24.0,
+  "width": 28,
+  "height": 28
+ },
+ {
+  "nodeId": "1:111",
+  "name": "Collapse sidebar",
+  "selector": "button.inline-flex",
+  "page": "/assistant",
+  "x": 233.0,
+  "y": 24.0,
+  "width": 28,
+  "height": 28
+ },
+ {
+  "nodeId": "1:118",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/assistant",
+  "x": 127.5,
+  "y": 70.0,
+  "width": 231,
+  "height": 28
+ },
+ {
+  "nodeId": "1:124",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/assistant",
+  "x": 127.5,
+  "y": 99.0,
+  "width": 231,
+  "height": 28
+ },
+ {
+  "nodeId": "1:130",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/assistant",
+  "x": 127.5,
+  "y": 128.0,
+  "width": 231,
+  "height": 28
+ },
+ {
+  "nodeId": "1:136",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/assistant",
+  "x": 127.5,
+  "y": 157.0,
+  "width": 231,
+  "height": 28
+ },
+ {
+  "nodeId": "1:158",
+  "name": "button",
+  "selector": "#radix-_R_q79kncab6itpalb_",
+  "page": "/assistant",
+  "x": 105.5,
+  "y": 1156.0,
+  "width": 203,
+  "height": 40
+ },
+ {
+  "nodeId": "1:171",
+  "name": "Notifications",
+  "selector": "button.inline-flex",
+  "page": "/assistant",
+  "x": 231.0,
+  "y": 1156.0,
+  "width": 40,
+  "height": 40
+ },
+ {
+  "nodeId": "1:200",
+  "name": "Switch project, current: Home",
+  "selector": "#radix-_R_lamclritqkncab6itpalb_",
+  "page": "/assistant",
+  "x": 332.078125,
+  "y": 26.0,
+  "width": 112.15625,
+  "height": 32
+ },
+ {
+  "nodeId": "1:228",
+  "name": "Open menu",
+  "selector": "#radix-_R_2bqcmclritqkncab6itpalb_",
+  "page": "/assistant",
+  "x": 307.0,
+  "y": 612.0,
+  "width": 32,
+  "height": 32
+ },
+ {
+  "nodeId": "1:231",
+  "name": "Select integrations/tools",
+  "selector": "button.inline-flex",
+  "page": "/assistant",
+  "x": 404.359375,
+  "y": 612.0,
+  "width": 146.71875,
+  "height": 32
+ },
+ {
+  "nodeId": "1:237",
+  "name": "Select model (current: Auto)",
+  "selector": "button.inline-flex",
+  "page": "/assistant",
+  "x": 712.3671875,
+  "y": 612.0,
+  "width": 65.265625,
+  "height": 32
+ },
+ {
+  "nodeId": "1:241",
+  "name": "Dictate",
+  "selector": "button.inline-flex",
+  "page": "/assistant",
+  "x": 769.0,
+  "y": 612.0,
+  "width": 32,
+  "height": 32
+ },
+ {
+  "nodeId": "1:246",
+  "name": "button",
+  "selector": "button.inline-flex",
+  "page": "/assistant",
+  "x": 383.453125,
+  "y": 699.0,
+  "width": 190.90625,
+  "height": 32
+ },
+ {
+  "nodeId": "1:248",
+  "name": "button",
+  "selector": "button.inline-flex",
+  "page": "/assistant",
+  "x": 529.8828125,
+  "y": 699.0,
+  "width": 89.953125,
+  "height": 32
+ },
+ {
+  "nodeId": "1:250",
+  "name": "button",
+  "selector": "button.inline-flex",
+  "page": "/assistant",
+  "x": 664.21875,
+  "y": 699.0,
+  "width": 166.71875,
+  "height": 32
+ },
+ {
+  "nodeId": "1:252",
+  "name": "button",
+  "selector": "button.inline-flex",
+  "page": "/assistant",
+  "x": 395.46875,
+  "y": 737.0,
+  "width": 214.9375,
+  "height": 32
+ },
+ {
+  "nodeId": "2:439",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/drive",
+  "x": 28.0,
+  "y": 24.0,
+  "width": 40,
+  "height": 31
+ },
+ {
+  "nodeId": "2:452",
+  "name": "Search chats",
+  "selector": "button.inline-flex",
+  "page": "/drive",
+  "x": 205.0,
+  "y": 24.0,
+  "width": 28,
+  "height": 28
+ },
+ {
+  "nodeId": "2:455",
+  "name": "Collapse sidebar",
+  "selector": "button.inline-flex",
+  "page": "/drive",
+  "x": 233.0,
+  "y": 24.0,
+  "width": 28,
+  "height": 28
+ },
+ {
+  "nodeId": "2:462",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/drive",
+  "x": 127.5,
+  "y": 70.0,
+  "width": 231,
+  "height": 28
+ },
+ {
+  "nodeId": "2:468",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/drive",
+  "x": 127.5,
+  "y": 99.0,
+  "width": 231,
+  "height": 28
+ },
+ {
+  "nodeId": "2:474",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/drive",
+  "x": 127.5,
+  "y": 128.0,
+  "width": 231,
+  "height": 28
+ },
+ {
+  "nodeId": "2:480",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/drive",
+  "x": 127.5,
+  "y": 157.0,
+  "width": 231,
+  "height": 28
+ },
+ {
+  "nodeId": "2:502",
+  "name": "button",
+  "selector": "#radix-_R_q79kncab6itpalb_",
+  "page": "/drive",
+  "x": 105.5,
+  "y": 1156.0,
+  "width": 203,
+  "height": 40
+ },
+ {
+  "nodeId": "2:515",
+  "name": "Notifications",
+  "selector": "button.inline-flex",
+  "page": "/drive",
+  "x": 231.0,
+  "y": 1156.0,
+  "width": 40,
+  "height": 40
+ },
+ {
+  "nodeId": "2:549",
+  "name": "Switch project, current: Home",
+  "selector": "#radix-_R_albineitqkncab6itpalb_",
+  "page": "/drive",
+  "x": 332.078125,
+  "y": 26.0,
+  "width": 112.15625,
+  "height": 32
+ },
+ {
+  "nodeId": "2:564",
+  "name": "button",
+  "selector": "button.data-[placeholder]:text-muted-foreground",
+  "page": "/drive",
+  "x": 538.0,
+  "y": 26.0,
+  "width": 60,
+  "height": 32
+ },
+ {
+  "nodeId": "2:334",
+  "name": "input",
+  "selector": "input.file:text-foreground",
+  "page": "/drive",
+  "x": 651.59375,
+  "y": 26.0,
+  "width": 149.1875,
+  "height": 32
+ },
+ {
+  "nodeId": "2:573",
+  "name": "button",
+  "selector": "#radix-_R_6bdbineitqkncab6itpalb_",
+  "page": "/drive",
+  "x": 741.1875,
+  "y": 26.0,
+  "width": 30,
+  "height": 24
+ },
+ {
+  "nodeId": "2:576",
+  "name": "button",
+  "selector": "button.cursor-pointer",
+  "page": "/drive",
+  "x": 779.1875,
+  "y": 26.0,
+  "width": 30,
+  "height": 24
+ },
+ {
+  "nodeId": "2:583",
+  "name": "button",
+  "selector": "#radix-_R_cmbineitqkncab6itpalb_",
+  "page": "/drive",
+  "x": 306.0,
+  "y": 76.0,
+  "width": 60,
+  "height": 32
+ },
+ {
+  "nodeId": "2:590",
+  "name": "button",
+  "selector": "button.inline-flex",
+  "page": "/drive",
+  "x": 365.0,
+  "y": 76.0,
+  "width": 42,
+  "height": 32
+ },
+ {
+  "nodeId": "2:595",
+  "name": "Start session",
+  "selector": "button.inline-flex",
+  "page": "/drive",
+  "x": 415.0,
+  "y": 76.0,
+  "width": 42,
+  "height": 32
+ },
+ {
+  "nodeId": "2:619",
+  "name": "Select all",
+  "selector": "button.peer",
+  "page": "/drive",
+  "x": 296.0,
+  "y": 136.0,
+  "width": 16,
+  "height": 16
+ },
+ {
+  "nodeId": "2:621",
+  "name": "Sort by name, ascending",
+  "selector": "button.inline-flex",
+  "page": "/drive",
+  "x": 342.9609375,
+  "y": 136.0,
+  "width": 53.921875,
+  "height": 20
+ },
+ {
+  "nodeId": "2:635",
+  "name": "button",
+  "selector": "#radix-_R_1splineitqkncab6itpalb_",
+  "page": "/drive",
+  "x": 755.796875,
+  "y": 136.0,
+  "width": 72.40625,
+  "height": 32
+ },
+ {
+  "nodeId": "2:654",
+  "name": "Select My Uploads",
+  "selector": "button.peer",
+  "page": "/drive",
+  "x": 297.0,
+  "y": 181.0,
+  "width": 16,
+  "height": 16
+ },
+ {
+  "nodeId": "2:678",
+  "name": "Open actions for My Uploads",
+  "selector": "#radix-_R_ouv9lineitqkncab6itpalb_",
+  "page": "/drive",
+  "x": 775.0,
+  "y": 181.0,
+  "width": 32,
+  "height": 32
+ },
+ {
+  "nodeId": "3:869",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/projects",
+  "x": 28.0,
+  "y": 24.0,
+  "width": 40,
+  "height": 31
+ },
+ {
+  "nodeId": "3:882",
+  "name": "Search chats",
+  "selector": "button.inline-flex",
+  "page": "/projects",
+  "x": 205.0,
+  "y": 24.0,
+  "width": 28,
+  "height": 28
+ },
+ {
+  "nodeId": "3:885",
+  "name": "Collapse sidebar",
+  "selector": "button.inline-flex",
+  "page": "/projects",
+  "x": 233.0,
+  "y": 24.0,
+  "width": 28,
+  "height": 28
+ },
+ {
+  "nodeId": "3:892",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/projects",
+  "x": 127.5,
+  "y": 70.0,
+  "width": 231,
+  "height": 28
+ },
+ {
+  "nodeId": "3:898",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/projects",
+  "x": 127.5,
+  "y": 99.0,
+  "width": 231,
+  "height": 28
+ },
+ {
+  "nodeId": "3:904",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/projects",
+  "x": 127.5,
+  "y": 128.0,
+  "width": 231,
+  "height": 28
+ },
+ {
+  "nodeId": "3:910",
+  "name": "a",
+  "selector": "a.justify-start",
+  "page": "/projects",
+  "x": 127.5,
+  "y": 157.0,
+  "width": 231,
+  "height": 28
+ },
+ {
+  "nodeId": "3:932",
+  "name": "button",
+  "selector": "#radix-_R_q79kncab6itpalb_",
+  "page": "/projects",
+  "x": 105.5,
+  "y": 1156.0,
+  "width": 203,
+  "height": 40
+ },
+ {
+  "nodeId": "3:945",
+  "name": "Notifications",
+  "selector": "button.inline-flex",
+  "page": "/projects",
+  "x": 231.0,
+  "y": 1156.0,
+  "width": 40,
+  "height": 40
+ },
+ {
+  "nodeId": "3:973",
+  "name": "Switch project, current: Home",
+  "selector": "#radix-_R_2lclritqkncab6itpalb_",
+  "page": "/projects",
+  "x": 332.078125,
+  "y": 26.0,
+  "width": 112.15625,
+  "height": 32
+ },
+ {
+  "nodeId": "3:996",
+  "name": "a",
+  "selector": "a.inline-flex",
+  "page": "/projects",
+  "x": 537.9921875,
+  "y": 709.0,
+  "width": 125.109375,
+  "height": 32
+ }
+]
