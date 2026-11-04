@@ -94,6 +94,7 @@ class FigmaRenderer:
         self.fonts = fonts or FontLibrary(dirs)
         self.images = ImageCache(doc.image_path)
         self.variant_overrides: dict[str, str] = variant_overrides if variant_overrides is not None else {}
+        self._backdrops: list[tuple[Coverage, float]] | None = None
 
     def render(
         self,
@@ -104,13 +105,18 @@ class FigmaRenderer:
         skip_ids: Iterable[str] = (),
         only_ids: Iterable[str] | None = None,
         transparent: bool = False,
+        backdrops: list[tuple[Coverage, float]] | None = None,
     ) -> np.ndarray:
         """Rasterize a frame to (H, W, 4) uint8 RGBA.
 
         `skip_ids` drops those subtrees; `only_ids` draws just those subtrees (the
         frame's own fills included only if its id is listed). With `transparent`
         the result keeps straight alpha instead of being flattened onto a background.
+        When a `backdrops` list is given, BACKGROUND_BLUR effects are appended to it
+        as (coverage, radius in pixels) instead of blurring this canvas, so a caller
+        compositing the result over other content can blur that content instead.
         """
+        self._backdrops = backdrops
         frame = self.doc.frame(frame_id)
         width = max(1, int(round(frame.width * scale)))
         height = max(1, int(round(frame.height * scale)))
@@ -263,7 +269,12 @@ class FigmaRenderer:
             return
         for effect in effects:
             if effect.get("type") == "BACKGROUND_BLUR":
-                _background_blur(target, clip.restrict(fill_cov), float(effect.get("radius", 0.0)) * tf.mean_scale)
+                radius_px = float(effect.get("radius", 0.0)) * tf.mean_scale
+                region = clip.restrict(fill_cov)
+                if self._backdrops is None:
+                    _background_blur(target, region, radius_px)
+                elif region is not None and radius_px > 0.5:
+                    self._backdrops.append((region, radius_px))
         self._fill(target, clip.restrict(fill_cov), node.get("fills"), tf, size, opacity, blend)
         for effect in effects:
             if effect.get("type") == "INNER_SHADOW":
@@ -593,6 +604,42 @@ def _background_blur(target: np.ndarray, cov: Coverage | None, radius_px: float)
     blurred = np.stack([gaussian_blur(region[..., ch], radius_px / 2) for ch in range(4)], axis=-1)
     mask = cov.mask[: region.shape[0], : region.shape[1], None]
     region[...] = region * (1 - mask) + blurred * mask
+
+
+def backdrop_blur(image: np.ndarray, rect: Rect, radius_px: float) -> np.ndarray:
+    """Blurred RGB (float32) of `image` inside `rect`, sampling a margin around it.
+
+    Wide blurs run on a block-averaged copy and are upsampled bilinearly: a
+    Gaussian of sigma >= 3 low-res pixels has no detail the downsample loses,
+    and it keeps per-frame glass blurs cheap at 3x device scale.
+    """
+    x0, y0, x1, y1 = rect
+    sigma = radius_px / 2.0
+    pad = int(math.ceil(sigma * 3))
+    h, w = image.shape[:2]
+    sx0, sy0, sx1, sy1 = max(0, x0 - pad), max(0, y0 - pad), min(w, x1 + pad), min(h, y1 + pad)
+    src = image[sy0:sy1, sx0:sx1, :3].astype(np.float32)
+    factor = max(1, min(8, int(sigma // 3)))
+    if factor == 1:
+        blurred = np.stack([gaussian_blur(src[..., c], sigma) for c in range(3)], axis=-1)
+    else:
+        sh, sw = src.shape[:2]
+        padded = np.pad(src, ((0, (-sh) % factor), (0, (-sw) % factor), (0, 0)), mode="edge")
+        small = padded.reshape(padded.shape[0] // factor, factor, padded.shape[1] // factor, factor, 3).mean(axis=(1, 3))
+        small = np.stack([gaussian_blur(small[..., c], sigma / factor) for c in range(3)], axis=-1)
+        blurred = _upsample_axis(_upsample_axis(small, factor, 0), factor, 1)[:sh, :sw]
+    return blurred[y0 - sy0 : y1 - sy0, x0 - sx0 : x1 - sx0]
+
+
+def _upsample_axis(arr: np.ndarray, factor: int, axis: int) -> np.ndarray:
+    n = arr.shape[axis]
+    pos = np.clip((np.arange(n * factor) + 0.5) / factor - 0.5, 0.0, n - 1)
+    lo = np.floor(pos).astype(np.intp)
+    hi = np.minimum(lo + 1, n - 1)
+    shape = [1] * arr.ndim
+    shape[axis] = -1
+    frac = (pos - lo).astype(np.float32).reshape(shape)
+    return np.take(arr, lo, axis=axis) * (1.0 - frac) + np.take(arr, hi, axis=axis) * frac
 
 
 def _blur_region(region: np.ndarray, radius_px: float) -> np.ndarray:

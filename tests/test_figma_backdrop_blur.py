@@ -147,7 +147,9 @@ def test_renderer_reports_backdrop_regions_for_fixed_layers() -> None:
 
     assert len(backdrops) == 1
     coverage, radius_px = backdrops[0]
-    assert (coverage.x0, coverage.y0, coverage.x1, coverage.y1) == (20, 340, 180, 380)
+    # The bar at 2x, plus at most one pixel of antialiasing on each side.
+    bounds = (coverage.x0, coverage.y0, coverage.x1, coverage.y1)
+    assert bounds == pytest.approx((20, 340, 180, 380), abs=1)
     assert radius_px == pytest.approx(16.0)
     # The fill is still drawn, translucent, for compositing over the blurred backdrop.
     assert 40 <= int(overlay[360, 100, 3]) <= 62

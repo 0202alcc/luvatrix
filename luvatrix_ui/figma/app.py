@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +19,8 @@ from .document import (
     UrlAction,
     VariantAction,
 )
-from .render import FigmaRenderer
+from .geometry import Coverage
+from .render import FigmaRenderer, backdrop_blur
 from .smart_animate import layer_geometry, match_layers, walk_with_parent
 from .tour import Tour
 from .transitions import SmartAnimateTransition, Transition, TweenLayer
@@ -45,6 +46,10 @@ class _Screen:
     overlay: np.ndarray | None
     overlay_window: tuple[int, int, int, int]
     letterbox: tuple[int, int, int, int]
+    # BACKGROUND_BLUR regions of the fixed overlay, in viewport pixels; the
+    # blurred content patches are cached for the last (top, left) scroll offset.
+    backdrops: list[tuple[Coverage, float]] = field(default_factory=list)
+    backdrop_cache: dict[tuple[int, int], list[tuple[int, int, np.ndarray]]] = field(default_factory=dict)
 
 
 @dataclass
@@ -336,8 +341,9 @@ class FigmaApp(App):
         content = self._renderer.render(frame_id, scale, skip_ids=fixed | skip_ids)
         overlay = None
         window = (0, 0, 0, 0)
+        backdrops: list[tuple[Coverage, float]] = []
         if fixed:
-            overlay = self._renderer.render(frame_id, scale, only_ids=fixed, transparent=True)
+            overlay = self._renderer.render(frame_id, scale, only_ids=fixed, transparent=True, backdrops=backdrops)
             rows = np.nonzero(overlay[..., 3].any(axis=1))[0]
             cols = np.nonzero(overlay[..., 3].any(axis=0))[0]
             r = (int(rows.min()), int(rows.max()) + 1) if len(rows) else (0, 0)
@@ -358,6 +364,7 @@ class FigmaApp(App):
             overlay=overlay,
             overlay_window=window,
             letterbox=self._letterbox_color(frame),
+            backdrops=backdrops,
         )
         self._screens[key] = screen
         return screen
@@ -372,6 +379,8 @@ class FigmaApp(App):
         content = screen.content[top : top + height, left : left + width]
         ch, cw = content.shape[:2]
         image[screen.offset_y : screen.offset_y + ch, screen.offset_x : screen.offset_x + cw] = content
+        if screen.backdrops:
+            self._blur_backdrops(image, screen, (top, left))
         if screen.overlay is not None:
             r0, r1, c0, c1 = screen.overlay_window
             r1 = min(r1, height - screen.offset_y)
@@ -394,6 +403,30 @@ class FigmaApp(App):
             dst[..., :3] = np.rint(mixed).astype(np.uint8)
             dst[..., 3:4] = 255
         return image
+
+    def _blur_backdrops(self, image: np.ndarray, screen: _Screen, offset: tuple[int, int]) -> None:
+        """Blur the scrolled content under each fixed BACKGROUND_BLUR shape, in place."""
+        patches = screen.backdrop_cache.get(offset)
+        if patches is not None:
+            for x0, y0, patch in patches:
+                image[y0 : y0 + patch.shape[0], x0 : x0 + patch.shape[1], :3] = patch
+            return
+        patches = []
+        height, width = image.shape[:2]
+        for cov, radius_px in screen.backdrops:
+            x0, y0 = cov.x0 + screen.offset_x, cov.y0 + screen.offset_y
+            x1 = min(width, x0 + cov.mask.shape[1])
+            y1 = min(height, y0 + cov.mask.shape[0])
+            if x1 <= x0 or y1 <= y0:
+                continue
+            blurred = backdrop_blur(image, (x0, y0, x1, y1), radius_px)
+            mask = cov.mask[: y1 - y0, : x1 - x0, None]
+            region = image[y0:y1, x0:x1, :3]
+            patch = np.rint(region * (1.0 - mask) + blurred * mask).astype(np.uint8)
+            region[...] = patch
+            patches.append((x0, y0, patch))
+        screen.backdrop_cache.clear()
+        screen.backdrop_cache[offset] = patches
 
     def _draw_scrim(self, image: np.ndarray, scrim: tuple[float, float, float, float]) -> None:
         r, g, b, a = scrim
