@@ -91,6 +91,7 @@ def test_main_cli_capture_passes_options_and_prints_summary(tmp_path: Path) -> N
         full_page=True,
         chrome_path="/opt/chrome",
         cookies=[],
+        color_scheme=None,
     )
     assert (out_dir / "figma_file.json").is_file()
 
@@ -119,7 +120,23 @@ def test_main_cli_capture_passes_cookies_to_design(tmp_path: Path) -> None:
         full_page=True,
         chrome_path=None,
         cookies=[("wos-session", "abc123"), ("nomic-instance", "http%3A%2F%2Flocalhost%3A3000")],
+        color_scheme=None,
     )
+
+
+def test_main_cli_capture_passes_color_scheme_to_design(tmp_path: Path) -> None:
+    from main import main
+
+    argv = [
+        "luvatrix", "figma", "capture", "https://example.test/app",
+        "--out", str(tmp_path / "cap"),
+        "--color-scheme", "dark",
+    ]
+
+    with patch.object(sys, "argv", argv), patch.object(capture_module, "capture_design", return_value=_result()) as design:
+        main()
+
+    assert design.call_args.kwargs["color_scheme"] == "dark"
 
 
 def test_parse_cookie_args_rejects_malformed_pair() -> None:
