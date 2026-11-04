@@ -22,12 +22,8 @@
 	<string>1</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>GCSupportsGameMode</key>
-	<true/>
 	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.games</string>
-	<key>LSSupportsGameMode</key>
-	<true/>
+	<string>public.app-category.productivity</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -49,9 +45,15 @@
 	<dict/>
 	<key>UIRequiresFullScreen</key>
 	<true/>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleDarkContent</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<key>UIUserInterfaceStyle</key>
+	<string>Light</string>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
 </dict>
 </plist>

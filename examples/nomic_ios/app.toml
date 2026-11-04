@@ -6,9 +6,9 @@ required_capabilities = ["window.write"]
 optional_capabilities = ["hdi.touch", "hdi.mouse", "hdi.trackpad"]
 
 [display]
-native_width = 393
-native_height = 852
-bar_color_rgba = [0, 0, 0, 255]
+native_width = 402
+native_height = 874
+bar_color_rgba = [255, 255, 255, 255]
 default_coordinate_frame = "screen_tl"
 title = "Nomic"
 

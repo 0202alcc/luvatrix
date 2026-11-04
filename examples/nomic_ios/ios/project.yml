@@ -22,10 +22,11 @@ targets:
       properties:
         CFBundleDisplayName: Nomic
         UILaunchScreen: {}
-        LSApplicationCategoryType: public.app-category.games
-        LSSupportsGameMode: true
-        GCSupportsGameMode: true
+        LSApplicationCategoryType: public.app-category.productivity
         CADisableMinimumFrameDurationOnPhone: true
+        UIStatusBarStyle: UIStatusBarStyleDarkContent
+        UIViewControllerBasedStatusBarAppearance: false
+        UIUserInterfaceStyle: Light
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UIRequiresFullScreen: true

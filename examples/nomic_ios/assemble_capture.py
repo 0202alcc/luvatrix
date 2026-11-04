@@ -1,10 +1,10 @@
-"""Assemble captured Nomic screens into a mobile (393x852) luvatrix iOS app.
+"""Assemble captured Nomic screens into an iPhone 17 (402x874) luvatrix iOS app.
 
-Reads the per-screen `figma capture` outputs, cleans capture artifacts
-(serialize-style CSS text and compiler/clip mismatches), and composes one
-393x852 screen frame per capture: app content below the simulator's real
-status-bar clear zone, plus an authored iOS-style bottom tab bar pinned over
-the scrollable content as the frame's fixed child.
+Reads the per-screen `figma capture` outputs (captured with
+`--viewport 402x874@3`), cleans capture artifacts (serialize-style CSS text and
+compiler/clip mismatches), and composes one 402x874 screen frame per capture:
+app content below the status bar, running edge to edge underneath a floating
+Liquid Glass-style tab bar that is the frame's fixed child.
 
     python assemble_capture.py --captures assistant=/tmp/... --out design/
 """
@@ -12,20 +12,44 @@ the scrollable content as the frame's fixed child.
 from __future__ import annotations
 
 import argparse
-import io
 import json
-import math
 import re
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
-STATUS_CLEAR_PT = 59.0
-TAB_BAR_HEIGHT_PT = 80.0
-FRAME_W = 393.0
-VIEWPORT_H = 852.0
-FALLBACK_DARK = (10, 10, 12)
-FALLBACK_ACCENT = (94, 92, 230)
+# iPhone 17 portrait: 402x874 pt [S-LAYOUT-ARCHIVE]; safe-area insets 62 pt top
+# and 34 pt bottom (third-party simulator measurement [T-SAFEAREA]). Tags refer
+# to .cursor/skills/ios-app-design/references/sources.md.
+FRAME_W = 402.0
+VIEWPORT_H = 874.0
+STATUS_CLEAR_PT = 62.0
+HOME_INDICATOR_PT = 34.0
+
+# Apple publishes no floating tab bar metrics. These are chosen, not measured:
+# replace them with the iOS 27 Figma kit values [S-DESIGNKITS] when available.
+TAB_BAR_HEIGHT_PT = 62.0
+TAB_BAR_INSET_PT = 16.0
+TAB_BAR_PADDING_PT = 4.0
+TAB_BAR_Y = VIEWPORT_H - HOME_INDICATOR_PT - TAB_BAR_HEIGHT_PT
+TAB_ICON_PT = 24.0
+TAB_LABEL_PT = 11.0  # Caption 2, the iOS minimum text size [S-TYPOGRAPHY]
+
+# Regular glass approximation: background blur, a translucent light tint, a
+# hairline edge, a top specular highlight, and a soft float shadow.
+GLASS_TINT = (250, 250, 252)
+GLASS_TINT_OPACITY = 0.72
+GLASS_BLUR_PT = 12.0
+# Monochrome bar symbols and labels [S-COLOR]; the selection is carried by
+# weight, a darker shade, and a concentric pill rather than a hue.
+TAB_SELECTED = (24, 24, 24)
+TAB_UNSELECTED = (102, 102, 102)
+SELECTION_PILL_OPACITY = 0.07
+
+# Captured-layout heuristics: the top band where the web header lives, and the
+# tallest block that still counts as the chat composer control.
+HEADER_BAND_PT = 160.0
+COMPOSER_MAX_H_PT = 160.0
+SCROLL_EDGE_FADE_PT = 20.0
 
 _CSS_DECLARATION = re.compile(r"^\s*[-a-z]+\s*:\s*[^;{}]+;\s*[-a-z]+\s*:", re.IGNORECASE)
 _CSS_POSITION = re.compile(r"^\s*position\s*:\s*(absolute|fixed|relative|sticky)\b", re.IGNORECASE)
@@ -132,41 +156,6 @@ def reconcile_clips(payload: dict[str, Any], max_grow: float = 40.0) -> int:
     return fixed
 
 
-# ── palette ───────────────────────────────────────────────────────────────────
-
-
-def sample_palette(pngs: list[bytes]) -> dict[str, tuple[int, int, int]]:
-    """Sample the tab-bar dark and the app accent color from capture renders."""
-    import numpy as np
-    from PIL import Image
-
-    best_dark: tuple[int, int, int] | None = None
-    best_sat: tuple[int, tuple[int, int, int]] | None = None
-    for png in pngs:
-        image = np.asarray(Image.open(io.BytesIO(png)).convert("RGB"), dtype=np.int32)
-        flat = image.reshape(-1, 3)
-        luminance = flat @ np.array([299, 587, 114], dtype=np.int32) // 1000
-        dark_rows = flat[luminance < 60]
-        if len(dark_rows):
-            # The single darkest pixel cluster anchors the near-black chrome.
-            counts = Counter(map(tuple, dark_rows.tolist()))
-            candidate = min(counts, key=lambda px: sum(px))
-            if best_dark is None or sum(candidate) < sum(best_dark):
-                best_dark = candidate
-        saturation = flat.max(axis=1) - flat.min(axis=1)
-        colorful = saturation > 60
-        if colorful.any():
-            row = int(np.argmax(np.where(colorful, saturation, -1)))
-            px = tuple(int(v) for v in flat[row])
-            score = int(saturation[row])
-            if best_sat is None or score > best_sat[0]:
-                best_sat = (score, px)
-    return {
-        "dark": best_dark or FALLBACK_DARK,
-        "accent": (best_sat or (0, FALLBACK_ACCENT))[1],
-    }
-
-
 # ── vector chrome ─────────────────────────────────────────────────────────────
 
 
@@ -179,91 +168,121 @@ def rounded_rect_path(x: float, y: float, w: float, h: float, r: float) -> str:
 
 
 def tab_icon_path(kind: str) -> str:
-    """Outline-style tab icons authored on a 24x24 grid."""
+    """Filled tab glyphs on a 24x24 grid, after the SF Symbols bubble.left.fill,
+    folder.fill, square.stack.fill, and person.fill (tab bars prefer filled
+    symbols [S-TABBARS]; SF Symbols themselves can't be bundled)."""
     if kind == "assistant":
         return (
-            "M6 4 h12 a2.5 2.5 0 0 1 2.5 2.5 v7.5 a2.5 2.5 0 0 1 -2.5 2.5 "
-            "h-7.5 l-4 3.5 v-3.5 h-0.5 a2.5 2.5 0 0 1 -2.5 -2.5 v-7.5 a2.5 2.5 0 0 1 2.5 -2.5 Z"
+            "M7 3.5 h10 a5 5 0 0 1 5 5 v4.5 a5 5 0 0 1 -5 5 h-5.6 l-4.6 3.5 "
+            "a0.7 0.7 0 0 1 -1.1 -0.6 v-3.1 a5 5 0 0 1 -3.7 -4.8 v-4.5 a5 5 0 0 1 5 -5 Z"
         )
     if kind == "drive":
         return (
-            "M3.5 7.5 a2 2 0 0 1 2-2 h3.6 a1 1 0 0 1 0.8 0.4 l1.3 1.6 h7.3 "
-            "a2 2 0 0 1 2 2 v7.5 a2 2 0 0 1 -2 2 h-13 a2 2 0 0 1 -2 -2 Z"
+            "M2 7 a2.5 2.5 0 0 1 2.5 -2.5 h4.4 a2 2 0 0 1 1.5 0.7 l1.5 1.8 h7.6 "
+            "a2.5 2.5 0 0 1 2.5 2.5 v9 a2.5 2.5 0 0 1 -2.5 2.5 h-15 a2.5 2.5 0 0 1 -2.5 -2.5 Z"
         )
     if kind == "projects":
-        return (
-            "M12 3.2 20 7.7 12 12.2 4 7.7 Z "
-            "M4.6 11.5 12 15.8 19.4 11.5 "
-            "M4.6 15.3 12 19.6 19.4 15.3"
+        return " ".join(
+            (
+                rounded_rect_path(3, 9, 18, 12.5, 3),
+                rounded_rect_path(5, 5.6, 14, 2.2, 1.1),
+                rounded_rect_path(7.5, 2.5, 9, 2, 1),
+            )
         )
     if kind == "profile":
         return (
-            "M12 10.4 a3.4 3.4 0 1 0 0 -6.8 a3.4 3.4 0 0 0 0 6.8 Z "
-            "M5.2 20.2 a6.8 5.6 0 0 1 13.6 0"
+            "M12 2.8 a4.6 4.6 0 1 1 0 9.2 a4.6 4.6 0 1 1 0 -9.2 Z "
+            "M3.6 20.2 c0.4 -3.9 4 -6.4 8.4 -6.4 c4.4 0 8 2.5 8.4 6.4 "
+            "a1 1 0 0 1 -1 1.1 h-14.8 a1 1 0 0 1 -1 -1.1 Z"
         )
     raise ValueError(f"unknown tab icon kind: {kind}")
 
 
-def _vector_node(node_id: str, path: str, *, x: float, y: float, size: float, color: tuple[float, float, float], weight: float = 1.8) -> dict[str, Any]:
+def _solid(rgb: tuple[int, int, int], opacity: float = 1.0) -> dict[str, Any]:
+    return {"type": "SOLID", "color": {"r": rgb[0] / 255, "g": rgb[1] / 255, "b": rgb[2] / 255}, "opacity": opacity}
+
+
+def _vector_node(node_id: str, path: str, *, x: float, y: float, size: float, color: tuple[int, int, int]) -> dict[str, Any]:
     return {
         "id": node_id,
         "type": "VECTOR",
         "name": "icon",
         "absoluteBoundingBox": {"x": x, "y": y, "width": size, "height": size},
         "size": {"x": size, "y": size},
-        "vectorPaths": [{"path": path, "windingRule": "NONE"}],
-        "strokes": [{"type": "SOLID", "color": {"r": color[0] / 255, "g": color[1] / 255, "b": color[2] / 255}, "opacity": 1}],
-        "strokeWeight": weight,
-        "strokeAlign": "CENTER",
-        "fills": [],
+        "vectorPaths": [{"path": path, "windingRule": "NONZERO"}],
+        "fills": [_solid(color)],
+        "strokes": [],
     }
 
 
-def _label_node(node_id: str, text: str, *, cx: float, y: float, color: tuple[float, float, float], active: bool) -> dict[str, Any]:
+def _label_node(node_id: str, text: str, *, x: float, y: float, width: float, color: tuple[int, int, int], active: bool) -> dict[str, Any]:
     return {
         "id": node_id,
         "type": "TEXT",
         "name": "label",
         "characters": text,
-        "absoluteBoundingBox": {"x": cx - 40, "y": y, "width": 80, "height": 12},
+        "absoluteBoundingBox": {"x": x, "y": y, "width": width, "height": 13.0},
         "style": {
             "fontFamily": "Inter",
             "fontWeight": 600 if active else 500,
-            "fontSize": 10,
+            "fontSize": TAB_LABEL_PT,
             "textAlignHorizontal": "CENTER",
             "textAutoResize": "NONE",
-            "lineHeightPx": 12,
+            "lineHeightPx": 13,
             "lineHeightUnit": "PIXELS",
         },
-        "fills": [{"type": "SOLID", "color": {"r": color[0] / 255, "g": color[1] / 255, "b": color[2] / 255}, "opacity": 1}],
+        "fills": [_solid(color)],
     }
 
 
-def build_tab_bar_node(
-    y: float,
-    dark: tuple[int, int, int],
-    accent: tuple[int, int, int],
-    tabs: list[tuple[str, str, str]],
-    active: str | None = None,
-) -> dict[str, Any]:
-    """Build the fixed bottom tab bar; ``tabs`` is (label, icon kind, destination id).
+def build_tab_bar_node(tabs: list[tuple[str, str, str]], active: str | None = None) -> dict[str, Any]:
+    """Build the floating glass tab bar; ``tabs`` is (label, icon kind, destination id).
 
-    ``active`` names the icon kind whose tab renders as selected (accent tint,
-    semibold label); the rest render in the inactive gray.
+    The bar is a capsule inset from the screen edges, sitting just above the
+    home-indicator zone. Each tab fills an equal slot inside the capsule's
+    padding, so the selected tab's pill is concentric with the bar: its radius
+    is the bar radius minus the padding [S-WWDC25-356]. ``active`` names the
+    icon kind of the selected tab.
     """
+    bar_x, bar_w, bar_h = TAB_BAR_INSET_PT, FRAME_W - 2 * TAB_BAR_INSET_PT, TAB_BAR_HEIGHT_PT
+    pad = TAB_BAR_PADDING_PT
+    slot_w = (bar_w - 2 * pad) / len(tabs)
+    slot_h = bar_h - 2 * pad
+    slot_y = TAB_BAR_Y + pad
     children: list[dict[str, Any]] = []
-    slot = FRAME_W / len(tabs)
     for index, (label, kind, destination) in enumerate(tabs):
-        x = index * slot
+        x = bar_x + pad + index * slot_w
         is_active = kind == active
-        icon_color = accent if is_active else (152, 152, 159)
-        label_color = (255, 255, 255) if is_active else (152, 152, 159)
+        color = TAB_SELECTED if is_active else TAB_UNSELECTED
+        parts: list[dict[str, Any]] = []
+        if is_active:
+            parts.append(
+                {
+                    "id": f"tab:{kind}:selection",
+                    "type": "RECTANGLE",
+                    "name": "selection",
+                    "absoluteBoundingBox": {"x": x, "y": slot_y, "width": slot_w, "height": slot_h},
+                    "cornerRadius": bar_h / 2 - pad,
+                    "fills": [_solid((0, 0, 0), SELECTION_PILL_OPACITY)],
+                }
+            )
+        parts.append(
+            _vector_node(
+                f"tab:{kind}:icon",
+                tab_icon_path(kind),
+                x=x + slot_w / 2 - TAB_ICON_PT / 2,
+                y=slot_y + 7,
+                size=TAB_ICON_PT,
+                color=color,
+            )
+        )
+        parts.append(_label_node(f"tab:{kind}:label", label, x=x, y=slot_y + 35, width=slot_w, color=color, active=is_active))
         children.append(
             {
                 "id": f"tab:{kind}",
                 "type": "FRAME",
                 "name": f"{label} Tab",
-                "absoluteBoundingBox": {"x": x, "y": y, "width": slot, "height": TAB_BAR_HEIGHT_PT},
+                "absoluteBoundingBox": {"x": x, "y": slot_y, "width": slot_w, "height": slot_h},
                 "clipsContent": False,
                 "fills": [],
                 "interactions": [
@@ -279,33 +298,25 @@ def build_tab_bar_node(
                         ],
                     }
                 ],
-                "children": [
-                    _vector_node(
-                        f"tab:{kind}:icon",
-                        tab_icon_path(kind),
-                        x=x + slot / 2 - 12,
-                        y=y + 16,
-                        size=24,
-                        color=icon_color,
-                    ),
-                    _label_node(
-                        f"tab:{kind}:label",
-                        label,
-                        cx=x + slot / 2,
-                        y=y + 50,
-                        color=label_color,
-                        active=is_active,
-                    ),
-                ],
+                "children": parts,
             }
         )
     return {
         "id": "tab:bar",
         "type": "FRAME",
         "name": "Tab Bar",
-        "absoluteBoundingBox": {"x": 0.0, "y": y, "width": FRAME_W, "height": TAB_BAR_HEIGHT_PT},
+        "absoluteBoundingBox": {"x": bar_x, "y": TAB_BAR_Y, "width": bar_w, "height": bar_h},
+        "cornerRadius": bar_h / 2,
         "clipsContent": False,
-        "fills": [{"type": "SOLID", "color": {"r": dark[0] / 255, "g": dark[1] / 255, "b": dark[2] / 255}, "opacity": 1}],
+        "fills": [_solid(GLASS_TINT, GLASS_TINT_OPACITY)],
+        "strokes": [_solid((0, 0, 0), 0.08)],
+        "strokeWeight": 0.5,
+        "strokeAlign": "INSIDE",
+        "effects": [
+            {"type": "DROP_SHADOW", "color": {"r": 0, "g": 0, "b": 0, "a": 0.1}, "offset": {"x": 0, "y": 4}, "radius": 16, "visible": True},
+            {"type": "BACKGROUND_BLUR", "radius": GLASS_BLUR_PT, "visible": True},
+            {"type": "INNER_SHADOW", "color": {"r": 1, "g": 1, "b": 1, "a": 0.9}, "offset": {"x": 0, "y": 1}, "radius": 1, "visible": True},
+        ],
         "children": children,
     }
 
@@ -319,23 +330,24 @@ def assemble_screen(
     name: str,
     tab_bar: dict[str, Any],
 ) -> dict[str, Any]:
-    """Turn one captured 393x852 frame into an app screen.
+    """Turn one captured 402x874 frame into an app screen.
 
     The captured frame becomes the screen itself: every descendant shifts down
     by the status-bar clear height (children are positioned in frame-local
-    absolute coordinates), the frame grows exactly far enough that the whole
-    content can scroll clear of the fixed tab bar, and the tab bar is appended
-    as the last child (the renderer's fixed overlay) at the viewport bottom.
+    absolute coordinates), and the tab bar is appended as the last child (the
+    renderer's fixed overlay). The frame and its background run to the screen
+    bottom underneath the floating bar [S-LAYOUT]; it grows exactly far enough
+    that the end of the content can scroll up to the bar's top edge.
     """
     content_h = float(capture_frame["absoluteBoundingBox"]["height"])
-    visible_content = VIEWPORT_H - STATUS_CLEAR_PT - TAB_BAR_HEIGHT_PT
+    bar_top = float(tab_bar["absoluteBoundingBox"]["y"])
+    visible_content = bar_top - STATUS_CLEAR_PT
     height = VIEWPORT_H + max(0.0, content_h - visible_content)
     capture_frame["name"] = name
     capture_frame["absoluteBoundingBox"]["height"] = height
     capture_frame["overflowDirection"] = (
         "VERTICAL_SCROLLING" if content_h > visible_content + 0.5 else "NONE"
     )
-    capture_frame["numberOfFixedChildren"] = 1
     for node in _walk_all(capture_frame):
         if node is capture_frame:
             continue
@@ -345,30 +357,56 @@ def assemble_screen(
         rel = node.get("relativeTransform")
         if isinstance(rel, list) and len(rel) == 2 and "size" in node:
             rel[1][2] = float(rel[1][2]) + STATUS_CLEAR_PT
-    bar_y = VIEWPORT_H - TAB_BAR_HEIGHT_PT
-    built_y = float(tab_bar["absoluteBoundingBox"].get("y", 0.0))
-    if abs(bar_y - built_y) > 0.01:
-        _translate_y(tab_bar, bar_y - built_y)
-    capture_frame.setdefault("children", []).append(tab_bar)
+    children = capture_frame.setdefault("children", [])
+    children.append(build_scroll_edge_node(capture_frame))
+    children.append(tab_bar)
+    capture_frame["numberOfFixedChildren"] = 2
     return capture_frame
 
 
-def _translate_y(node: dict[str, Any], dy: float) -> None:
-    box = node.get("absoluteBoundingBox")
-    if box is not None:
-        box["y"] = float(box.get("y", 0.0)) + dy
-    for child in node.get("children") or ():
-        _translate_y(child, dy)
+def build_scroll_edge_node(screen: dict[str, Any]) -> dict[str, Any]:
+    """A top scroll edge effect: content fades out under the status bar.
+
+    Floating UI over a scroll view separates itself from content with a scroll
+    edge effect rather than an opaque band [S-LAYOUT], [S-SCROLLVIEWS]. At rest
+    it matches the screen background, so it is invisible until content scrolls.
+    """
+    color = {"r": 1.0, "g": 1.0, "b": 1.0}
+    for paint in screen.get("fills") or ():
+        if paint.get("type") == "SOLID":
+            color = {k: float(paint["color"][k]) for k in ("r", "g", "b")}
+            break
+    height = STATUS_CLEAR_PT + SCROLL_EDGE_FADE_PT
+    opaque_until = (STATUS_CLEAR_PT - 8.0) / height
+    return {
+        "id": f"{screen.get('id', 'screen')}:scroll-edge",
+        "type": "RECTANGLE",
+        "name": "Scroll Edge",
+        "absoluteBoundingBox": {"x": 0.0, "y": 0.0, "width": FRAME_W, "height": height},
+        "fills": [
+            {
+                "type": "GRADIENT_LINEAR",
+                "gradientHandlePositions": [{"x": 0.5, "y": 0.0}, {"x": 0.5, "y": 1.0}, {"x": 0.0, "y": 0.0}],
+                "gradientStops": [
+                    {"position": 0.0, "color": {**color, "a": 1.0}},
+                    {"position": opaque_until, "color": {**color, "a": 1.0}},
+                    {"position": 1.0, "color": {**color, "a": 0.0}},
+                ],
+            }
+        ],
+    }
 
 
 def drop_misplaced_header_widgets(screen: dict[str, Any]) -> int:
     """Remove header widgets the compiler overlapped at mobile width.
 
     The Drive header's organization switcher compiles on top of the breadcrumb
-    at 393pt (flex measurement drift); it carries no demo value, so drop it
-    rather than ship an overlapping gray blob.
+    at mobile width (flex measurement drift); it carries no demo value, so drop
+    it rather than ship an overlapping gray blob. Selects of the same kind
+    further down the page (Profile's Theme picker) are real controls and stay.
     """
     removed = 0
+    header_bottom = STATUS_CLEAR_PT + HEADER_BAND_PT
 
     def prune(node: dict[str, Any]) -> None:
         nonlocal removed
@@ -377,7 +415,8 @@ def drop_misplaced_header_widgets(screen: dict[str, Any]) -> int:
             return
         kept = []
         for child in children:
-            if str(child.get("name", "")).startswith("button.data-[placeholder]"):
+            top = float((child.get("absoluteBoundingBox") or {}).get("y", 0.0))
+            if str(child.get("name", "")).startswith("button.data-[placeholder]") and top < header_bottom:
                 removed += 1
                 continue
             kept.append(child)
@@ -386,6 +425,53 @@ def drop_misplaced_header_widgets(screen: dict[str, Any]) -> int:
 
     prune(screen)
     return removed
+
+
+def pin_composer_above_tab_bar(screen: dict[str, Any], needle: str) -> bool:
+    """Make the chat composer a fixed child that sits on top of the floating tab bar.
+
+    The web layout pins the composer to the bottom of its viewport, which the
+    status-bar shift pushes under the tab bar. The tab bar must stay visible
+    [S-TABBARS], so the composer block (the largest ancestor of the ``needle``
+    text short enough to be a control) moves out of the scrolling content and
+    becomes a fixed child whose bottom meets the bar's top edge.
+    """
+    path = _path_to_text(screen, needle)
+    if path is None:
+        return False
+    blocks = [n for n in path[1:-1] if float(n["absoluteBoundingBox"]["height"]) <= COMPOSER_MAX_H_PT]
+    if not blocks:
+        return False
+    block = blocks[0]
+    parent = path[path.index(block) - 1]
+    parent["children"] = [c for c in parent["children"] if c is not block]
+    box = block["absoluteBoundingBox"]
+    _translate_y(block, TAB_BAR_Y - (float(box["y"]) + float(box["height"])))
+    fixed = int(screen.get("numberOfFixedChildren", 0))
+    screen["children"].insert(len(screen["children"]) - fixed, block)
+    screen["numberOfFixedChildren"] = fixed + 1
+    return True
+
+
+def _path_to_text(node: dict[str, Any], needle: str) -> list[dict[str, Any]] | None:
+    if node.get("type") == "TEXT" and needle in str(node.get("characters", "")):
+        return [node]
+    for child in node.get("children") or ():
+        found = _path_to_text(child, needle)
+        if found is not None:
+            return [node, *found]
+    return None
+
+
+def _translate_y(node: dict[str, Any], dy: float) -> None:
+    box = node.get("absoluteBoundingBox")
+    if box is not None:
+        box["y"] = float(box.get("y", 0.0)) + dy
+    rel = node.get("relativeTransform")
+    if isinstance(rel, list) and len(rel) == 2 and "size" in node:
+        rel[1][2] = float(rel[1][2]) + dy
+    for child in node.get("children") or ():
+        _translate_y(child, dy)
 
 
 def rename_composer_chip(screen: dict[str, Any]) -> bool:
@@ -455,6 +541,7 @@ SCREEN_SPECS = [
     ("projects", "Projects", 911.0),
     ("settings", "Profile", 911.0),
 ]
+COMPOSER_NEEDLE = "Integrations/MCPs"
 TABS = [
     ("Assistant", "assistant", "Assistant"),
     ("Drive", "drive", "Drive"),
@@ -467,7 +554,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--captures", action="append", required=True, help="name=path/to/capture-dir")
     parser.add_argument("--out", type=Path, required=True, help="Design dir for figma_file.json")
-    parser.add_argument("--renders", type=Path, default=None, help="Dir with <Name>.png renders for palette sampling")
     parser.add_argument("--click-map", type=Path, default=None, help="JSON: hotspot needle -> {name, frame}")
     args = parser.parse_args()
 
@@ -475,15 +561,6 @@ def main() -> None:
     for spec in args.captures:
         key, _, value = spec.partition("=")
         captures[key.strip()] = Path(value.strip())
-
-    palette_pngs: list[bytes] = []
-    if args.renders is not None:
-        for _, name, _height in SCREEN_SPECS:
-            png = args.renders / f"{name}.png"
-            if png.exists():
-                palette_pngs.append(png.read_bytes())
-    palette = sample_palette(palette_pngs)
-    print(f"[nomic_ios] palette: dark={palette['dark']} accent={palette['accent']}")
 
     frames: list[tuple[dict[str, Any], str]] = []
     ids: dict[str, str] = {}
@@ -500,7 +577,7 @@ def main() -> None:
     for (_key, name, _height), (frame, _original) in zip(SCREEN_SPECS, frames):
         tabs = [(label, kind, ids[dest_name]) for label, kind, dest_name in TABS]
         active = next((kind for _label, kind, dest_name in TABS if dest_name == name), None)
-        bar = build_tab_bar_node(VIEWPORT_H - TAB_BAR_HEIGHT_PT, palette["dark"], palette["accent"], tabs, active=active)
+        bar = build_tab_bar_node(tabs, active=active)
         screens.append(assemble_screen(frame, name=name, tab_bar=bar))
 
     if args.click_map:
@@ -517,6 +594,8 @@ def main() -> None:
         dropped = drop_misplaced_header_widgets(screens[order.index(name)])
         if dropped:
             print(f"[nomic_ios] dropped {dropped} misplaced header widget(s) on {name}")
+    if not pin_composer_above_tab_bar(screens[order.index("Conversation")], COMPOSER_NEEDLE):
+        print("[nomic_ios] warning: composer not found on Conversation")
 
     payload = merge_captures([(screen, name) for screen, name in zip(screens, order)], title="Nomic iOS")
     # Artifact cleanup + clip reconciliation run per assembled screen.
