@@ -10,7 +10,7 @@ on:
     inputs:
       app_dir:
         description: App folder to tour
-        default: examples/figma_app
+        default: examples/nomic_ios
       tour:
         description: Tour JSON file (default <app_dir>/tour.json)
         default: ""
@@ -27,35 +27,34 @@ concurrency:
 
 jobs:
   tour:
-    name: Tour ${{ matrix.slug }} in iOS Simulator
+    name: Tour ${{ inputs.app_dir || 'examples/nomic_ios' }} in iOS Simulator
     if: ${{ vars.LUVATRIX_IOS_SIM_RUNNER == '1' }}
     runs-on: [self-hosted, macOS, ios-sim]
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - app: examples/figma_app
-            slug: figma_app
-          - app: examples/captured_site
-            slug: captured_site
-          - app: examples/nomic_app
-            slug: nomic_app
-          - app: examples/nomic_ios
-            slug: nomic_ios
     env:
-      APP_DIR: ${{ inputs.app_dir || matrix.app }}
+      # Pushes tour only the Nomic iOS app; dispatches tour the chosen app_dir.
+      APP_DIR: ${{ inputs.app_dir || 'examples/nomic_ios' }}
       TOUR: ${{ inputs.tour }}
       SIMULATOR: ${{ inputs.simulator || 'iPhone 17' }}
-      # Set the LUVATRIX_IOS_KEEP_OPEN repo variable to a matrix app value
-      # (examples/figma_app, examples/captured_site, examples/nomic_app) or its
-      # short slug (figma_app, captured_site, nomic_app) to leave that app
-      # running and interactive in the simulator after its tour.
-      KEEP_OPEN: ${{ (vars.LUVATRIX_IOS_KEEP_OPEN == matrix.app || vars.LUVATRIX_IOS_KEEP_OPEN == matrix.slug) && '1' || '' }}
+      # Set the LUVATRIX_IOS_KEEP_OPEN repo variable to the toured app folder
+      # (e.g. examples/nomic_ios) or its short slug (nomic_ios) to leave that
+      # app running and interactive in the simulator after its tour.
+      KEEP_OPEN_VAR: ${{ vars.LUVATRIX_IOS_KEEP_OPEN }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+
+      - name: Resolve app
+        id: app
+        run: |
+          slug="$(basename "$APP_DIR")"
+          keep_open=""
+          if [ -n "$KEEP_OPEN_VAR" ] && { [ "$KEEP_OPEN_VAR" = "$APP_DIR" ] || [ "$KEEP_OPEN_VAR" = "$slug" ]; }; then
+            keep_open="1"
+          fi
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+          echo "keep_open=$keep_open" >> "$GITHUB_OUTPUT"
 
       - name: Install uv
         uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
@@ -74,6 +73,8 @@ jobs:
         run: uv run bash ios/scripts/setup_ios.sh
 
       - name: Run tour
+        env:
+          KEEP_OPEN: ${{ steps.app.outputs.keep_open }}
         run: |
           keep_open_args=()
           if [ -n "$KEEP_OPEN" ]; then
@@ -90,7 +91,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ios-tour-${{ matrix.slug }}-${{ github.run_id }}
+          name: ios-tour-${{ steps.app.outputs.slug }}-${{ github.run_id }}
           path: ${{ runner.temp }}/ios-tour
           if-no-files-found: warn
           retention-days: 14
