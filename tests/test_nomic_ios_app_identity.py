@@ -31,3 +31,31 @@ def test_app_icon_is_an_opaque_1024_png() -> None:
         assert icon.size == (1024, 1024)
         # iOS rejects app icons with an alpha channel.
         assert icon.mode == "RGB"
+
+
+def _plist() -> dict:
+    import plistlib
+
+    with (APP_DIR / "ios" / "Luvatrix" / "Info.plist").open("rb") as handle:
+        return plistlib.load(handle)
+
+
+def test_app_is_categorized_as_productivity_not_a_game() -> None:
+    spec = _spec()
+    assert re.search(r"^\s+LSApplicationCategoryType: public\.app-category\.productivity$", spec, re.MULTILINE)
+    assert "GameMode" not in spec
+    plist = _plist()
+    assert plist["LSApplicationCategoryType"] == "public.app-category.productivity"
+    assert not any("GameMode" in key for key in plist)
+
+
+def test_status_bar_draws_dark_content_over_the_light_ui() -> None:
+    spec = _spec()
+    plist = _plist()
+    # The design has a light appearance only, so the system chrome is pinned to it.
+    assert re.search(r"^\s+UIStatusBarStyle: UIStatusBarStyleDarkContent$", spec, re.MULTILINE)
+    assert re.search(r"^\s+UIViewControllerBasedStatusBarAppearance: false$", spec, re.MULTILINE)
+    assert re.search(r"^\s+UIUserInterfaceStyle: Light$", spec, re.MULTILINE)
+    assert plist["UIStatusBarStyle"] == "UIStatusBarStyleDarkContent"
+    assert plist["UIViewControllerBasedStatusBarAppearance"] is False
+    assert plist["UIUserInterfaceStyle"] == "Light"

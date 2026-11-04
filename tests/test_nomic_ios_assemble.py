@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import io
 import sys
 from pathlib import Path
 
@@ -26,14 +25,6 @@ def asm():
     return _load_assemble()
 
 
-def _png_bytes(rgb) -> bytes:
-    import PIL.Image
-
-    buf = io.BytesIO()
-    PIL.Image.new("RGB", (4, 4), rgb).save(buf, format="PNG")
-    return buf.getvalue()
-
-
 def _text_node(chars: str, box: dict | None = None) -> dict:
     return {
         "id": "9:9",
@@ -50,7 +41,7 @@ def _frame(nodes: list[dict], *, clips: bool = False, box: dict | None = None) -
         "id": "1:0",
         "type": "FRAME",
         "name": "frame",
-        "absoluteBoundingBox": box or {"x": 0, "y": 0, "width": 393, "height": 852},
+        "absoluteBoundingBox": box or {"x": 0, "y": 0, "width": 402, "height": 874},
         "clipsContent": clips,
         "children": nodes,
     }
@@ -85,23 +76,23 @@ def test_drop_css_artifact_texts_removes_only_artifacts(asm) -> None:
 
 def _screen_with(clip: dict) -> dict:
     """Wrap a candidate clip as a screen child (the assembler's real structure)."""
-    tab_bar = _frame([], box={"x": 0.0, "y": 772.0, "width": 393.0, "height": 80.0})
+    tab_bar = _frame([], box={"x": 16.0, "y": 778.0, "width": 370.0, "height": 62.0})
     tab_bar["name"] = "Tab Bar"
-    return _frame([clip, tab_bar], clips=True, box={"x": 0.0, "y": 0.0, "width": 393.0, "height": 991.0})
+    return _frame([clip, tab_bar], clips=True, box={"x": 0.0, "y": 0.0, "width": 402.0, "height": 1032.0})
 
 
 def test_reconcile_clips_skips_the_screen_shell(asm) -> None:
     text = _text_node("Riverfront Tower — Level 3 Framing Plan (Rev C).pdf", {"x": 72.0, "y": 99, "width": 354.0, "height": 18})
-    tab_bar = _frame([], box={"x": 0.0, "y": 772.0, "width": 393.0, "height": 80.0})
+    tab_bar = _frame([], box={"x": 16.0, "y": 778.0, "width": 370.0, "height": 62.0})
     tab_bar["name"] = "Tab Bar"
-    screen = _frame([tab_bar], clips=True, box={"x": 0.0, "y": 0.0, "width": 393.0, "height": 991.0})
+    screen = _frame([tab_bar], clips=True, box={"x": 0.0, "y": 0.0, "width": 402.0, "height": 1032.0})
     # A loose top-level text (no inner clip between it and the screen) must not
     # grow the screen itself.
     screen["children"].insert(0, text)
 
     asm.reconcile_clips({"document": {"children": [{"children": [screen]}]}})
 
-    assert screen["absoluteBoundingBox"] == {"x": 0.0, "y": 0.0, "width": 393.0, "height": 991.0}
+    assert screen["absoluteBoundingBox"] == {"x": 0.0, "y": 0.0, "width": 402.0, "height": 1032.0}
 
 
 def test_reconcile_clips_grows_a_clip_to_cover_its_text(asm) -> None:
@@ -131,24 +122,38 @@ def test_reconcile_clips_ignores_oversized_right_overflow(asm) -> None:
     assert box["y"] == 0 and box["height"] == 20
 
 
-# ── palette ───────────────────────────────────────────────────────────────────
-
-
-def test_sample_palette_picks_the_dark_and_accent_clusters(asm) -> None:
-    dark = asm.sample_palette([_png_bytes((12, 12, 14)), _png_bytes((250, 250, 250))])
-    assert dark["dark"] == (12, 12, 14)
-
-    accent = asm.sample_palette([_png_bytes((94, 92, 230))])
-    assert accent["accent"] == (94, 92, 230)
-
-
-def test_sample_palette_falls_back_when_no_accent_exists(asm) -> None:
-    plain = asm.sample_palette([_png_bytes((250, 250, 250))])
-    assert plain["accent"] == asm.FALLBACK_ACCENT
-    assert plain["dark"] == asm.FALLBACK_DARK
-
-
 # ── tab bar construction ──────────────────────────────────────────────────────
+
+TABS = [
+    ("Assistant", "assistant", "10:0"),
+    ("Drive", "drive", "20:0"),
+    ("Projects", "projects", "30:0"),
+    ("Profile", "profile", "40:0"),
+]
+
+
+def _bar(asm, active: str | None = "drive") -> dict:
+    return asm.build_tab_bar_node(TABS, active=active)
+
+
+def _box(node: dict) -> tuple[float, float, float, float]:
+    b = node["absoluteBoundingBox"]
+    return b["x"], b["y"], b["width"], b["height"]
+
+
+def _tab_parts(tab: dict) -> dict[str, dict]:
+    return {child["name"]: child for child in tab["children"]}
+
+
+def _rgb(paint: dict) -> tuple[int, int, int]:
+    c = paint["color"]
+    return round(c["r"] * 255), round(c["g"] * 255), round(c["b"] * 255)
+
+
+def test_frame_matches_the_iphone_17_viewport_and_safe_areas(asm) -> None:
+    assert (asm.FRAME_W, asm.VIEWPORT_H) == (402.0, 874.0)
+    assert asm.STATUS_CLEAR_PT == 62.0
+    assert asm.HOME_INDICATOR_PT == 34.0
 
 
 def test_svg_paths_exist_for_every_tab_and_are_wellformed(asm) -> None:
@@ -158,6 +163,8 @@ def test_svg_paths_exist_for_every_tab_and_are_wellformed(asm) -> None:
         segments = parse_path(asm.tab_icon_path(kind))
         assert segments, f"icon path for {kind} parsed to no segments"
         assert segments[0][0][0] == "M"
+    with pytest.raises(ValueError):
+        asm.tab_icon_path("settings")
 
 
 def test_rounded_rect_path_is_a_closed_path(asm) -> None:
@@ -166,69 +173,111 @@ def test_rounded_rect_path_is_a_closed_path(asm) -> None:
     assert path.rstrip().endswith("Z")
 
 
-def test_build_tab_bar_marks_the_current_screen_active(asm) -> None:
-    bar = asm.build_tab_bar_node(
-        772.0,
-        (12, 12, 14),
-        (94, 92, 230),
-        [
-            ("Assistant", "assistant", "10:0"),
-            ("Drive", "drive", "20:0"),
-            ("Projects", "projects", "30:0"),
-            ("Profile", "profile", "40:0"),
-        ],
-        active="drive",
-    )
+def test_tab_bar_is_a_floating_capsule_above_the_home_indicator(asm) -> None:
+    bar = _bar(asm)
+    x, y, w, h = _box(bar)
 
-    drive_tab = bar["children"][1]
-    assistant_tab = bar["children"][0]
-    assert drive_tab["children"][0]["strokes"][0]["color"] == {"r": 94 / 255, "g": 92 / 255, "b": 230 / 255}
-    assert drive_tab["children"][1]["style"]["fontWeight"] == 600
-    assert assistant_tab["children"][0]["strokes"][0]["color"] == {"r": 152 / 255, "g": 152 / 255, "b": 159 / 255}
-    assert assistant_tab["children"][1]["style"]["fontWeight"] == 500
+    assert x > 0 and x + w < asm.FRAME_W
+    assert x == pytest.approx(asm.FRAME_W - (x + w))
+    assert bar["cornerRadius"] == pytest.approx(h / 2)
+    assert y + h <= asm.VIEWPORT_H - asm.HOME_INDICATOR_PT
+    for node in asm._walk_all(bar):
+        nx, ny, nw, nh = _box(node)
+        assert ny + nh <= asm.VIEWPORT_H - asm.HOME_INDICATOR_PT, node["name"]
+
+
+def test_tab_bar_approximates_regular_liquid_glass(asm) -> None:
+    bar = _bar(asm)
+
+    fills = bar["fills"]
+    assert len(fills) == 1 and fills[0]["type"] == "SOLID"
+    assert 0.0 < fills[0]["opacity"] < 1.0
+    blurs = [e for e in bar["effects"] if e["type"] == "BACKGROUND_BLUR"]
+    assert blurs and blurs[0]["radius"] > 0
+    assert bar["strokes"], "glass needs a highlight edge to separate it from light content"
 
 
 def test_build_tab_bar_creates_four_tappable_tabs(asm) -> None:
-    bar = asm.build_tab_bar_node(
-        y=772.0,
-        dark=(12, 12, 14),
-        accent=(94, 92, 230),
-        tabs=[
-            ("Assistant", "assistant", "10:0"),
-            ("Drive", "drive", "20:0"),
-            ("Projects", "projects", "30:0"),
-            ("Profile", "profile", "40:0"),
-        ],
-    )
+    bar = _bar(asm, active=None)
 
     assert bar["type"] == "FRAME"
     assert bar["name"] == "Tab Bar"
-    assert bar["absoluteBoundingBox"] == {"x": 0.0, "y": 772.0, "width": 393.0, "height": 80.0}
-    assert len(bar["children"]) == 4
     names = [child["name"] for child in bar["children"]]
     assert names == ["Assistant Tab", "Drive Tab", "Projects Tab", "Profile Tab"]
-    for child in bar["children"]:
-        actions = child["interactions"][0]["actions"]
-        assert actions[0]["type"] == "NODE"
-        assert actions[0]["navigation"] == "NAVIGATE"
     destinations = [child["interactions"][0]["actions"][0]["destinationId"] for child in bar["children"]]
     assert destinations == ["10:0", "20:0", "30:0", "40:0"]
-    for child in bar["children"]:
-        kinds = [grandchild["type"] for grandchild in child["children"]]
-        assert "VECTOR" in kinds
-        labels = [g for g in child["children"] if g["type"] == "TEXT"]
-        assert labels and labels[0]["characters"] == child["name"].removesuffix(" Tab")
+    for tab in bar["children"]:
+        action = tab["interactions"][0]["actions"][0]
+        assert action["type"] == "NODE" and action["navigation"] == "NAVIGATE"
+        _x, _y, w, h = _box(tab)
+        assert w >= 44 and h >= 44
+        label = _tab_parts(tab)["label"]
+        assert label["characters"] == tab["name"].removesuffix(" Tab")
+
+
+def test_tabs_share_the_capsule_without_overlapping(asm) -> None:
+    bar = _bar(asm)
+    bx, by, bw, bh = _box(bar)
+    edges = []
+    for tab in bar["children"]:
+        x, y, w, h = _box(tab)
+        assert bx <= x and x + w <= bx + bw + 1e-6
+        assert by <= y and y + h <= by + bh + 1e-6
+        edges.append((x, x + w))
+    for (_, right), (left, _) in zip(edges, edges[1:]):
+        assert right <= left + 1e-6
+
+
+def test_tab_icons_are_filled_glyphs(asm) -> None:
+    for tab in _bar(asm)["children"]:
+        icon = _tab_parts(tab)["icon"]
+        assert icon["type"] == "VECTOR"
+        assert icon["fills"] and not icon.get("strokes")
+        assert icon["vectorPaths"][0]["windingRule"] in {"NONZERO", "EVENODD"}
+
+
+def test_tab_labels_meet_the_ios_minimum_size(asm) -> None:
+    for tab in _bar(asm)["children"]:
+        assert _tab_parts(tab)["label"]["style"]["fontSize"] >= 11
+
+
+def test_tab_symbols_and_labels_are_monochrome(asm) -> None:
+    bar = _bar(asm, active="drive")
+    colors = set()
+    for tab in bar["children"]:
+        parts = _tab_parts(tab)
+        icon_rgb = _rgb(parts["icon"]["fills"][0])
+        label_rgb = _rgb(parts["label"]["fills"][0])
+        assert icon_rgb == label_rgb, "one color per tab state"
+        assert icon_rgb[0] == icon_rgb[1] == icon_rgb[2], "bar symbols carry no hue"
+        colors.add(icon_rgb)
+    assert len(colors) == 2
+
+
+def test_selected_tab_gets_a_concentric_selection_pill(asm) -> None:
+    bar = _bar(asm, active="drive")
+    tabs = {tab["name"]: _tab_parts(tab) for tab in bar["children"]}
+
+    assert "selection" not in tabs["Assistant Tab"]
+    pill = tabs["Drive Tab"]["selection"]
+    _bx, by, _bw, bh = _box(bar)
+    _px, py, _pw, ph = _box(pill)
+    padding = py - by
+    assert padding > 0
+    assert by + bh - (py + ph) == pytest.approx(padding)
+    assert pill["cornerRadius"] == pytest.approx(bar["cornerRadius"] - padding)
+    assert tabs["Drive Tab"]["label"]["style"]["fontWeight"] > tabs["Assistant Tab"]["label"]["style"]["fontWeight"]
 
 
 # ── screen assembly ───────────────────────────────────────────────────────────
 
 
-def _capture_frame() -> dict:
+def _capture_frame(height: float = 874) -> dict:
     return {
         "id": "1:0",
         "type": "FRAME",
         "name": "Nomic",
-        "absoluteBoundingBox": {"x": 0, "y": 0, "width": 393, "height": 852},
+        "absoluteBoundingBox": {"x": 0, "y": 0, "width": 402, "height": height},
         "clipsContent": True,
         "fills": [{"type": "SOLID", "color": {"r": 1, "g": 1, "b": 1}, "opacity": 1}],
         "children": [_text_node("Hello")],
@@ -236,51 +285,42 @@ def _capture_frame() -> dict:
 
 
 def test_assemble_screen_places_content_below_the_status_clear(asm) -> None:
-    tab_bar = asm.build_tab_bar_node(772.0, (12, 12, 14), (94, 92, 230), [("Drive", "drive", "20:0")])
+    tab_bar = _bar(asm)
     screen = asm.assemble_screen(_capture_frame(), name="Drive", tab_bar=tab_bar)
 
     assert screen["name"] == "Drive"
-    # 852pt viewport + 139pt of reachable scroll so the content clears the bar.
-    assert screen["absoluteBoundingBox"] == {"x": 0.0, "y": 0.0, "width": 393.0, "height": 991.0}
     assert screen["overflowDirection"] == "VERTICAL_SCROLLING"
-    # The capture frame IS the screen; its content shifts below the status clear.
     assert screen["children"][0]["absoluteBoundingBox"]["y"] == asm.STATUS_CLEAR_PT
-    # The bar pins to the bottom of the 852pt viewport, not the scrollable frame.
-    assert tab_bar["absoluteBoundingBox"]["y"] == 852.0 - asm.TAB_BAR_HEIGHT_PT
     assert screen["children"][-1] is tab_bar
+    assert screen["numberOfFixedChildren"] == 1
 
 
-def test_assemble_screen_marks_the_tab_bar_as_the_fixed_child(asm) -> None:
-    tab_bar = asm.build_tab_bar_node(772.0, (12, 12, 14), (94, 92, 230), [("Drive", "drive", "20:0")])
+def test_content_scrolls_edge_to_edge_under_the_floating_bar(asm) -> None:
+    tab_bar = _bar(asm)
+    _x, bar_y, _w, _h = _box(tab_bar)
     screen = asm.assemble_screen(_capture_frame(), name="Drive", tab_bar=tab_bar)
 
-    assert screen["numberOfFixedChildren"] == 1
-    assert screen["children"][-1] is tab_bar
-    icon = tab_bar["children"][0]["children"][0]
-    assert icon["absoluteBoundingBox"]["y"] == 772.0 + 16.0
+    height = screen["absoluteBoundingBox"]["height"]
+    assert screen["absoluteBoundingBox"]["width"] == asm.FRAME_W
+    # Fully scrolled, the end of the content sits just above the floating bar,
+    # and the frame (with its background) still reaches the screen bottom.
+    max_scroll = height - asm.VIEWPORT_H
+    content_bottom = asm.STATUS_CLEAR_PT + 874
+    assert content_bottom - max_scroll == pytest.approx(bar_y)
 
 
 def test_screen_height_grows_only_when_content_needs_scrolling(asm) -> None:
-    tab_bar = asm.build_tab_bar_node(772.0, (12, 12, 14), (94, 92, 230), [("Profile", "profile", "40:0")])
-    short = _capture_frame()
-    short["absoluteBoundingBox"]["height"] = 500
+    tab_bar = _bar(asm)
+    screen = asm.assemble_screen(_capture_frame(500), name="Profile", tab_bar=tab_bar)
 
-    screen = asm.assemble_screen(short, name="Profile", tab_bar=tab_bar)
-
-    assert screen["absoluteBoundingBox"]["height"] == 852.0
+    assert screen["absoluteBoundingBox"]["height"] == asm.VIEWPORT_H
     assert screen.get("overflowDirection", "NONE") == "NONE"
-    # A short screen keeps the tab bar pinned to the viewport bottom.
-    assert tab_bar["absoluteBoundingBox"]["y"] == 852.0 - asm.TAB_BAR_HEIGHT_PT
 
 
 def test_session_row_hotspot_gets_a_friendly_name_and_navigation(asm) -> None:
     capture = _capture_frame()
     capture["children"].append(_text_node("Concrete spec questions", {"x": 24, "y": 400, "width": 200, "height": 20}))
-    assistant = asm.assemble_screen(
-        capture,
-        name="Assistant",
-        tab_bar=asm.build_tab_bar_node(772.0, (12, 12, 14), (94, 92, 230), [("Conversation", "assistant", "5:0")]),
-    )
+    assistant = asm.assemble_screen(capture, name="Assistant", tab_bar=_bar(asm, active="assistant"))
     wired = asm.wire_content_hotspot(assistant, "Concrete spec questions", "Conversation Link", "99:0")
 
     assert wired
@@ -293,11 +333,7 @@ def test_session_row_hotspot_gets_a_friendly_name_and_navigation(asm) -> None:
 def test_composer_mode_chip_gets_a_tappable_name(asm) -> None:
     capture = _capture_frame()
     capture["children"].append(_text_node("Auto", {"x": 300, "y": 745, "width": 40, "height": 18}))
-    screen = asm.assemble_screen(
-        capture,
-        name="Assistant",
-        tab_bar=asm.build_tab_bar_node(772.0, (12, 12, 14), (94, 92, 230), [("Drive", "drive", "20:0")]),
-    )
+    screen = asm.assemble_screen(capture, name="Assistant", tab_bar=_bar(asm, active="assistant"))
 
     assert asm.rename_composer_chip(screen)
 
@@ -315,11 +351,7 @@ def test_org_switcher_button_is_dropped_from_the_drive_header(asm) -> None:
         "children": [_text_node("Direct Upload logo")],
     }
     capture["children"].append(switcher)
-    screen = asm.assemble_screen(
-        capture,
-        name="Drive",
-        tab_bar=asm.build_tab_bar_node(772.0, (12, 12, 14), (94, 92, 230), [("Drive", "drive", "20:0")], active="drive"),
-    )
+    screen = asm.assemble_screen(capture, name="Drive", tab_bar=_bar(asm))
 
     assert asm.drop_misplaced_header_widgets(screen) == 1
     assert all(node is not switcher for node in asm._walk_all(screen))
@@ -327,8 +359,8 @@ def test_org_switcher_button_is_dropped_from_the_drive_header(asm) -> None:
 
 def test_merge_captures_renames_and_orders_frames(asm) -> None:
     frames = [
-        ({"id": "S0:1:0", "type": "FRAME", "name": "Nomic", "absoluteBoundingBox": {"x": 0, "y": 0, "width": 393, "height": 852}, "children": []}, "Assistant"),
-        ({"id": "S1:1:0", "type": "FRAME", "name": "Nomic", "absoluteBoundingBox": {"x": 0, "y": 0, "width": 393, "height": 852}, "children": []}, "Drive"),
+        ({"id": "S0:1:0", "type": "FRAME", "name": "Nomic", "absoluteBoundingBox": {"x": 0, "y": 0, "width": 402, "height": 874}, "children": []}, "Assistant"),
+        ({"id": "S1:1:0", "type": "FRAME", "name": "Nomic", "absoluteBoundingBox": {"x": 0, "y": 0, "width": 402, "height": 874}, "children": []}, "Drive"),
     ]
     payload = asm.merge_captures(frames, title="Nomic iOS")
 
@@ -360,3 +392,26 @@ def test_remap_ids_makes_nested_nodes_unique_and_rewires_interactions(asm) -> No
     assert node["id"] == "A:1:0"
     assert node["children"][0]["id"] == "A:1:5"
     assert node["children"][0]["interactions"][0]["actions"][0]["destinationId"] == "A:2:0"
+
+
+# ── generated design ──────────────────────────────────────────────────────────
+
+
+def test_generated_design_matches_the_app_viewport(asm) -> None:
+    import json
+    import tomllib
+
+    display = tomllib.loads((APP_DIR / "app.toml").read_text(encoding="utf-8"))["display"]
+    payload = json.loads((APP_DIR / "design" / "figma_file.json").read_text(encoding="utf-8"))
+    screens = payload["document"]["children"][0]["children"]
+
+    assert (display["native_width"], display["native_height"]) == (asm.FRAME_W, asm.VIEWPORT_H)
+    assert screens
+    for screen in screens:
+        assert screen["absoluteBoundingBox"]["width"] == asm.FRAME_W
+        assert screen["absoluteBoundingBox"]["height"] >= asm.VIEWPORT_H
+        bar = screen["children"][-1]
+        assert bar["name"] == "Tab Bar" and screen["numberOfFixedChildren"] == 1
+        for node in asm._walk_all(bar):
+            if node["type"] == "TEXT":
+                assert node["style"]["fontSize"] >= 11
