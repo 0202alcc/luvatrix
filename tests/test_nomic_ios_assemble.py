@@ -292,7 +292,25 @@ def test_assemble_screen_places_content_below_the_status_clear(asm) -> None:
     assert screen["overflowDirection"] == "VERTICAL_SCROLLING"
     assert screen["children"][0]["absoluteBoundingBox"]["y"] == asm.STATUS_CLEAR_PT
     assert screen["children"][-1] is tab_bar
-    assert screen["numberOfFixedChildren"] == 1
+    assert screen["numberOfFixedChildren"] == 2
+
+
+def test_top_scroll_edge_fades_content_under_the_status_bar(asm) -> None:
+    tab_bar = _bar(asm)
+    screen = asm.assemble_screen(_capture_frame(), name="Drive", tab_bar=tab_bar)
+
+    edge = screen["children"][-2]
+    assert edge["name"] == "Scroll Edge"
+    x, y, w, h = _box(edge)
+    assert (x, y, w) == (0.0, 0.0, asm.FRAME_W)
+    assert h > asm.STATUS_CLEAR_PT
+    paint = edge["fills"][0]
+    assert paint["type"] == "GRADIENT_LINEAR"
+    alphas = [stop["color"]["a"] for stop in paint["gradientStops"]]
+    assert alphas[0] == 1.0 and alphas[-1] == 0.0
+    # Opaque through the status bar, fading out below it.
+    opaque_until = max(stop["position"] for stop in paint["gradientStops"] if stop["color"]["a"] == 1.0)
+    assert opaque_until * h >= asm.STATUS_CLEAR_PT - 12
 
 
 def test_content_scrolls_edge_to_edge_under_the_floating_bar(asm) -> None:
@@ -402,8 +420,8 @@ def test_conversation_composer_pins_above_the_floating_tab_bar(asm) -> None:
 
     assert asm.pin_composer_above_tab_bar(screen, "Integrations/MCPs")
 
-    assert screen["numberOfFixedChildren"] == 2
-    assert screen["children"][-2] is composer and screen["children"][-1] is bar
+    assert screen["numberOfFixedChildren"] == 3
+    assert screen["children"][-3] is composer and screen["children"][-1] is bar
     assert composer not in thread["children"]
     _x, y, _w, h = _box(composer)
     assert y + h == pytest.approx(asm.TAB_BAR_Y)
@@ -415,7 +433,7 @@ def test_pinning_reports_a_missing_composer(asm) -> None:
     screen = asm.assemble_screen(_capture_frame(), name="Conversation", tab_bar=_bar(asm))
 
     assert not asm.pin_composer_above_tab_bar(screen, "Integrations/MCPs")
-    assert screen["numberOfFixedChildren"] == 1
+    assert screen["numberOfFixedChildren"] == 2
 
 
 def test_merge_captures_renames_and_orders_frames(asm) -> None:
@@ -472,7 +490,7 @@ def test_generated_design_matches_the_app_viewport(asm) -> None:
         assert screen["absoluteBoundingBox"]["width"] == asm.FRAME_W
         assert screen["absoluteBoundingBox"]["height"] >= asm.VIEWPORT_H
         bar = screen["children"][-1]
-        assert bar["name"] == "Tab Bar" and screen["numberOfFixedChildren"] == 1
+        assert bar["name"] == "Tab Bar" and screen["numberOfFixedChildren"] >= 2
         for node in asm._walk_all(bar):
             if node["type"] == "TEXT":
                 assert node["style"]["fontSize"] >= 11
