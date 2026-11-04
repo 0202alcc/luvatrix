@@ -120,6 +120,22 @@ def test_center_aligned_text_keeps_its_center() -> None:
     assert abs(center - 100.0) < 1.5
 
 
+def test_single_line_ink_is_never_rewrapped_into_a_second_line() -> None:
+    # A captured line whose renderer-measured width slightly exceeds its box
+    # (font metric drift) must stay one line: re-wrapping it would emit a
+    # "\\n" plus an orphaned word that paints on top of the next captured line.
+    b, body = page()
+    text = "Coordination revision before pour"
+    box_width = measured(text) - 3.0
+    paragraph(b, body, width=box_width, text=text)
+
+    result = compile_snapshots([("/", b.build())])
+
+    compiled = first_child(result)
+    assert "\n" not in compiled["characters"]
+    assert compiled["absoluteBoundingBox"]["height"] <= 21.0
+
+
 def test_multi_run_text_measures_each_run_style() -> None:
     b, body = page()
     p = b.element("P", parent=body)
