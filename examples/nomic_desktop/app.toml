@@ -13,6 +13,9 @@ native_height = 900
 bar_color_rgba = [0, 0, 0, 255]
 default_coordinate_frame = "screen_tl"
 title = "Nomic"
+# Nomic logo pulled from the Figma file; the macOS runtime sets it as the
+# Dock icon via NSApplication.setApplicationIconImage.
+icon = "design/images/b17353f221cfa35f0a5fe509f1fd6ecd44d6aa03.png"
 
 [render]
 preferred = "matrix"
