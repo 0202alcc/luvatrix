@@ -220,6 +220,7 @@ def add_figma_parser(subparsers: Any) -> None:
     tour.add_argument("--render-scale", type=float, default=3.0)
     tour.add_argument("--timeout", type=float, default=900.0, help="Seconds for build, launch, and the whole tour")
     tour.add_argument("--keep-open", action="store_true", help="After the tour, relaunch the app fresh and leave it running in the simulator")
+    tour.add_argument("--reset-simulator", action="store_true", help="Shut down and erase the simulator before the tour so no previous launch's retained environment leaks into the app")
 
 
 def run_figma_command(args: Any) -> None:
@@ -269,5 +270,6 @@ def run_figma_command(args: Any) -> None:
             render_scale=args.render_scale,
             timeout=args.timeout,
             keep_open=args.keep_open,
+            reset_simulator=args.reset_simulator,
         )
         raise SystemExit(code)

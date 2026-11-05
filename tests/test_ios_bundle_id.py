@@ -130,7 +130,12 @@ def test_run_ios_simulator_terminates_the_derived_bundle_id_on_interrupt(
     runner._run_ios_simulator(app, "iPhone 17")
 
     terminates = [cmd for cmd in commands if cmd[:3] == ["xcrun", "simctl", "terminate"]]
-    assert terminates == [["xcrun", "simctl", "terminate", UDID, "com.luvatrix.app.nomic-app"]]
+    # The pre-install stale-instance sweep plus the interrupt cleanup, both
+    # against the derived bundle id.
+    assert terminates == [
+        ["xcrun", "simctl", "terminate", UDID, "com.luvatrix.app.nomic-app"],
+        ["xcrun", "simctl", "terminate", UDID, "com.luvatrix.app.nomic-app"],
+    ]
 
 
 def test_run_ios_simulator_launches_legacy_bundle_id_without_app_id(

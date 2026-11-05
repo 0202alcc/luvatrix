@@ -80,11 +80,18 @@ jobs:
           if [ -n "$KEEP_OPEN" ]; then
             keep_open_args=(--keep-open)
           fi
+          # --reset-simulator erases the device first: the simulator retains a
+          # launch's environment per bundle id across terminate/uninstall, and
+          # a kept-open previous tour otherwise reruns forever with its stale
+          # run id. The erase plus cold boot needs headroom over the default
+          # 900s tour timeout.
           caffeinate -dims uv run python main.py figma ios-tour "$APP_DIR" \
             --tour "${TOUR:-$APP_DIR/tour.json}" \
             --out "$RUNNER_TEMP/ios-tour" \
             --simulator "$SIMULATOR" \
             --native-project "$APP_DIR/ios" \
+            --reset-simulator \
+            --timeout 1500 \
             "${keep_open_args[@]}"
 
       - name: Upload screenshots and logs

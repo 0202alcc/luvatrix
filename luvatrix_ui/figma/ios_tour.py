@@ -42,6 +42,7 @@ def run_ios_tour(
     settle: float = 0.75,
     ack_timeout: float = 60.0,
     keep_open: bool = False,
+    reset_simulator: bool = False,
     run_id: str | None = None,
     run: Callable[..., Any] = subprocess.run,
     popen: Callable[..., Any] = subprocess.Popen,
@@ -84,10 +85,35 @@ def run_ios_tour(
     if native_project is not None:
         cmd += ["--native-project", str(native_project)]
 
+    if reset_simulator:
+        # Terminating and even uninstalling the app is not enough to clear a
+        # previous launch: the simulator retains that launch's environment per
+        # bundle id across process death and reinstall, and keeps delivering it
+        # to newly spawned processes, so the tour runs with a stale run id and
+        # this harness never sees its own status. Erasing the device drops
+        # every retained launch record. Shutdown failure just means the device
+        # was already off; a failed erase means the device state is unknown,
+        # so launching anyway would burn the whole timeout on a stale tour.
+        print(f"[ios-tour] erasing simulator {simulator} ({udid}) for a clean launch", flush=True)
+        run(["xcrun", "simctl", "shutdown", udid], capture_output=True)
+        erased = run(["xcrun", "simctl", "erase", udid], capture_output=True, text=True)
+        if erased.returncode != 0:
+            detail = (erased.stderr or erased.stdout or "").strip()
+            summary.update(state="reset_failed", error=f"simctl erase failed: {detail}")
+            return _finish(out, summary)
+
+    # Kill any stale instance (e.g. a kept-open app from a previous tour) before
+    # run-app reinstalls and launches: an app killed by the install can be
+    # auto-relaunched with the previous launch's retained environment, and the
+    # env-carrying `simctl launch` then no-ops instead of delivering this run's
+    # tour config.
+    run(["xcrun", "simctl", "terminate", udid, bundle_id], capture_output=True)
+
     with open(out / "console.log", "w", buffering=1) as console:
         proc = popen(cmd, env=env, stdout=console, stderr=subprocess.STDOUT)
         container: Path | None = None
         pinned = False
+        foreign_warned: str | None = None
         shot = 0
         done_steps: set[int] = set()
         deadline = clock() + timeout
@@ -100,7 +126,13 @@ def run_ios_tour(
                 # the app, simctl still reports the previous install's data container.
                 if not pinned:
                     container = _app_container(run, udid, bundle_id)
-                status = _read_status(container, run_id) if container else None
+                raw = _read_status(container) if container else None
+                status = raw if raw is not None and raw.get("run") == run_id else None
+                if raw is not None and status is None:
+                    foreign = str(raw.get("run") or "?")
+                    if foreign != foreign_warned:
+                        print(f"[ios-tour] ignoring status from run {foreign} (waiting for {run_id})", flush=True)
+                        foreign_warned = foreign
                 pinned = pinned or status is not None
                 if status is not None and status.get("state") == "capture" and status.get("step") not in done_steps:
                     sleep(settle)
@@ -147,8 +179,11 @@ def _relaunch_for_user(run: Callable[..., Any], udid: str, render_scale: float, 
     screenshot records which app is actually on screen.
     """
     env = os.environ.copy()
+    # Scrub the tour env with empty overrides rather than dropping the keys: the
+    # simulator retains the last spawning launch's environment, so an omitted
+    # key can leak a previous tour's config into the next launch.
     for key in (f"SIMCTL_CHILD_{TOUR_ENV}", f"SIMCTL_CHILD_{TOUR_RUN_ENV}", f"SIMCTL_CHILD_{TOUR_ACK_TIMEOUT_ENV}"):
-        env.pop(key, None)
+        env[key] = ""
     env["SIMCTL_CHILD_LUVATRIX_IOS_RENDER_SCALE"] = f"{render_scale:.6g}"
     env["SIMCTL_CHILD_LUVATRIX_RENDER_MODE"] = os.environ.get("LUVATRIX_RENDER_MODE", "auto")
     run(["xcrun", "simctl", "launch", udid, bundle_id], capture_output=True, env=env)
@@ -185,12 +220,12 @@ def _status_dir(container: Path) -> Path:
     return container / "tmp" / "luvatrix_tour"
 
 
-def _read_status(container: Path, run_id: str) -> dict[str, Any] | None:
+def _read_status(container: Path) -> dict[str, Any] | None:
     try:
         status = json.loads((_status_dir(container) / STATUS_FILE).read_text())
     except (OSError, json.JSONDecodeError):
         return None
-    return status if isinstance(status, dict) and status.get("run") == run_id else None
+    return status if isinstance(status, dict) else None
 
 
 def _write_app_log(run: Callable[..., Any], udid: str, start: str, out: Path) -> None:
