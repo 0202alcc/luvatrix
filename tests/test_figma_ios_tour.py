@@ -35,6 +35,11 @@ class _FakeSimulator:
         self.terminate_calls: list[list[str]] = []
         self.terminated_before_launch = False
         self.foreign_run: str | None = None
+        self.fail_shutdown = False
+        self.fail_erase = False
+        self.reset_calls: list[list[str]] = []
+        self.erased_before_launch = False
+        self.erased = False
         self.step = 0
         self.ticks = 0
         self.now = 0.0
@@ -54,6 +59,17 @@ class _FakeSimulator:
             return SimpleNamespace(returncode=0, stdout=f"{self.container}\n", stderr="")
         if cmd[:4] == ["xcrun", "simctl", "io", UDID]:
             Path(cmd[-1]).write_bytes(b"\x89PNG fake")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd[:3] == ["xcrun", "simctl", "shutdown"]:
+            self.reset_calls.append(cmd)
+            if self.fail_shutdown:
+                return SimpleNamespace(returncode=1, stdout="", stderr="Unable to shutdown device in current state: Shutdown")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd[:3] == ["xcrun", "simctl", "erase"]:
+            self.reset_calls.append(cmd)
+            if self.fail_erase:
+                return SimpleNamespace(returncode=1, stdout="", stderr="Unable to erase contents and settings in current state: Booted")
+            self.erased = True
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if cmd[:3] == ["xcrun", "simctl", "terminate"]:
             self.terminated = True
@@ -78,6 +94,7 @@ class _FakeSimulator:
         self.launch_cmd = [str(c) for c in cmd]
         self.env = env
         self.terminated_before_launch = self.terminated
+        self.erased_before_launch = self.erased
         stdout.write("[ios] launching com.luvatrix.app\n")
         return self
 
@@ -368,6 +385,50 @@ def test_ios_tour_terminates_a_stale_app_before_launching_run_app(tmp_path: Path
     assert code == 0
     assert sim.terminated_before_launch
     assert sim.terminate_calls[0] == ["xcrun", "simctl", "terminate", UDID, BUNDLE]
+    assert sim.reset_calls == []
+
+
+def test_ios_tour_reset_simulator_erases_the_device_before_launching(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome")])
+
+    code = _run(tmp_path, sim, reset_simulator=True)
+
+    # Terminating and even uninstalling a kept-open app is not enough: the
+    # simulator still delivers the previous launch's retained environment to
+    # the next process it spawns for that bundle id, so the tour runs with a
+    # stale run id and the harness never sees its own status. Erasing the
+    # device is the only operation that drops every retained launch record.
+    assert code == 0
+    assert sim.reset_calls[:2] == [
+        ["xcrun", "simctl", "shutdown", UDID],
+        ["xcrun", "simctl", "erase", UDID],
+    ]
+    assert sim.erased_before_launch
+
+
+def test_ios_tour_reset_simulator_tolerates_an_already_shutdown_device(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome")])
+    sim.fail_shutdown = True
+
+    code = _run(tmp_path, sim, reset_simulator=True)
+
+    assert code == 0
+    assert sim.erased_before_launch
+
+
+def test_ios_tour_reset_simulator_aborts_when_the_erase_fails(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome")])
+    sim.fail_erase = True
+
+    code = _run(tmp_path, sim, reset_simulator=True)
+
+    # Launching anyway would rerun the tour against the stale retained
+    # environment and burn the full timeout, so a failed erase is fatal.
+    summary = json.loads((tmp_path / "out" / "summary.json").read_text())
+    assert code == 1
+    assert summary["state"] == "reset_failed"
+    assert "erase" in summary["error"]
+    assert sim.launch_cmd == []
 
 
 def test_ios_tour_warns_when_only_a_stale_run_reports(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
