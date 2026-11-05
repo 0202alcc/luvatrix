@@ -65,6 +65,21 @@ jobs:
             exit 1
           fi
 
+      - name: Diagnose window session
+        run: |
+          echo "runner: user=$(id -un) uid=$(id -u); console owner=$(stat -f %Su /dev/console) uid=$(stat -f %u /dev/console)"
+          echo "app process:"
+          pgrep -fl "main.py run-app $APP_DIR" || echo "  (not running)"
+          echo "python-owned windows visible to the window server:"
+          uv run python - <<'EOF'
+          import Quartz
+          wins = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionAll, Quartz.kCGNullWindowID)
+          mine = [w for w in wins if "python" in str(w.get("kCGWindowOwnerName", "")).lower()]
+          print(f"  {len(mine)} python window(s) of {len(wins)} total")
+          for w in mine:
+              print("  window:", w.get("kCGWindowOwnerName"), w.get("kCGWindowNumber"), w.get("kCGWindowBounds"), w.get("kCGWindowOwnerPID"))
+          EOF
+
       - name: Screenshot
         run: |
           # Needs an unlocked GUI session and Screen Recording permission for
