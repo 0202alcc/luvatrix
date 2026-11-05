@@ -449,6 +449,8 @@ fn parse_raster_ops<'a>(
                 t: tuple.get_item(1)?.extract()?,
                 rotation: tuple.get_item(2)?.extract()?,
                 scroll_y: tuple.get_item(3)?.extract()?,
+                offset_dx: tuple.get_item(4)?.extract()?,
+                offset_dy: tuple.get_item(5)?.extract()?,
             },
             5 => {
                 let idx = store.stage(&tuple.get_item(5)?)?;
@@ -492,6 +494,8 @@ fn parse_raster_ops<'a>(
                 point_size: tuple.get_item(6)?.extract()?,
                 color: color4(tuple, 7)?,
                 basis: basis_at(tuple, 11)?,
+                offset_dx: tuple.get_item(25)?.extract()?,
+                offset_dy: tuple.get_item(26)?.extract()?,
             },
             11 => raster::RasterOp::DotPlane3D {
                 center: vec3(tuple, 1)?,
@@ -501,6 +505,8 @@ fn parse_raster_ops<'a>(
                 point_size: tuple.get_item(7)?.extract()?,
                 color: color4(tuple, 8)?,
                 basis: basis_at(tuple, 12)?,
+                offset_dx: tuple.get_item(26)?.extract()?,
+                offset_dy: tuple.get_item(27)?.extract()?,
             },
             other => {
                 return Err(PyValueError::new_err(format!(

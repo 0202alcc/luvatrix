@@ -104,13 +104,14 @@ def _rasterize_scene_frame_rs(frame: SceneFrame, out=None):
             raise _SceneRsFallback("out buffer is not a contiguous writable uint8 array")
     sx = float(frame.display_width) / max(1.0, float(frame.logical_width))
     sy = float(frame.display_height) / max(1.0, float(frame.logical_height))
+    offsets = _Offsets(float(frame.content_offset_x), float(frame.content_offset_y), sx, sy)
     encoded = []
     camera3d = _DEFAULT_CAMERA_3D
     for node in frame.nodes:
         if isinstance(node, Camera3DNode):
             camera3d = node
             continue
-        ops = _encode_node_for_rs(node, sx, sy, frame, camera3d)
+        ops = _encode_node_for_rs(node, sx, sy, frame, camera3d, offsets)
         if ops is None:
             raise _SceneRsFallback(f"node not lowered by the Rust rasterizer: {type(node).__name__}")
         encoded.extend(ops)
@@ -139,13 +140,16 @@ def _rgba4(color: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
     return (int(color[0]), int(color[1]), int(color[2]), int(color[3]))
 
 
-def _encode_node_for_rs(node: SceneNode, sx: float, sy: float, frame: SceneFrame, camera3d: Camera3DNode) -> list | None:
+def _encode_node_for_rs(node: SceneNode, sx: float, sy: float, frame: SceneFrame, camera3d: Camera3DNode, offsets: "_Offsets") -> list | None:
     """Encode one node as ``_matrix_rs.rasterize`` op tuples.
 
     Returns a list of op tuples (empty for nodes the Python rasterizer treats
     as no-ops), or ``None`` for nodes that need the Python rasterizer for this
     frame. 3D nodes lower to Line/Rect/DebugText/DotGrid3D/DotPlane3D ops in
     display space, mirroring the Python 3D fallbacks painter's-order exactly.
+    ``offsets`` applies the frame's content offset the same way the Python
+    rasterizer does: logical-unit subtraction before scaling for 2D nodes,
+    display-pixel subtraction after projection for 3D nodes.
     """
     np = _numpy()
     if isinstance(node, ClearNode):
@@ -154,8 +158,8 @@ def _encode_node_for_rs(node: SceneNode, sx: float, sy: float, frame: SceneFrame
         if node.shader != "full_suite_background":
             return [(
                 1,
-                float(node.x * sx),
-                float(node.y * sy),
+                float((node.x - offsets.x) * sx),
+                float((node.y - offsets.y) * sy),
                 float(node.width * sx),
                 float(node.height * sy),
                 *_rgba4(node.color_rgba),
@@ -163,12 +167,12 @@ def _encode_node_for_rs(node: SceneNode, sx: float, sy: float, frame: SceneFrame
         t = float(node.uniforms[0]) if node.uniforms else 0.0
         rotation = float(node.uniforms[1]) if len(node.uniforms) > 1 else 0.0
         scroll_y = float(node.uniforms[2]) if len(node.uniforms) > 2 else 0.0
-        return [(4, t, rotation, scroll_y)]
+        return [(4, t, rotation, scroll_y, offsets.dx, offsets.dy)]
     if isinstance(node, RectNode):
         return [(
             1,
-            float(node.x * sx),
-            float(node.y * sy),
+            float((node.x - offsets.x) * sx),
+            float((node.y - offsets.y) * sy),
             float(node.width * sx),
             float(node.height * sy),
             *_rgba4(node.color_rgba),
@@ -176,8 +180,8 @@ def _encode_node_for_rs(node: SceneNode, sx: float, sy: float, frame: SceneFrame
     if isinstance(node, RoundedRectNode):
         return [(
             2,
-            float(node.x * sx),
-            float(node.y * sy),
+            float((node.x - offsets.x) * sx),
+            float((node.y - offsets.y) * sy),
             float(node.width * sx),
             float(node.height * sy),
             float(node.radius * min(sx, sy)),
@@ -186,15 +190,15 @@ def _encode_node_for_rs(node: SceneNode, sx: float, sy: float, frame: SceneFrame
     if isinstance(node, CircleNode):
         return [(
             3,
-            float(node.cx * sx),
-            float(node.cy * sy),
+            float((node.cx - offsets.x) * sx),
+            float((node.cy - offsets.y) * sy),
             float(node.radius) * ((sx + sy) * 0.5),
             float(node.stroke_width),
             *_rgba4(node.fill_rgba),
             *_rgba4(node.stroke_rgba),
         )]
     if isinstance(node, TextNode):
-        mode, mask, mask_x, mask_y = _text_mask_for_node(node, sx, sy)
+        mode, mask, mask_x, mask_y = _text_mask_for_node(node, sx, sy, offsets.x, offsets.y)
         if mode == "blend":
             mask_u8 = np.ascontiguousarray(mask)
             return [(
@@ -221,8 +225,8 @@ def _encode_node_for_rs(node: SceneNode, sx: float, sy: float, frame: SceneFrame
         layer_h, layer_w = int(view.shape[0]), int(view.shape[1])
         return [(
             5,
-            int(round(node.x * sx)),
-            int(round(node.y * sy)),
+            int(round((node.x - offsets.x) * sx)),
+            int(round((node.y - offsets.y) * sy)),
             layer_w,
             layer_h,
             view,
@@ -232,7 +236,7 @@ def _encode_node_for_rs(node: SceneNode, sx: float, sy: float, frame: SceneFrame
     width = int(frame.display_width)
     height = int(frame.display_height)
     if isinstance(node, Cube3DNode):
-        return _encode_cube3d_for_rs(node, camera3d, width, height)
+        return _encode_cube3d_for_rs(node, camera3d, width, height, offsets)
     if isinstance(node, DotGrid3DNode):
         return [(
             10,
@@ -244,6 +248,8 @@ def _encode_node_for_rs(node: SceneNode, sx: float, sy: float, frame: SceneFrame
             float(node.point_size),
             *_rgba4(node.color_rgba),
             *_camera_rs_basis(camera3d),
+            offsets.dx,
+            offsets.dy,
         )]
     if isinstance(node, DotPlane3DNode):
         return [(
@@ -257,19 +263,21 @@ def _encode_node_for_rs(node: SceneNode, sx: float, sy: float, frame: SceneFrame
             float(node.point_size),
             *_rgba4(node.color_rgba),
             *_camera_rs_basis(camera3d),
+            offsets.dx,
+            offsets.dy,
         )]
     if isinstance(node, Line3DNode):
         start = _project_point(node.start, camera3d, width, height)
         end = _project_point(node.end, camera3d, width, height)
         if start is None or end is None:
             return []
-        return [(8, start[0], start[1], end[0], end[1], *_rgba4(node.color_rgba))]
+        return [(8, start[0] - offsets.dx, start[1] - offsets.dy, end[0] - offsets.dx, end[1] - offsets.dy, *_rgba4(node.color_rgba))]
     if isinstance(node, GroundPlane3DNode):
-        return _encode_ground_plane3d_for_rs(node, camera3d, width, height)
+        return _encode_ground_plane3d_for_rs(node, camera3d, width, height, offsets)
     if isinstance(node, Horizon3DNode):
-        return _encode_horizon3d_for_rs(node, camera3d, width, height)
+        return _encode_horizon3d_for_rs(node, camera3d, width, height, offsets)
     if isinstance(node, Text3DNode):
-        return _encode_text3d_for_rs(node, camera3d, width, height)
+        return _encode_text3d_for_rs(node, camera3d, width, height, offsets)
     # Node kinds the Python rasterizer's elif chain does not handle are no-ops.
     return []
 
@@ -290,7 +298,7 @@ def _camera_rs_basis(camera: Camera3DNode) -> tuple:
     return (*eye, *right, *up, *forward, f, float(camera.near))
 
 
-def _encode_cube3d_for_rs(node: Cube3DNode, camera: Camera3DNode, width: int, height: int) -> list:
+def _encode_cube3d_for_rs(node: Cube3DNode, camera: Camera3DNode, width: int, height: int, offsets: _Offsets) -> list:
     points = [_project_point(_transform_cube_vertex(vertex, node), camera, width, height) for vertex in _CUBE_VERTICES]
     ops = []
     for start, end in _CUBE_EDGES:
@@ -298,14 +306,14 @@ def _encode_cube3d_for_rs(node: Cube3DNode, camera: Camera3DNode, width: int, he
         b = points[end]
         if a is None or b is None:
             continue
-        ops.append((8, a[0], a[1], b[0], b[1], *_rgba4(node.edge_rgba)))
+        ops.append((8, a[0] - offsets.dx, a[1] - offsets.dy, b[0] - offsets.dx, b[1] - offsets.dy, *_rgba4(node.edge_rgba)))
     for point in points:
         if point is not None:
-            ops.append((1, point[0] - 1.0, point[1] - 1.0, 3.0, 3.0, *_rgba4(node.color_rgba)))
+            ops.append((1, point[0] - offsets.dx - 1.0, point[1] - offsets.dy - 1.0, 3.0, 3.0, *_rgba4(node.color_rgba)))
     return ops
 
 
-def _encode_ground_plane3d_for_rs(node: GroundPlane3DNode, camera: Camera3DNode, width: int, height: int) -> list:
+def _encode_ground_plane3d_for_rs(node: GroundPlane3DNode, camera: Camera3DNode, width: int, height: int, offsets: _Offsets) -> list:
     half_w = float(node.width) * 0.5
     half_d = float(node.depth) * 0.5
     x0 = node.center[0] - half_w
@@ -325,11 +333,11 @@ def _encode_ground_plane3d_for_rs(node: GroundPlane3DNode, camera: Camera3DNode,
         a = points[start]
         b = points[end]
         if a is not None and b is not None:
-            ops.append((8, a[0], a[1], b[0], b[1], *_rgba4(node.color_rgba)))
+            ops.append((8, a[0] - offsets.dx, a[1] - offsets.dy, b[0] - offsets.dx, b[1] - offsets.dy, *_rgba4(node.color_rgba)))
     return ops
 
 
-def _encode_horizon3d_for_rs(node: Horizon3DNode, camera: Camera3DNode, width: int, height: int) -> list:
+def _encode_horizon3d_for_rs(node: Horizon3DNode, camera: Camera3DNode, width: int, height: int, offsets: _Offsets) -> list:
     dy = camera.target[1] - camera.position[1]
     dx = camera.target[0] - camera.position[0]
     dz = camera.target[2] - camera.position[2]
@@ -338,16 +346,16 @@ def _encode_horizon3d_for_rs(node: Horizon3DNode, camera: Camera3DNode, width: i
     fov = math.radians(camera.fov_deg)
     horizon_ndc = max(-0.95, min(0.95, math.tan(pitch) / math.tan(fov * 0.5)))
     horizon_y = int(round((0.5 - horizon_ndc * 0.5) * height))
-    ops = [(1, 0, 0, width, max(0, horizon_y), *_rgba4(node.sky_rgba))]
+    ops = [(1, 0 - offsets.dx, 0 - offsets.dy, width, max(0, horizon_y), *_rgba4(node.sky_rgba))]
     if node.sky_horizon_rgba is not None:
-        ops.append((1, 0, max(0, horizon_y - height // 12), width, height // 12, *_rgba4(node.sky_horizon_rgba)))
-    ops.append((1, 0, horizon_y, width, max(0, height - horizon_y), *_rgba4(node.ground_rgba)))
+        ops.append((1, 0 - offsets.dx, max(0, horizon_y - height // 12) - offsets.dy, width, height // 12, *_rgba4(node.sky_horizon_rgba)))
+    ops.append((1, 0 - offsets.dx, horizon_y - offsets.dy, width, max(0, height - horizon_y), *_rgba4(node.ground_rgba)))
     line_height = max(1, int(round(node.horizon_width * height)))
-    ops.append((1, 0, horizon_y - line_height // 2, width, line_height, *_rgba4(node.horizon_rgba)))
+    ops.append((1, 0 - offsets.dx, (horizon_y - line_height // 2) - offsets.dy, width, line_height, *_rgba4(node.horizon_rgba)))
     return ops
 
 
-def _encode_text3d_for_rs(node: Text3DNode, camera: Camera3DNode, width: int, height: int) -> list:
+def _encode_text3d_for_rs(node: Text3DNode, camera: Camera3DNode, width: int, height: int, offsets: _Offsets) -> list:
     point = _project_point(node.position, camera, width, height)
     if point is None:
         return []
@@ -357,8 +365,8 @@ def _encode_text3d_for_rs(node: Text3DNode, camera: Camera3DNode, width: int, he
     return [(
         9,
         node.text.upper(),
-        int(point[0]),
-        int(point[1]),
+        int(point[0] - offsets.dx),
+        int(point[1] - offsets.dy),
         scale,
         *_rgba4(node.color_rgba),
     )]
@@ -381,6 +389,36 @@ def _layer_payload_for_rs(layer):
     return np.ascontiguousarray(layer)
 
 
+class _Offsets(tuple):
+    """Content-offset in logical units (x, y) and display pixels (dx, dy).
+
+    Mirrors the native scene backends, which subtract the offset in logical
+    units before scaling (Metal quad shader, Android geometry shift), and
+    subtract the display-scaled offset after 3D projection.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, x: float, y: float, sx: float, sy: float):
+        return super().__new__(cls, (x, y, x * sx, y * sy))
+
+    @property
+    def x(self) -> float:
+        return self[0]
+
+    @property
+    def y(self) -> float:
+        return self[1]
+
+    @property
+    def dx(self) -> float:
+        return self[2]
+
+    @property
+    def dy(self) -> float:
+        return self[3]
+
+
 def _rasterize_scene_frame_python(frame: SceneFrame, out=None):
     np = _numpy()
     if out is not None:
@@ -392,10 +430,11 @@ def _rasterize_scene_frame_python(frame: SceneFrame, out=None):
             out = np.zeros((frame.display_height, frame.display_width, 4), dtype=np.uint8)
         else:
             out = accel.zeros((frame.display_height, frame.display_width, 4))
-    
+
     out[:, :, 3] = 255
     sx = float(frame.display_width) / max(1.0, float(frame.logical_width))
     sy = float(frame.display_height) / max(1.0, float(frame.logical_height))
+    offsets = _Offsets(float(frame.content_offset_x), float(frame.content_offset_y), sx, sy)
     camera3d = _DEFAULT_CAMERA_3D
     for node in frame.nodes:
         if isinstance(node, ClearNode):
@@ -404,35 +443,35 @@ def _rasterize_scene_frame_python(frame: SceneFrame, out=None):
             out[:, :, 2] = node.color_rgba[2]
             out[:, :, 3] = node.color_rgba[3]
         elif isinstance(node, ShaderRectNode):
-            _draw_shader_rect(out, node, sx=sx, sy=sy)
+            _draw_shader_rect(out, node, sx=sx, sy=sy, offsets=offsets)
         elif isinstance(node, RectNode):
-            _draw_rect(out, node.x * sx, node.y * sy, node.width * sx, node.height * sy, node.color_rgba)
+            _draw_rect(out, (node.x - offsets.x) * sx, (node.y - offsets.y) * sy, node.width * sx, node.height * sy, node.color_rgba)
         elif isinstance(node, RoundedRectNode):
-            _draw_rounded_rect(out, node.x * sx, node.y * sy, node.width * sx, node.height * sy, node.radius * min(sx, sy), node.color_rgba)
+            _draw_rounded_rect(out, (node.x - offsets.x) * sx, (node.y - offsets.y) * sy, node.width * sx, node.height * sy, node.radius * min(sx, sy), node.color_rgba)
         elif isinstance(node, CircleNode):
-            _draw_circle(out, node, sx=sx, sy=sy)
+            _draw_circle(out, node, sx=sx, sy=sy, offsets=offsets)
         elif isinstance(node, TextNode):
-            _draw_text(out, node, sx=sx, sy=sy)
+            _draw_text(out, node, sx=sx, sy=sy, offsets=offsets)
         elif isinstance(node, Camera3DNode):
             camera3d = node
         elif isinstance(node, Cube3DNode):
-            _draw_cube3d_fallback(out, node, camera3d)
+            _draw_cube3d_fallback(out, node, camera3d, offsets)
         elif isinstance(node, DotGrid3DNode):
-            _draw_dot_grid3d_fallback(out, node, camera3d)
+            _draw_dot_grid3d_fallback(out, node, camera3d, offsets)
         elif isinstance(node, DotPlane3DNode):
-            _draw_dot_plane3d_fallback(out, node, camera3d)
+            _draw_dot_plane3d_fallback(out, node, camera3d, offsets)
         elif isinstance(node, Line3DNode):
-            _draw_line3d_fallback(out, node, camera3d)
+            _draw_line3d_fallback(out, node, camera3d, offsets)
         elif isinstance(node, GroundPlane3DNode):
-            _draw_ground_plane3d_fallback(out, node, camera3d)
+            _draw_ground_plane3d_fallback(out, node, camera3d, offsets)
         elif isinstance(node, Horizon3DNode):
-            _draw_horizon3d_fallback(out, node, camera3d)
+            _draw_horizon3d_fallback(out, node, camera3d, offsets)
         elif isinstance(node, Text3DNode):
-            _draw_text3d_fallback(out, node, camera3d)
+            _draw_text3d_fallback(out, node, camera3d, offsets)
         elif isinstance(node, CpuLayerNode):
-            _draw_layer(out, node, sx=sx, sy=sy)
+            _draw_layer(out, node, sx=sx, sy=sy, offsets=offsets)
         elif isinstance(node, ImageNode) and node.rgba is not None:
-            _draw_layer(out, CpuLayerNode(node.x, node.y, node.width, node.height, node.rgba, node.z_index), sx=sx, sy=sy)
+            _draw_layer(out, CpuLayerNode(node.x, node.y, node.width, node.height, node.rgba, node.z_index), sx=sx, sy=sy, offsets=offsets)
         elif isinstance(node, SvgNode):
             # SVG scene fallback is intentionally no-op until vector CPU fallback
             # moves behind the retained scene API.
@@ -440,20 +479,20 @@ def _rasterize_scene_frame_python(frame: SceneFrame, out=None):
     return out
 
 
-def _draw_cube3d_fallback(out, node: Cube3DNode, camera: Camera3DNode) -> None:
+def _draw_cube3d_fallback(out, node: Cube3DNode, camera: Camera3DNode, offsets: _Offsets) -> None:
     points = [_project_point(_transform_cube_vertex(vertex, node), camera, out.shape[1], out.shape[0]) for vertex in _CUBE_VERTICES]
     for start, end in _CUBE_EDGES:
         a = points[start]
         b = points[end]
         if a is None or b is None:
             continue
-        _draw_line(out, a[0], a[1], b[0], b[1], node.edge_rgba)
+        _draw_line(out, a[0] - offsets.dx, a[1] - offsets.dy, b[0] - offsets.dx, b[1] - offsets.dy, node.edge_rgba)
     for point in points:
         if point is not None:
-            _draw_rect(out, point[0] - 1.0, point[1] - 1.0, 3.0, 3.0, node.color_rgba)
+            _draw_rect(out, point[0] - offsets.dx - 1.0, point[1] - offsets.dy - 1.0, 3.0, 3.0, node.color_rgba)
 
 
-def _draw_dot_grid3d_fallback(out, node: DotGrid3DNode, camera: Camera3DNode) -> None:
+def _draw_dot_grid3d_fallback(out, node: DotGrid3DNode, camera: Camera3DNode, offsets: _Offsets) -> None:
     half = float(node.extent) * 0.5
     count = max(1, int(math.floor(float(node.extent) / float(node.spacing))))
     start = -count * float(node.spacing) * 0.5
@@ -468,10 +507,10 @@ def _draw_dot_grid3d_fallback(out, node: DotGrid3DNode, camera: Camera3DNode) ->
                     continue
                 point = _project_point((node.center[0] + x, node.center[1] + y, node.center[2] + z), camera, out.shape[1], out.shape[0])
                 if point is not None:
-                    _draw_rect(out, point[0] - radius * 0.5, point[1] - radius * 0.5, radius, radius, node.color_rgba)
+                    _draw_rect(out, point[0] - offsets.dx - radius * 0.5, point[1] - offsets.dy - radius * 0.5, radius, radius, node.color_rgba)
 
 
-def _draw_dot_plane3d_fallback(out, node: DotPlane3DNode, camera: Camera3DNode) -> None:
+def _draw_dot_plane3d_fallback(out, node: DotPlane3DNode, camera: Camera3DNode, offsets: _Offsets) -> None:
     x_count = max(1, int(math.floor(float(node.width) / float(node.spacing))))
     z_count = max(1, int(math.floor(float(node.depth) / float(node.spacing))))
     x_start = -x_count * float(node.spacing) * 0.5
@@ -490,18 +529,18 @@ def _draw_dot_plane3d_fallback(out, node: DotPlane3DNode, camera: Camera3DNode) 
                 out.shape[0],
             )
             if point is not None:
-                _draw_rect(out, point[0] - radius * 0.5, point[1] - radius * 0.5, radius, radius, node.color_rgba)
+                _draw_rect(out, point[0] - offsets.dx - radius * 0.5, point[1] - offsets.dy - radius * 0.5, radius, radius, node.color_rgba)
 
 
-def _draw_line3d_fallback(out, node: Line3DNode, camera: Camera3DNode) -> None:
+def _draw_line3d_fallback(out, node: Line3DNode, camera: Camera3DNode, offsets: _Offsets) -> None:
     start = _project_point(node.start, camera, out.shape[1], out.shape[0])
     end = _project_point(node.end, camera, out.shape[1], out.shape[0])
     if start is None or end is None:
         return
-    _draw_line(out, start[0], start[1], end[0], end[1], node.color_rgba)
+    _draw_line(out, start[0] - offsets.dx, start[1] - offsets.dy, end[0] - offsets.dx, end[1] - offsets.dy, node.color_rgba)
 
 
-def _draw_ground_plane3d_fallback(out, node: GroundPlane3DNode, camera: Camera3DNode) -> None:
+def _draw_ground_plane3d_fallback(out, node: GroundPlane3DNode, camera: Camera3DNode, offsets: _Offsets) -> None:
     half_w = float(node.width) * 0.5
     half_d = float(node.depth) * 0.5
     x0 = node.center[0] - half_w
@@ -520,10 +559,10 @@ def _draw_ground_plane3d_fallback(out, node: GroundPlane3DNode, camera: Camera3D
         a = points[start]
         b = points[end]
         if a is not None and b is not None:
-            _draw_line(out, a[0], a[1], b[0], b[1], node.color_rgba)
+            _draw_line(out, a[0] - offsets.dx, a[1] - offsets.dy, b[0] - offsets.dx, b[1] - offsets.dy, node.color_rgba)
 
 
-def _draw_horizon3d_fallback(out, node: Horizon3DNode, camera: Camera3DNode) -> None:
+def _draw_horizon3d_fallback(out, node: Horizon3DNode, camera: Camera3DNode, offsets: _Offsets) -> None:
     height, width, _ = out.shape
     dy = camera.target[1] - camera.position[1]
     dx = camera.target[0] - camera.position[0]
@@ -533,20 +572,20 @@ def _draw_horizon3d_fallback(out, node: Horizon3DNode, camera: Camera3DNode) -> 
     fov = math.radians(camera.fov_deg)
     horizon_ndc = max(-0.95, min(0.95, math.tan(pitch) / math.tan(fov * 0.5)))
     horizon_y = int(round((0.5 - horizon_ndc * 0.5) * height))
-    _draw_rect(out, 0, 0, width, max(0, horizon_y), node.sky_rgba)
+    _draw_rect(out, 0 - offsets.dx, 0 - offsets.dy, width, max(0, horizon_y), node.sky_rgba)
     if node.sky_horizon_rgba is not None:
-        _draw_rect(out, 0, max(0, horizon_y - height // 12), width, height // 12, node.sky_horizon_rgba)
-    _draw_rect(out, 0, horizon_y, width, max(0, height - horizon_y), node.ground_rgba)
+        _draw_rect(out, 0 - offsets.dx, max(0, horizon_y - height // 12) - offsets.dy, width, height // 12, node.sky_horizon_rgba)
+    _draw_rect(out, 0 - offsets.dx, horizon_y - offsets.dy, width, max(0, height - horizon_y), node.ground_rgba)
     line_height = max(1, int(round(node.horizon_width * height)))
-    _draw_rect(out, 0, horizon_y - line_height // 2, width, line_height, node.horizon_rgba)
+    _draw_rect(out, 0 - offsets.dx, (horizon_y - line_height // 2) - offsets.dy, width, line_height, node.horizon_rgba)
 
 
-def _draw_text3d_fallback(out, node: Text3DNode, camera: Camera3DNode) -> None:
+def _draw_text3d_fallback(out, node: Text3DNode, camera: Camera3DNode, offsets: _Offsets) -> None:
     point = _project_point(node.position, camera, out.shape[1], out.shape[0])
     if point is None:
         return
     scale = max(1, int(round(node.height * 18.0)))
-    _draw_debug_text(out, node.text, x=int(point[0]), y=int(point[1]), scale=scale, color=node.color_rgba)
+    _draw_debug_text(out, node.text, x=int(point[0] - offsets.dx), y=int(point[1] - offsets.dy), scale=scale, color=node.color_rgba)
 
 
 def _transform_cube_vertex(vertex: tuple[float, float, float], node: Cube3DNode) -> tuple[float, float, float]:
@@ -593,13 +632,13 @@ def _cross(a: tuple[float, float, float], b: tuple[float, float, float]) -> tupl
     return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
 
 
-def _draw_shader_rect(out, node: ShaderRectNode, *, sx: float, sy: float) -> None:
+def _draw_shader_rect(out, node: ShaderRectNode, *, sx: float, sy: float, offsets: _Offsets) -> None:
     if node.shader != "full_suite_background":
-        _draw_rect(out, node.x * sx, node.y * sy, node.width * sx, node.height * sy, node.color_rgba)
+        _draw_rect(out, (node.x - offsets.x) * sx, (node.y - offsets.y) * sy, node.width * sx, node.height * sy, node.color_rgba)
         return
     np = _numpy()
     if np is not None:
-        _draw_rainbow_background(out, node)
+        _draw_rainbow_background(out, node, offset_dx=offsets.dx, offset_dy=offsets.dy)
         return
     t = int(node.uniforms[0]) if node.uniforms else 0
     rotation = float(node.uniforms[1]) if len(node.uniforms) > 1 else 0.0
@@ -615,10 +654,10 @@ def _draw_shader_rect(out, node: ShaderRectNode, *, sx: float, sy: float) -> Non
         max(0, min(255, base_b)),
         255,
     )
-    _draw_rect(out, node.x * sx, node.y * sy, node.width * sx, node.height * sy, color)
+    _draw_rect(out, (node.x - offsets.x) * sx, (node.y - offsets.y) * sy, node.width * sx, node.height * sy, color)
 
 
-def _draw_rainbow_background(out, node: ShaderRectNode) -> None:
+def _draw_rainbow_background(out, node: ShaderRectNode, *, offset_dx: float = 0.0, offset_dy: float = 0.0) -> None:
     np = _numpy()
     if np is None:
         return
@@ -627,8 +666,8 @@ def _draw_rainbow_background(out, node: ShaderRectNode) -> None:
     rotation = float(node.uniforms[1]) if len(node.uniforms) > 1 else 0.0
     scroll_y = float(node.uniforms[2]) if len(node.uniforms) > 2 else 0.0
     yy, xx = np.mgrid[0:h, 0:w]
-    nx = xx.astype(np.float32) / max(1.0, float(w))
-    ny = yy.astype(np.float32) / max(1.0, float(h))
+    nx = (xx + offset_dx).astype(np.float32) / max(1.0, float(w))
+    ny = (yy + offset_dy).astype(np.float32) / max(1.0, float(h))
     phase = t * 0.0025 + rotation * 0.01 + scroll_y * 0.002
     wave = np.sin((nx * 3.2 + ny * 2.4 + phase) * (2.0 * np.pi)) * 0.055
     hue = (nx * 0.58 + ny * 0.42 + phase + wave) % 1.0
@@ -714,13 +753,13 @@ def _draw_line(out, x0: float, y0: float, x1: float, y1: float, color: tuple[int
         _draw_rect(out, x - 0.5, y - 0.5, 2.0, 2.0, color)
 
 
-def _draw_circle(out, node: CircleNode, *, sx: float, sy: float) -> None:
+def _draw_circle(out, node: CircleNode, *, sx: float, sy: float, offsets: _Offsets) -> None:
     np = _numpy()
     if np is None:
         return
     h, w, _ = out.shape
-    cx = float(node.cx) * sx
-    cy = float(node.cy) * sy
+    cx = (float(node.cx) - offsets.x) * sx
+    cy = (float(node.cy) - offsets.y) * sy
     radius = max(0.0, float(node.radius) * ((sx + sy) * 0.5))
     x0 = max(0, int(math.floor(cx - radius - node.stroke_width - 1)))
     y0 = max(0, int(math.floor(cy - radius - node.stroke_width - 1)))
@@ -741,7 +780,7 @@ def _draw_circle(out, node: CircleNode, *, sx: float, sy: float) -> None:
 _TEXT_MASK_CACHE: dict[tuple[str, str, float], object] = {}
 
 
-def _text_mask_for_node(node: TextNode, sx: float, sy: float) -> tuple[str, object, int, int]:
+def _text_mask_for_node(node: TextNode, sx: float, sy: float, offset_x: float = 0.0, offset_y: float = 0.0) -> tuple[str, object, int, int]:
     """Resolve the glyph mask for a text node.
 
     Returns ``(mode, mask, x, y)``: ``"blend"`` pastes the mask at the rounded
@@ -782,24 +821,24 @@ def _text_mask_for_node(node: TextNode, sx: float, sy: float) -> tuple[str, obje
         except Exception:
             return ("debug", None, 0, 0)
 
-    return ("blend", mask, int(round(node.x * sx)), int(round(node.y * sy)))
+    return ("blend", mask, int(round((node.x - offset_x) * sx)), int(round((node.y - offset_y) * sy)))
 
 
-def _draw_text(out, node: TextNode, *, sx: float, sy: float) -> None:
-    mode, mask, x, y = _text_mask_for_node(node, sx, sy)
+def _draw_text(out, node: TextNode, *, sx: float, sy: float, offsets: _Offsets) -> None:
+    mode, mask, x, y = _text_mask_for_node(node, sx, sy, offsets.x, offsets.y)
     if mode == "blend":
         _blend_alpha_mask(out, mask, x=x, y=y, color=node.color_rgba)
         return
     if mode == "debug":
-        _draw_debug_text(out, node.text, x=int(node.x * sx), y=int(node.y * sy), scale=max(1, int(node.font_size_px * sy // 7)), color=node.color_rgba)
+        _draw_debug_text(out, node.text, x=int((node.x - offsets.x) * sx), y=int((node.y - offsets.y) * sy), scale=max(1, int(node.font_size_px * sy // 7)), color=node.color_rgba)
 
 
-def _draw_layer(out, node: CpuLayerNode, *, sx: float, sy: float) -> None:
+def _draw_layer(out, node: CpuLayerNode, *, sx: float, sy: float, offsets: _Offsets) -> None:
     layer = node.rgba
     if not hasattr(layer, "shape"):
         return
-    x = int(round(node.x * sx))
-    y = int(round(node.y * sy))
+    x = int(round((node.x - offsets.x) * sx))
+    y = int(round((node.y - offsets.y) * sy))
     h, w, _ = layer.shape
     _paste_rgba(out, layer, x=x, y=y, width=w, height=h)
 
