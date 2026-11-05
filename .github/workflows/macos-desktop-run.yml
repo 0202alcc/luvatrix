@@ -76,7 +76,10 @@ jobs:
           # env marker, so a plain nohup+disown app dies with the job. A
           # throwaway .app launched via `open` lands fronted in the console
           # session with a Dock icon; the launch script inside scrubs the
-          # tracking marker so the reaper skips it.
+          # tracking marker so the reaper skips it, and execs the app
+          # directly (no caffeinate/uv middlemen) so the bundle-registered
+          # pid IS the NSApplication process — otherwise LaunchServices
+          # never sees the launch finish and the Dock icon bounces forever.
           BUNDLE="$RUNNER_TEMP/NomicDesktop.app"
           mkdir -p "$BUNDLE/Contents/MacOS"
           cat > "$BUNDLE/Contents/Info.plist" <<'EOF_PLIST'
@@ -87,6 +90,7 @@ jobs:
             <key>CFBundleExecutable</key><string>launch</string>
             <key>CFBundleIdentifier</key><string>ai.nomic.desktop.dev</string>
             <key>CFBundleName</key><string>Nomic</string>
+            <key>CFBundleDisplayName</key><string>Nomic</string>
             <key>CFBundlePackageType</key><string>APPL</string>
             <key>CFBundleVersion</key><string>1</string>
           </dict>
@@ -104,7 +108,13 @@ jobs:
           # uploaded startup log stays empty.
           export PYTHONUNBUFFERED=1
           cd "$GITHUB_WORKSPACE" || exit 1
-          exec caffeinate -dims "$(command -v uv)" run python main.py run-app "$APP_DIR" --render "$RENDER" >>"$LOG" 2>&1
+          # Keep the Mac awake only while the app lives ($$ becomes the app's
+          # pid after exec).
+          caffeinate -dims -w $$ &
+          # exec the venv python directly: the bundle-registered pid becomes
+          # the NSApplication process, so LaunchServices sees the launch
+          # finish and the Dock icon stops bouncing.
+          exec "$GITHUB_WORKSPACE/.venv/bin/python" main.py run-app "$APP_DIR" --render "$RENDER" >>"$LOG" 2>&1
           EOF_LAUNCH
           chmod +x "$BUNDLE/Contents/MacOS/launch"
           open -n "$BUNDLE"
