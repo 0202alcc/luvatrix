@@ -822,7 +822,7 @@ def _run_ios_simulator(
     subprocess.run(["xcrun", "simctl", "bootstatus", udid, "-b"], check=True)
 
     # Install and launch, streaming output to the terminal.
-    subprocess.run(["xcrun", "simctl", "install", udid, str(app_path)], check=True)
+    _install_fresh(udid, app_path, bundle_id)
     print(f"[ios] launching {bundle_id} on {simulator_name} ({udid})")
     try:
         launch_env = os.environ.copy()
@@ -838,6 +838,22 @@ def _run_ios_simulator(
         _launch_simulator_app(udid, bundle_id, launch_env)
     except KeyboardInterrupt:
         subprocess.run(["xcrun", "simctl", "terminate", udid, bundle_id], capture_output=True)
+
+
+def _install_fresh(udid: str, app_path: Path, bundle_id: str, *, run=None) -> None:
+    """Install ``app_path`` after terminating any running instance of ``bundle_id``.
+
+    Without the terminate, an already-running app (e.g. kept open by a previous
+    tour) is killed by the install and the simulator can auto-relaunch it with
+    the PREVIOUS launch's retained environment; the env-carrying
+    ``simctl launch`` that follows then no-ops and this run's configuration
+    (tour steps, render scale, fps caps) never reaches the app. A terminate
+    failure just means the app was not running.
+    """
+    if run is None:
+        run = subprocess.run
+    run(["xcrun", "simctl", "terminate", udid, bundle_id], capture_output=True)
+    run(["xcrun", "simctl", "install", udid, str(app_path)], check=True)
 
 
 def _launch_simulator_app(udid: str, bundle_id: str, launch_env: dict[str, str]) -> None:
