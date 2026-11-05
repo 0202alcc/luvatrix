@@ -36,13 +36,21 @@ class NomicDesktopExampleTests(unittest.TestCase):
         for frame in doc.frames:
             self.assertEqual((frame.width, frame.height), (1440.0, 900.0)), frame.name
 
-    def test_display_icon_resolves_inside_the_app(self) -> None:
+    def test_display_icon_is_the_nomic_mark(self) -> None:
         manifest = tomllib.loads((APP_DIR / "app.toml").read_text(encoding="utf-8"))
 
-        icon = manifest["display"]["icon"]
-        icon_path = APP_DIR / icon
-        self.assertTrue(icon_path.is_file(), f"Dock icon missing: {icon}")
+        # The Dock icon must be the curated Nomic mark at the app root, not a
+        # content image from the design (a photo fill once shipped as the icon).
+        self.assertEqual(manifest["display"]["icon"], "icon.png")
+        icon_path = APP_DIR / "icon.png"
+        self.assertTrue(icon_path.is_file(), "Dock icon missing: icon.png")
         self.assertGreater(icon_path.stat().st_size, 1024, "Dock icon looks like a placeholder")
+        with icon_path.open("rb") as f:
+            from PIL import Image
+
+            image = Image.open(f)
+            self.assertEqual(image.size[0], image.size[1], "Dock icon should be square")
+            self.assertGreaterEqual(image.size[0], 256, "Dock icon should be at least 256px")
 
 
 if __name__ == "__main__":
