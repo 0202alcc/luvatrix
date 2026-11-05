@@ -196,6 +196,26 @@ fn color4(tuple: &Bound<'_, PyTuple>, base: usize) -> PyResult<[u8; 4]> {
     ])
 }
 
+fn vec3(tuple: &Bound<'_, PyTuple>, base: usize) -> PyResult<[f64; 3]> {
+    Ok([
+        tuple.get_item(base)?.extract()?,
+        tuple.get_item(base + 1)?.extract()?,
+        tuple.get_item(base + 2)?.extract()?,
+    ])
+}
+
+/// Basis layout: eye(3), right(3), up(3), forward(3), f, near = 14 f64 values.
+fn basis_at(tuple: &Bound<'_, PyTuple>, base: usize) -> PyResult<raster::Basis> {
+    Ok(raster::Basis {
+        eye: vec3(tuple, base)?,
+        right: vec3(tuple, base + 3)?,
+        up: vec3(tuple, base + 6)?,
+        forward: vec3(tuple, base + 9)?,
+        f: tuple.get_item(base + 12)?.extract()?,
+        near: tuple.get_item(base + 13)?.extract()?,
+    })
+}
+
 fn parse_ops<'a>(
     py_ops: &Bound<'_, PyList>,
     store: &'a mut PayloadStore,
@@ -350,6 +370,37 @@ fn parse_raster_ops<'a>(
                     color: color4(tuple, 6)?,
                 }
             }
+            8 => raster::RasterOp::Line {
+                x0: tuple.get_item(1)?.extract()?,
+                y0: tuple.get_item(2)?.extract()?,
+                x1: tuple.get_item(3)?.extract()?,
+                y1: tuple.get_item(4)?.extract()?,
+                color: color4(tuple, 5)?,
+            },
+            9 => raster::RasterOp::DebugText {
+                text: tuple.get_item(1)?.extract()?,
+                x: tuple.get_item(2)?.extract()?,
+                y: tuple.get_item(3)?.extract()?,
+                scale: tuple.get_item(4)?.extract()?,
+                color: color4(tuple, 5)?,
+            },
+            10 => raster::RasterOp::DotGrid3D {
+                center: vec3(tuple, 1)?,
+                extent: tuple.get_item(4)?.extract()?,
+                spacing: tuple.get_item(5)?.extract()?,
+                point_size: tuple.get_item(6)?.extract()?,
+                color: color4(tuple, 7)?,
+                basis: basis_at(tuple, 11)?,
+            },
+            11 => raster::RasterOp::DotPlane3D {
+                center: vec3(tuple, 1)?,
+                width: tuple.get_item(4)?.extract()?,
+                depth: tuple.get_item(5)?.extract()?,
+                spacing: tuple.get_item(6)?.extract()?,
+                point_size: tuple.get_item(7)?.extract()?,
+                color: color4(tuple, 8)?,
+                basis: basis_at(tuple, 12)?,
+            },
             other => {
                 return Err(PyValueError::new_err(format!(
                     "unsupported raster op kind: {other}"
