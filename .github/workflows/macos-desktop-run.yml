@@ -96,6 +96,9 @@ jobs:
           # invisible to the reaper — the same protection the iOS tour gets
           # from simctl's environment sanitizing.
           unset RUNNER_TRACKING_ID
+          # Python block-buffers stdout when redirected; without this the
+          # uploaded startup log stays empty.
+          export PYTHONUNBUFFERED=1
           cd "$GITHUB_WORKSPACE" || exit 1
           exec caffeinate -dims "$(command -v uv)" run python main.py run-app "$APP_DIR" --render "$RENDER" >>"$LOG" 2>&1
           EOF_LAUNCH
