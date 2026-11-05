@@ -25,6 +25,7 @@ from luvatrix_core.core.scene_graph import (
     TextNode,
 )
 from luvatrix_core.core.window_matrix import (
+    Multiply,
     PushColumn,
     PushRow,
     ReplaceColumn,
@@ -174,6 +175,12 @@ def _numpy_reference_apply(buf: np.ndarray, ops: list) -> None:
                         src_y : src_y + h, src_x : src_x + w, :
                     ]
             buf[:, :, :] = out
+        elif isinstance(op, Multiply):
+            # Mirrors WindowMatrix._apply_operation: float32 matmul against the
+            # transposed color matrix, round-ties-even, clip, truncate.
+            color_matrix = np.array(op.color_matrix_4x4, dtype=np.float32).reshape(4, 4)
+            graded = buf.astype(np.float32) @ color_matrix.T
+            buf[:, :, :] = np.clip(np.round(graded), 0, 255).astype(np.uint8)
         else:  # pragma: no cover - defensive
             raise AssertionError(f"unexpected op: {op!r}")
 
@@ -182,10 +189,16 @@ def _reference_dirty_rect(ops: list, width: int, height: int):
     return window_matrix._dirty_rect_for_operations(ops, width, height)
 
 
-def _random_ops(rng: random.Random, width: int, height: int) -> list:
+def _exact_f32_matrix(rng: random.Random) -> list[list[float]]:
+    """4x4 matrix of exactly-representable f32 values (bit-exact under FMA)."""
+    pool = [v * 0.125 for v in range(-16, 17)]
+    return [[rng.choice(pool) for _ in range(4)] for _ in range(4)]
+
+
+def _random_ops(rng: random.Random, width: int, height: int, *, allow_multiply: bool = True) -> list:
     ops = []
     for _ in range(rng.randrange(1, 4)):
-        kind = rng.randrange(6)
+        kind = rng.randrange(7 if allow_multiply else 6)
         if kind == 0:
             x = rng.randrange(width)
             y = rng.randrange(height)
@@ -209,9 +222,11 @@ def _random_ops(rng: random.Random, width: int, height: int) -> list:
             index = rng.randrange(width)
             payload = [rng.randrange(256) for _ in range(height * 4)]
             ops.append(PushColumn(index, payload))
-        else:
+        elif kind == 5:
             fill = [rng.randrange(256) for _ in range(4)]
             ops.append(ShiftFrame(rng.randrange(-width, width + 1), rng.randrange(-height, height + 1), fill))
+        else:
+            ops.append(Multiply(_exact_f32_matrix(rng)))
     return ops
 
 
@@ -233,6 +248,25 @@ def test_rust_apply_ops_matches_numpy_reference_and_dirty_rects() -> None:
 
         assert bytes(actual) == expected.tobytes(), f"buffer mismatch for ops {ops!r}"
         assert dirty == _reference_dirty_rect(ops, width, height)
+
+
+def test_rust_apply_ops_multiply_matches_numpy_reference() -> None:
+    rng = random.Random(602210)
+    width = 9
+    height = 7
+    for _ in range(10):
+        initial = [rng.randrange(256) for _ in range(width * height * 4)]
+        op = Multiply(_exact_f32_matrix(rng))
+        expected = np.array(initial, dtype=np.uint8).reshape(height, width, 4)
+        _numpy_reference_apply(expected, [op])
+
+        actual = bytearray(initial)
+        encoded = window_matrix._encode_ops_for_rs([op])
+        assert encoded is not None
+        dirty = matrix_rs.apply_ops(actual, width, height, encoded)
+
+        assert bytes(actual) == expected.tobytes()
+        assert dirty is None
 
 
 def test_rust_apply_ops_rejects_invalid_geometry() -> None:
@@ -284,6 +318,9 @@ def _with_backend_arrays(op):
     if isinstance(op, ShiftFrame):
         fill = accel.from_sequence(list(op.fill_rgba_4), (1, 1, 4))
         return ShiftFrame(op.dx, op.dy, fill)
+    if isinstance(op, Multiply):
+        matrix = np.array(op.color_matrix_4x4, dtype=np.float32).reshape(4, 4)
+        return Multiply(matrix)
     raise AssertionError(f"unexpected op: {op!r}")
 
 
@@ -304,6 +341,58 @@ def test_window_matrix_produces_identical_results_with_and_without_rust() -> Non
 
     assert actual_events == expected_events
     assert actual_snapshots == expected_snapshots
+
+
+def test_rust_multiply_matches_backend_within_one_lsb_under_fuzz() -> None:
+    """Full-range f32 matrices may diverge by FMA ordering; bound it to 1 LSB."""
+    rng = random.Random(4242)
+    sequences = []
+    for _ in range(4):
+        ops = []
+        for _ in range(3):
+            matrix = [[rng.uniform(-4.0, 4.0) for _ in range(4)] for _ in range(4)]
+            ops.append(Multiply(np.array(matrix, dtype=np.float32)))
+        sequences.append(ops)
+
+    saved = window_matrix._matrix_rs_apply
+    try:
+        window_matrix._matrix_rs_apply = None
+        expected_snapshots, _ = _run_batch_sequence(sequences)
+        window_matrix._matrix_rs_apply = saved
+        assert window_matrix._matrix_rs_apply is not None
+        actual_snapshots, _ = _run_batch_sequence(sequences)
+    finally:
+        window_matrix._matrix_rs_apply = saved
+
+    mismatched = 0
+    total = 0
+    for expected, actual in zip(expected_snapshots, actual_snapshots):
+        reference = np.frombuffer(expected, dtype=np.uint8).astype(np.int16)
+        candidate = np.frombuffer(actual, dtype=np.uint8).astype(np.int16)
+        diff = np.abs(reference - candidate)
+        assert int(diff.max()) <= 1
+        mismatched += int((diff > 0).sum())
+        total += diff.size
+    assert mismatched / max(1, total) <= 0.01
+
+
+def test_window_matrix_multiply_rejects_non_finite_matrix_without_mutation() -> None:
+    for rust_disabled in (True, False):
+        matrix = WindowMatrix(height=4, width=5)
+        before = accel.to_contiguous_numpy(matrix.read_snapshot()).tobytes()
+        bad = np.full((4, 4), np.inf, dtype=np.float32)
+
+        saved = window_matrix._matrix_rs_apply
+        if rust_disabled:
+            window_matrix._matrix_rs_apply = None
+        try:
+            with pytest.raises(ValueError):
+                matrix.submit_write_batch(WriteBatch([Multiply(bad)]))
+        finally:
+            window_matrix._matrix_rs_apply = saved
+
+        after = accel.to_contiguous_numpy(matrix.read_snapshot()).tobytes()
+        assert after == before
 
 
 # ---------------------------------------------------------------------------
