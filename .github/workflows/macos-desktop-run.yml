@@ -65,6 +65,10 @@ jobs:
       - name: Launch app detached
         if: steps.app.outputs.exists == 'true'
         run: |
+          echo "previous instance (before relaunch):"
+          pgrep -fl "main.py run-app $APP_DIR" || echo "  (none alive — the last launch died after its job)"
+          echo "recent crash reports:"
+          ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -iE "python|caffeinate|^Nomic" | head -5 || true
           pkill -f "main.py run-app $APP_DIR" 2>/dev/null || true
           LOG="$RUNNER_TEMP/desktop-run.log"
           # The runner reaps orphaned processes when the job ends ("Cleaning
@@ -116,6 +120,8 @@ jobs:
         if: steps.app.outputs.exists == 'true'
         run: |
           echo "runner: user=$(id -un) uid=$(id -u); console owner=$(stat -f %Su /dev/console) uid=$(stat -f %u /dev/console)"
+          echo "frontmost app:"
+          osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null || echo "  (unknown)"
           echo "app process:"
           pgrep -fl "main.py run-app $APP_DIR" || echo "  (not running)"
           echo "windows visible to the window server:"
