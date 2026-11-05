@@ -6,6 +6,8 @@ required_capabilities = ["window.write"]
 optional_capabilities = ["hdi.touch", "hdi.mouse", "hdi.trackpad"]
 
 [display]
+# Design canvas matches the Figma Flow Screens frames; the window opens at
+# exactly this size on macOS.
 native_width = 1440
 native_height = 900
 bar_color_rgba = [0, 0, 0, 255]
