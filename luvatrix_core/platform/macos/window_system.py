@@ -155,6 +155,10 @@ class AppKitWindowSystem:
                 window.setContentMaxSize_(frame.size)
             except Exception:
                 pass
+        # NSMakeRect(0, 0, ...) would otherwise leave the window at the
+        # screen's bottom-left corner, half-hidden under the Dock and other
+        # windows on first launch.
+        window.center()
         window.makeKeyAndOrderFront_(None)
         self._install_main_menu(app=app, menu_config=menu_config)
         app.activateIgnoringOtherApps_(True)
