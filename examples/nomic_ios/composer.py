@@ -150,20 +150,20 @@ class TextMeasure:
         from luvatrix_ui.figma.text import FontLibrary
 
         self._fonts = FontLibrary()
-        self._font: Any = None
+        self._font_by_size: dict[float, Any] = {}
 
-    def _face(self) -> Any:
-        if self._font is None:
+    def _face(self, size: float = FONT_SIZE) -> Any:
+        if size not in self._font_by_size:
             path = self._fonts.resolve("Inter", 400, False)
-            self._font = self._fonts.font(path, FONT_SIZE)
-        return self._font
+            self._font_by_size[size] = self._fonts.font(path, size)
+        return self._font_by_size[size]
 
-    def measure(self, text: str) -> float:
+    def measure(self, text: str, size: float = FONT_SIZE) -> float:
         if not text:
             return 0.0
-        return float(self._face().getlength(text))
+        return float(self._face(size).getlength(text))
 
-    def wrap(self, text: str, width: float) -> list[tuple[int, str]]:
+    def wrap(self, text: str, width: float, size: float = FONT_SIZE) -> list[tuple[int, str]]:
         """(start index, line) pairs; empty input wraps to one empty line."""
         out: list[tuple[int, str]] = []
         idx = 0
@@ -173,13 +173,13 @@ class TextMeasure:
             pos = idx
             for match in re.finditer(r"[^ ]+ *| +", para):
                 word = match.group()
-                if line and self.measure((line + word).rstrip(" ")) > width:
+                if line and self.measure((line + word).rstrip(" "), size) > width:
                     out.append((line_start, line))
                     line_start = pos
                     line = word
-                    while len(line) > 1 and self.measure(line.rstrip(" ")) > width:
+                    while len(line) > 1 and self.measure(line.rstrip(" "), size) > width:
                         cut = len(line) - 1
-                        while cut > 1 and self.measure(line[:cut]) > width:
+                        while cut > 1 and self.measure(line[:cut], size) > width:
                             cut -= 1
                         out.append((line_start, line[:cut]))
                         line_start += cut
@@ -570,19 +570,22 @@ class ComposerController:
         cursor = float(box["y"]) + float(box["height"])
         bubble, bubble_h = self._build_bubble(text, y=cursor, theme=theme)
         stub_y = cursor + bubble_h + 8.0
+        stub_line_h = STUB_FONT_SIZE * 1.3
+        stub_lines = self._measurer.wrap(STUB_TEXT, COMPOSER_W, size=STUB_FONT_SIZE)
+        stub_h = max(1, len(stub_lines)) * stub_line_h
         stub = {
             "id": f"composer:conversation:stub{self._bubble_count}",
             "type": "TEXT",
             "name": "Stub Reply",
             "characters": STUB_TEXT,
-            "absoluteBoundingBox": {"x": COMPOSER_X, "y": stub_y, "width": COMPOSER_W, "height": 20.0},
+            "absoluteBoundingBox": {"x": COMPOSER_X, "y": stub_y, "width": COMPOSER_W, "height": stub_h},
             "style": _text_style(STUB_FONT_SIZE),
             "fills": [_solid(GRAY_400)],
         }
         replies.setdefault("children", []).extend([bubble, stub])
-        box["height"] = stub_y + 20.0 + 24.0 - float(box["y"])
+        box["height"] = stub_y + stub_h + 24.0 - float(box["y"])
         self._bubble_count += 1
-        content_bottom = stub_y + 20.0 + 12.0
+        content_bottom = stub_y + stub_h + 12.0
         needed = content_bottom + (VIEWPORT_H - (TAB_BAR_Y - COMPOSER_GAP - self._current_composer_height())) + 12.0
         self._grow_conversation(doc, max(self._content_h.get(id(doc), VIEWPORT_H), needed))
 
@@ -737,7 +740,11 @@ class ComposerController:
         if root is None or bar is None:
             return
         box = root["absoluteBoundingBox"]
-        box["y"] = TAB_BAR_Y - COMPOSER_GAP - self.keyboard_offset - float(box["height"])
+        # The composer children are positioned in absolute coordinates, so the
+        # root must be translated (not just re-boxed) to keep them glued on.
+        dy = TAB_BAR_Y - COMPOSER_GAP - self.keyboard_offset - float(box["height"]) - float(box["y"])
+        if abs(dy) > 0.01:
+            _translate_y(root, dy)
         dy = TAB_BAR_Y - self.keyboard_offset - float(bar["absoluteBoundingBox"]["y"])
         if abs(dy) > 0.01:
             _translate_y(bar, dy)
