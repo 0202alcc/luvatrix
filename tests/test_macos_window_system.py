@@ -60,5 +60,61 @@ class MacOSWindowSystemTargetClassTests(unittest.TestCase):
         self.assertIsInstance(target, window_system._MenuActionTarget)
 
 
+class _ChainedFake:
+    """AppKit stand-in: records `<tag>.<selector>` calls and returns itself for chaining."""
+
+    def __init__(self, calls: list[str], tag: str) -> None:
+        self._calls = calls
+        self._tag = tag
+
+    def __getattr__(self, attr: str):
+        if attr.startswith("_"):
+            raise AttributeError(attr)
+
+        def _method(*args, **kwargs):
+            self._calls.append(f"{self._tag}.{attr}")
+            return self
+
+        return _method
+
+    def __call__(self, *args, **kwargs):
+        return self
+
+
+class MacOSWindowPlacementTests(unittest.TestCase):
+    def _fake_ns(self, calls: list[str]) -> dict[str, object]:
+        return {
+            "NSApp": _ChainedFake(calls, "nsapp"),
+            "NSApplication": _ChainedFake(calls, "nsapplication"),
+            "NSApplicationActivationPolicyRegular": 0,
+            "NSWindowStyleMaskTitled": 1,
+            "NSWindowStyleMaskClosable": 2,
+            "NSWindowStyleMaskMiniaturizable": 4,
+            "NSWindowStyleMaskResizable": 8,
+            "NSBackingStoreBuffered": 2,
+            "NSMakeRect": _ChainedFake(calls, "rect"),
+            "NSWindow": _ChainedFake(calls, "window"),
+            "CAMetalLayer": _ChainedFake(calls, "layer"),
+            "CALayer": _ChainedFake(calls, "layer"),
+        }
+
+    def test_create_window_centers_before_ordering_front(self) -> None:
+        calls: list[str] = []
+        ws = window_system.AppKitWindowSystem()
+        with (
+            patch.object(ws, "_imports", return_value=self._fake_ns(calls)),
+            patch.object(ws, "_install_main_menu", lambda **kwargs: None),
+        ):
+            ws.create_window(1440, 900, "Nomic")
+
+        window_calls = [c for c in calls if c.startswith("window.")]
+        self.assertIn("window.center", window_calls)
+        self.assertLess(
+            window_calls.index("window.center"),
+            window_calls.index("window.makeKeyAndOrderFront_"),
+            "window must be centered before it is shown",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
