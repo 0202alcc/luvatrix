@@ -55,12 +55,12 @@ jobs:
         run: |
           pkill -f "main.py run-app $APP_DIR" 2>/dev/null || true
           LOG="$RUNNER_TEMP/desktop-run.log"
-          # The runner reaps orphaned child processes when the job ends
-          # ("Cleaning up orphan processes"), so a nohup+disown app dies with
-          # the job. A throwaway .app launched via `open` is spawned by
-          # LaunchServices outside the runner's process tree — the same trick
-          # the iOS tour gets for free from SpringBoard — and the window lands
-          # fronted in the console session with a Dock icon.
+          # The runner reaps orphaned processes when the job ends ("Cleaning
+          # up orphan processes") by matching a per-job RUNNER_TRACKING_ID
+          # env marker, so a plain nohup+disown app dies with the job. A
+          # throwaway .app launched via `open` lands fronted in the console
+          # session with a Dock icon; the launch script inside scrubs the
+          # tracking marker so the reaper skips it.
           BUNDLE="$RUNNER_TEMP/NomicDesktop.app"
           mkdir -p "$BUNDLE/Contents/MacOS"
           cat > "$BUNDLE/Contents/Info.plist" <<'EOF_PLIST'
@@ -78,12 +78,16 @@ jobs:
           EOF_PLIST
           cat > "$BUNDLE/Contents/MacOS/launch" <<EOF_LAUNCH
           #!/bin/bash
+          # The runner's end-of-job cleanup kills every process carrying its
+          # per-job RUNNER_TRACKING_ID env marker ("Cleaning up orphan
+          # processes"). Scrub it so this deliberately kept-open app is
+          # invisible to the reaper — the same protection the iOS tour gets
+          # from simctl's environment sanitizing.
+          unset RUNNER_TRACKING_ID
           cd "$GITHUB_WORKSPACE" || exit 1
           exec caffeinate -dims "$(command -v uv)" run python main.py run-app "$APP_DIR" --render "$RENDER" >>"$LOG" 2>&1
           EOF_LAUNCH
           chmod +x "$BUNDLE/Contents/MacOS/launch"
-          # No --stdout/--stderr: attaching the app's pipes to `open` keeps the
-          # runner in its lineage and the end-of-job orphan reaper kills it.
           open -n "$BUNDLE"
           sleep 20
           if ! pgrep -f "main.py run-app $APP_DIR" >/dev/null; then
