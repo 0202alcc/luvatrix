@@ -147,6 +147,8 @@ jobs:
           echo "runner: user=$(id -un) uid=$(id -u); console owner=$(stat -f %Su /dev/console) uid=$(stat -f %u /dev/console)"
           echo "frontmost app:"
           osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null || echo "  (unknown)"
+          echo "displays:"
+          system_profiler SPDisplaysDataType 2>/dev/null | grep -E "Display Type|Resolution|UI Looks like|Main Display|Mirror" || echo "  (unknown)"
           echo "pinned Dock entries mentioning nomic:"
           defaults read com.apple.dock persistent-apps 2>/dev/null | grep -i -B2 -A2 nomic || echo "  (none pinned)"
           echo "app process:"
@@ -183,7 +185,7 @@ jobs:
           name: macos-desktop-run-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/desktop-run.log
-            ${{ runner.temp }}/desktop-app.png
-            ${{ runner.temp }}/pre-launch.png
+            ${{ runner.temp }}/desktop-app*.png
+            ${{ runner.temp }}/pre-launch*.png
           if-no-files-found: warn
           retention-days: 14
