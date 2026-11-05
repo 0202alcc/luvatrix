@@ -53,3 +53,7 @@ ios/Python/
 ios/Luvatrix.xcodeproj/xcuserdata/
 ios/Luvatrix.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcuserstate
+
+# Rust build artifacts
+/rust/*/target/
+luvatrix_core/_matrix_rs*.so

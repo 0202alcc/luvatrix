@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
 
 from luvatrix_core import accel
 from luvatrix_core.core.scene_graph import (
@@ -51,7 +52,213 @@ def _numpy():
     return np
 
 
+try:
+    from luvatrix_core import _matrix_rs as _rs_raster  # type: ignore[import-not-found]
+except ModuleNotFoundError:
+    _rs_raster = None  # type: ignore[assignment]
+
+_RS_DISABLE_ENV = "LUVATRIX_DISABLE_MATRIX_RS"
+_LAST_RASTER_BACKEND = "python"
+
+
+def _last_raster_backend() -> str:
+    """Backend used by the most recent ``rasterize_scene_frame`` call."""
+    return _LAST_RASTER_BACKEND
+
+
+class _SceneRsFallback(Exception):
+    """Internal control flow: this frame needs the Python rasterizer."""
+
+
 def rasterize_scene_frame(frame: SceneFrame, out=None):
+    global _LAST_RASTER_BACKEND
+    if _rs_raster is not None and os.environ.get(_RS_DISABLE_ENV, "0") != "1" and _numpy() is not None:
+        try:
+            result = _rasterize_scene_frame_rs(frame, out=out)
+        except _SceneRsFallback:
+            pass
+        else:
+            _LAST_RASTER_BACKEND = "rust"
+            return result
+    _LAST_RASTER_BACKEND = "python"
+    return _rasterize_scene_frame_python(frame, out=out)
+
+
+def _rasterize_scene_frame_rs(frame: SceneFrame, out=None):
+    """Rust fast path: encode 2D nodes as raster ops, one native pass.
+
+    Raises ``_SceneRsFallback`` when any node needs the Python rasterizer; the
+    caller's ``out`` buffer is never mutated before that decision.
+    """
+    np = _numpy()
+    target_shape = (int(frame.display_height), int(frame.display_width), 4)
+    if out is not None and tuple(out.shape) != target_shape:
+        out = None
+    if out is None:
+        buffer = np.zeros(target_shape, dtype=np.uint8)
+        view = buffer
+    else:
+        buffer = out
+        view = _rs_writable_frame_view(out)
+        if view is None:
+            raise _SceneRsFallback("out buffer is not a contiguous writable uint8 array")
+    sx = float(frame.display_width) / max(1.0, float(frame.logical_width))
+    sy = float(frame.display_height) / max(1.0, float(frame.logical_height))
+    encoded = []
+    for node in frame.nodes:
+        op = _encode_node_for_rs(node, sx, sy)
+        if op is None:
+            raise _SceneRsFallback(f"node not lowered by the Rust rasterizer: {type(node).__name__}")
+        if op:
+            encoded.append(op)
+    _rs_raster.rasterize(view, int(frame.display_width), int(frame.display_height), encoded)
+    return buffer
+
+
+def _rs_writable_frame_view(out):
+    """Contiguous writable uint8 view of a frame buffer, or ``None``."""
+    np = _numpy()
+    if np is not None and isinstance(out, np.ndarray):
+        if out.dtype == np.uint8 and out.flags.c_contiguous and out.flags.writeable:
+            return out
+        return None
+    torch = accel._torch
+    if torch is not None and torch.is_tensor(out):
+        if out.dtype == torch.uint8 and out.is_cpu and out.is_contiguous():
+            return out.numpy()
+        return None
+    if isinstance(out, accel._PureArray):
+        return out._data
+    return None
+
+
+def _rgba4(color: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    return (int(color[0]), int(color[1]), int(color[2]), int(color[3]))
+
+
+def _encode_node_for_rs(node: SceneNode, sx: float, sy: float) -> tuple | None:
+    """Encode one node as a ``_matrix_rs.rasterize`` op tuple.
+
+    Returns ``()`` for nodes the Python rasterizer treats as no-ops, and
+    ``None`` for nodes that need the Python rasterizer for this frame.
+    """
+    np = _numpy()
+    if isinstance(node, ClearNode):
+        return (0, *_rgba4(node.color_rgba))
+    if isinstance(node, ShaderRectNode):
+        if node.shader != "full_suite_background":
+            return (
+                1,
+                float(node.x * sx),
+                float(node.y * sy),
+                float(node.width * sx),
+                float(node.height * sy),
+                *_rgba4(node.color_rgba),
+            )
+        t = float(node.uniforms[0]) if node.uniforms else 0.0
+        rotation = float(node.uniforms[1]) if len(node.uniforms) > 1 else 0.0
+        scroll_y = float(node.uniforms[2]) if len(node.uniforms) > 2 else 0.0
+        return (4, t, rotation, scroll_y)
+    if isinstance(node, RectNode):
+        return (
+            1,
+            float(node.x * sx),
+            float(node.y * sy),
+            float(node.width * sx),
+            float(node.height * sy),
+            *_rgba4(node.color_rgba),
+        )
+    if isinstance(node, RoundedRectNode):
+        return (
+            2,
+            float(node.x * sx),
+            float(node.y * sy),
+            float(node.width * sx),
+            float(node.height * sy),
+            float(node.radius * min(sx, sy)),
+            *_rgba4(node.color_rgba),
+        )
+    if isinstance(node, CircleNode):
+        return (
+            3,
+            float(node.cx * sx),
+            float(node.cy * sy),
+            float(node.radius) * ((sx + sy) * 0.5),
+            float(node.stroke_width),
+            *_rgba4(node.fill_rgba),
+            *_rgba4(node.stroke_rgba),
+        )
+    if isinstance(node, TextNode):
+        mode, mask, mask_x, mask_y = _text_mask_for_node(node, sx, sy)
+        if mode == "blend":
+            mask_u8 = np.ascontiguousarray(mask)
+            return (
+                6,
+                int(mask_x),
+                int(mask_y),
+                int(mask_u8.shape[1]),
+                int(mask_u8.shape[0]),
+                mask_u8,
+                *_rgba4(node.color_rgba),
+            )
+        if mode == "none":
+            return ()
+        return None
+    if isinstance(node, (CpuLayerNode, ImageNode)):
+        layer = node.rgba
+        if isinstance(node, ImageNode) and layer is None:
+            return ()
+        if not hasattr(layer, "shape"):
+            return ()
+        view = _layer_payload_for_rs(layer)
+        if view is None:
+            return None
+        layer_h, layer_w = int(view.shape[0]), int(view.shape[1])
+        return (
+            5,
+            int(round(node.x * sx)),
+            int(round(node.y * sy)),
+            layer_w,
+            layer_h,
+            view,
+        )
+    if isinstance(node, (Camera3DNode, SvgNode)):
+        return ()
+    if isinstance(
+        node,
+        (
+            Cube3DNode,
+            DotGrid3DNode,
+            DotPlane3DNode,
+            Line3DNode,
+            GroundPlane3DNode,
+            Horizon3DNode,
+            Text3DNode,
+        ),
+    ):
+        return None
+    # Node kinds the Python rasterizer's elif chain does not handle are no-ops.
+    return ()
+
+
+def _layer_payload_for_rs(layer):
+    """Contiguous uint8 (H, W, 4) numpy view of a CpuLayer/Image payload."""
+    np = _numpy()
+    if np is None:
+        return None
+    torch = accel._torch
+    if torch is not None and torch.is_tensor(layer):
+        if layer.dtype != torch.uint8 or not layer.is_cpu:
+            return None
+        layer = layer.contiguous().numpy()
+    if not isinstance(layer, np.ndarray):
+        return None
+    if layer.dtype != np.uint8 or layer.ndim != 3 or int(layer.shape[2]) != 4:
+        return None
+    return np.ascontiguousarray(layer)
+
+
+def _rasterize_scene_frame_python(frame: SceneFrame, out=None):
     np = _numpy()
     if out is not None:
         if out.shape != (frame.display_height, frame.display_width, 4):
@@ -410,14 +617,20 @@ def _draw_circle(out, node: CircleNode, *, sx: float, sy: float) -> None:
 
 _TEXT_MASK_CACHE: dict[tuple[str, str, float], object] = {}
 
-def _draw_text(out, node: TextNode, *, sx: float, sy: float) -> None:
+
+def _text_mask_for_node(node: TextNode, sx: float, sy: float) -> tuple[str, object, int, int]:
+    """Resolve the glyph mask for a text node.
+
+    Returns ``(mode, mask, x, y)``: ``"blend"`` pastes the mask at the rounded
+    position, ``"debug"`` means the caller must draw the blocky fallback (with
+    the truncated position), and ``"none"`` is a no-op.
+    """
     try:
         from PIL import Image, ImageDraw
         from luvatrix_core.core.ui_frame_renderer import _load_font, _resolve_system_font_path
     except Exception:
-        _draw_debug_text(out, node.text, x=int(node.x * sx), y=int(node.y * sy), scale=max(1, int(node.font_size_px * sy // 7)), color=node.color_rgba)
-        return
-    
+        return ("debug", None, 0, 0)
+
     font_size = max(1.0, node.font_size_px * sy)
     rotation_deg = float(node.rotation_deg)
     cache_key = (node.text, node.font_family, font_size, rotation_deg)
@@ -437,17 +650,25 @@ def _draw_text(out, node: TextNode, *, sx: float, sy: float) -> None:
                 image = image.rotate(rotation_deg, resample=Image.Resampling.BICUBIC, expand=True)
             np = _numpy()
             if np is None:
-                return
+                return ("none", None, 0, 0)
             mask = np.asarray(image, dtype=np.uint8)
             # Simple bounded cache
             if len(_TEXT_MASK_CACHE) > 500:
                 _TEXT_MASK_CACHE.clear()
             _TEXT_MASK_CACHE[cache_key] = mask
         except Exception:
-            _draw_debug_text(out, node.text, x=int(node.x * sx), y=int(node.y * sy), scale=max(1, int(node.font_size_px * sy // 7)), color=node.color_rgba)
-            return
-            
-    _blend_alpha_mask(out, mask, x=int(round(node.x * sx)), y=int(round(node.y * sy)), color=node.color_rgba)
+            return ("debug", None, 0, 0)
+
+    return ("blend", mask, int(round(node.x * sx)), int(round(node.y * sy)))
+
+
+def _draw_text(out, node: TextNode, *, sx: float, sy: float) -> None:
+    mode, mask, x, y = _text_mask_for_node(node, sx, sy)
+    if mode == "blend":
+        _blend_alpha_mask(out, mask, x=x, y=y, color=node.color_rgba)
+        return
+    if mode == "debug":
+        _draw_debug_text(out, node.text, x=int(node.x * sx), y=int(node.y * sy), scale=max(1, int(node.font_size_px * sy // 7)), color=node.color_rgba)
 
 
 def _draw_layer(out, node: CpuLayerNode, *, sx: float, sy: float) -> None:
