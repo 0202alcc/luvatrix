@@ -410,7 +410,7 @@ def test_window_matrix_multiply_rejects_non_finite_matrix_without_mutation() -> 
 # ---------------------------------------------------------------------------
 
 
-def _frame_with_nodes(nodes: tuple) -> SceneFrame:
+def _frame_with_nodes(nodes: tuple, content_offset: tuple[float, float] = (0.0, 0.0)) -> SceneFrame:
     return SceneFrame(
         revision=1,
         logical_width=64,
@@ -419,6 +419,9 @@ def _frame_with_nodes(nodes: tuple) -> SceneFrame:
         display_height=48,
         ts_ns=0,
         nodes=nodes,
+        content_offset_x=float(content_offset[0]),
+        content_offset_y=float(content_offset[1]),
+        retained=True,
     )
 
 
@@ -525,6 +528,83 @@ def test_rust_scene_lowering_3d_camera_switching_and_near_clip() -> None:
     )
     expected, actual = _rasterize_pair(frame)
     np.testing.assert_array_equal(actual, expected)
+
+
+def test_scene_rasterizer_content_offset_translates_content() -> None:
+    """Transform-only contract: a content offset must move rendered content.
+
+    Pre-fix both rasterizers ignored ``content_offset_*`` and produced
+    identical frames regardless of offset (only the native GPU backends
+    honored the transform).
+    """
+    for backend in ("python", "rust"):
+        nodes = (RectNode(10.0, 8.0, 6.0, 4.0, (255, 0, 0, 255)),)
+        base_frame = _frame_with_nodes(nodes, content_offset=(0.0, 0.0))
+        shifted_frame = _frame_with_nodes(nodes, content_offset=(2.0, 4.0))
+        if backend == "python":
+            base = scene_rasterizer._rasterize_scene_frame_python(base_frame)
+            shifted = scene_rasterizer._rasterize_scene_frame_python(shifted_frame)
+        else:
+            base = scene_rasterizer.rasterize_scene_frame(base_frame)
+            assert scene_rasterizer._last_raster_backend() == "rust"
+            shifted = scene_rasterizer.rasterize_scene_frame(shifted_frame)
+            assert scene_rasterizer._last_raster_backend() == "rust"
+        base = np.asarray(base)
+        shifted = np.asarray(shifted)
+        assert not np.array_equal(base, shifted), f"{backend} rasterizer ignored content_offset"
+        # Integer offset + axis-aligned rect: an exact pixel roll by (-2, -4).
+        np.testing.assert_array_equal(shifted, np.roll(np.roll(base, -2, axis=1), -4, axis=0))
+
+
+def test_rust_scene_lowering_matches_python_rasterizer_with_content_offset_2d() -> None:
+    rng = random.Random(4321)
+    layer = _random_layer(rng, 9, 7)
+    frame = _frame_with_nodes(
+        (
+            ClearNode((10, 20, 30, 255)),
+            RectNode(12.5, 20.5, 20.0, 10.0, (200, 30, 40, 255)),
+            RectNode(3.0, 5.0, 12.0, 12.0, (10, 220, 40, 128)),
+            RoundedRectNode(25.0, 30.0, 25.0, 15.0, 4.0, (90, 90, 200, 255)),
+            CircleNode(40.0, 20.0, 10.0, (250, 200, 10, 255), (20, 20, 220, 255), 2.0),
+            TextNode("Hi 42", 20.0, 38.0, color_rgba=(255, 255, 0, 255)),
+            CpuLayerNode(30.0, 40.0, 9.0, 7.0, layer),
+        ),
+        content_offset=(7.25, 13.5),
+    )
+    expected, actual = _rasterize_pair(frame)
+    np.testing.assert_array_equal(actual, expected)
+
+
+def test_rust_scene_lowering_matches_python_rasterizer_with_content_offset_3d() -> None:
+    frame = _frame_with_nodes(
+        (
+            ClearNode((5, 8, 12, 255)),
+            Camera3DNode(position=(0.0, 2.0, 6.0), target=(0.0, 0.5, 0.0)),
+            Cube3DNode(center=(0.0, 0.5, 0.0), size=1.4, rotation=(0.3, 0.7, 0.1)),
+            DotGrid3DNode(center=(0.5, 0.5, -1.0), extent=4.0, spacing=0.5, point_size=2.0),
+            DotPlane3DNode(center=(0.0, -0.5, -2.0), width=6.0, depth=4.0, spacing=0.75, point_size=1.5),
+            Line3DNode(start=(-2.0, 0.0, 0.0), end=(2.0, 1.0, -1.0), color_rgba=(255, 120, 60, 255)),
+            GroundPlane3DNode(center=(0.0, -1.0, -5.0), width=8.0, depth=6.0),
+            Horizon3DNode(sky_horizon_rgba=(200, 210, 220, 255)),
+            Text3DNode(text="HELLO", position=(0.0, 1.5, -1.0), height=0.4),
+        ),
+        content_offset=(4.75, -6.5),
+    )
+    expected, actual = _rasterize_pair(frame)
+    np.testing.assert_array_equal(actual, expected)
+
+
+def test_rust_scene_lowering_rainbow_with_content_offset_within_one_lsb() -> None:
+    frame = _frame_with_nodes(
+        (
+            ClearNode(),
+            ShaderRectNode(0.0, 0.0, 64.0, 48.0, "full_suite_background", (0, 0, 0, 255), (123.0, 4.0, 7.0)),
+        ),
+        content_offset=(5.0, 9.0),
+    )
+    expected, actual = _rasterize_pair(frame)
+    diff = np.abs(actual.astype(np.int16) - expected.astype(np.int16))
+    assert int(diff.max()) <= 1
 
 
 def test_rust_scene_lowering_reuses_output_buffer_and_scales_logical_coords() -> None:
