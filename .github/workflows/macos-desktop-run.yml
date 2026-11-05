@@ -69,6 +69,9 @@ jobs:
           pgrep -fl "main.py run-app $APP_DIR" || echo "  (none alive — the last launch died after its job)"
           echo "recent crash reports:"
           ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -iE "python|caffeinate|^Nomic" | head -5 || true
+          # Capture the screen BEFORE touching anything, so "I don't see a
+          # window" reports can be compared against the pre-relaunch state.
+          screencapture -x "$RUNNER_TEMP/pre-launch.png" 2>/dev/null || true
           pkill -f "main.py run-app $APP_DIR" 2>/dev/null || true
           LOG="$RUNNER_TEMP/desktop-run.log"
           # The runner reaps orphaned processes when the job ends ("Cleaning
@@ -158,5 +161,6 @@ jobs:
           path: |
             ${{ runner.temp }}/desktop-run.log
             ${{ runner.temp }}/desktop-app.png
+            ${{ runner.temp }}/pre-launch.png
           if-no-files-found: warn
           retention-days: 14
