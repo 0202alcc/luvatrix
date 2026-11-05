@@ -2,6 +2,20 @@
 
 Audit date: **November 4, 2026**, against the generated `examples/nomic_ios/design/figma_file.json`, `assemble_capture.py`, `app.toml`, and `ios/project.yml`. Nothing here has been changed in the app; these are recorded deviations to fix in later work. Fix them in `assemble_capture.py` (`build_tab_bar_node`, `assemble_screen`, and the constants at the top), not in the generated JSON.
 
+## Status after the visual polish pass
+
+Later the same day, a polish pass driven by headless 3x renders of every screen in both appearances fixed five more defects:
+
+- **Dark-mode icons were invisible.** The dark capture themed text and gray icons (gray-500 to gray-400, gray-700 to gray-100) but left 75 `currentColor` svg glyphs pure black on the gray-900 canvas — the wordmark measured 1.1:1, and the sidebar toggle, composer `+`/chevrons, share, copy/thumbs, Drive toolbar, and Profile nav icons all vanished (icon regions measured within noise of the background). `recolor_dark_icons` in the assembler now maps near-black vector fills to gray-100, skipping glyphs on colorful surfaces: the six glyphs on the teal Dictate/Search/Upload/New-project buttons stay black, as on the real site.
+- **sr-only text leaked as ink.** The "Toggle Sidebar" `span.sr-only` rendered clipped inside its 28 pt button, painting three stray dots under the sidebar icon on every screen in both appearances. `drop_sr_only_texts` removes them (5 per variant).
+- **The selected tab now uses the product accent, not a gray pill.** Apple's tab bars carry selection with a single accent tint on the symbol and label [S-TABBARS], [S-COLOR]; the pill read as Material. The light accent is teal-600 (oklch(55.8% 0.068 169) = 73,129,109, the token the product uses for its active sidebar item): 4.3:1 on gray-50, on par with Apple's own system-blue labels. The dark accent is teal-400 (122,167,151): 6.3:1 on the gray-900 glass. Unselected tabs keep gray-500/gray-400; the selected label keeps its heavier weight.
+- **Conversation keeps the Assistant tab selected.** It is a detail flow, not a tab destination; `ACTIVE_TAB_OVERRIDES` records the mapping.
+- **The pinned composer no longer touches the tab bar.** It hovers `COMPOSER_BAR_GAP_PT` (10 pt) above the capsule; before, its bottom met the bar's top edge exactly.
+
+The committed design documents are regenerated without a capture session via `python examples/nomic_ios/assemble_capture.py --refresh examples/nomic_ios/design`, which re-applies the builder's authored chrome (tab bars, artifact drops, dark recolor, composer gap) to the assembled JSON.
+
+Deviations 8 (SF Pro and Dynamic Type), 9 (layered icon), and 10 (iPhone Duo) below remain open. Bar metrics remain chosen, not measured, pending the iOS 27 Figma kit [S-DESIGNKITS].
+
 ## Status after the Dark Mode change
 
 Later the same day, the app gained a real second appearance. Deviation 7 below is fixed:

@@ -71,6 +71,79 @@ def test_drop_css_artifact_texts_removes_only_artifacts(asm) -> None:
     assert survivors == [real]
 
 
+def test_sr_only_text_is_dropped(asm) -> None:
+    # Screen-reader-only spans render as clipped ink fragments inside their
+    # tiny buttons (the "..." blob under the sidebar toggle): the web hides
+    # them, so the assembler must too.
+    sr = _text_node("Toggle Sidebar")
+    sr["name"] = "span.sr-only"
+    real = _text_node("Home")
+    payload = {"document": {"children": [{"children": [_frame([sr, real])]}]}}
+
+    removed = asm.drop_sr_only_texts(payload)
+
+    assert removed == 1
+    survivors = payload["document"]["children"][0]["children"][0]["children"]
+    assert survivors == [real]
+
+
+# ── dark icon recolor ─────────────────────────────────────────────────────────
+
+
+def _black_icon(box: dict | None = None) -> dict:
+    return {
+        "id": "8:8",
+        "type": "VECTOR",
+        "name": "svg:paths",
+        "absoluteBoundingBox": box or {"x": 20, "y": 80, "width": 13, "height": 11},
+        "fills": [{"type": "SOLID", "color": {"r": 0, "g": 0, "b": 0}, "opacity": 1}],
+        "strokes": [],
+    }
+
+
+def test_dark_icon_recolor_turns_black_glyphs_light(asm) -> None:
+    # The dark capture leaves currentColor svg glyphs pure black, which is
+    # invisible on the gray-900 canvas (measured 1.1:1). They map to the same
+    # gray-100 the capture uses for dark foreground text.
+    icon = _black_icon()
+    screen = _frame([icon])
+
+    assert asm.recolor_dark_icons(screen) == 1
+    assert _rgb(icon["fills"][0]) == (241, 241, 234)
+
+
+def test_dark_icon_recolor_keeps_glyphs_on_colorful_surfaces_black(asm) -> None:
+    # Glyphs on teal buttons (Dictate, Upload) are black on both appearances on
+    # the real site; recoloring them white would break the button.
+    mic = _black_icon()
+    button = _frame([mic], box={"x": 300, "y": 250, "width": 40, "height": 40})
+    button["fills"] = [{"type": "SOLID", "color": {"r": 72 / 255, "g": 129 / 255, "b": 109 / 255}, "opacity": 1}]
+    screen = _frame([button])
+
+    assert asm.recolor_dark_icons(screen) == 0
+    assert _rgb(mic["fills"][0]) == (0, 0, 0)
+
+
+def test_dark_icon_recolor_leaves_themed_gray_glyphs_alone(asm) -> None:
+    icon = _black_icon()
+    icon["fills"] = [{"type": "SOLID", "color": {"r": 145 / 255, "g": 148 / 255, "b": 146 / 255}, "opacity": 1}]
+    screen = _frame([icon])
+
+    assert asm.recolor_dark_icons(screen) == 0
+    assert _rgb(icon["fills"][0]) == (145, 148, 146)
+
+
+def test_dark_icon_recolor_sees_through_fill_free_wrappers(asm) -> None:
+    # Header icons sit inside borderless buttons; only a colorful ancestor
+    # suppresses the recolor.
+    icon = _black_icon()
+    wrapper = _frame([icon], box={"x": 16, "y": 78, "width": 28, "height": 32})
+    screen = _frame([wrapper])
+
+    assert asm.recolor_dark_icons(screen) == 1
+    assert _rgb(icon["fills"][0]) == (241, 241, 234)
+
+
 # ── clip reconciliation ───────────────────────────────────────────────────────
 
 
@@ -242,9 +315,12 @@ def test_tab_labels_meet_the_ios_minimum_size(asm) -> None:
         assert _tab_parts(tab)["label"]["style"]["fontSize"] >= 11
 
 
-def test_tab_symbols_and_labels_use_the_nomic_light_grays(asm) -> None:
-    # Nomic grays are teal-tinted (hue ~153), never neutral; values come from
-    # the drive-next globals.css tokens (gray-700 selected, gray-500 unselected).
+def test_selected_tab_uses_the_teal_accent_and_unselected_stays_gray(asm) -> None:
+    # Apple's tab bars carry selection with a single accent tint on the symbol
+    # and label [S-TABBARS], [S-COLOR]. The light accent is teal-600, the same
+    # token the product uses for its active sidebar item on a light canvas
+    # (oklch(55.8% 0.068 169) = sRGB 73,129,109; 4.3:1 on gray-50, on par with
+    # Apple's own system-blue labels). Unselected tabs stay monochrome gray-500.
     bar = _bar(asm, active="drive")
     colors = set()
     for tab in bar["children"]:
@@ -253,25 +329,21 @@ def test_tab_symbols_and_labels_use_the_nomic_light_grays(asm) -> None:
         label_rgb = _rgb(parts["label"]["fills"][0])
         assert icon_rgb == label_rgb, "one color per tab state"
         colors.add(icon_rgb)
-    assert colors == {(38, 43, 39), (77, 82, 79)}
+    assert colors == {(73, 129, 109), (77, 82, 79)}
     selected = _rgb(_tab_parts(bar["children"][1])["icon"]["fills"][0])
     unselected = _rgb(_tab_parts(bar["children"][0])["icon"]["fills"][0])
-    assert selected == (38, 43, 39)
+    assert selected == (73, 129, 109)
     assert unselected == (77, 82, 79)
 
 
-def test_selected_tab_gets_a_concentric_selection_pill(asm) -> None:
+def test_selection_is_the_accent_tint_not_a_pill(asm) -> None:
+    # iOS tab bars have no selection pill; tint and label weight carry the
+    # state [S-TABBARS].
     bar = _bar(asm, active="drive")
     tabs = {tab["name"]: _tab_parts(tab) for tab in bar["children"]}
 
-    assert "selection" not in tabs["Assistant Tab"]
-    pill = tabs["Drive Tab"]["selection"]
-    _bx, by, _bw, bh = _box(bar)
-    _px, py, _pw, ph = _box(pill)
-    padding = py - by
-    assert padding > 0
-    assert by + bh - (py + ph) == pytest.approx(padding)
-    assert pill["cornerRadius"] == pytest.approx(bar["cornerRadius"] - padding)
+    for parts in tabs.values():
+        assert "selection" not in parts, "no selection pill in an iOS tab bar"
     assert tabs["Drive Tab"]["label"]["style"]["fontWeight"] > tabs["Assistant Tab"]["label"]["style"]["fontWeight"]
 
 
@@ -302,9 +374,10 @@ def test_dark_tab_bar_uses_a_dark_translucent_tint(asm) -> None:
     assert blurs and blurs[0]["radius"] > 0
 
 
-def test_dark_tab_symbols_and_labels_use_the_nomic_dark_grays(asm) -> None:
-    # Dark-mode grays are the teal-tinted Nomic tokens (gray-100 selected,
-    # gray-400 unselected), not neutral ramps.
+def test_dark_selected_tab_uses_teal_400_and_unselected_stays_gray(asm) -> None:
+    # The dark accent is teal-400 (122, 167, 151): 6.3:1 on the gray-900 glass,
+    # well past the 4.5:1 text minimum [S-ACCESSIBILITY]. Unselected tabs keep
+    # the gray-400 token; both grays lean teal, never neutral.
     bar = _bar(asm, active="drive", appearance="dark")
     colors = set()
     for tab in bar["children"]:
@@ -313,28 +386,20 @@ def test_dark_tab_symbols_and_labels_use_the_nomic_dark_grays(asm) -> None:
         label_rgb = _rgb(parts["label"]["fills"][0])
         assert icon_rgb == label_rgb, "one color per tab state"
         colors.add(icon_rgb)
-    assert colors == {(241, 241, 234), (145, 148, 146)}
+    assert colors == {(122, 167, 151), (145, 148, 146)}
     assert min(rgb[0] for rgb in colors) >= 120, "dark-mode bar symbols stay legible on dark glass"
-    # Selected reads stronger than unselected in both appearances.
     selected = _rgb(_tab_parts(bar["children"][1])["icon"]["fills"][0])
     unselected = _rgb(_tab_parts(bar["children"][0])["icon"]["fills"][0])
-    assert selected == (241, 241, 234)
+    assert selected == (122, 167, 151)
     assert unselected == (145, 148, 146)
-    assert selected[0] > unselected[0]
 
 
-def test_dark_selection_pill_is_a_light_wash_with_the_same_shape(asm) -> None:
-    light = _bar(asm, active="drive")
-    dark = _bar(asm, active="drive", appearance="dark")
-    dark_tabs = {tab["name"]: _tab_parts(tab) for tab in dark["children"]}
-
-    pill = dark_tabs["Drive Tab"]["selection"]
-    fill = pill["fills"][0]
-    assert _rgb(fill) == (255, 255, 255), "dark selection is a white wash, not a black one"
-    assert 0.0 < fill["opacity"] < 0.5
-    light_pill = {tab["name"]: _tab_parts(tab) for tab in light["children"]}["Drive Tab"]["selection"]
-    assert _box(pill) == _box(light_pill)
-    assert pill["cornerRadius"] == light_pill["cornerRadius"]
+def test_dark_selection_is_also_pill_free(asm) -> None:
+    for appearance in ("light", "dark"):
+        bar = _bar(asm, active="drive", appearance=appearance)
+        for tab in bar["children"]:
+            parts = _tab_parts(tab)
+            assert "selection" not in parts, appearance
 
 
 def test_dark_scroll_edge_fades_from_the_dark_screen_background(asm) -> None:
@@ -564,7 +629,10 @@ def test_conversation_composer_pins_above_the_floating_tab_bar(asm) -> None:
     assert screen["children"][-3] is composer and screen["children"][-1] is bar
     assert composer not in thread["children"]
     _x, y, _w, h = _box(composer)
-    assert y + h == pytest.approx(asm.TAB_BAR_Y)
+    # Two floating controls never touch: the composer hovers a clear gap above
+    # the glass capsule.
+    assert y + h == pytest.approx(asm.TAB_BAR_Y - asm.COMPOSER_BAR_GAP_PT)
+    assert asm.COMPOSER_BAR_GAP_PT >= 8.0
     label_y = composer["children"][0]["absoluteBoundingBox"]["y"]
     assert label_y - y == pytest.approx(807 - 744)
 
@@ -613,6 +681,29 @@ def test_remap_ids_makes_nested_nodes_unique_and_rewires_interactions(asm) -> No
     assert node["children"][0]["interactions"][0]["actions"][0]["destinationId"] == "A:2:0"
 
 
+def test_conversation_screen_keeps_the_assistant_tab_selected(asm, tmp_path) -> None:
+    # Conversation is a detail flow inside the Assistant tab, not a tab itself;
+    # iOS keeps the originating tab selected [S-TABBARS].
+    import json
+
+    captures = {}
+    for key, _name, _height in asm.SCREEN_SPECS:
+        capture_dir = tmp_path / key
+        capture_dir.mkdir()
+        payload = {"document": {"children": [{"children": [_capture_frame()]}]}}
+        (capture_dir / "figma_file.json").write_text(json.dumps(payload), encoding="utf-8")
+        captures[key] = capture_dir
+
+    payload = asm.assemble_design(captures)
+
+    convo = next(f for f in payload["document"]["children"][0]["children"] if f["name"] == "Conversation")
+    bar = convo["children"][-1]
+    tabs = {tab["name"]: _tab_parts(tab) for tab in bar["children"]}
+    assert _rgb(tabs["Assistant Tab"]["icon"]["fills"][0]) == (73, 129, 109)
+    for name in ("Drive Tab", "Projects Tab", "Profile Tab"):
+        assert _rgb(tabs[name]["icon"]["fills"][0]) == (77, 82, 79), name
+
+
 # ── generated design ──────────────────────────────────────────────────────────
 
 
@@ -634,3 +725,47 @@ def test_generated_design_matches_the_app_viewport(asm) -> None:
         for node in asm._walk_all(bar):
             if node["type"] == "TEXT":
                 assert node["style"]["fontSize"] >= 11
+
+
+def _committed_designs() -> dict[str, dict]:
+    import json
+
+    return {
+        appearance: json.loads((APP_DIR / "design" / filename).read_text(encoding="utf-8"))
+        for appearance, filename in (("light", "figma_file.json"), ("dark", "figma_file.dark.json"))
+    }
+
+
+def test_committed_designs_have_no_sr_only_text(asm) -> None:
+    for appearance, payload in _committed_designs().items():
+        for node in asm._walk_all(payload["document"]):
+            assert "sr-only" not in str(node.get("name", "")), (appearance, node.get("name"))
+
+
+def test_committed_dark_design_has_no_invisible_black_icons(asm) -> None:
+    payload = _committed_designs()["dark"]
+
+    def walk(node: dict, colorful_ancestor: bool, screen_name: str) -> None:
+        colorful = colorful_ancestor
+        for paint in node.get("fills") or ():
+            if paint.get("type") == "SOLID":
+                rgb = _rgb(paint)
+                if max(rgb) - min(rgb) > 24:
+                    colorful = True
+                if node["type"] == "VECTOR":
+                    assert colorful or max(rgb) > 12, (screen_name, node.get("name"), rgb)
+        for child in node.get("children") or ():
+            walk(child, colorful, screen_name)
+
+    for screen in payload["document"]["children"][0]["children"]:
+        walk(screen, False, screen["name"])
+
+
+def test_committed_conversation_composer_clears_the_tab_bar(asm) -> None:
+    for appearance, payload in _committed_designs().items():
+        convo = next(f for f in payload["document"]["children"][0]["children"] if f["name"] == "Conversation")
+        bar = convo["children"][-1]
+        composer = convo["children"][-3]
+        _x, cy, _w, ch = _box(composer)
+        _x, by, _w, _h = _box(bar)
+        assert by - (cy + ch) == pytest.approx(asm.COMPOSER_BAR_GAP_PT), appearance
