@@ -55,27 +55,53 @@ jobs:
         run: |
           pkill -f "main.py run-app $APP_DIR" 2>/dev/null || true
           LOG="$RUNNER_TEMP/desktop-run.log"
-          nohup caffeinate -dims uv run python main.py run-app "$APP_DIR" --render "$RENDER" >"$LOG" 2>&1 &
-          echo $! > "$RUNNER_TEMP/desktop-run.pid"
-          disown
+          # The runner reaps orphaned child processes when the job ends
+          # ("Cleaning up orphan processes"), so a nohup+disown app dies with
+          # the job. A throwaway .app launched via `open` is spawned by
+          # LaunchServices outside the runner's process tree — the same trick
+          # the iOS tour gets for free from SpringBoard — and the window lands
+          # fronted in the console session with a Dock icon.
+          BUNDLE="$RUNNER_TEMP/NomicDesktop.app"
+          mkdir -p "$BUNDLE/Contents/MacOS"
+          cat > "$BUNDLE/Contents/Info.plist" <<'EOF_PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>launch</string>
+            <key>CFBundleIdentifier</key><string>ai.nomic.desktop.dev</string>
+            <key>CFBundleName</key><string>Nomic</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleVersion</key><string>1</string>
+          </dict>
+          </plist>
+          EOF_PLIST
+          cat > "$BUNDLE/Contents/MacOS/launch" <<EOF_LAUNCH
+          #!/bin/bash
+          cd "$GITHUB_WORKSPACE" || exit 1
+          exec caffeinate -dims "$(command -v uv)" run python main.py run-app "$APP_DIR" --render "$RENDER"
+          EOF_LAUNCH
+          chmod +x "$BUNDLE/Contents/MacOS/launch"
+          open -n "$BUNDLE" --stdout "$LOG" --stderr "$LOG"
           sleep 20
-          if ! kill -0 "$(cat "$RUNNER_TEMP/desktop-run.pid")" 2>/dev/null; then
+          if ! pgrep -f "main.py run-app $APP_DIR" >/dev/null; then
             echo "app exited during startup; log follows"
             cat "$LOG"
             exit 1
           fi
+          echo "app is running outside the runner's process tree; window should be on screen"
 
       - name: Diagnose window session
         run: |
           echo "runner: user=$(id -un) uid=$(id -u); console owner=$(stat -f %Su /dev/console) uid=$(stat -f %u /dev/console)"
           echo "app process:"
           pgrep -fl "main.py run-app $APP_DIR" || echo "  (not running)"
-          echo "python-owned windows visible to the window server:"
+          echo "windows visible to the window server:"
           uv run python - <<'EOF'
           import Quartz
-          wins = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionAll, Quartz.kCGNullWindowID)
-          mine = [w for w in wins if "python" in str(w.get("kCGWindowOwnerName", "")).lower()]
-          print(f"  {len(mine)} python window(s) of {len(wins)} total")
+          wins = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionAll, Quartz.kCGNullWindowID) or []
+          mine = [w for w in wins if "python" in str(w.get("kCGWindowOwnerName", "")).lower() or "nomic" in str(w.get("kCGWindowOwnerName", "")).lower()]
+          print(f"  {len(mine)} matching window(s) of {len(wins)} total")
           for w in mine:
               print("  window:", w.get("kCGWindowOwnerName"), w.get("kCGWindowNumber"), w.get("kCGWindowBounds"), w.get("kCGWindowOwnerPID"))
           EOF
