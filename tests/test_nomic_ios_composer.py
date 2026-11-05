@@ -322,6 +322,32 @@ def test_keyboard_pushes_the_composer_and_tab_capsule_up(composer, asm, app) -> 
     assert convo["absoluteBoundingBox"]["height"] >= 1032.0 + 346.0
 
 
+def test_keyboard_lift_keeps_the_composer_children_glued_to_the_root(composer, app) -> None:
+    _conversation(app)
+    app.tap("Composer")
+    app.composer.inject_text("line one\nline two\nline three")
+
+    enqueue_native_text_input_events([{"type": "keyboard", "height": 346.0, "duration": 0.0}])
+    app.loop(app.test_ctx, 0.016)
+
+    convo = app.document.node(app.current_frame_id)
+    native = _find(convo, "Composer")
+    rx, ry, _rw, rh = _box(native)
+    # Children ride along with the lifted root: text, caret, and send button
+    # must land inside the composer chrome, not at the pre-lift position.
+    value = _find(native, "Composer Text")
+    vx, vy, vw, vh = _box(value)
+    assert rx <= vx and vx + vw <= rx + _rw
+    assert ry <= vy and vy + vh <= ry + rh
+    caret = _find(native, "Composer Caret")
+    cx, cy, cw, ch = _box(caret)
+    assert ry <= cy and cy + ch <= ry + rh
+    send = _find(native, "Composer Send")
+    sx, sy, sw, sh = _box(send)
+    assert ry <= sy and sy + sh <= ry + rh
+    assert rx <= sx and sx + sw <= rx + _rw
+
+
 def test_keyboard_animates_with_the_forwarded_duration(composer, app) -> None:
     _conversation(app)
     app.tap("Composer")
@@ -409,6 +435,22 @@ def test_send_appends_a_user_bubble_and_a_quiet_stub(composer, app) -> None:
     assert stub["characters"] == composer.STUB_TEXT
     assert _rgb(stub["fills"][0]) == (145, 148, 146)  # gray-400, no bubble fill
     assert stub.get("type") == "TEXT"
+
+
+def test_stub_box_fits_every_wrapped_line(composer, app) -> None:
+    _conversation(app)
+    app.tap("Composer")
+    app.composer.inject_text("What changed in rev C?")
+    app.composer.send()
+    app.loop(app.test_ctx, 0.016)
+
+    stub = _find(_replies(app.document.node(app.current_frame_id)), "Stub Reply")
+    _sx, _sy, sw, sh = _box(stub)
+    line_h = float(stub["style"]["lineHeightPx"])
+    lines = app.composer._measurer.wrap(composer.STUB_TEXT, sw, size=composer.STUB_FONT_SIZE)
+    # textAutoResize NONE clips lines past the box height; the stub must be
+    # tall enough that no line of the quiet note is lost.
+    assert sh >= len(lines) * line_h
 
 
 def test_send_clears_the_composer_and_the_native_field(app) -> None:
