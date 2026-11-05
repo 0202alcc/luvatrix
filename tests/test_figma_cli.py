@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import sys
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 from PIL import Image
@@ -226,11 +227,36 @@ class _FakeFigmaFolder:
     def __call__(self, request, timeout: float = 0):
         url = request.full_url
         self.requests.append((url, dict(request.header_items())))
+        if "/v2/folders/" in url:
+            return _Response(json.dumps({"name": "Folder", "files": self.files}).encode())
         if "/projects/" in url:
             return _Response(json.dumps({"files": self.files}).encode())
         match = re.search(r"/files/([^/?]+)", url)
         payload = self.payloads.get(match.group(1), {"status": 404, "err": "not found"}) if match else {}
         return _Response(json.dumps(payload).encode())
+
+
+class _FakeFolderListing:
+    """Serves only the folder listing endpoints, with configurable 403s."""
+
+    def __init__(self, files: list[dict], *, v2_status: int = 200, v1_status: int = 200) -> None:
+        self.files = files
+        self.v2_status = v2_status
+        self.v1_status = v1_status
+        self.requests: list[tuple[str, dict[str, str]]] = []
+
+    def __call__(self, request, timeout: float = 0):
+        url = request.full_url
+        self.requests.append((url, dict(request.header_items())))
+        if "/v2/folders/" in url:
+            if self.v2_status != 200:
+                raise HTTPError(url, self.v2_status, "Forbidden", None, io.BytesIO(b'{"error":true,"status":403,"message":"Invalid scope"}'))
+            return _Response(json.dumps({"name": "Folder", "files": self.files}).encode())
+        if "/projects/" in url:
+            if self.v1_status != 200:
+                raise HTTPError(url, self.v1_status, "Forbidden", None, io.BytesIO(b'{"error":true,"status":403,"message":"Invalid scope"}'))
+            return _Response(json.dumps({"files": self.files}).encode())
+        raise AssertionError(f"unexpected url {url}")
 
 
 def test_pull_folder_lists_and_pulls_every_file(tmp_path: Path) -> None:
@@ -255,8 +281,47 @@ def test_pull_folder_lists_and_pulls_every_file(tmp_path: Path) -> None:
     assert results[0]["path"].is_file()
     assert results[1]["path"].is_file()
     list_url, headers = fake.requests[0]
-    assert list_url == "https://api.figma.com/v1/projects/417193958/files"
+    assert list_url == "https://api.figma.com/v2/folders/417193958/files"
     assert headers.get("X-figma-token") == "secret"
+
+
+def test_list_project_files_uses_the_v2_folders_endpoint_first() -> None:
+    from luvatrix_ui.figma.cli import list_project_files
+
+    fake = _FakeFolderListing([{"key": "AbC123", "name": "A", "thumbnail_url": "", "last_modified": "x"}])
+
+    files = list_project_files("417193958", token="t", opener=fake)
+
+    assert [f["key"] for f in files] == ["AbC123"]
+    url, headers = fake.requests[0]
+    assert url == "https://api.figma.com/v2/folders/417193958/files"
+    assert headers.get("X-figma-token") == "t"
+
+
+def test_list_project_files_falls_back_to_v1_projects_when_v2_forbids() -> None:
+    from luvatrix_ui.figma.cli import list_project_files
+
+    # Older tokens carry projects:read but not folders:read; newer tokens are
+    # the reverse. The v1 projects endpoint is deprecated but still serves
+    # those older tokens, so a v2 403 falls back to it.
+    fake = _FakeFolderListing([{"key": "AbC123", "name": "A"}], v2_status=403)
+
+    files = list_project_files("417193958", token="t", opener=fake)
+
+    assert [f["key"] for f in files] == ["AbC123"]
+    assert [url for url, _ in fake.requests] == [
+        "https://api.figma.com/v2/folders/417193958/files",
+        "https://api.figma.com/v1/projects/417193958/files",
+    ]
+
+
+def test_list_project_files_raises_a_combined_error_when_both_endpoints_forbid() -> None:
+    from luvatrix_ui.figma.cli import list_project_files
+
+    fake = _FakeFolderListing([], v2_status=403, v1_status=403)
+
+    with pytest.raises(FigmaApiError, match="v2 folders endpoint"):
+        list_project_files("417193958", token="t", opener=fake)
 
 
 def test_pull_folder_continues_past_a_failing_file(tmp_path: Path) -> None:
