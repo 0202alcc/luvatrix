@@ -20,11 +20,21 @@ import struct as _struct
 import traceback as _traceback
 
 try:
+    from . import _matrix_rs as _rs_accel
+except ImportError:
+    _rs_accel = None
+
+try:
     from . import _accel_native as _native_accel
 except ImportError:
     _native_accel = None
 
-NATIVE_ACCEL_AVAILABLE = _native_accel is not None
+NATIVE_ACCEL_AVAILABLE = _native_accel is not None or _rs_accel is not None
+
+
+def _active_native_accel():
+    """Fastest available native blit extension (Rust preferred, Cython fallback)."""
+    return _rs_accel if _rs_accel is not None else _native_accel
 
 # ── probe for available backends ──────────────────────────────────────────────
 _torch = None
@@ -534,8 +544,9 @@ def _alpha_blit_pure(
     source_width = int(source.shape[1])
     mask_width = int(mask.shape[1]) if mask is not None else 0
     mask_channels = int(mask.shape[2]) if mask is not None and mask.ndim == 3 else 1
-    if _native_accel is not None:
-        _native_accel.alpha_blit_rgba_u8(
+    native_accel = _active_native_accel()
+    if native_accel is not None:
+        native_accel.alpha_blit_rgba_u8(
             destination._data,
             destination_width,
             source._data,
@@ -596,8 +607,9 @@ def blend_solid_mask_rgba_pure(destination, mask, *, x: int, y: int, color) -> N
     rgba = tuple(int(value) for value in color)
     if len(rgba) != 4 or any(value < 0 or value > 255 for value in rgba):
         raise ValueError("color must contain four uint8 channel values")
-    if _native_accel is not None:
-        _native_accel.blend_solid_mask_rgba_u8(
+    native_accel = _active_native_accel()
+    if native_accel is not None:
+        native_accel.blend_solid_mask_rgba_u8(
             destination._data,
             int(frame_width),
             int(frame_height),

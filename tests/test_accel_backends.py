@@ -343,6 +343,11 @@ real_import = builtins.__import__
 def blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
     if name == "torch" or name.startswith("torch.") or name == "numpy" or name.startswith("numpy."):
         raise ImportError("blocked numeric backend for native dispatch test")
+    if (
+        name in ("luvatrix_core._matrix_rs", "_matrix_rs")
+        or (name in ("luvatrix_core", "") and "_matrix_rs" in (fromlist or ()))
+    ):
+        raise ImportError("blocked Rust accelerator so the Cython stub is the active one")
     return real_import(name, globals, locals, fromlist, level)
 builtins.__import__ = blocked_import
 
@@ -364,6 +369,58 @@ frame = accel.from_sequence([10, 20, 30, 255], (1, 1, 4))
 tile = accel.from_sequence([110, 120, 130, 128], (1, 1, 4))
 accel.alpha_blit(frame, tile, x=0, y=0)
 assert calls == [(1, 1, 1, 1)], calls
+assert list(frame._data) == [60, 70, 80, 255], list(frame._data)
+'''
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
+    def test_pure_alpha_blit_prefers_rust_accelerator_over_cython(self) -> None:
+        code = r'''
+import builtins
+import sys
+import types
+
+real_import = builtins.__import__
+def blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "torch" or name.startswith("torch.") or name == "numpy" or name.startswith("numpy."):
+        raise ImportError("blocked numeric backend for native dispatch test")
+    return real_import(name, globals, locals, fromlist, level)
+builtins.__import__ = blocked_import
+
+rust_calls = []
+cython_calls = []
+def make_blit(calls, pixel):
+    def alpha_blit_rgba_u8(destination, destination_width, source, source_width, mask,
+                           mask_width, mask_channels, destination_x0, destination_y0,
+                           source_x0, source_y0, copy_width, copy_height):
+        calls.append((destination_width, source_width, copy_width, copy_height))
+        destination[:4] = bytes(pixel)
+    return alpha_blit_rgba_u8
+
+rust = types.ModuleType("luvatrix_core._matrix_rs")
+rust.alpha_blit_rgba_u8 = make_blit(rust_calls, [60, 70, 80, 255])
+rust.blend_solid_mask_rgba_u8 = lambda *args: None
+sys.modules["luvatrix_core._matrix_rs"] = rust
+
+cython = types.ModuleType("luvatrix_core._accel_native")
+cython.alpha_blit_rgba_u8 = make_blit(cython_calls, [1, 2, 3, 4])
+cython.blend_solid_mask_rgba_u8 = lambda *args: None
+sys.modules["luvatrix_core._accel_native"] = cython
+
+from luvatrix_core import accel
+assert accel.BACKEND == "pure", accel.BACKEND
+assert accel.NATIVE_ACCEL_AVAILABLE
+frame = accel.from_sequence([10, 20, 30, 255], (1, 1, 4))
+tile = accel.from_sequence([110, 120, 130, 128], (1, 1, 4))
+accel.alpha_blit(frame, tile, x=0, y=0)
+assert rust_calls == [(1, 1, 1, 1)], rust_calls
+assert cython_calls == [], cython_calls
 assert list(frame._data) == [60, 70, 80, 255], list(frame._data)
 '''
         result = subprocess.run(
