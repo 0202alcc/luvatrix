@@ -48,10 +48,22 @@ jobs:
         # macos-metal checks the macos extra (PyObjC/AppKit/Metal + torch).
         run: uv sync --frozen --extra macos
 
+      - name: Check app example is present
+        id: app
+        run: |
+          if [ -d "$APP_DIR" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$APP_DIR is not on this branch; skipping launch."
+          fi
+
       - name: Validate app
+        if: steps.app.outputs.exists == 'true'
         run: uv run python main.py validate-app "$APP_DIR" --render "$RENDER"
 
       - name: Launch app detached
+        if: steps.app.outputs.exists == 'true'
         run: |
           pkill -f "main.py run-app $APP_DIR" 2>/dev/null || true
           LOG="$RUNNER_TEMP/desktop-run.log"
@@ -98,6 +110,7 @@ jobs:
           echo "app is running outside the runner's process tree; window should be on screen"
 
       - name: Diagnose window session
+        if: steps.app.outputs.exists == 'true'
         run: |
           echo "runner: user=$(id -un) uid=$(id -u); console owner=$(stat -f %Su /dev/console) uid=$(stat -f %u /dev/console)"
           echo "app process:"
