@@ -10,7 +10,7 @@ name: macOS Desktop Run
 on:
   push:
     branches: ["feature/**", "dev-alec/**"]
-    paths: ["examples/nomic_desktop/**"]
+    paths: ["examples/nomic_desktop/**", ".github/workflows/macos-desktop-run.yml"]
   workflow_dispatch:
     inputs:
       app_dir:
