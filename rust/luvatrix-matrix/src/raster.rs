@@ -153,6 +153,7 @@ fn debug_glyph(ch: char) -> [&'static str; 5] {
 
 /// Blocky fallback glyphs, mirroring `_draw_debug_text`. The Python digest
 /// path is unreachable here because encodable text nodes are non-empty.
+#[allow(clippy::too_many_arguments)]
 fn draw_debug_text(buf: &mut [u8], frame_w: i64, frame_h: i64, text: &str, x: i64, y: i64, scale: i64, color: [u8; 4]) {
     let mut cursor = x;
     for ch in text.to_uppercase().chars() {
