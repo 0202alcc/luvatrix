@@ -1,0 +1,77 @@
+name: macOS Desktop Run
+
+# Launches a luvatrix app as a native macOS window on the self-hosted Mac
+# runner and leaves it open for interactive use. Dispatch-only: this workflow
+# opens a GUI on someone's machine, so it never triggers on push or
+# pull_request. The repository is public; only maintainers can dispatch.
+on:
+  workflow_dispatch:
+    inputs:
+      app_dir:
+        description: App folder to launch
+        default: examples/nomic_desktop
+      render:
+        description: macOS render target
+        default: macos-metal
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-desktop-run
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: Launch ${{ inputs.app_dir }} on macOS
+    if: ${{ vars.LUVATRIX_IOS_SIM_RUNNER == '1' }}
+    runs-on: [self-hosted, macOS, ios-sim]
+    timeout-minutes: 15
+    env:
+      APP_DIR: ${{ inputs.app_dir }}
+      RENDER: ${{ inputs.render }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
+
+      - name: Sync deps
+        # macos-metal checks the macos extra (PyObjC/AppKit/Metal + torch).
+        run: uv sync --frozen --extra macos
+
+      - name: Validate app
+        run: uv run python main.py validate-app "$APP_DIR" --render "$RENDER"
+
+      - name: Launch app detached
+        run: |
+          pkill -f "main.py run-app $APP_DIR" 2>/dev/null || true
+          LOG="$RUNNER_TEMP/desktop-run.log"
+          nohup caffeinate -dims uv run python main.py run-app "$APP_DIR" --render "$RENDER" >"$LOG" 2>&1 &
+          echo $! > "$RUNNER_TEMP/desktop-run.pid"
+          disown
+          sleep 20
+          if ! kill -0 "$(cat "$RUNNER_TEMP/desktop-run.pid")" 2>/dev/null; then
+            echo "app exited during startup; log follows"
+            cat "$LOG"
+            exit 1
+          fi
+
+      - name: Screenshot
+        run: |
+          # Needs an unlocked GUI session and Screen Recording permission for
+          # the runner's host process; failure is non-fatal, the log is enough.
+          screencapture -x "$RUNNER_TEMP/desktop-app.png" || echo "screencapture failed"
+
+      - name: Upload log and screenshot
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-desktop-run-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/desktop-run.log
+            ${{ runner.temp }}/desktop-app.png
+          if-no-files-found: warn
+          retention-days: 14
