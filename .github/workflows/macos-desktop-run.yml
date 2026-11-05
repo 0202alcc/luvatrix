@@ -88,7 +88,13 @@ jobs:
           # directly (no caffeinate/uv middlemen) so the bundle-registered
           # pid IS the NSApplication process — otherwise LaunchServices
           # never sees the launch finish and the Dock icon bounces forever.
-          BUNDLE="$RUNNER_TEMP/NomicDesktop.app"
+          # The bundle must live outside RUNNER_TEMP: the runner deletes
+          # _temp when the job ends, and LaunchServices resolves the Dock
+          # tile's icon/name from the bundle path — a deleted bundle turns
+          # the running app's tile into a blank page, and clicking it
+          # relaunches nothing (endless bounce).
+          BUNDLE="$HOME/.nomic-desktop/NomicDesktop.app"
+          rm -rf "$BUNDLE"
           mkdir -p "$BUNDLE/Contents/MacOS"
           cat > "$BUNDLE/Contents/Info.plist" <<'EOF_PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
