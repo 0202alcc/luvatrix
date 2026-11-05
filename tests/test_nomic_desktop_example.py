@@ -36,6 +36,14 @@ class NomicDesktopExampleTests(unittest.TestCase):
         for frame in doc.frames:
             self.assertEqual((frame.width, frame.height), (1440.0, 900.0)), frame.name
 
+    def test_display_icon_resolves_inside_the_app(self) -> None:
+        manifest = tomllib.loads((APP_DIR / "app.toml").read_text(encoding="utf-8"))
+
+        icon = manifest["display"]["icon"]
+        icon_path = APP_DIR / icon
+        self.assertTrue(icon_path.is_file(), f"Dock icon missing: {icon}")
+        self.assertGreater(icon_path.stat().st_size, 1024, "Dock icon looks like a placeholder")
+
 
 if __name__ == "__main__":
     unittest.main()
