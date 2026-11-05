@@ -11,6 +11,7 @@ use pyo3::types::{PyList, PyTuple};
 
 mod blend;
 mod ops;
+mod present;
 mod raster;
 
 fn writable_u8(obj: &Bound<'_, PyAny>) -> PyResult<(PyBuffer<u8>, *mut u8, usize)> {
@@ -41,6 +42,106 @@ fn non_negative(value: i64, label: &str) -> PyResult<usize> {
         return Err(PyValueError::new_err(format!("{label} must be >= 0: {value}")));
     }
     Ok(value as usize)
+}
+
+/// Read a `(H, W, 4)` uint8 buffer of any strides into a `StridedFrame`.
+///
+/// The returned frame borrows a raw slice over the whole buffer span; the
+/// `PyBuffer` guard must outlive all use (same invariant as `PayloadStore`).
+fn strided_frame<'a>(buf: &PyBuffer<u8>, label: &str) -> PyResult<present::StridedFrame<'a>> {
+    if buf.dimensions() != 3 {
+        return Err(PyValueError::new_err(format!(
+            "{label} must be a 3D (H, W, 4) uint8 buffer, got {} dimensions",
+            buf.dimensions()
+        )));
+    }
+    let shape = buf.shape();
+    let strides = buf.strides();
+    if shape[2] != 4 {
+        return Err(PyValueError::new_err(format!(
+            "{label} must have 4 channels, got {}",
+            shape[2]
+        )));
+    }
+    let (height, width) = (shape[0], shape[1]);
+    if height == 0 || width == 0 {
+        return Ok(present::StridedFrame {
+            data: &[],
+            origin: 0,
+            row_stride: strides[0],
+            col_stride: strides[1],
+            channel_stride: strides[2],
+            height,
+            width,
+        });
+    }
+    // Span from the first to the last addressed byte, used to size the slice.
+    let mut min_off: isize = 0;
+    let mut max_off: isize = 0;
+    for (dim, stride) in [(height - 1, strides[0]), (width - 1, strides[1]), (3usize, strides[2])] {
+        let extent = dim as isize * stride;
+        if extent >= 0 {
+            max_off += extent;
+        } else {
+            min_off += extent;
+        }
+    }
+    let ptr = unsafe { buf.buf_ptr().offset(min_off) } as *const u8;
+    let len = (max_off - min_off) as usize + 1;
+    let data = unsafe { std::slice::from_raw_parts(ptr, len) };
+    Ok(present::StridedFrame {
+        data,
+        origin: -min_off,
+        row_stride: strides[0],
+        col_stride: strides[1],
+        channel_stride: strides[2],
+        height,
+        width,
+    })
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn crop_viewport_rgba_u8(
+    source: &Bound<'_, PyAny>,
+    x: i64,
+    y: i64,
+    width: i64,
+    height: i64,
+    wrap_x: bool,
+    wrap_y: bool,
+    destination: &Bound<'_, PyAny>,
+) -> PyResult<()> {
+    if width <= 0 || height <= 0 {
+        return Err(PyValueError::new_err("viewport width and height must be > 0"));
+    }
+    let src_buf = PyBuffer::<u8>::get(source)?;
+    let src = strided_frame(&src_buf, "source")?;
+    if src.width == 0 || src.height == 0 {
+        return Err(PyValueError::new_err("source frame must be non-empty"));
+    }
+    let (_dst_guard, dst_ptr, dst_len) = writable_u8(destination)?;
+    let dst = unsafe { std::slice::from_raw_parts_mut(dst_ptr, dst_len) };
+    present::crop_viewport_rgba_u8(
+        &src,
+        x,
+        y,
+        width as usize,
+        height as usize,
+        wrap_x,
+        wrap_y,
+        dst,
+    )
+    .map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn swizzle_rgba_bgra_u8(source: &Bound<'_, PyAny>, destination: &Bound<'_, PyAny>) -> PyResult<()> {
+    let src_buf = PyBuffer::<u8>::get(source)?;
+    let src = strided_frame(&src_buf, "source")?;
+    let (_dst_guard, dst_ptr, dst_len) = writable_u8(destination)?;
+    let dst = unsafe { std::slice::from_raw_parts_mut(dst_ptr, dst_len) };
+    present::swizzle_rgba_bgra_u8(&src, dst).map_err(PyValueError::new_err)
 }
 
 #[pyfunction]
@@ -443,6 +544,8 @@ fn _matrix_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(blend_solid_mask_rgba_u8, m)?)?;
     m.add_function(wrap_pyfunction!(apply_ops, m)?)?;
     m.add_function(wrap_pyfunction!(rasterize, m)?)?;
+    m.add_function(wrap_pyfunction!(crop_viewport_rgba_u8, m)?)?;
+    m.add_function(wrap_pyfunction!(swizzle_rgba_bgra_u8, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
