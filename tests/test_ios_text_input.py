@@ -247,8 +247,8 @@ def test_swift_scaffold_ships_the_text_input_bridge() -> None:
         assert "UITextView" in swift, native
         assert "becomeFirstResponder" in swift, native
         # Keyboard avoidance: frame + animation duration flow into Python.
-        assert "UIKeyboardWillChangeFrameNotification" in swift, native
-        assert "UIKeyboardAnimationDurationUserInfoKey" in swift, native
+        assert "keyboardWillChangeFrameNotification" in swift, native
+        assert "keyboardAnimationDurationUserInfoKey" in swift, native
         # Swift -> Python entry point (LuvatrixPyRunSimpleString script).
         assert "enqueue_native_text_input_events" in swift, native
         assert "luvatrix_core.platform.ios.text_input" in swift, native
