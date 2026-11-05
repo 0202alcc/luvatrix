@@ -15,13 +15,21 @@ import pytest
 from luvatrix_core import accel
 from luvatrix_core.core import scene_rasterizer, window_matrix
 from luvatrix_core.core.scene_graph import (
+    Camera3DNode,
     CircleNode,
     ClearNode,
     CpuLayerNode,
+    Cube3DNode,
+    DotGrid3DNode,
+    DotPlane3DNode,
+    GroundPlane3DNode,
+    Horizon3DNode,
+    Line3DNode,
     RectNode,
     RoundedRectNode,
     SceneFrame,
     ShaderRectNode,
+    Text3DNode,
     TextNode,
 )
 from luvatrix_core.core.window_matrix import (
@@ -455,6 +463,66 @@ def test_rust_scene_lowering_rainbow_shader_within_one_lsb() -> None:
     expected, actual = _rasterize_pair(frame)
     diff = np.abs(actual.astype(np.int16) - expected.astype(np.int16))
     assert int(diff.max()) <= 1
+
+
+def test_rust_scene_lowering_matches_python_rasterizer_3d_nodes() -> None:
+    frame = _frame_with_nodes(
+        (
+            ClearNode((5, 8, 12, 255)),
+            Camera3DNode(position=(0.0, 2.0, 6.0), target=(0.0, 0.5, 0.0)),
+            Cube3DNode(
+                center=(0.0, 0.5, 0.0),
+                size=1.4,
+                rotation=(0.3, 0.7, 0.1),
+                color_rgba=(80, 180, 255, 255),
+                edge_rgba=(255, 255, 255, 255),
+            ),
+            DotGrid3DNode(
+                center=(0.5, 0.5, -1.0),
+                extent=4.0,
+                spacing=0.5,
+                point_size=2.0,
+                color_rgba=(120, 170, 220, 120),
+            ),
+            DotPlane3DNode(
+                center=(0.0, -0.5, -2.0),
+                width=6.0,
+                depth=4.0,
+                spacing=0.75,
+                point_size=1.5,
+                color_rgba=(140, 190, 225, 170),
+            ),
+            Line3DNode(start=(-2.0, 0.0, 0.0), end=(2.0, 1.0, -1.0), color_rgba=(255, 120, 60, 255)),
+            GroundPlane3DNode(center=(0.0, -1.0, -5.0), width=8.0, depth=6.0, color_rgba=(26, 46, 34, 255)),
+            Horizon3DNode(
+                sky_rgba=(228, 238, 246, 255),
+                ground_rgba=(236, 232, 220, 255),
+                horizon_rgba=(150, 160, 168, 255),
+                sky_horizon_rgba=(200, 210, 220, 255),
+                horizon_width=0.02,
+            ),
+            Text3DNode(text="HELLO", position=(0.0, 1.5, -1.0), height=0.4, color_rgba=(235, 246, 255, 255)),
+            RectNode(2.0, 2.0, 10.0, 6.0, (255, 0, 0, 128)),
+        )
+    )
+    expected, actual = _rasterize_pair(frame)
+    np.testing.assert_array_equal(actual, expected)
+
+
+def test_rust_scene_lowering_3d_camera_switching_and_near_clip() -> None:
+    frame = _frame_with_nodes(
+        (
+            ClearNode((0, 0, 0, 255)),
+            Cube3DNode(center=(0.0, 0.0, 0.0), size=1.0),
+            Camera3DNode(position=(3.0, 1.0, 4.0), target=(0.0, 0.0, 0.0), fov_deg=45.0),
+            Cube3DNode(center=(0.0, 0.0, 0.0), size=1.0, rotation=(0.2, 0.4, 0.0), color_rgba=(255, 80, 80, 255)),
+            # Entirely behind the near plane: projection returns None, no draw.
+            Line3DNode(start=(0.0, 0.0, 100.0), end=(1.0, 1.0, 100.0), color_rgba=(255, 0, 0, 255)),
+            Text3DNode(text="GONE", position=(0.0, 0.0, 100.0)),
+        )
+    )
+    expected, actual = _rasterize_pair(frame)
+    np.testing.assert_array_equal(actual, expected)
 
 
 def test_rust_scene_lowering_reuses_output_buffer_and_scales_logical_coords() -> None:
