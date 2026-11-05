@@ -42,6 +42,7 @@ def run_ios_tour(
     settle: float = 0.75,
     ack_timeout: float = 60.0,
     keep_open: bool = False,
+    reset_simulator: bool = False,
     run_id: str | None = None,
     run: Callable[..., Any] = subprocess.run,
     popen: Callable[..., Any] = subprocess.Popen,
@@ -83,6 +84,23 @@ def run_ios_tour(
     ]
     if native_project is not None:
         cmd += ["--native-project", str(native_project)]
+
+    if reset_simulator:
+        # Terminating and even uninstalling the app is not enough to clear a
+        # previous launch: the simulator retains that launch's environment per
+        # bundle id across process death and reinstall, and keeps delivering it
+        # to newly spawned processes, so the tour runs with a stale run id and
+        # this harness never sees its own status. Erasing the device drops
+        # every retained launch record. Shutdown failure just means the device
+        # was already off; a failed erase means the device state is unknown,
+        # so launching anyway would burn the whole timeout on a stale tour.
+        print(f"[ios-tour] erasing simulator {simulator} ({udid}) for a clean launch", flush=True)
+        run(["xcrun", "simctl", "shutdown", udid], capture_output=True)
+        erased = run(["xcrun", "simctl", "erase", udid], capture_output=True, text=True)
+        if erased.returncode != 0:
+            detail = (erased.stderr or erased.stdout or "").strip()
+            summary.update(state="reset_failed", error=f"simctl erase failed: {detail}")
+            return _finish(out, summary)
 
     # Kill any stale instance (e.g. a kept-open app from a previous tour) before
     # run-app reinstalls and launches: an app killed by the install can be
