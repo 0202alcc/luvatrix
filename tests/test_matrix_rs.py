@@ -32,6 +32,8 @@ from luvatrix_core.core.scene_graph import (
     Text3DNode,
     TextNode,
 )
+from luvatrix_core.core import display_runtime
+from luvatrix_core.core.matrix_viewport import MatrixViewport
 from luvatrix_core.core.window_matrix import (
     Multiply,
     PushColumn,
@@ -533,3 +535,150 @@ def test_rust_scene_lowering_reuses_output_buffer_and_scales_logical_coords() ->
     assert reused is out
     expected = scene_rasterizer._rasterize_scene_frame_python(frame_b)
     np.testing.assert_array_equal(np.asarray(reused), np.asarray(expected))
+
+
+# ---------------------------------------------------------------------------
+# Present-path parity: Rust viewport crop and RGBA/BGRA swizzle.
+# ---------------------------------------------------------------------------
+
+
+def _python_crop_viewport_reference(snapshot: np.ndarray, viewport: MatrixViewport) -> np.ndarray:
+    """Inline copy of the pure-Python reference loop from display_runtime."""
+    output = np.zeros((viewport.height, viewport.width, 4), dtype=np.uint8)
+    for destination_y in range(viewport.height):
+        source_y = (viewport.y + destination_y) % snapshot.shape[0] if viewport.wrap_y else viewport.y + destination_y
+        for destination_x in range(viewport.width):
+            source_x = (viewport.x + destination_x) % snapshot.shape[1] if viewport.wrap_x else viewport.x + destination_x
+            output[destination_y, destination_x, :] = snapshot[source_y, source_x, :]
+    return output
+
+
+def _crop_viewports() -> tuple[MatrixViewport, ...]:
+    return (
+        MatrixViewport(x=0, y=0, width=32, height=24),
+        MatrixViewport(x=5, y=7, width=20, height=12),
+        MatrixViewport(x=30, y=20, width=12, height=4, wrap_x=True),
+        MatrixViewport(x=4, y=18, width=16, height=10, wrap_y=True),
+        MatrixViewport(x=28, y=22, width=24, height=16, wrap_x=True, wrap_y=True),
+        MatrixViewport(x=1000, y=-40, width=8, height=8, wrap_x=True, wrap_y=True),
+    )
+
+
+def test_rust_crop_viewport_matches_python_reference_loop() -> None:
+    rng = np.random.default_rng(2026)
+    snapshot = rng.integers(0, 256, size=(24, 32, 4), dtype=np.uint8)
+    for viewport in _crop_viewports():
+        expected = _python_crop_viewport_reference(snapshot, viewport)
+        actual = display_runtime._crop_viewport(snapshot, viewport)
+        assert isinstance(actual, np.ndarray)
+        np.testing.assert_array_equal(np.asarray(actual), expected)
+
+
+def test_rust_crop_viewport_dispatches_to_rust_and_honors_kill_switch(monkeypatch: pytest.MonkeyPatch) -> None:
+    rng = np.random.default_rng(7)
+    np_snapshot = rng.integers(0, 256, size=(24, 32, 4), dtype=np.uint8)
+    # The Python fallback loop mixes accel.zeros output with the snapshot, so
+    # the snapshot must match the active accel backend (torch in this env).
+    torch = accel._torch
+    snapshot = torch.from_numpy(np_snapshot) if torch is not None else np_snapshot
+    viewport = MatrixViewport(x=28, y=22, width=24, height=16, wrap_x=True, wrap_y=True)
+
+    calls: list[tuple] = []
+    real_module = display_runtime._rs_present
+    assert real_module is not None, "display_runtime must bind the Rust present module when it is importable"
+    real_crop = real_module.crop_viewport_rgba_u8
+
+    class _Spy:
+        @staticmethod
+        def crop_viewport_rgba_u8(*args):
+            calls.append(args)
+            return real_crop(*args)
+
+        @staticmethod
+        def swizzle_rgba_bgra_u8(*args, **kwargs):
+            return real_module.swizzle_rgba_bgra_u8(*args, **kwargs)
+
+    monkeypatch.setattr(display_runtime, "_rs_present", _Spy)
+    expected = _python_crop_viewport_reference(np_snapshot, viewport)
+    np.testing.assert_array_equal(np.asarray(display_runtime._crop_viewport(snapshot, viewport)), expected)
+    assert len(calls) == 1
+
+    calls.clear()
+    monkeypatch.setenv("LUVATRIX_DISABLE_MATRIX_RS", "1")
+    np.testing.assert_array_equal(np.asarray(display_runtime._crop_viewport(snapshot, viewport)), expected)
+    assert calls == []
+
+
+def test_rust_crop_viewport_torch_backend_preserved() -> None:
+    torch = pytest.importorskip("torch")
+    rng = np.random.default_rng(99)
+    snapshot = torch.from_numpy(rng.integers(0, 256, size=(24, 32, 4), dtype=np.uint8))
+    for viewport in _crop_viewports():
+        expected = _python_crop_viewport_reference(snapshot.numpy(), viewport)
+        actual = display_runtime._crop_viewport(snapshot, viewport)
+        assert torch.is_tensor(actual)
+        np.testing.assert_array_equal(actual.numpy(), expected)
+
+
+def test_rust_crop_viewport_strided_source() -> None:
+    rng = np.random.default_rng(123)
+    base = rng.integers(0, 256, size=(48, 32, 4), dtype=np.uint8)
+    snapshot = base[::2]  # row-strided, non-contiguous view
+    assert not snapshot.flags.c_contiguous
+    for viewport in _crop_viewports():
+        expected = _python_crop_viewport_reference(snapshot, viewport)
+        actual = display_runtime._crop_viewport(snapshot, viewport)
+        np.testing.assert_array_equal(np.asarray(actual), expected)
+
+
+def test_rust_crop_viewport_rejects_out_of_bounds_without_wrap() -> None:
+    snapshot = np.zeros((8, 8, 4), dtype=np.uint8)
+    destination = np.zeros((4, 4, 4), dtype=np.uint8)
+    with pytest.raises(ValueError):
+        matrix_rs.crop_viewport_rgba_u8(snapshot, 6, 6, 4, 4, False, False, destination)
+    with pytest.raises(ValueError):
+        matrix_rs.crop_viewport_rgba_u8(snapshot, -1, 0, 4, 4, False, False, destination)
+    with pytest.raises(ValueError):
+        matrix_rs.crop_viewport_rgba_u8(snapshot, 0, 0, 4, 4, False, False, np.zeros((2, 2, 4), dtype=np.uint8))
+
+
+def test_rust_swizzle_rgba_bgra_matches_numpy_reference() -> None:
+    rng = np.random.default_rng(4242)
+    for height, width in ((1, 1), (3, 5), (24, 31)):
+        source = rng.integers(0, 256, size=(height, width, 4), dtype=np.uint8)
+        destination = np.full((height, width, 4), 77, dtype=np.uint8)
+        matrix_rs.swizzle_rgba_bgra_u8(source, destination)
+        np.testing.assert_array_equal(destination, source[:, :, [2, 1, 0, 3]])
+        np.testing.assert_array_equal(source, source)  # source untouched
+
+    base = rng.integers(0, 256, size=(16, 32, 4), dtype=np.uint8)
+    strided = base[:, ::2]
+    assert not strided.flags.c_contiguous
+    destination = np.zeros((16, 16, 4), dtype=np.uint8)
+    matrix_rs.swizzle_rgba_bgra_u8(strided, destination)
+    np.testing.assert_array_equal(destination, strided[:, :, [2, 1, 0, 3]])
+
+
+def test_vulkan_backend_swizzle_matches_torch_reference_and_honors_kill_switch(monkeypatch: pytest.MonkeyPatch) -> None:
+    torch = pytest.importorskip("torch")
+    from luvatrix_core.platform.macos import vulkan_backend
+
+    rng = np.random.default_rng(5150)
+    frame = torch.from_numpy(rng.integers(0, 256, size=(12, 20, 4), dtype=np.uint8))
+    expected = frame[:, :, [2, 1, 0, 3]].contiguous()
+
+    actual = vulkan_backend._swizzle_rgba_to_bgra(frame)
+    assert torch.is_tensor(actual)
+    assert actual.is_contiguous()
+    assert torch.equal(actual, expected)
+    assert torch.equal(frame[:, :, [0, 1, 2, 3]], frame)  # source untouched
+
+    monkeypatch.setenv("LUVATRIX_DISABLE_MATRIX_RS", "1")
+    fallback = vulkan_backend._swizzle_rgba_to_bgra(frame)
+    assert torch.equal(fallback, expected)
+
+    strided = torch.from_numpy(rng.integers(0, 256, size=(12, 40, 4), dtype=np.uint8))[:, ::2, :]
+    assert not strided.is_contiguous()
+    monkeypatch.delenv("LUVATRIX_DISABLE_MATRIX_RS", raising=False)
+    actual_strided = vulkan_backend._swizzle_rgba_to_bgra(strided)
+    assert torch.equal(actual_strided, strided[:, :, [2, 1, 0, 3]].contiguous())
