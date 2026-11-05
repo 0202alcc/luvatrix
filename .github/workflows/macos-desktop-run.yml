@@ -79,10 +79,12 @@ jobs:
           cat > "$BUNDLE/Contents/MacOS/launch" <<EOF_LAUNCH
           #!/bin/bash
           cd "$GITHUB_WORKSPACE" || exit 1
-          exec caffeinate -dims "$(command -v uv)" run python main.py run-app "$APP_DIR" --render "$RENDER"
+          exec caffeinate -dims "$(command -v uv)" run python main.py run-app "$APP_DIR" --render "$RENDER" >>"$LOG" 2>&1
           EOF_LAUNCH
           chmod +x "$BUNDLE/Contents/MacOS/launch"
-          open -n "$BUNDLE" --stdout "$LOG" --stderr "$LOG"
+          # No --stdout/--stderr: attaching the app's pipes to `open` keeps the
+          # runner in its lineage and the end-of-job orphan reaper kills it.
+          open -n "$BUNDLE"
           sleep 20
           if ! pgrep -f "main.py run-app $APP_DIR" >/dev/null; then
             echo "app exited during startup; log follows"
