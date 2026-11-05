@@ -248,6 +248,14 @@ fn parse_ops<'a>(
                 dy: tuple.get_item(2)?.extract()?,
                 fill: color4(tuple, 3)?,
             },
+            7 => {
+                let mut matrix = [0f32; 16];
+                for (i, slot) in matrix.iter_mut().enumerate() {
+                    let value: f64 = tuple.get_item(1 + i)?.extract()?;
+                    *slot = value as f32;
+                }
+                ops::Op::Multiply { matrix }
+            }
             other => {
                 return Err(PyValueError::new_err(format!(
                     "unsupported encoded op kind: {other}"

@@ -9,6 +9,8 @@ pub enum Op<'a> {
     PushRow { index: i64, payload: &'a [u8] },
     PushColumn { index: i64, payload: &'a [u8] },
     Shift { dx: i64, dy: i64, fill: [u8; 4] },
+    /// Row-major 4x4 color matrix: out channel k = sum_j px_j * matrix[k*4+j].
+    Multiply { matrix: [f32; 16] },
 }
 
 pub type DirtyRect = Option<(i64, i64, i64, i64)>;
@@ -63,7 +65,7 @@ pub fn dirty_rect_for_ops(ops: &[Op<'_>], matrix_width: i64, matrix_height: i64)
     let mut rect: DirtyRect = Some((0, 0, 0, 0));
     for op in ops {
         let candidate = match op {
-            Op::Shift { .. } => return None,
+            Op::Shift { .. } | Op::Multiply { .. } => return None,
             Op::ReplaceRect { x, y, width, height, .. } => Some((*x, *y, *width, *height)),
             Op::ReplaceColumn { index, .. } => Some((*index, 0, 1, matrix_height)),
             Op::PushColumn { index, .. } => Some((*index, 0, matrix_width - index, matrix_height)),
@@ -111,6 +113,11 @@ pub fn validate_ops(ops: &[Op<'_>], width: i64, height: i64) -> Result<(), Strin
                 }
             }
             Op::Shift { .. } => {}
+            Op::Multiply { matrix } => {
+                if matrix.iter().any(|value| !value.is_finite()) {
+                    return Err("color_matrix_4x4 must contain only finite values".to_string());
+                }
+            }
         }
     }
     Ok(())
@@ -194,6 +201,18 @@ pub fn apply_ops(buf: &mut [u8], width: i64, height: i64, ops: &[Op<'_>]) -> Dir
             }
             Op::Shift { dx, dy, fill } => {
                 shift_frame(buf, width, height, *dx, *dy, *fill);
+            }
+            Op::Multiply { matrix } => {
+                // float32 matmul like torch/numpy, then round-ties-even, clip,
+                // truncate (mirrors WindowMatrix._apply_operation).
+                for px in buf.chunks_exact_mut(4) {
+                    let p = [px[0] as f32, px[1] as f32, px[2] as f32, px[3] as f32];
+                    for (k, channel) in px.iter_mut().enumerate() {
+                        let row = &matrix[k * 4..k * 4 + 4];
+                        let acc = ((p[0] * row[0] + p[1] * row[1]) + p[2] * row[2]) + p[3] * row[3];
+                        *channel = acc.round_ties_even().clamp(0.0, 255.0) as u8;
+                    }
+                }
             }
         }
     }
