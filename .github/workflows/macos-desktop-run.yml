@@ -6,11 +6,21 @@ name: macOS Desktop Run
 # machine. Pushes relaunch only when the desktop app itself changed (the
 # previous window is killed first), and workflow_dispatch needs the workflow
 # on the default branch, so the path-scoped push trigger is what makes a
-# feature branch launchable before anything reaches main.
+# feature branch launchable before anything reaches main. The runtime sources
+# are watched too: `run-app` executes main.py and the luvatrix packages from
+# the checkout, so a runtime fix changes what the launch puts on screen.
 on:
   push:
     branches: ["feature/**", "dev-alec/**"]
-    paths: ["examples/nomic_desktop/**", ".github/workflows/macos-desktop-run.yml"]
+    paths:
+      - "examples/nomic_desktop/**"
+      - ".github/workflows/macos-desktop-run.yml"
+      - "main.py"
+      - "luvatrix/**"
+      - "luvatrix_core/**"
+      - "luvatrix_ui/**"
+      - "luvatrix_plot/**"
+      - "uv.lock"
   workflow_dispatch:
     inputs:
       app_dir:
