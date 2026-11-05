@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
 API = "https://api.figma.com/v1"
+API_V2 = "https://api.figma.com/v2"
 Opener = Callable[..., Any]
 
 APP_TOML = """app_id = "{app_id}"
@@ -178,12 +179,34 @@ def render_design(design: str | Path, out_dir: str | Path, *, frame: str | None 
     return written
 
 
-def list_project_files(project_id: str, *, token: str | None = None, opener: Opener | None = None) -> list[dict[str, Any]]:
-    """List the files directly inside a Figma project (folder)."""
-    token = _resolve_token(token)
-    payload = json.loads(_get(f"{API}/projects/{project_id}/files", token, opener))
+def _list_files_payload(url: str, token: str, opener: Opener | None) -> dict[str, Any]:
+    payload = json.loads(_get(url, token, opener))
     if payload.get("err") or payload.get("status", 200) >= 400:
         raise FigmaApiError(f"Figma API error: {payload.get('err') or payload}")
+    return payload
+
+
+def list_project_files(project_id: str, *, token: str | None = None, opener: Opener | None = None) -> list[dict[str, Any]]:
+    """List the files directly inside a Figma project (folder).
+
+    Prefers the v2 folders endpoint (scope ``folders:read``). The deprecated
+    v1 projects endpoint 403s for tokens minted after Aug 2026 but still
+    serves older tokens that carry ``projects:read`` without ``folders:read``,
+    so a v2 failure falls back to it.
+    """
+    token = _resolve_token(token)
+    v2_url = f"{API_V2}/folders/{project_id}/files"
+    v1_url = f"{API}/projects/{project_id}/files"
+    try:
+        payload = _list_files_payload(v2_url, token, opener)
+    except FigmaApiError as v2_error:
+        try:
+            payload = _list_files_payload(v1_url, token, opener)
+        except FigmaApiError as v1_error:
+            raise FigmaApiError(
+                f"could not list folder {project_id}: v2 folders endpoint failed ({v2_error}); "
+                f"v1 projects endpoint failed ({v1_error})"
+            ) from v1_error
     files = payload.get("files")
     if not isinstance(files, list):
         raise FigmaApiError(f"unexpected project files response: {payload}")
