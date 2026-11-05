@@ -6,6 +6,9 @@ name: iOS Simulator Tour
 on:
   push:
     branches: ["feature/**", "dev-alec/**"]
+    # Desktop branches get the macOS Desktop Run workflow instead; booting the
+    # iOS Simulator for them wastes the shared Mac runner for ~15 minutes.
+    branches-ignore: ["feature/nomic-desktop-*", "dev-alec/desktop-*"]
   workflow_dispatch:
     inputs:
       app_dir:
