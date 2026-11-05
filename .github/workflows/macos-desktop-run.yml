@@ -69,11 +69,16 @@ jobs:
           pgrep -fl "main.py run-app $APP_DIR" || echo "  (none alive — the last launch died after its job)"
           echo "recent crash reports:"
           ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -iE "python|caffeinate|^Nomic" | head -5 || true
+          echo "previous app log tail (~/nomic-desktop-run.log):"
+          tail -20 "$HOME/nomic-desktop-run.log" 2>/dev/null || echo "  (no log)"
           # Capture the screen BEFORE touching anything, so "I don't see a
           # window" reports can be compared against the pre-relaunch state.
           screencapture -x "$RUNNER_TEMP/pre-launch.png" 2>/dev/null || true
           pkill -f "main.py run-app $APP_DIR" 2>/dev/null || true
-          LOG="$RUNNER_TEMP/desktop-run.log"
+          # The app writes to a persistent home-dir log so post-job crashes
+          # leave evidence the next run can read; RUNNER_TEMP is per-job.
+          LOG="$HOME/nomic-desktop-run.log"
+          : > "$LOG"
           # The runner reaps orphaned processes when the job ends ("Cleaning
           # up orphan processes") by matching a per-job RUNNER_TRACKING_ID
           # env marker, so a plain nohup+disown app dies with the job. A
@@ -128,6 +133,7 @@ jobs:
             exit 1
           fi
           echo "app is running outside the runner's process tree; window should be on screen"
+          cp "$LOG" "$RUNNER_TEMP/desktop-run.log"
 
       - name: Diagnose window session
         if: steps.app.outputs.exists == 'true'
