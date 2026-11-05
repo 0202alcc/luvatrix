@@ -841,18 +841,21 @@ def _run_ios_simulator(
 
 
 def _install_fresh(udid: str, app_path: Path, bundle_id: str, *, run=None) -> None:
-    """Install ``app_path`` after terminating any running instance of ``bundle_id``.
+    """Reinstall ``app_path`` with a guaranteed-fresh launch environment.
 
-    Without the terminate, an already-running app (e.g. kept open by a previous
-    tour) is killed by the install and the simulator can auto-relaunch it with
-    the PREVIOUS launch's retained environment; the env-carrying
-    ``simctl launch`` that follows then no-ops and this run's configuration
-    (tour steps, render scale, fps caps) never reaches the app. A terminate
-    failure just means the app was not running.
+    The simulator retains a launched app's environment per bundle id.
+    Reinstalling over a previous install keeps that retention: the next spawn
+    (an auto-relaunch after the install, or a ``simctl launch`` that attaches
+    to an already-running instance) can deliver the PREVIOUS launch's
+    environment instead of the caller's, so a tour runs with a stale run id
+    and the harness never sees its own status. ``simctl uninstall`` drops the
+    retained environment with the app, so reinstall + launch starts clean.
+    Terminate/uninstall failures just mean the app was not running/installed.
     """
     if run is None:
         run = subprocess.run
     run(["xcrun", "simctl", "terminate", udid, bundle_id], capture_output=True)
+    run(["xcrun", "simctl", "uninstall", udid, bundle_id], capture_output=True)
     run(["xcrun", "simctl", "install", udid, str(app_path)], check=True)
 
 
