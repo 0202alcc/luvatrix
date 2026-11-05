@@ -32,6 +32,9 @@ class _FakeSimulator:
         self.previous_install: Path | None = None
         self.returncode: int | None = None
         self.terminated = False
+        self.terminate_calls: list[list[str]] = []
+        self.terminated_before_launch = False
+        self.foreign_run: str | None = None
         self.step = 0
         self.ticks = 0
         self.now = 0.0
@@ -54,6 +57,7 @@ class _FakeSimulator:
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if cmd[:3] == ["xcrun", "simctl", "terminate"]:
             self.terminated = True
+            self.terminate_calls.append(cmd)
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if cmd[:3] == ["xcrun", "simctl", "launch"]:
             assert cmd[3:] == [UDID, self.bundle]
@@ -73,6 +77,7 @@ class _FakeSimulator:
     def popen(self, cmd, *, env, stdout, stderr, **_kwargs):
         self.launch_cmd = [str(c) for c in cmd]
         self.env = env
+        self.terminated_before_launch = self.terminated
         stdout.write("[ios] launching com.luvatrix.app\n")
         return self
 
@@ -106,7 +111,7 @@ class _FakeSimulator:
         self._advance_app()
 
     def _advance_app(self) -> None:
-        run = self.env["SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_RUN"]
+        run = self.foreign_run or self.env["SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_RUN"]
         self.status_dir.mkdir(parents=True, exist_ok=True)
         status_path = self.status_dir / "status.json"
         if self.step < len(self.captures):
@@ -262,20 +267,23 @@ def test_ios_tour_keep_open_relaunches_fresh_and_opens_the_simulator(tmp_path: P
     assert code == 0
     assert summary["state"] == "done"
     assert summary["kept_open"] is True
-    # The tour app instance is not terminated; only the console parent is.
-    assert not sim.terminated
+    # The tour app instance is not terminated at the end; only the console
+    # parent is. The single terminate is the pre-launch stale-instance sweep.
+    assert sim.terminate_calls == [["xcrun", "simctl", "terminate", UDID, BUNDLE]]
     assert sim.returncode is not None
     # Detached relaunch: bare simctl launch, no --console, with the render env
-    # the runner normally sets and without any tour env.
+    # the runner normally sets and the tour env scrubbed to empty values (the
+    # simulator retains the last spawning launch's environment, so merely
+    # dropping the keys would leak this tour's config into the next launch).
     assert len(sim.launch_commands) == 1
     launch_cmd, launch_env = sim.launch_commands[0]
     assert launch_cmd == ["xcrun", "simctl", "launch", UDID, BUNDLE]
     assert launch_env is not None
     assert launch_env["SIMCTL_CHILD_LUVATRIX_IOS_RENDER_SCALE"] == "3"
     assert launch_env["SIMCTL_CHILD_LUVATRIX_RENDER_MODE"] == "matrix"
-    assert "SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR" not in launch_env
-    assert "SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_RUN" not in launch_env
-    assert "SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_ACK_TIMEOUT" not in launch_env
+    assert launch_env["SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR"] == ""
+    assert launch_env["SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_RUN"] == ""
+    assert launch_env["SIMCTL_CHILD_LUVATRIX_FIGMA_TOUR_ACK_TIMEOUT"] == ""
     assert sim.open_commands == [["open", "-a", "Simulator", "--args", "-CurrentDeviceUDID", UDID]]
     # The artifact proves which app ended up on screen.
     assert (tmp_path / "out" / "kept_open.png").read_bytes().startswith(b"\x89PNG")
@@ -303,7 +311,7 @@ def test_ios_tour_keep_open_relaunches_even_when_the_app_exited_early(tmp_path: 
     assert summary["state"] == "app_exited"
     assert summary["kept_open"] is True
     assert len(sim.launch_commands) == 1
-    assert not sim.terminated
+    assert sim.terminate_calls == [["xcrun", "simctl", "terminate", UDID, BUNDLE]]
 
 
 def test_ios_tour_without_keep_open_terminates_and_never_relaunches(tmp_path: Path) -> None:
@@ -314,7 +322,10 @@ def test_ios_tour_without_keep_open_terminates_and_never_relaunches(tmp_path: Pa
     summary = json.loads((tmp_path / "out" / "summary.json").read_text())
     assert code == 0
     assert "kept_open" not in summary
-    assert sim.terminated
+    assert sim.terminate_calls == [
+        ["xcrun", "simctl", "terminate", UDID, BUNDLE],
+        ["xcrun", "simctl", "terminate", UDID, BUNDLE],
+    ]
     assert sim.launch_commands == []
     assert sim.open_commands == []
     assert not (tmp_path / "out" / "kept_open.png").exists()
@@ -332,7 +343,7 @@ def test_ios_tour_resolves_the_bundle_id_from_the_app_dir(tmp_path: Path) -> Non
     assert code == 0
     assert summary["state"] == "done"
     assert summary["kept_open"] is True
-    assert not sim.terminated
+    assert sim.terminate_calls == [["xcrun", "simctl", "terminate", UDID, "com.luvatrix.app.nomic-app"]]
     launch_cmd, _ = sim.launch_commands[0]
     assert launch_cmd == ["xcrun", "simctl", "launch", UDID, "com.luvatrix.app.nomic-app"]
 
@@ -344,3 +355,29 @@ def test_ios_tour_keeps_the_legacy_bundle_id_without_app_id(tmp_path: Path) -> N
 
     assert code == 0
     assert sim.terminated
+
+
+def test_ios_tour_terminates_a_stale_app_before_launching_run_app(tmp_path: Path) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome")])
+
+    code = _run(tmp_path, sim)
+
+    # A kept-open instance from a previous tour must be terminated before
+    # run-app starts: the simulator can otherwise relaunch it with the previous
+    # launch's retained environment and this run's tour config never lands.
+    assert code == 0
+    assert sim.terminated_before_launch
+    assert sim.terminate_calls[0] == ["xcrun", "simctl", "terminate", UDID, BUNDLE]
+
+
+def test_ios_tour_warns_when_only_a_stale_run_reports(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    sim = _FakeSimulator(tmp_path, [("welcome", "Welcome")])
+    sim.foreign_run = "old-run"
+
+    code = _run(tmp_path, sim, timeout=5.0)
+
+    summary = json.loads((tmp_path / "out" / "summary.json").read_text())
+    assert code == 1
+    assert summary["state"] == "timeout"
+    out = capsys.readouterr().out
+    assert out.count("ignoring status from run old-run") == 1
