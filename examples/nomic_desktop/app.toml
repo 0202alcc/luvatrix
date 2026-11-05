@@ -1,0 +1,17 @@
+app_id = "figma.nomic_desktop"
+protocol_version = "3"
+entrypoint = "app_main:create"
+platform_support = ["ios", "macos"]
+required_capabilities = ["window.write"]
+optional_capabilities = ["hdi.touch", "hdi.mouse", "hdi.trackpad"]
+
+[display]
+native_width = 1440
+native_height = 900
+bar_color_rgba = [0, 0, 0, 255]
+default_coordinate_frame = "screen_tl"
+title = "Nomic"
+
+[render]
+preferred = "matrix"
+fallbacks = ["matrix"]
