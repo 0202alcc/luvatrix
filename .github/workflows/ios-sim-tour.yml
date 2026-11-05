@@ -5,10 +5,11 @@ name: iOS Simulator Tour
 # dispatches can run code on that machine.
 on:
   push:
-    branches: ["feature/**", "dev-alec/**"]
     # Desktop branches get the macOS Desktop Run workflow instead; booting the
     # iOS Simulator for them wastes the shared Mac runner for ~15 minutes.
-    branches-ignore: ["feature/nomic-desktop-*", "dev-alec/desktop-*"]
+    # GitHub ignores branches-ignore when branches is also set, so the desktop
+    # exclusions are negated patterns inside branches itself.
+    branches: ["feature/**", "dev-alec/**", "!feature/nomic-desktop-*", "!dev-alec/desktop-*"]
   workflow_dispatch:
     inputs:
       app_dir:
