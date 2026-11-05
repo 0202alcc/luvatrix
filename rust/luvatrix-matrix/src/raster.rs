@@ -5,14 +5,14 @@
 //! sx/sy exactly like the Python rasterizer does).
 
 #[derive(Debug)]
-pub enum RasterOp {
+pub enum RasterOp<'a> {
     Clear { color: [u8; 4] },
     Rect { x: f64, y: f64, width: f64, height: f64, color: [u8; 4] },
     RoundedRect { x: f64, y: f64, width: f64, height: f64, radius: f64, color: [u8; 4] },
     Circle { cx: f64, cy: f64, radius: f64, stroke_width: f64, fill: [u8; 4], stroke: [u8; 4] },
     Rainbow { t: f64, rotation: f64, scroll_y: f64 },
-    Paste { x: i64, y: i64, width: i64, height: i64, payload: Vec<u8> },
-    MaskBlend { x: i64, y: i64, width: i64, height: i64, mask: Vec<u8>, color: [u8; 4] },
+    Paste { x: i64, y: i64, width: i64, height: i64, payload: &'a [u8] },
+    MaskBlend { x: i64, y: i64, width: i64, height: i64, mask: &'a [u8], color: [u8; 4] },
 }
 
 /// `round()` in Python is ties-to-even; match it for geometry snapping.
@@ -50,7 +50,7 @@ pub fn prepare(buf: &mut [u8]) {
     }
 }
 
-pub fn rasterize(buf: &mut [u8], width: i64, height: i64, ops: &[RasterOp]) {
+pub fn rasterize(buf: &mut [u8], width: i64, height: i64, ops: &[RasterOp<'_>]) {
     for op in ops {
         match op {
             RasterOp::Clear { color } => clear(buf, *color),

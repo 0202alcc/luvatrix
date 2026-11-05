@@ -2,12 +2,12 @@
 //! operations with WindowMatrix-compatible dirty-rect semantics.
 
 #[derive(Debug)]
-pub enum Op {
-    ReplaceRect { x: i64, y: i64, width: i64, height: i64, payload: Vec<u8> },
-    ReplaceRow { index: i64, payload: Vec<u8> },
-    ReplaceColumn { index: i64, payload: Vec<u8> },
-    PushRow { index: i64, payload: Vec<u8> },
-    PushColumn { index: i64, payload: Vec<u8> },
+pub enum Op<'a> {
+    ReplaceRect { x: i64, y: i64, width: i64, height: i64, payload: &'a [u8] },
+    ReplaceRow { index: i64, payload: &'a [u8] },
+    ReplaceColumn { index: i64, payload: &'a [u8] },
+    PushRow { index: i64, payload: &'a [u8] },
+    PushColumn { index: i64, payload: &'a [u8] },
     Shift { dx: i64, dy: i64, fill: [u8; 4] },
 }
 
@@ -59,7 +59,7 @@ fn union_dirty_rect(first: DirtyRect, second: DirtyRect) -> DirtyRect {
 }
 
 /// Mirrors `_dirty_rect_for_operations` in window_matrix.py.
-pub fn dirty_rect_for_ops(ops: &[Op], matrix_width: i64, matrix_height: i64) -> DirtyRect {
+pub fn dirty_rect_for_ops(ops: &[Op<'_>], matrix_width: i64, matrix_height: i64) -> DirtyRect {
     let mut rect: DirtyRect = Some((0, 0, 0, 0));
     for op in ops {
         let candidate = match op {
@@ -77,7 +77,7 @@ pub fn dirty_rect_for_ops(ops: &[Op], matrix_width: i64, matrix_height: i64) -> 
 
 /// Validate every op up-front so a failing batch never partially mutates the
 /// matrix (same observable behavior as the staged-clone path).
-pub fn validate_ops(ops: &[Op], width: i64, height: i64) -> Result<(), String> {
+pub fn validate_ops(ops: &[Op<'_>], width: i64, height: i64) -> Result<(), String> {
     for op in ops {
         match op {
             Op::ReplaceRect { x, y, width: w, height: h, payload } => {
@@ -131,7 +131,7 @@ fn fill_region(buf: &mut [u8], matrix_width: i64, x0: i64, y0: i64, w: i64, h: i
 }
 
 /// Apply validated ops in place. Returns the batch dirty rect (None = global).
-pub fn apply_ops(buf: &mut [u8], width: i64, height: i64, ops: &[Op]) -> DirtyRect {
+pub fn apply_ops(buf: &mut [u8], width: i64, height: i64, ops: &[Op<'_>]) -> DirtyRect {
     let w = width as usize;
     let h = height as usize;
     for op in ops {
@@ -285,7 +285,7 @@ mod tests {
         for _ in 0..3 {
             payload.extend_from_slice(&px(5));
         }
-        apply_ops(&mut buf, 3, 3, &[Op::PushRow { index: 0, payload }]);
+        apply_ops(&mut buf, 3, 3, &[Op::PushRow { index: 0, payload: &payload }]);
         assert_eq!(&buf[12..16], &px(0));
         assert_eq!(&buf[24..28], &px(3));
         assert_eq!(&buf[0..4], &px(5));

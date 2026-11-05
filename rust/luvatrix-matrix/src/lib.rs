@@ -148,9 +148,35 @@ fn blend_solid_mask_rgba_u8(
     Ok(())
 }
 
-fn extract_payload(obj: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
-    let (_buf, ptr, len) = readable_u8(obj)?;
-    Ok(unsafe { std::slice::from_raw_parts(ptr, len) }.to_vec())
+/// Owns the buffer-protocol guards for the duration of one native call so op
+/// payloads are read zero-copy straight out of Python-owned memory.
+struct PayloadStore {
+    guards: Vec<PyBuffer<u8>>,
+    spans: Vec<(usize, usize)>,
+}
+
+impl PayloadStore {
+    fn new() -> Self {
+        Self { guards: Vec::new(), spans: Vec::new() }
+    }
+
+    fn stage(&mut self, obj: &Bound<'_, PyAny>) -> PyResult<usize> {
+        let (buf, ptr, len) = readable_u8(obj)?;
+        self.guards.push(buf);
+        self.spans.push((ptr as usize, len));
+        Ok(self.spans.len() - 1)
+    }
+
+    /// Returns a view of a staged payload with a caller-chosen lifetime.
+    ///
+    /// The slice points into Python memory kept alive by `self.guards`;
+    /// pushing more guards never moves that memory, so the slice stays valid
+    /// until the store is dropped. Callers must not let it outlive the store;
+    /// in this crate every op is consumed before the store is dropped.
+    fn slice<'a>(&self, idx: usize) -> &'a [u8] {
+        let (ptr, len) = self.spans[idx];
+        unsafe { std::slice::from_raw_parts(ptr as *const u8, len) }
+    }
 }
 
 fn extract_color(tuple: &Bound<'_, PyTuple>, index: usize) -> PyResult<u8> {
@@ -170,35 +196,53 @@ fn color4(tuple: &Bound<'_, PyTuple>, base: usize) -> PyResult<[u8; 4]> {
     ])
 }
 
-fn parse_ops(py_ops: &Bound<'_, PyList>) -> PyResult<Vec<ops::Op>> {
+fn parse_ops<'a>(
+    py_ops: &Bound<'_, PyList>,
+    store: &'a mut PayloadStore,
+) -> PyResult<Vec<ops::Op<'a>>> {
     let mut out = Vec::with_capacity(py_ops.len());
     for item in py_ops.iter() {
         let tuple = item.downcast::<PyTuple>()?;
         let kind: i64 = tuple.get_item(0)?.extract()?;
         let op = match kind {
-            1 => ops::Op::ReplaceRect {
-                x: tuple.get_item(1)?.extract()?,
-                y: tuple.get_item(2)?.extract()?,
-                width: tuple.get_item(3)?.extract()?,
-                height: tuple.get_item(4)?.extract()?,
-                payload: extract_payload(&tuple.get_item(5)?)?,
-            },
-            2 => ops::Op::ReplaceRow {
-                index: tuple.get_item(1)?.extract()?,
-                payload: extract_payload(&tuple.get_item(2)?)?,
-            },
-            3 => ops::Op::ReplaceColumn {
-                index: tuple.get_item(1)?.extract()?,
-                payload: extract_payload(&tuple.get_item(2)?)?,
-            },
-            4 => ops::Op::PushRow {
-                index: tuple.get_item(1)?.extract()?,
-                payload: extract_payload(&tuple.get_item(2)?)?,
-            },
-            5 => ops::Op::PushColumn {
-                index: tuple.get_item(1)?.extract()?,
-                payload: extract_payload(&tuple.get_item(2)?)?,
-            },
+            1 => {
+                let idx = store.stage(&tuple.get_item(5)?)?;
+                ops::Op::ReplaceRect {
+                    x: tuple.get_item(1)?.extract()?,
+                    y: tuple.get_item(2)?.extract()?,
+                    width: tuple.get_item(3)?.extract()?,
+                    height: tuple.get_item(4)?.extract()?,
+                    payload: store.slice(idx),
+                }
+            }
+            2 => {
+                let idx = store.stage(&tuple.get_item(2)?)?;
+                ops::Op::ReplaceRow {
+                    index: tuple.get_item(1)?.extract()?,
+                    payload: store.slice(idx),
+                }
+            }
+            3 => {
+                let idx = store.stage(&tuple.get_item(2)?)?;
+                ops::Op::ReplaceColumn {
+                    index: tuple.get_item(1)?.extract()?,
+                    payload: store.slice(idx),
+                }
+            }
+            4 => {
+                let idx = store.stage(&tuple.get_item(2)?)?;
+                ops::Op::PushRow {
+                    index: tuple.get_item(1)?.extract()?,
+                    payload: store.slice(idx),
+                }
+            }
+            5 => {
+                let idx = store.stage(&tuple.get_item(2)?)?;
+                ops::Op::PushColumn {
+                    index: tuple.get_item(1)?.extract()?,
+                    payload: store.slice(idx),
+                }
+            }
             6 => ops::Op::Shift {
                 dx: tuple.get_item(1)?.extract()?,
                 dy: tuple.get_item(2)?.extract()?,
@@ -225,7 +269,8 @@ fn apply_ops(
     if width <= 0 || height <= 0 {
         return Err(PyValueError::new_err("width and height must be > 0"));
     }
-    let parsed = parse_ops(py_ops)?;
+    let mut store = PayloadStore::new();
+    let parsed = parse_ops(py_ops, &mut store)?;
     ops::validate_ops(&parsed, width, height).map_err(PyValueError::new_err)?;
     let (_guard, ptr, len) = writable_u8(destination)?;
     let expected = (width * height * 4) as usize;
@@ -238,7 +283,10 @@ fn apply_ops(
     Ok(ops::apply_ops(slice, width, height, &parsed))
 }
 
-fn parse_raster_ops(py_ops: &Bound<'_, PyList>) -> PyResult<Vec<raster::RasterOp>> {
+fn parse_raster_ops<'a>(
+    py_ops: &Bound<'_, PyList>,
+    store: &'a mut PayloadStore,
+) -> PyResult<Vec<raster::RasterOp<'a>>> {
     let mut out = Vec::with_capacity(py_ops.len());
     for item in py_ops.iter() {
         let tuple = item.downcast::<PyTuple>()?;
@@ -273,21 +321,27 @@ fn parse_raster_ops(py_ops: &Bound<'_, PyList>) -> PyResult<Vec<raster::RasterOp
                 rotation: tuple.get_item(2)?.extract()?,
                 scroll_y: tuple.get_item(3)?.extract()?,
             },
-            5 => raster::RasterOp::Paste {
-                x: tuple.get_item(1)?.extract()?,
-                y: tuple.get_item(2)?.extract()?,
-                width: tuple.get_item(3)?.extract()?,
-                height: tuple.get_item(4)?.extract()?,
-                payload: extract_payload(&tuple.get_item(5)?)?,
-            },
-            6 => raster::RasterOp::MaskBlend {
-                x: tuple.get_item(1)?.extract()?,
-                y: tuple.get_item(2)?.extract()?,
-                width: tuple.get_item(3)?.extract()?,
-                height: tuple.get_item(4)?.extract()?,
-                mask: extract_payload(&tuple.get_item(5)?)?,
-                color: color4(tuple, 6)?,
-            },
+            5 => {
+                let idx = store.stage(&tuple.get_item(5)?)?;
+                raster::RasterOp::Paste {
+                    x: tuple.get_item(1)?.extract()?,
+                    y: tuple.get_item(2)?.extract()?,
+                    width: tuple.get_item(3)?.extract()?,
+                    height: tuple.get_item(4)?.extract()?,
+                    payload: store.slice(idx),
+                }
+            }
+            6 => {
+                let idx = store.stage(&tuple.get_item(5)?)?;
+                raster::RasterOp::MaskBlend {
+                    x: tuple.get_item(1)?.extract()?,
+                    y: tuple.get_item(2)?.extract()?,
+                    width: tuple.get_item(3)?.extract()?,
+                    height: tuple.get_item(4)?.extract()?,
+                    mask: store.slice(idx),
+                    color: color4(tuple, 6)?,
+                }
+            }
             other => {
                 return Err(PyValueError::new_err(format!(
                     "unsupported raster op kind: {other}"
@@ -309,7 +363,8 @@ fn rasterize(
     if width <= 0 || height <= 0 {
         return Err(PyValueError::new_err("width and height must be > 0"));
     }
-    let parsed = parse_raster_ops(py_ops)?;
+    let mut store = PayloadStore::new();
+    let parsed = parse_raster_ops(py_ops, &mut store)?;
     let (_guard, ptr, len) = writable_u8(destination)?;
     let expected = (width * height * 4) as usize;
     if len != expected {
