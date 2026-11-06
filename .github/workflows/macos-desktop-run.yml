@@ -84,6 +84,15 @@ jobs:
           # Capture the screen BEFORE touching anything, so "I don't see a
           # window" reports can be compared against the pre-relaunch state.
           screencapture -x "$RUNNER_TEMP/pre-launch.png" 2>/dev/null || true
+          LABEL="ai.nomic.desktop.dev"
+          DOMAIN="gui/$(id -u)"
+          launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+          for _ in {1..20}; do
+            if ! launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 0.25
+          done
           pkill -f "main.py run-app $APP_DIR" 2>/dev/null || true
           # The app writes to a persistent home-dir log so post-job crashes
           # leave evidence the next run can read; RUNNER_TEMP is per-job.
@@ -144,7 +153,36 @@ jobs:
           exec "$GITHUB_WORKSPACE/.venv/bin/python" main.py run-app "$APP_DIR" --render "$RENDER" --mcp >>"$LOG" 2>&1
           EOF_LAUNCH
           chmod +x "$BUNDLE/Contents/MacOS/launch"
-          open -n "$BUNDLE"
+          # Let the user's GUI launchd domain own the app. A process started
+          # only by `open` can disappear after the Actions job even when its
+          # runner-tracking marker is scrubbed. launchd also restarts an
+          # abnormal exit, while a normal window-close remains respected.
+          LAUNCH_AGENT="$HOME/Library/LaunchAgents/$LABEL.plist"
+          mkdir -p "$(dirname "$LAUNCH_AGENT")"
+          cat > "$LAUNCH_AGENT" <<EOF_AGENT
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>Label</key><string>$LABEL</string>
+            <key>ProgramArguments</key>
+            <array><string>$BUNDLE/Contents/MacOS/launch</string></array>
+            <key>RunAtLoad</key><true/>
+            <key>KeepAlive</key>
+            <dict><key>SuccessfulExit</key><false/></dict>
+            <key>ProcessType</key><string>Interactive</string>
+            <key>LimitLoadToSessionType</key><string>Aqua</string>
+          </dict>
+          </plist>
+          EOF_AGENT
+          for _ in {1..10}; do
+            if launchctl bootstrap "$DOMAIN" "$LAUNCH_AGENT"; then
+              break
+            fi
+            sleep 1
+          done
+          launchctl print "$DOMAIN/$LABEL" >/dev/null
+          launchctl kickstart -k "$DOMAIN/$LABEL"
           sleep 20
           if ! pgrep -f "main.py run-app $APP_DIR" >/dev/null; then
             echo "app exited during startup; log follows"
@@ -153,6 +191,54 @@ jobs:
           fi
           echo "app is running outside the runner's process tree; window should be on screen"
           cp "$LOG" "$RUNNER_TEMP/desktop-run.log"
+
+      - name: Inspect live app over MCP
+        if: steps.app.outputs.exists == 'true'
+        run: |
+          RESPONSES="$RUNNER_TEMP/mcp-responses.ndjson"
+          {
+            printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"app_state","arguments":{}}}'
+            printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"app_screenshot","arguments":{}}}'
+          } | uv run python main.py mcp-proxy "$APP_DIR" > "$RESPONSES"
+          uv run python - "$RESPONSES" "$RUNNER_TEMP" <<'PY'
+          import base64
+          import json
+          from pathlib import Path
+          import sys
+
+          from PIL import Image
+
+          responses_path = Path(sys.argv[1])
+          artifact_dir = Path(sys.argv[2])
+          responses = {
+              response["id"]: response
+              for line in responses_path.read_text(encoding="utf-8").splitlines()
+              if (response := json.loads(line)).get("id") is not None
+          }
+
+          def tool_payload(request_id):
+              response = responses[request_id]
+              if "error" in response:
+                  raise RuntimeError(response["error"])
+              return json.loads(response["result"]["content"][0]["text"])
+
+          state = tool_payload(1)
+          screenshot = tool_payload(2)
+          assert state["app_id"] == "figma.nomic_desktop", state
+          assert (screenshot["width"], screenshot["height"]) == (1440, 900), screenshot
+          assert screenshot["format"] == "raw_rgba", screenshot
+
+          (artifact_dir / "mcp-app-state.json").write_text(
+              json.dumps(state, indent=2, sort_keys=True), encoding="utf-8"
+          )
+          pixels = base64.b64decode(screenshot.pop("data_base64"))
+          Image.frombytes("RGBA", (screenshot["width"], screenshot["height"]), pixels).save(
+              artifact_dir / "mcp-app-screenshot.png"
+          )
+          (artifact_dir / "mcp-app-screenshot.json").write_text(
+              json.dumps(screenshot, indent=2, sort_keys=True), encoding="utf-8"
+          )
+          PY
 
       - name: Diagnose window session
         if: steps.app.outputs.exists == 'true'
@@ -189,9 +275,17 @@ jobs:
       - name: Bring Nomic to the front
         if: steps.app.outputs.exists == 'true'
         run: |
-          # Re-activating the bundle raises the running instance's window;
-          # doing it as the job's last action leaves Nomic frontmost.
-          open "$HOME/.nomic-desktop/NomicDesktop.app"
+          # Activate the launchd-owned process by pid. Calling `open` here
+          # starts a second copy because launchd invoked the bundle executable
+          # directly rather than through LaunchServices.
+          PID="$(pgrep -f "main.py run-app $APP_DIR" | head -1)"
+          osascript - "$PID" <<'APPLESCRIPT'
+          on run argv
+            tell application "System Events"
+              set frontmost of first process whose unix id is (item 1 of argv as integer) to true
+            end tell
+          end run
+          APPLESCRIPT
           sleep 2
           osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null || true
 
@@ -209,6 +303,44 @@ jobs:
           path: |
             ${{ runner.temp }}/desktop-run.log
             ${{ runner.temp }}/desktop-app*.png
+            ${{ runner.temp }}/mcp-app-state.json
+            ${{ runner.temp }}/mcp-app-screenshot.*
             ${{ runner.temp }}/pre-launch*.png
           if-no-files-found: warn
           retention-days: 14
+
+  verify-persistence:
+    name: Verify app survives job cleanup
+    needs: run
+    if: ${{ vars.LUVATRIX_IOS_SIM_RUNNER == '1' }}
+    runs-on: [self-hosted, macOS, ios-sim]
+    timeout-minutes: 5
+    env:
+      APP_DIR: ${{ inputs.app_dir || 'examples/nomic_desktop' }}
+    steps:
+      - name: Check launchd-owned app and MCP session
+        run: |
+          sleep 5
+          pgrep -fl "main.py run-app $APP_DIR"
+          test "$(pgrep -f "main.py run-app $APP_DIR" | wc -l | tr -d ' ')" -eq 1
+          test -f "$GITHUB_WORKSPACE/$APP_DIR/.luvatrix/mcp-session.json"
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"app_state","arguments":{}}}' \
+            | "$GITHUB_WORKSPACE/.venv/bin/python" "$GITHUB_WORKSPACE/main.py" \
+                mcp-proxy "$GITHUB_WORKSPACE/$APP_DIR" \
+            | "$GITHUB_WORKSPACE/.venv/bin/python" -c '
+          import json, sys
+          response = json.loads(sys.stdin.readline())
+          state = json.loads(response["result"]["content"][0]["text"])
+          assert state["app_id"] == "figma.nomic_desktop", state
+          assert state["runtime"]["app_active"] == 1, state
+          print(json.dumps(state, indent=2, sort_keys=True))
+          '
+          PID="$(pgrep -f "main.py run-app $APP_DIR")"
+          osascript - "$PID" <<'APPLESCRIPT'
+          on run argv
+            tell application "System Events"
+              set frontmost of first process whose unix id is (item 1 of argv as integer) to true
+            end tell
+          end run
+          APPLESCRIPT
