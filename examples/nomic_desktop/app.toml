@@ -20,3 +20,10 @@ icon = "icon.png"
 [render]
 preferred = "matrix"
 fallbacks = ["matrix"]
+
+[mcp]
+# Second MCP gate (the first is run-app --mcp, which the macOS Desktop Run
+# workflow passes). Serves agent inspection/control on 127.0.0.1 with a
+# bearer token; session discovery at .luvatrix/mcp-session.json. Default
+# allows all four capability families (inspect, input, control, app).
+enabled = true
