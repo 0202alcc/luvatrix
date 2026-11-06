@@ -26,7 +26,7 @@ from luvatrix_core.core.scene_graph import (
     ShaderRectNode,
     TextNode,
 )
-from luvatrix_core.core.scene_rasterizer import _draw_layer, _draw_text, _numpy, rasterize_scene_frame
+from luvatrix_core.core.scene_rasterizer import _Offsets, _draw_layer, _draw_text, _numpy, rasterize_scene_frame
 from luvatrix_core.platform.macos.metal_backend import (
     _CGSize,
     _MTL_LOAD_ACTION_CLEAR,
@@ -1265,6 +1265,9 @@ def _rasterize_text_node(node: TextNode, *, scale: float):
             ),
             sx=scale,
             sy=scale,
+            # Node-local texture: the frame content offset is applied by the
+            # GPU transform when the texture quad is positioned, not here.
+            offsets=_Offsets(0.0, 0.0, scale, scale),
         )
         return out
 
@@ -1298,7 +1301,7 @@ def _cached_dynamic_layer_texture(state: _MacOSMetalSceneState, node: CpuLayerNo
         if np is None:
             return None
         overlay = np.zeros((max(1, int(node.height)), max(1, int(node.width)), 4), dtype=np.uint8)
-        _draw_layer(overlay, CpuLayerNode(0, 0, node.width, node.height, rgba, node.z_index), sx=1.0, sy=1.0)
+        _draw_layer(overlay, CpuLayerNode(0, 0, node.width, node.height, rgba, node.z_index), sx=1.0, sy=1.0, offsets=_Offsets(0.0, 0.0, 1.0, 1.0))
         rgba = overlay
     h, w, _ = rgba.shape
     if state.dynamic_texture is None or state.dynamic_texture_width != w or state.dynamic_texture_height != h:

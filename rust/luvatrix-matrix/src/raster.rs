@@ -23,13 +23,13 @@ pub enum RasterOp<'a> {
     Rect { x: f64, y: f64, width: f64, height: f64, color: [u8; 4] },
     RoundedRect { x: f64, y: f64, width: f64, height: f64, radius: f64, color: [u8; 4] },
     Circle { cx: f64, cy: f64, radius: f64, stroke_width: f64, fill: [u8; 4], stroke: [u8; 4] },
-    Rainbow { t: f64, rotation: f64, scroll_y: f64 },
+    Rainbow { t: f64, rotation: f64, scroll_y: f64, offset_dx: f64, offset_dy: f64 },
     Paste { x: i64, y: i64, width: i64, height: i64, payload: &'a [u8] },
     MaskBlend { x: i64, y: i64, width: i64, height: i64, mask: &'a [u8], color: [u8; 4] },
     Line { x0: f64, y0: f64, x1: f64, y1: f64, color: [u8; 4] },
     DebugText { text: String, x: i64, y: i64, scale: i64, color: [u8; 4] },
-    DotGrid3D { center: [f64; 3], extent: f64, spacing: f64, point_size: f64, color: [u8; 4], basis: Basis },
-    DotPlane3D { center: [f64; 3], width: f64, depth: f64, spacing: f64, point_size: f64, color: [u8; 4], basis: Basis },
+    DotGrid3D { center: [f64; 3], extent: f64, spacing: f64, point_size: f64, color: [u8; 4], basis: Basis, offset_dx: f64, offset_dy: f64 },
+    DotPlane3D { center: [f64; 3], width: f64, depth: f64, spacing: f64, point_size: f64, color: [u8; 4], basis: Basis, offset_dx: f64, offset_dy: f64 },
 }
 
 /// `round()` in Python is ties-to-even; match it for geometry snapping.
@@ -80,8 +80,8 @@ pub fn rasterize(buf: &mut [u8], width: i64, height: i64, ops: &[RasterOp<'_>]) 
             RasterOp::Circle { cx, cy, radius, stroke_width, fill, stroke } => {
                 draw_circle(buf, width, height, *cx, *cy, *radius, *stroke_width, *fill, *stroke);
             }
-            RasterOp::Rainbow { t, rotation, scroll_y } => {
-                draw_rainbow(buf, width, height, *t, *rotation, *scroll_y);
+            RasterOp::Rainbow { t, rotation, scroll_y, offset_dx, offset_dy } => {
+                draw_rainbow(buf, width, height, *t, *rotation, *scroll_y, *offset_dx, *offset_dy);
             }
             RasterOp::Paste { x, y, width: w, height: h, payload } => {
                 paste(buf, width, height, *x, *y, *w, *h, payload);
@@ -95,11 +95,11 @@ pub fn rasterize(buf: &mut [u8], width: i64, height: i64, ops: &[RasterOp<'_>]) 
             RasterOp::DebugText { text, x, y, scale, color } => {
                 draw_debug_text(buf, width, height, text, *x, *y, *scale, *color);
             }
-            RasterOp::DotGrid3D { center, extent, spacing, point_size, color, basis } => {
-                draw_dot_grid3d(buf, width, height, *center, *extent, *spacing, *point_size, *color, basis);
+            RasterOp::DotGrid3D { center, extent, spacing, point_size, color, basis, offset_dx, offset_dy } => {
+                draw_dot_grid3d(buf, width, height, *center, *extent, *spacing, *point_size, *color, basis, *offset_dx, *offset_dy);
             }
-            RasterOp::DotPlane3D { center, width: w, depth, spacing, point_size, color, basis } => {
-                draw_dot_plane3d(buf, width, height, *center, *w, *depth, *spacing, *point_size, *color, basis);
+            RasterOp::DotPlane3D { center, width: w, depth, spacing, point_size, color, basis, offset_dx, offset_dy } => {
+                draw_dot_plane3d(buf, width, height, *center, *w, *depth, *spacing, *point_size, *color, basis, *offset_dx, *offset_dy);
             }
         }
     }
@@ -190,6 +190,8 @@ fn draw_dot_grid3d(
     point_size: f64,
     color: [u8; 4],
     basis: &Basis,
+    offset_dx: f64,
+    offset_dy: f64,
 ) {
     let half = extent * 0.5;
     let count = ((extent / spacing).floor() as i64).max(1);
@@ -206,7 +208,7 @@ fn draw_dot_grid3d(
                 }
                 let point = [center[0] + x, center[1] + y, center[2] + z];
                 if let Some((px, py)) = project(point, basis, frame_w, frame_h) {
-                    draw_rect(buf, frame_w, frame_h, px - radius * 0.5, py - radius * 0.5, radius, radius, color);
+                    draw_rect(buf, frame_w, frame_h, px - offset_dx - radius * 0.5, py - offset_dy - radius * 0.5, radius, radius, color);
                 }
             }
         }
@@ -226,6 +228,8 @@ fn draw_dot_plane3d(
     point_size: f64,
     color: [u8; 4],
     basis: &Basis,
+    offset_dx: f64,
+    offset_dy: f64,
 ) {
     let x_count = ((width / spacing).floor() as i64).max(1);
     let z_count = ((depth / spacing).floor() as i64).max(1);
@@ -240,7 +244,7 @@ fn draw_dot_plane3d(
                 center[2] + z_start + iz as f64 * spacing,
             ];
             if let Some((px, py)) = project(point, basis, frame_w, frame_h) {
-                draw_rect(buf, frame_w, frame_h, px - radius * 0.5, py - radius * 0.5, radius, radius, color);
+                draw_rect(buf, frame_w, frame_h, px - offset_dx - radius * 0.5, py - offset_dy - radius * 0.5, radius, radius, color);
             }
         }
     }
@@ -378,15 +382,17 @@ fn numpy_mod_f32(value: f32, divisor: f32) -> f32 {
     value - (value / divisor).floor() * divisor
 }
 
-fn draw_rainbow(buf: &mut [u8], frame_w: i64, frame_h: i64, t: f64, rotation: f64, scroll_y: f64) {
+#[allow(clippy::too_many_arguments)]
+fn draw_rainbow(buf: &mut [u8], frame_w: i64, frame_h: i64, t: f64, rotation: f64, scroll_y: f64, offset_dx: f64, offset_dy: f64) {
     let w = frame_w.max(1) as f32;
     let h = frame_h.max(1) as f32;
     let phase = (t * 0.0025 + rotation * 0.01 + scroll_y * 0.002) as f32;
     let two_pi = 2.0f32 * std::f32::consts::PI;
     for py in 0..frame_h {
-        let ny = py as f32 / h;
+        // numpy: (yy + offset_dy) in f64, cast to f32, then weak-scalar / h.
+        let ny = ((py as f64 + offset_dy) as f32) / h;
         for px in 0..frame_w {
-            let nx = px as f32 / w;
+            let nx = ((px as f64 + offset_dx) as f32) / w;
             let wave = ((nx * 3.2 + ny * 2.4 + phase) * two_pi).sin() * 0.055;
             let hue = numpy_mod_f32(nx * 0.58 + ny * 0.42 + phase + wave, 1.0);
             let value = (0.78f32 + 0.16 * ((nx - ny + phase * 0.7) * two_pi).sin()).clamp(0.35, 0.95);
