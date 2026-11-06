@@ -155,7 +155,13 @@ class CoerceHdiEventTests(unittest.TestCase):
 
 class InjectSyntheticEventTests(unittest.TestCase):
     def test_injected_pointer_event_flows_through_normalization(self) -> None:
-        hdi = HDIThread(source=None)
+        # Pointer normalization bounds-checks against window geometry, so the
+        # thread needs providers that describe the (virtual) window.
+        hdi = HDIThread(
+            source=None,
+            window_geometry_provider=lambda: (0.0, 0.0, 100.0, 100.0),
+            target_extent_provider=lambda: (100.0, 100.0),
+        )
         injected = coerce_hdi_event(
             {
                 "device": "mouse",
@@ -187,9 +193,11 @@ class InjectSyntheticEventTests(unittest.TestCase):
         )
         hdi.inject_synthetic_event(down)
         hdi.inject_synthetic_event(up)
-        types = [event.event_type for event in hdi.poll_events(8)]
-        self.assertIn("key_down", types)
-        self.assertIn("key_up", types)
+        events = hdi.poll_events(8)
+        # The keyboard state machine rewrites transitions into press events
+        # carrying a phase payload.
+        phases = [event.payload["phase"] for event in events if event.event_type == "press"]
+        self.assertEqual(phases, ["down", "up", "single"])
 
 
 class InputAndGateToolTests(unittest.TestCase):
@@ -320,7 +328,11 @@ class McpInputControlEndToEndTests(unittest.TestCase):
             runtime = UnifiedRuntime(
                 matrix=WindowMatrix(width=4, height=4),
                 target=_RecordingTarget(),
-                hdi=HDIThread(source=_NoopHDISource()),
+                hdi=HDIThread(
+                    source=_NoopHDISource(),
+                    window_geometry_provider=lambda: (0.0, 0.0, 4.0, 4.0),
+                    target_extent_provider=lambda: (4.0, 4.0),
+                ),
                 sensor_manager=_FakeSensorManager(),
                 capability_decider=lambda _cap: True,
                 mcp_enabled=True,

@@ -102,6 +102,7 @@ class UnifiedRuntime:
             raise ValueError("render_mode must be one of: auto, matrix, scene")
         self._mcp_enabled = mcp_enabled
         self._capability_audit_logger = capability_audit_logger
+        self._hdi = hdi
         self._render_mode = render_mode
         self._scene_target = scene_target
         self._active_provider = active_provider
@@ -296,6 +297,12 @@ class UnifiedRuntime:
                     break
                 if mcp_session is not None and mcp_session.bridge.stop_requested:
                     break
+                if mcp_session is not None and not mcp_session.bridge.gate.tick_permitted():
+                    # MCP gate closed: keep pumping targets, idle briefly, and
+                    # reset the dt anchor so resuming does not produce a huge dt.
+                    last = time.perf_counter()
+                    time.sleep(0.01)
+                    continue
                 now = time.perf_counter()
                 active = self._is_active()
                 if not active:
@@ -421,6 +428,7 @@ class UnifiedRuntime:
             screenshot_provider=self._mcp_screenshot,
             scene_tree_provider=self._mcp_scene_tree,
             log_provider=log_handler.entries,
+            input_injector=self._hdi.inject_synthetic_event,
             audit_logger=self._capability_audit_logger,
         )
         token = generate_session_token()

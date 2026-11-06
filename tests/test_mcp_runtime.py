@@ -507,7 +507,16 @@ class UnifiedRuntimeMcpTests(unittest.TestCase):
             names = [tool["name"] for tool in body["result"]["tools"]]
             self.assertEqual(
                 names,
-                ["app_state", "app_screenshot", "app_scene_tree", "app_logs", "app_stop"],
+                [
+                    "app_state",
+                    "app_screenshot",
+                    "app_scene_tree",
+                    "app_logs",
+                    "app_pause",
+                    "app_step",
+                    "app_resume",
+                    "app_stop",
+                ],
             )
 
             status, body = _post_json(

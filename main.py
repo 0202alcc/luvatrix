@@ -547,7 +547,18 @@ def main() -> None:
             scene_target = None
             if args.render == "headless":
                 target: RenderTarget = _HeadlessTarget()
-                hdi = HDIThread(source=_NoopHDISource())
+                # Describe the virtual window so HDI position normalization
+                # (including MCP app_input injection) maps onto the matrix.
+                hdi = HDIThread(
+                    source=_NoopHDISource(),
+                    window_geometry_provider=lambda: (
+                        0.0,
+                        0.0,
+                        float(matrix_width),
+                        float(matrix_height),
+                    ),
+                    target_extent_provider=lambda: (float(matrix_width), float(matrix_height)),
+                )
             elif args.render in ("macos", "macos-metal") and args.render_mode in ("auto", "scene"):
                 from luvatrix_core.platform.macos.metal_scene_target import MacOSMetalSceneBackend, MacOSMetalSceneTarget
 

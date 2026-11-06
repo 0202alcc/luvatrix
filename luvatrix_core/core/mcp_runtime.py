@@ -10,6 +10,7 @@ import base64
 from collections import deque
 from dataclasses import dataclass
 import dataclasses
+import itertools
 import json
 import logging
 import os
@@ -19,6 +20,8 @@ import tempfile
 import threading
 import time
 from typing import Any, Callable, Iterable
+
+from .hdi_thread import HDIEvent
 
 from .mcp_protocol import (
     MCP_ALLOW_NAMES,
@@ -34,6 +37,8 @@ __all__ = [
     "McpRuntimeBridge",
     "McpScreenshot",
     "RingBufferLogHandler",
+    "TickGate",
+    "coerce_hdi_event",
     "discovery_file_path",
     "generate_session_token",
     "mcp_capabilities_for_allow",
@@ -42,6 +47,81 @@ __all__ = [
     "scene_node_to_dict",
     "write_discovery_file",
 ]
+
+
+_HDI_DEVICES = ("keyboard", "mouse", "trackpad", "touch")
+
+
+def coerce_hdi_event(data: Any, *, event_id: int, window_id: str) -> HDIEvent:
+    """Validate and map an ``app_input`` event dict onto an HDIEvent."""
+    if not isinstance(data, dict):
+        raise ValueError("event must be an object")
+    device = data.get("device")
+    if device not in _HDI_DEVICES:
+        raise ValueError(f"event.device must be one of {_HDI_DEVICES}; got {device!r}")
+    event_type = data.get("event_type", data.get("type"))
+    if not isinstance(event_type, str) or not event_type:
+        raise ValueError("event.event_type must be a non-empty string")
+    payload = data.get("payload", {})
+    if not isinstance(payload, dict):
+        raise ValueError("event.payload must be an object if provided")
+    return HDIEvent(
+        event_id=int(event_id),
+        ts_ns=time.time_ns(),
+        window_id=window_id,
+        device=device,
+        event_type=event_type,
+        status="OK",
+        payload=dict(payload),
+    )
+
+
+class TickGate:
+    """Non-blocking run-loop gate for MCP control (pause/step/resume).
+
+    The run loop calls :meth:`tick_permitted` once per iteration. While
+    paused with no pending steps the loop is expected to idle (pump targets,
+    sleep briefly) and check again.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._paused = False
+        self._pending_steps = 0
+
+    @property
+    def paused(self) -> bool:
+        with self._lock:
+            return self._paused
+
+    @property
+    def pending_steps(self) -> int:
+        with self._lock:
+            return self._pending_steps
+
+    def pause(self) -> None:
+        with self._lock:
+            self._paused = True
+
+    def resume(self) -> None:
+        with self._lock:
+            self._paused = False
+            self._pending_steps = 0
+
+    def step(self, ticks: int) -> None:
+        if ticks <= 0:
+            raise ValueError("ticks must be > 0")
+        with self._lock:
+            self._pending_steps += int(ticks)
+
+    def tick_permitted(self) -> bool:
+        with self._lock:
+            if not self._paused:
+                return True
+            if self._pending_steps > 0:
+                self._pending_steps -= 1
+                return True
+            return False
 
 
 @dataclass(frozen=True)
@@ -175,6 +255,7 @@ class McpRuntimeBridge:
         screenshot_provider: Callable[[], McpScreenshot] | None = None,
         scene_tree_provider: Callable[[], dict[str, Any]] | None = None,
         log_provider: Callable[[int], list[dict[str, Any]]] | None = None,
+        input_injector: Callable[[HDIEvent], int] | None = None,
         audit_logger: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._app_id = app_id
@@ -183,6 +264,9 @@ class McpRuntimeBridge:
         self._screenshot_provider = screenshot_provider
         self._scene_tree_provider = scene_tree_provider
         self._log_provider = log_provider
+        self._input_injector = input_injector
+        self._synthetic_event_ids = itertools.count(1)
+        self.gate = TickGate()
         self._stop_requested = False
         self._audit_mcp_capabilities(audit_logger)
         self._tools = self._build_tools()
@@ -264,6 +348,50 @@ class McpRuntimeBridge:
                 capability="mcp.inspect",
             ),
             McpToolSpec(
+                name="app_input",
+                description=(
+                    "Inject synthetic input events into the app's HDI queue. "
+                    "Events flow through the real normalization path and are "
+                    "visible to the app on the next tick."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "event": {"type": "object", "description": "Single event shorthand."},
+                        "events": {"type": "array", "items": {"type": "object"}},
+                    },
+                },
+                capability="mcp.input",
+            ),
+            McpToolSpec(
+                name="app_pause",
+                description="Pause the app run loop at the next tick boundary.",
+                input_schema={"type": "object", "properties": {}},
+                capability="mcp.control",
+            ),
+            McpToolSpec(
+                name="app_step",
+                description="While paused, advance the app run loop by exactly N ticks.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "ticks": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10000,
+                            "default": 1,
+                        }
+                    },
+                },
+                capability="mcp.control",
+            ),
+            McpToolSpec(
+                name="app_resume",
+                description="Resume free-running after app_pause.",
+                input_schema={"type": "object", "properties": {}},
+                capability="mcp.control",
+            ),
+            McpToolSpec(
                 name="app_stop",
                 description="Request a graceful stop of the app run loop.",
                 input_schema={"type": "object", "properties": {}},
@@ -273,7 +401,50 @@ class McpRuntimeBridge:
 
     def _handle_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         if name == "app_state":
-            return {"app_id": self._app_id, "runtime": self._state_provider()}
+            return {
+                "app_id": self._app_id,
+                "runtime": self._state_provider(),
+                "gate": {"paused": self.gate.paused, "pending_steps": self.gate.pending_steps},
+            }
+        if name == "app_input":
+            if self._input_injector is None:
+                raise RuntimeError("app_input unavailable: no input injector configured")
+            raw_events: list[Any] = []
+            if "event" in arguments:
+                raw_events.append(arguments["event"])
+            if "events" in arguments:
+                events_arg = arguments["events"]
+                if not isinstance(events_arg, list):
+                    raise RuntimeError("app_input 'events' must be an array")
+                raw_events.extend(events_arg)
+            if not raw_events:
+                raise RuntimeError("app_input requires 'event' or 'events'")
+            accepted = 0
+            for raw in raw_events:
+                event = coerce_hdi_event(
+                    raw,
+                    event_id=next(self._synthetic_event_ids),
+                    window_id=self._app_id,
+                )
+                self._input_injector(event)
+                accepted += 1
+            return {"accepted": accepted}
+        if name == "app_pause":
+            self.gate.pause()
+            return {"paused": True}
+        if name == "app_step":
+            if not self.gate.paused:
+                raise RuntimeError("app_step requires a paused app (call app_pause first)")
+            try:
+                ticks = int(arguments.get("ticks", 1))
+            except (TypeError, ValueError):
+                raise RuntimeError("app_step ticks must be an integer") from None
+            ticks = max(1, min(10000, ticks))
+            self.gate.step(ticks)
+            return {"released_ticks": ticks}
+        if name == "app_resume":
+            self.gate.resume()
+            return {"paused": False}
         if name == "app_screenshot":
             if self._screenshot_provider is None:
                 raise RuntimeError("app_screenshot unavailable: no frame source configured")
