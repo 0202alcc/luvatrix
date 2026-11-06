@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 import time
-from typing import Callable
+from typing import Any, Callable
 
+from luvatrix_core import accel
 from luvatrix_core.targets.base import RenderTarget
 from luvatrix_core.targets.scene_target import SceneRenderTarget
 
@@ -16,13 +18,17 @@ from .hdi_thread import HDIThread
 from .mcp_http import McpHttpServer
 from .mcp_runtime import (
     McpRuntimeBridge,
+    McpScreenshot,
+    RingBufferLogHandler,
     generate_session_token,
     mcp_capabilities_for_allow,
     remove_discovery_file,
+    scene_node_to_dict,
     write_discovery_file,
 )
 from .scene_display_runtime import SceneDisplayRuntime
 from .scene_graph import SceneGraphBuffer
+from .scene_rasterizer import rasterize_scene_frame
 from .sensor_manager import SensorManagerThread
 from .window_matrix import WindowMatrix
 
@@ -33,6 +39,21 @@ class UnifiedRunResult:
     frames_presented: int
     stopped_by_target_close: bool
     stopped_by_energy_safety: bool
+
+
+@dataclass
+class _McpSession:
+    bridge: McpRuntimeBridge
+    server: McpHttpServer
+    log_handler: RingBufferLogHandler
+    previous_root_log_level: int
+
+    def shutdown(self, app_path: Path) -> None:
+        self.server.stop()
+        root = logging.getLogger()
+        root.removeHandler(self.log_handler)
+        root.setLevel(self.previous_root_log_level)
+        remove_discovery_file(app_path)
 
 
 class _RollingRate:
@@ -273,7 +294,7 @@ class UnifiedRuntime:
                 if any(bool(active_target.should_close()) for active_target in active_targets):
                     stopped_by_target_close = True
                     break
-                if mcp_session is not None and mcp_session[0].stop_requested:
+                if mcp_session is not None and mcp_session.bridge.stop_requested:
                     break
                 now = time.perf_counter()
                 active = self._is_active()
@@ -358,8 +379,7 @@ class UnifiedRuntime:
                     for active_target in reversed(active_targets):
                         active_target.stop()
                 if mcp_session is not None:
-                    mcp_session[1].stop()
-                    remove_discovery_file(app_path)
+                    mcp_session.shutdown(app_path)
         if scene_present_loop_started and self._scene_display_runtime is not None:
             frames_presented = self._scene_display_runtime.frames_presented
             self._frames_presented = frames_presented
@@ -374,7 +394,7 @@ class UnifiedRuntime:
         self,
         manifest: AppManifest,
         app_path: Path,
-    ) -> tuple[McpRuntimeBridge, McpHttpServer]:
+    ) -> _McpSession:
         """Start the MCP session for this run: bridge, HTTP server, discovery file."""
         if manifest.runtime_kind == "process":
             raise ValueError(
@@ -386,10 +406,21 @@ class UnifiedRuntime:
                 "set [mcp] enabled = true in app.toml"
             )
         granted = mcp_capabilities_for_allow(manifest.mcp.allow)
+        log_handler = RingBufferLogHandler()
+        root_logger = logging.getLogger()
+        previous_root_log_level = root_logger.level
+        # app_logs is only useful if typical INFO-level app logging flows;
+        # lowered for the session and restored on shutdown.
+        if root_logger.level > logging.INFO:
+            root_logger.setLevel(logging.INFO)
+        root_logger.addHandler(log_handler)
         bridge = McpRuntimeBridge(
             app_id=manifest.app_id,
             granted_capabilities=granted,
             state_provider=self._runtime_telemetry,
+            screenshot_provider=self._mcp_screenshot,
+            scene_tree_provider=self._mcp_scene_tree,
+            log_provider=log_handler.entries,
             audit_logger=self._capability_audit_logger,
         )
         token = generate_session_token()
@@ -402,7 +433,48 @@ class UnifiedRuntime:
             app_id=manifest.app_id,
             capabilities=granted,
         )
-        return bridge, server
+        return _McpSession(
+            bridge=bridge,
+            server=server,
+            log_handler=log_handler,
+            previous_root_log_level=previous_root_log_level,
+        )
+
+    def _mcp_screenshot(self) -> McpScreenshot:
+        """Read back the current frame: retained scene raster when available, else matrix."""
+        if self._scene_buffer is not None:
+            frame = self._scene_buffer.latest_frame()
+            if frame is not None:
+                raster = accel.to_contiguous_numpy(rasterize_scene_frame(frame))
+                return McpScreenshot(
+                    width=int(raster.shape[1]),
+                    height=int(raster.shape[0]),
+                    source="scene_retained",
+                    rgba=raster.tobytes(),
+                )
+        snapshot = accel.to_contiguous_numpy(self._matrix.read_snapshot())
+        return McpScreenshot(
+            width=int(snapshot.shape[1]),
+            height=int(snapshot.shape[0]),
+            source="matrix",
+            rgba=snapshot.tobytes(),
+        )
+
+    def _mcp_scene_tree(self) -> dict[str, Any]:
+        if self._scene_buffer is None:
+            return {"available": False, "reason": "scene render mode not active", "nodes": []}
+        frame = self._scene_buffer.latest_frame()
+        if frame is None:
+            return {"available": False, "reason": "no scene frame submitted yet", "nodes": []}
+        return {
+            "available": True,
+            "revision": int(frame.revision),
+            "logical_width": int(frame.logical_width),
+            "logical_height": int(frame.logical_height),
+            "retained": bool(frame.retained),
+            "content_offset": [float(frame.content_offset_x), float(frame.content_offset_y)],
+            "nodes": [scene_node_to_dict(node) for node in frame.nodes],
+        }
 
     def _enable_granted_sensors(self, sensor_manager: SensorManagerThread, granted_capabilities: set[str]) -> None:
         mapping = {

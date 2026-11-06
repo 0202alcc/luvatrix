@@ -258,7 +258,8 @@ class RuntimeProviderTests(unittest.TestCase):
         )
         tree = runtime._mcp_scene_tree()
         self.assertTrue(tree["available"])
-        self.assertEqual(tree["revision"], 9)
+        # SceneGraphBuffer owns the revision counter; first submit lands at 1.
+        self.assertEqual(tree["revision"], 1)
         self.assertTrue(tree["retained"])
         self.assertEqual([node["type"] for node in tree["nodes"]], ["ClearNode", "RectNode"])
         rect = tree["nodes"][1]
