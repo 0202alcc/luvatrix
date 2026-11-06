@@ -6,6 +6,7 @@ Compares, per workload, the existing pure/numpy implementation against
 - ``alpha_blit``: pure-Python per-pixel loop vs Rust blit (pure backend).
 - ``write_batch``: WindowMatrix staged-clone path vs Rust in-place op engine.
 - ``scene_rasterize``: Python scene rasterizer vs Rust scene lowering.
+- ``viewport_crop``: pure-Python per-pixel viewport loop vs Rust present crop.
 
 Usage::
 
@@ -20,7 +21,8 @@ import random
 import time
 
 from luvatrix_core import accel
-from luvatrix_core.core import scene_rasterizer, window_matrix
+from luvatrix_core.core import display_runtime, scene_rasterizer, window_matrix
+from luvatrix_core.core.matrix_viewport import MatrixViewport
 from luvatrix_core.core.scene_graph import (
     Camera3DNode,
     CircleNode,
@@ -217,6 +219,37 @@ def _bench_scene_rasterize_3d(iterations: int) -> dict[str, float | str]:
     }
 
 
+def _python_crop_loop(snapshot, viewport: MatrixViewport):
+    output = accel.zeros((viewport.height, viewport.width, 4))
+    for destination_y in range(viewport.height):
+        source_y = (viewport.y + destination_y) % snapshot.shape[0] if viewport.wrap_y else viewport.y + destination_y
+        for destination_x in range(viewport.width):
+            source_x = (viewport.x + destination_x) % snapshot.shape[1] if viewport.wrap_x else viewport.x + destination_x
+            output[destination_y, destination_x, :] = snapshot[source_y, source_x, :]
+    return output
+
+
+def _bench_viewport_crop(iterations: int) -> dict[str, float | str]:
+    import numpy as np
+
+    width, height = 1280, 720
+    rng = np.random.default_rng(2027)
+    np_snapshot = rng.integers(0, 256, size=(height, width, 4), dtype=np.uint8)
+    # Match the active accel backend so the Python reference loop mixes the
+    # same array kinds it would in production.
+    torch = accel._torch
+    snapshot = torch.from_numpy(np_snapshot) if torch is not None else np_snapshot
+    viewport = MatrixViewport(x=977, y=533, width=640, height=360, wrap_x=True, wrap_y=True)
+    python_ns = _time_ns(lambda: _python_crop_loop(snapshot, viewport), max(1, iterations // 30))
+    rust_ns = _time_ns(lambda: display_runtime._crop_viewport(snapshot, viewport), iterations)
+    return {
+        "workload": f"viewport_crop_wrap_{viewport.width}x{viewport.height}_of_{width}x{height}",
+        "python_ns_per_op": float(python_ns),
+        "rust_ns_per_op": float(rust_ns),
+        "speedup": round(python_ns / rust_ns, 2),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iterations", type=int, default=30)
@@ -226,6 +259,7 @@ def main() -> None:
         _bench_write_batch(args.iterations),
         _bench_scene_rasterize(max(3, args.iterations // 6)),
         _bench_scene_rasterize_3d(max(3, args.iterations // 6)),
+        _bench_viewport_crop(args.iterations),
     ]
     print(f"{'workload':<38} {'python ns/op':>14} {'rust ns/op':>14} {'speedup':>9}")
     for row in results:
