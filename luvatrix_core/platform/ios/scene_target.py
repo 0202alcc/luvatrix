@@ -18,7 +18,7 @@ from luvatrix_core.core.scene_graph import (
     SvgNode,
     TextNode,
 )
-from luvatrix_core.core.scene_rasterizer import _draw_circle, _draw_layer, _draw_rect, _draw_text, _numpy
+from luvatrix_core.core.scene_rasterizer import _Offsets, _draw_circle, _draw_layer, _draw_rect, _draw_text, _numpy
 from luvatrix_core.platform.ios.metal_backend import (
     _CGSize,
     _MTL_LOAD_ACTION_CLEAR,
@@ -1128,7 +1128,7 @@ def _rasterize_text_node(node: TextNode, *, scale: float):
         width = max(1, int(round(len(node.text) * node.font_size_px * scale * 0.75)))
         height = max(1, int(round(node.font_size_px * scale * 1.25)))
         out = np.zeros((height, width, 4), dtype=np.uint8)
-        _draw_text(out, TextNode(node.text, x=0, y=0, font_family=node.font_family, font_size_px=node.font_size_px, color_rgba=node.color_rgba), sx=scale, sy=scale)
+        _draw_text(out, TextNode(node.text, x=0, y=0, font_family=node.font_family, font_size_px=node.font_size_px, color_rgba=node.color_rgba), sx=scale, sy=scale, offsets=_Offsets(0.0, 0.0, scale, scale))
         return out
     out = np.zeros((height, width, 4), dtype=np.uint8)
     color = np.asarray(node.color_rgba, dtype=np.uint8)
@@ -1162,6 +1162,9 @@ def _rasterize_overlay(frame: SceneFrame, include_node) -> object | None:
     overlay = np.zeros((frame.display_height, frame.display_width, 4), dtype=np.uint8)
     sx = float(frame.display_width) / max(1.0, float(frame.logical_width))
     sy = float(frame.display_height) / max(1.0, float(frame.logical_height))
+    # The overlay quad is positioned by the native pipeline, which applies the
+    # frame content offset as a transform; keep this raster offset-free.
+    offsets = _Offsets(0.0, 0.0, sx, sy)
     touched = False
     for node in frame.nodes:
         if not include_node(node):
@@ -1174,17 +1177,17 @@ def _rasterize_overlay(frame: SceneFrame, include_node) -> object | None:
                 touched = True
         elif isinstance(node, CircleNode):
             if node.fill_rgba[3] > 0 or node.stroke_rgba[3] > 0:
-                _draw_circle(overlay, node, sx=sx, sy=sy)
+                _draw_circle(overlay, node, sx=sx, sy=sy, offsets=offsets)
                 touched = True
         elif isinstance(node, TextNode):
             if node.text and node.color_rgba[3] > 0:
-                _draw_text(overlay, node, sx=sx, sy=sy)
+                _draw_text(overlay, node, sx=sx, sy=sy, offsets=offsets)
                 touched = True
         elif isinstance(node, CpuLayerNode):
-            _draw_layer(overlay, node, sx=sx, sy=sy)
+            _draw_layer(overlay, node, sx=sx, sy=sy, offsets=offsets)
             touched = True
         elif isinstance(node, ImageNode) and node.rgba is not None:
-            _draw_layer(overlay, CpuLayerNode(node.x, node.y, node.width, node.height, node.rgba, node.z_index), sx=sx, sy=sy)
+            _draw_layer(overlay, CpuLayerNode(node.x, node.y, node.width, node.height, node.rgba, node.z_index), sx=sx, sy=sy, offsets=offsets)
             touched = True
     return overlay if touched else None
 

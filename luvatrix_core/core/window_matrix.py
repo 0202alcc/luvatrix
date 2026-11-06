@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import logging
 import os
 import threading
+import struct
 import time
 from typing import TypeAlias
 
@@ -12,8 +13,26 @@ from luvatrix_core import accel
 from luvatrix_core.perf.copy_telemetry import add_copy_telemetry
 from .matrix_viewport import MatrixViewport
 
+try:
+    from luvatrix_core import _matrix_rs as _matrix_rs_module
+except ImportError:
+    _matrix_rs_module = None
+
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _probe_matrix_rs_apply():
+    if _matrix_rs_module is None:
+        return None
+    if os.getenv("LUVATRIX_DISABLE_MATRIX_RS", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return None
+    return _matrix_rs_module.apply_ops
+
+
+# Patchable hook: tests and operators can disable the Rust op engine by setting
+# this to None (or LUVATRIX_DISABLE_MATRIX_RS=1 before import).
+_matrix_rs_apply = _probe_matrix_rs_apply()
 
 # Plain tuple accepted by both torch and numpy index assignment.
 _MAGENTA_RGBA = (255, 0, 255, 255)
@@ -221,21 +240,31 @@ class WindowMatrix:
                     (self.height, self.width, 4),
                     take_ownership=op.take_ownership,
                 )
-            elif self._is_localized_commit_batch(batch.operations):
-                prepared, offending_pixels = self._prepare_localized_ops(batch.operations)
-                self._apply_prepared_localized_ops(self._materialize_locked(), prepared)
             else:
-                stage_started = time.perf_counter_ns()
-                staged = accel.clone(self._materialize_locked())
-                add_copy_telemetry(
-                    copy_count=1,
-                    copy_bytes=accel.numel(staged),
-                    matrix_stage_clone_ns=time.perf_counter_ns() - stage_started,
-                )
-                for op in batch.operations:
-                    staged, op_offending = self._apply_operation(staged, op)
-                    offending_pixels += op_offending
-                self._matrix = staged
+                applied_with_rs = False
+                if _matrix_rs_apply is not None:
+                    rs_prepared = self._prepare_rs_ops(batch.operations)
+                    if rs_prepared is not None:
+                        encoded, offending_pixels = rs_prepared
+                        matrix_view = _rs_writable_view(self._materialize_locked())
+                        if matrix_view is not None:
+                            _matrix_rs_apply(matrix_view, self.width, self.height, encoded)
+                            applied_with_rs = True
+                if not applied_with_rs and self._is_localized_commit_batch(batch.operations):
+                    prepared, offending_pixels = self._prepare_localized_ops(batch.operations)
+                    self._apply_prepared_localized_ops(self._materialize_locked(), prepared)
+                elif not applied_with_rs:
+                    stage_started = time.perf_counter_ns()
+                    staged = accel.clone(self._materialize_locked())
+                    add_copy_telemetry(
+                        copy_count=1,
+                        copy_bytes=accel.numel(staged),
+                        matrix_stage_clone_ns=time.perf_counter_ns() - stage_started,
+                    )
+                    for op in batch.operations:
+                        staged, op_offending = self._apply_operation(staged, op)
+                        offending_pixels += op_offending
+                    self._matrix = staged
 
             if offending_pixels > 0:
                 LOGGER.warning(
@@ -360,6 +389,69 @@ class WindowMatrix:
     def _is_localized_commit_batch(operations: list[WriteOp]) -> bool:
         return all(isinstance(op, (ReplaceRect, ReplaceRow, ReplaceColumn)) for op in operations)
 
+    def _prepare_rs_ops(
+        self,
+        operations: list[WriteOp],
+    ) -> tuple[list[tuple], int] | None:
+        """Sanitize/validate ops and encode them for the Rust engine.
+
+        Returns ``(encoded_ops, offending_pixels)`` or ``None`` when the batch
+        contains op kinds or payload types the Rust path does not handle
+        (FullRewrite, Multiply, non-contiguous/GPU payloads), in which case the
+        caller falls back to the existing Python paths.
+        """
+        sanitized: list[WriteOp] = []
+        offending_pixels = 0
+        for op in operations:
+            if isinstance(op, ReplaceColumn):
+                _validate_index(op.index, self.width, "column index")
+                col, offending = _sanitize_rgba_array(op.column_h_4, (self.height, 4))
+                sanitized.append(ReplaceColumn(int(op.index), col))
+                offending_pixels += offending
+                continue
+            if isinstance(op, PushColumn):
+                _validate_index(op.index, self.width, "column index")
+                col, offending = _sanitize_rgba_array(op.column_h_4, (self.height, 4))
+                sanitized.append(PushColumn(int(op.index), col))
+                offending_pixels += offending
+                continue
+            if isinstance(op, ReplaceRow):
+                _validate_index(op.index, self.height, "row index")
+                row, offending = _sanitize_rgba_array(op.row_w_4, (self.width, 4))
+                sanitized.append(ReplaceRow(int(op.index), row))
+                offending_pixels += offending
+                continue
+            if isinstance(op, PushRow):
+                _validate_index(op.index, self.height, "row index")
+                row, offending = _sanitize_rgba_array(op.row_w_4, (self.width, 4))
+                sanitized.append(PushRow(int(op.index), row))
+                offending_pixels += offending
+                continue
+            if isinstance(op, ReplaceRect):
+                _validate_rect(op.x, op.y, op.width, op.height, self.width, self.height)
+                patch, offending = _sanitize_rgba_array(op.rect_h_w_4, (op.height, op.width, 4))
+                sanitized.append(ReplaceRect(int(op.x), int(op.y), int(op.width), int(op.height), patch))
+                offending_pixels += offending
+                continue
+            if isinstance(op, ShiftFrame):
+                fill, offending = _sanitize_rgba_array(
+                    accel.reshape(op.fill_rgba_4, (1, 1, 4)), (1, 1, 4)
+                )
+                sanitized.append(ShiftFrame(int(op.dx), int(op.dy), fill))
+                offending_pixels += offending
+                continue
+            if isinstance(op, Multiply):
+                color_matrix = _coerce_float32(op.color_matrix_4x4, (4, 4), "color_matrix_4x4")
+                if not accel.all_finite(color_matrix):
+                    raise ValueError("color_matrix_4x4 must contain only finite values")
+                sanitized.append(Multiply(color_matrix))
+                continue
+            return None
+        encoded = _encode_ops_for_rs(sanitized)
+        if encoded is None:
+            return None
+        return encoded, offending_pixels
+
     def _prepare_localized_ops(
         self,
         operations: list[WriteOp],
@@ -477,8 +569,146 @@ def _union_dirty_rect(
     return (left, top, right - left, bottom - top)
 
 
-def _coerce_float32(value: object, expected_shape: tuple[int, ...], label: str) -> object:
+def _coerce_float32(value, expected_shape: tuple[int, ...], label: str) -> object:
     return accel.coerce_float32(value, expected_shape, label)
+
+
+def _rs_readable_buffer(value: object) -> object | None:
+    """Zero-copy contiguous u8 buffer view of an accel array, or ``None``.
+
+    Accepts backend arrays (torch CPU / numpy / pure) plus raw bytes-like and
+    flat int sequences (used by tests); returns ``None`` when no zero-copy view
+    exists so the caller can fall back to the Python path.
+    """
+    if isinstance(value, accel._PureArray):
+        return value._data
+    np = accel._np
+    if np is not None and isinstance(value, np.ndarray):
+        if value.dtype == np.uint8 and value.flags.c_contiguous:
+            return value
+        return None
+    torch = accel._torch
+    if torch is not None and torch.is_tensor(value):
+        if value.dtype == torch.uint8 and value.is_cpu and value.is_contiguous():
+            return value.numpy()
+        return None
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return bytes(int(channel) & 0xFF for channel in value)
+    return None
+
+
+def _rs_writable_view(matrix: object) -> object | None:
+    """Writable contiguous u8 buffer view of the matrix storage, or ``None``."""
+    if isinstance(matrix, accel._PureArray):
+        return matrix._data
+    np = accel._np
+    if np is not None and isinstance(matrix, np.ndarray):
+        if matrix.dtype == np.uint8 and matrix.flags.c_contiguous and matrix.flags.writeable:
+            return matrix
+        return None
+    torch = accel._torch
+    if torch is not None and torch.is_tensor(matrix):
+        if matrix.dtype == torch.uint8 and matrix.is_cpu and matrix.is_contiguous():
+            return matrix.numpy()
+        return None
+    return None
+
+
+def _encode_ops_for_rs(operations: list[WriteOp]) -> list[tuple] | None:
+    """Encode WriteOps as ``_matrix_rs.apply_ops`` tuples, or ``None``.
+
+    FullRewrite and Multiply stay on the Python paths; every payload must expose
+    a zero-copy contiguous u8 buffer.
+    """
+    encoded: list[tuple] = []
+    for op in operations:
+        if isinstance(op, ReplaceRect):
+            payload = _rs_readable_buffer(op.rect_h_w_4)
+            if payload is None:
+                return None
+            encoded.append((1, int(op.x), int(op.y), int(op.width), int(op.height), payload))
+            continue
+        if isinstance(op, ReplaceRow):
+            payload = _rs_readable_buffer(op.row_w_4)
+            if payload is None:
+                return None
+            encoded.append((2, int(op.index), payload))
+            continue
+        if isinstance(op, ReplaceColumn):
+            payload = _rs_readable_buffer(op.column_h_4)
+            if payload is None:
+                return None
+            encoded.append((3, int(op.index), payload))
+            continue
+        if isinstance(op, PushRow):
+            payload = _rs_readable_buffer(op.row_w_4)
+            if payload is None:
+                return None
+            encoded.append((4, int(op.index), payload))
+            continue
+        if isinstance(op, PushColumn):
+            payload = _rs_readable_buffer(op.column_h_4)
+            if payload is None:
+                return None
+            encoded.append((5, int(op.index), payload))
+            continue
+        if isinstance(op, ShiftFrame):
+            raw_fill = op.fill_rgba_4
+            if isinstance(raw_fill, (list, tuple)):
+                fill_values = [int(channel) & 0xFF for channel in raw_fill]
+            else:
+                fill_buf = _rs_readable_buffer(accel.reshape(raw_fill, (1, 1, 4)))
+                if fill_buf is None:
+                    return None
+                np = accel._np
+                if np is not None and isinstance(fill_buf, np.ndarray):
+                    fill_buf = fill_buf.reshape(-1)
+                fill_values = [int(fill_buf[0]), int(fill_buf[1]), int(fill_buf[2]), int(fill_buf[3])]
+            if len(fill_values) < 4:
+                return None
+            encoded.append((6, int(op.dx), int(op.dy), *fill_values[:4]))
+            continue
+        if isinstance(op, Multiply):
+            values = _rs_float_matrix_values(op.color_matrix_4x4)
+            if values is None:
+                return None
+            encoded.append((7, *values))
+            continue
+        return None
+    return encoded
+
+
+def _rs_float_matrix_values(value: object) -> list[float] | None:
+    """Flatten a 4x4 float matrix to 16 row-major floats, or ``None``."""
+    if isinstance(value, (list, tuple)):
+        flat: list[float] = []
+
+        def _walk(node: object) -> None:
+            if isinstance(node, (list, tuple)):
+                for item in node:
+                    _walk(item)
+            else:
+                flat.append(float(node))
+
+        _walk(value)
+        return flat if len(flat) == 16 else None
+    np = accel._np
+    if np is not None and isinstance(value, np.ndarray):
+        if tuple(value.shape) != (4, 4):
+            return None
+        return [float(channel) for channel in value.reshape(-1).tolist()]
+    torch = accel._torch
+    if torch is not None and torch.is_tensor(value):
+        if tuple(value.shape) != (4, 4):
+            return None
+        return [float(channel) for channel in value.reshape(-1).tolist()]
+    if isinstance(value, accel._PureArray):
+        if tuple(value.shape) != (4, 4) or value.dtype != "float32":
+            return None
+        return list(struct.unpack("<16f", bytes(value._data[:64])))
+    return None
 
 
 def _sanitize_rgba_array(
