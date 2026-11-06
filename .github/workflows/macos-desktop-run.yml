@@ -154,6 +154,54 @@ jobs:
           echo "app is running outside the runner's process tree; window should be on screen"
           cp "$LOG" "$RUNNER_TEMP/desktop-run.log"
 
+      - name: Inspect live app over MCP
+        if: steps.app.outputs.exists == 'true'
+        run: |
+          RESPONSES="$RUNNER_TEMP/mcp-responses.ndjson"
+          {
+            printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"app_state","arguments":{}}}'
+            printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"app_screenshot","arguments":{}}}'
+          } | uv run python main.py mcp-proxy "$APP_DIR" > "$RESPONSES"
+          uv run python - "$RESPONSES" "$RUNNER_TEMP" <<'PY'
+          import base64
+          import json
+          from pathlib import Path
+          import sys
+
+          from PIL import Image
+
+          responses_path = Path(sys.argv[1])
+          artifact_dir = Path(sys.argv[2])
+          responses = {
+              response["id"]: response
+              for line in responses_path.read_text(encoding="utf-8").splitlines()
+              if (response := json.loads(line)).get("id") is not None
+          }
+
+          def tool_payload(request_id):
+              response = responses[request_id]
+              if "error" in response:
+                  raise RuntimeError(response["error"])
+              return json.loads(response["result"]["content"][0]["text"])
+
+          state = tool_payload(1)
+          screenshot = tool_payload(2)
+          assert state["app_id"] == "figma.nomic_desktop", state
+          assert (screenshot["width"], screenshot["height"]) == (1440, 900), screenshot
+          assert screenshot["format"] == "raw_rgba", screenshot
+
+          (artifact_dir / "mcp-app-state.json").write_text(
+              json.dumps(state, indent=2, sort_keys=True), encoding="utf-8"
+          )
+          pixels = base64.b64decode(screenshot.pop("data_base64"))
+          Image.frombytes("RGBA", (screenshot["width"], screenshot["height"]), pixels).save(
+              artifact_dir / "mcp-app-screenshot.png"
+          )
+          (artifact_dir / "mcp-app-screenshot.json").write_text(
+              json.dumps(screenshot, indent=2, sort_keys=True), encoding="utf-8"
+          )
+          PY
+
       - name: Diagnose window session
         if: steps.app.outputs.exists == 'true'
         run: |
@@ -209,6 +257,8 @@ jobs:
           path: |
             ${{ runner.temp }}/desktop-run.log
             ${{ runner.temp }}/desktop-app*.png
+            ${{ runner.temp }}/mcp-app-state.json
+            ${{ runner.temp }}/mcp-app-screenshot.*
             ${{ runner.temp }}/pre-launch*.png
           if-no-files-found: warn
           retention-days: 14
