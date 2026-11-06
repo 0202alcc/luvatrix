@@ -263,9 +263,17 @@ jobs:
       - name: Bring Nomic to the front
         if: steps.app.outputs.exists == 'true'
         run: |
-          # Re-activating the bundle raises the running instance's window;
-          # doing it as the job's last action leaves Nomic frontmost.
-          open "$HOME/.nomic-desktop/NomicDesktop.app"
+          # Activate the launchd-owned process by pid. Calling `open` here
+          # starts a second copy because launchd invoked the bundle executable
+          # directly rather than through LaunchServices.
+          PID="$(pgrep -f "main.py run-app $APP_DIR" | head -1)"
+          osascript - "$PID" <<'APPLESCRIPT'
+          on run argv
+            tell application "System Events"
+              set frontmost of first process whose unix id is (item 1 of argv as integer) to true
+            end tell
+          end run
+          APPLESCRIPT
           sleep 2
           osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null || true
 
@@ -302,6 +310,7 @@ jobs:
         run: |
           sleep 5
           pgrep -fl "main.py run-app $APP_DIR"
+          test "$(pgrep -f "main.py run-app $APP_DIR" | wc -l | tr -d ' ')" -eq 1
           test -f "$GITHUB_WORKSPACE/$APP_DIR/.luvatrix/mcp-session.json"
           printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"app_state","arguments":{}}}' \
@@ -315,4 +324,11 @@ jobs:
           assert state["runtime"]["app_active"] == 1, state
           print(json.dumps(state, indent=2, sort_keys=True))
           '
-          open "$HOME/.nomic-desktop/NomicDesktop.app"
+          PID="$(pgrep -f "main.py run-app $APP_DIR")"
+          osascript - "$PID" <<'APPLESCRIPT'
+          on run argv
+            tell application "System Events"
+              set frontmost of first process whose unix id is (item 1 of argv as integer) to true
+            end tell
+          end run
+          APPLESCRIPT
