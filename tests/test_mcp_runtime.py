@@ -369,7 +369,8 @@ class DiscoveryFileTests(unittest.TestCase):
             self.assertEqual(info["app_id"], "test.mcp")
             self.assertEqual(info["pid"], os.getpid())
             self.assertEqual(info["protocol_version"], MCP_PROTOCOL_VERSION)
-            self.assertEqual(tuple(info["capabilities"]), ("mcp.inspect", "mcp.control"))
+            # Capabilities are stored sorted for deterministic diffs.
+            self.assertEqual(tuple(info["capabilities"]), ("mcp.control", "mcp.inspect"))
             remove_discovery_file(app_dir)
             self.assertFalse(path.exists())
 
@@ -491,7 +492,7 @@ class UnifiedRuntimeMcpTests(unittest.TestCase):
                 time.sleep(0.01)
             info = read_discovery_file(app_dir)
             self.assertEqual(info["app_id"], "test.mcp")
-            self.assertEqual(tuple(info["capabilities"]), ("mcp.inspect", "mcp.control"))
+            self.assertEqual(tuple(info["capabilities"]), ("mcp.control", "mcp.inspect"))
 
             status, body = _post_json(
                 info["url"], {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}, token=info["token"]

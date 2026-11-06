@@ -23,6 +23,7 @@ from .hdi_thread import HDIEvent, HDIThread
 from .coordinates import CoordinateFrameRegistry
 from .coordinates import PRESET_CARTESIAN_BL, PRESET_CARTESIAN_CENTER, PRESET_SCREEN_TL
 from .frame_rate_controller import FrameRateController
+from .mcp_protocol import MCP_ALLOW_NAMES
 from .protocol_governance import CURRENT_PROTOCOL_VERSION, check_protocol_compatibility
 from .scene_graph import (
     Camera3DNode,
@@ -121,6 +122,19 @@ class AppWebConfig:
 
 
 @dataclass(frozen=True)
+class AppMcpConfig:
+    """``[mcp]`` manifest section: app opt-in for MCP mode.
+
+    MCP mode only activates when this section sets ``enabled = true`` AND the
+    runtime is launched with MCP enabled (``run-app --mcp``). ``allow``
+    restricts which runtime-side capability families the session grants.
+    """
+
+    enabled: bool = False
+    allow: tuple[str, ...] = ("inspect", "input", "control", "app")
+
+
+@dataclass(frozen=True)
 class AppManifest:
     app_id: str
     protocol_version: str
@@ -144,6 +158,7 @@ class AppManifest:
     render_preferred: str = "auto"
     render_fallbacks: list[str] = field(default_factory=lambda: ["scene", "ui", "matrix"])
     web: AppWebConfig = field(default_factory=AppWebConfig)
+    mcp: AppMcpConfig = field(default_factory=AppMcpConfig)
 
 
 @dataclass(frozen=True)
@@ -1166,6 +1181,7 @@ class AppRuntime:
         render_raw = raw.get("render", {})
         render_preferred, render_fallbacks = _coerce_render_config(render_raw)
         web_config = _coerce_web_config(raw.get("web", None), display_title=display_title, display_icon=display_icon)
+        mcp_config = _coerce_mcp_config(raw.get("mcp", None))
         manifest = AppManifest(
             app_id=app_id,
             protocol_version=protocol_version,
@@ -1189,6 +1205,7 @@ class AppRuntime:
             render_preferred=render_preferred,
             render_fallbacks=render_fallbacks,
             web=web_config,
+            mcp=mcp_config,
         )
         self._validate_manifest(manifest)
         return manifest
@@ -1565,6 +1582,31 @@ def _coerce_debug_policy(value: object) -> AppDebugPolicy:
         non_macos_stub_capability=non_macos_stub_capability,
         non_macos_unsupported_reason=non_macos_unsupported_reason,
     )
+
+
+def _coerce_mcp_config(value: object) -> AppMcpConfig:
+    if value is None:
+        return AppMcpConfig()
+    if not isinstance(value, dict):
+        raise ValueError("mcp must be a table/object")
+
+    enabled = value.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("mcp.enabled must be a boolean")
+
+    allow_raw = value.get("allow", list(MCP_ALLOW_NAMES))
+    allow = tuple(_coerce_string_list(allow_raw, "mcp.allow"))
+    unknown = [name for name in allow if name not in MCP_ALLOW_NAMES]
+    if unknown:
+        raise ValueError(
+            "mcp.allow has unknown entries: "
+            + ", ".join(sorted(unknown))
+            + " (valid: "
+            + ", ".join(MCP_ALLOW_NAMES)
+            + ")"
+        )
+
+    return AppMcpConfig(enabled=enabled, allow=allow)
 
 
 def _coerce_variants(value: object) -> list[AppVariant]:

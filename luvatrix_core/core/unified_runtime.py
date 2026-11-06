@@ -8,11 +8,19 @@ from typing import Callable
 from luvatrix_core.targets.base import RenderTarget
 from luvatrix_core.targets.scene_target import SceneRenderTarget
 
-from .app_runtime import AppRuntime
+from .app_runtime import AppManifest, AppRuntime
 from .display_runtime import DisplayRuntime
 from .energy_safety import EnergySafetyController
 from .frame_rate_controller import FrameRateController
 from .hdi_thread import HDIThread
+from .mcp_http import McpHttpServer
+from .mcp_runtime import (
+    McpRuntimeBridge,
+    generate_session_token,
+    mcp_capabilities_for_allow,
+    remove_discovery_file,
+    write_discovery_file,
+)
 from .scene_display_runtime import SceneDisplayRuntime
 from .scene_graph import SceneGraphBuffer
 from .sensor_manager import SensorManagerThread
@@ -67,9 +75,12 @@ class UnifiedRuntime:
         vsync_read_fd: int | None = None,
         host_os: str | None = None,
         host_arch: str | None = None,
+        mcp_enabled: bool = False,
     ) -> None:
         if render_mode not in ("auto", "matrix", "scene"):
             raise ValueError("render_mode must be one of: auto, matrix, scene")
+        self._mcp_enabled = mcp_enabled
+        self._capability_audit_logger = capability_audit_logger
         self._render_mode = render_mode
         self._scene_target = scene_target
         self._active_provider = active_provider
@@ -175,6 +186,7 @@ class UnifiedRuntime:
         rate = FrameRateController(target_fps=target_fps, present_fps=present_fps)
         app_path = Path(app_dir).resolve()
         manifest = self._app_runtime.load_manifest(app_path)
+        mcp_session = self._start_mcp_session(manifest, app_path) if self._mcp_enabled else None
         effective_render_mode = self._render_mode
         if effective_render_mode == "auto":
             if manifest.render_preferred == "matrix":
@@ -261,6 +273,8 @@ class UnifiedRuntime:
                 if any(bool(active_target.should_close()) for active_target in active_targets):
                     stopped_by_target_close = True
                     break
+                if mcp_session is not None and mcp_session[0].stop_requested:
+                    break
                 now = time.perf_counter()
                 active = self._is_active()
                 if not active:
@@ -343,6 +357,9 @@ class UnifiedRuntime:
                             self._scene_display_runtime.run_once(timeout=0.0, repeat_latest=True)
                     for active_target in reversed(active_targets):
                         active_target.stop()
+                if mcp_session is not None:
+                    mcp_session[1].stop()
+                    remove_discovery_file(app_path)
         if scene_present_loop_started and self._scene_display_runtime is not None:
             frames_presented = self._scene_display_runtime.frames_presented
             self._frames_presented = frames_presented
@@ -352,6 +369,40 @@ class UnifiedRuntime:
             stopped_by_target_close=stopped_by_target_close,
             stopped_by_energy_safety=stopped_by_energy_safety,
         )
+
+    def _start_mcp_session(
+        self,
+        manifest: AppManifest,
+        app_path: Path,
+    ) -> tuple[McpRuntimeBridge, McpHttpServer]:
+        """Start the MCP session for this run: bridge, HTTP server, discovery file."""
+        if manifest.runtime_kind == "process":
+            raise ValueError(
+                "MCP mode supports in-process apps only in v1 (runtime.kind = process)"
+            )
+        if not manifest.mcp.enabled:
+            raise ValueError(
+                "MCP mode requested but the app has not opted in: "
+                "set [mcp] enabled = true in app.toml"
+            )
+        granted = mcp_capabilities_for_allow(manifest.mcp.allow)
+        bridge = McpRuntimeBridge(
+            app_id=manifest.app_id,
+            granted_capabilities=granted,
+            state_provider=self._runtime_telemetry,
+            audit_logger=self._capability_audit_logger,
+        )
+        token = generate_session_token()
+        server = McpHttpServer(bridge.dispatcher(), token=token)
+        server.start()
+        write_discovery_file(
+            app_path,
+            url=server.url,
+            token=token,
+            app_id=manifest.app_id,
+            capabilities=granted,
+        )
+        return bridge, server
 
     def _enable_granted_sensors(self, sensor_manager: SensorManagerThread, granted_capabilities: set[str]) -> None:
         mapping = {
