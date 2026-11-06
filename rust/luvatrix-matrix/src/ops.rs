@@ -2,13 +2,15 @@
 //! operations with WindowMatrix-compatible dirty-rect semantics.
 
 #[derive(Debug)]
-pub enum Op {
-    ReplaceRect { x: i64, y: i64, width: i64, height: i64, payload: Vec<u8> },
-    ReplaceRow { index: i64, payload: Vec<u8> },
-    ReplaceColumn { index: i64, payload: Vec<u8> },
-    PushRow { index: i64, payload: Vec<u8> },
-    PushColumn { index: i64, payload: Vec<u8> },
+pub enum Op<'a> {
+    ReplaceRect { x: i64, y: i64, width: i64, height: i64, payload: &'a [u8] },
+    ReplaceRow { index: i64, payload: &'a [u8] },
+    ReplaceColumn { index: i64, payload: &'a [u8] },
+    PushRow { index: i64, payload: &'a [u8] },
+    PushColumn { index: i64, payload: &'a [u8] },
     Shift { dx: i64, dy: i64, fill: [u8; 4] },
+    /// Row-major 4x4 color matrix: out channel k = sum_j px_j * matrix[k*4+j].
+    Multiply { matrix: [f32; 16] },
 }
 
 pub type DirtyRect = Option<(i64, i64, i64, i64)>;
@@ -59,11 +61,11 @@ fn union_dirty_rect(first: DirtyRect, second: DirtyRect) -> DirtyRect {
 }
 
 /// Mirrors `_dirty_rect_for_operations` in window_matrix.py.
-pub fn dirty_rect_for_ops(ops: &[Op], matrix_width: i64, matrix_height: i64) -> DirtyRect {
+pub fn dirty_rect_for_ops(ops: &[Op<'_>], matrix_width: i64, matrix_height: i64) -> DirtyRect {
     let mut rect: DirtyRect = Some((0, 0, 0, 0));
     for op in ops {
         let candidate = match op {
-            Op::Shift { .. } => return None,
+            Op::Shift { .. } | Op::Multiply { .. } => return None,
             Op::ReplaceRect { x, y, width, height, .. } => Some((*x, *y, *width, *height)),
             Op::ReplaceColumn { index, .. } => Some((*index, 0, 1, matrix_height)),
             Op::PushColumn { index, .. } => Some((*index, 0, matrix_width - index, matrix_height)),
@@ -77,7 +79,7 @@ pub fn dirty_rect_for_ops(ops: &[Op], matrix_width: i64, matrix_height: i64) -> 
 
 /// Validate every op up-front so a failing batch never partially mutates the
 /// matrix (same observable behavior as the staged-clone path).
-pub fn validate_ops(ops: &[Op], width: i64, height: i64) -> Result<(), String> {
+pub fn validate_ops(ops: &[Op<'_>], width: i64, height: i64) -> Result<(), String> {
     for op in ops {
         match op {
             Op::ReplaceRect { x, y, width: w, height: h, payload } => {
@@ -111,6 +113,11 @@ pub fn validate_ops(ops: &[Op], width: i64, height: i64) -> Result<(), String> {
                 }
             }
             Op::Shift { .. } => {}
+            Op::Multiply { matrix } => {
+                if matrix.iter().any(|value| !value.is_finite()) {
+                    return Err("color_matrix_4x4 must contain only finite values".to_string());
+                }
+            }
         }
     }
     Ok(())
@@ -131,7 +138,7 @@ fn fill_region(buf: &mut [u8], matrix_width: i64, x0: i64, y0: i64, w: i64, h: i
 }
 
 /// Apply validated ops in place. Returns the batch dirty rect (None = global).
-pub fn apply_ops(buf: &mut [u8], width: i64, height: i64, ops: &[Op]) -> DirtyRect {
+pub fn apply_ops(buf: &mut [u8], width: i64, height: i64, ops: &[Op<'_>]) -> DirtyRect {
     let w = width as usize;
     let h = height as usize;
     for op in ops {
@@ -194,6 +201,18 @@ pub fn apply_ops(buf: &mut [u8], width: i64, height: i64, ops: &[Op]) -> DirtyRe
             }
             Op::Shift { dx, dy, fill } => {
                 shift_frame(buf, width, height, *dx, *dy, *fill);
+            }
+            Op::Multiply { matrix } => {
+                // float32 matmul like torch/numpy, then round-ties-even, clip,
+                // truncate (mirrors WindowMatrix._apply_operation).
+                for px in buf.chunks_exact_mut(4) {
+                    let p = [px[0] as f32, px[1] as f32, px[2] as f32, px[3] as f32];
+                    for (k, channel) in px.iter_mut().enumerate() {
+                        let row = &matrix[k * 4..k * 4 + 4];
+                        let acc = ((p[0] * row[0] + p[1] * row[1]) + p[2] * row[2]) + p[3] * row[3];
+                        *channel = acc.round_ties_even().clamp(0.0, 255.0) as u8;
+                    }
+                }
             }
         }
     }
@@ -285,7 +304,7 @@ mod tests {
         for _ in 0..3 {
             payload.extend_from_slice(&px(5));
         }
-        apply_ops(&mut buf, 3, 3, &[Op::PushRow { index: 0, payload }]);
+        apply_ops(&mut buf, 3, 3, &[Op::PushRow { index: 0, payload: &payload }]);
         assert_eq!(&buf[12..16], &px(0));
         assert_eq!(&buf[24..28], &px(3));
         assert_eq!(&buf[0..4], &px(5));

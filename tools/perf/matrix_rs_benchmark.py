@@ -22,12 +22,20 @@ import time
 from luvatrix_core import accel
 from luvatrix_core.core import scene_rasterizer, window_matrix
 from luvatrix_core.core.scene_graph import (
+    Camera3DNode,
     CircleNode,
     ClearNode,
+    Cube3DNode,
+    DotGrid3DNode,
+    DotPlane3DNode,
+    GroundPlane3DNode,
+    Horizon3DNode,
+    Line3DNode,
     RectNode,
     RoundedRectNode,
     SceneFrame,
     ShaderRectNode,
+    Text3DNode,
 )
 from luvatrix_core.core.window_matrix import (
     PushRow,
@@ -173,6 +181,42 @@ def _bench_scene_rasterize(iterations: int) -> dict[str, float | str]:
     }
 
 
+def _sample_frame_3d(width: int, height: int) -> SceneFrame:
+    nodes = [
+        ClearNode((10, 12, 18, 255)),
+        Camera3DNode(position=(0.0, 2.0, 6.0), target=(0.0, 0.5, 0.0)),
+        Horizon3DNode(sky_horizon_rgba=(200, 210, 220, 255)),
+        GroundPlane3DNode(center=(0.0, -1.0, -5.0), width=8.0, depth=6.0),
+        DotGrid3DNode(center=(0.5, 0.5, -1.0), extent=4.0, spacing=0.5, point_size=2.0),
+        DotPlane3DNode(center=(0.0, -0.5, -2.0), width=6.0, depth=4.0, spacing=0.75, point_size=1.5),
+        Cube3DNode(center=(0.0, 0.5, 0.0), size=1.4, rotation=(0.3, 0.7, 0.1)),
+        Line3DNode(start=(-2.0, 0.0, 0.0), end=(2.0, 1.0, -1.0)),
+        Text3DNode(text="FPS 60", position=(0.0, 1.5, -1.0), height=0.4),
+    ]
+    return SceneFrame(
+        revision=1,
+        logical_width=width,
+        logical_height=height,
+        display_width=width,
+        display_height=height,
+        ts_ns=0,
+        nodes=tuple(nodes),
+    )
+
+
+def _bench_scene_rasterize_3d(iterations: int) -> dict[str, float | str]:
+    width, height = 640, 360
+    frame = _sample_frame_3d(width, height)
+    python_ns = _time_ns(lambda: scene_rasterizer._rasterize_scene_frame_python(frame), iterations)
+    rust_ns = _time_ns(lambda: scene_rasterizer._rasterize_scene_frame_rs(frame), iterations)
+    return {
+        "workload": f"scene_rasterize_3d_{width}x{height}_9nodes",
+        "python_ns_per_op": float(python_ns),
+        "rust_ns_per_op": float(rust_ns),
+        "speedup": round(python_ns / rust_ns, 2),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iterations", type=int, default=30)
@@ -181,6 +225,7 @@ def main() -> None:
         _bench_alpha_blit(args.iterations),
         _bench_write_batch(args.iterations),
         _bench_scene_rasterize(max(3, args.iterations // 6)),
+        _bench_scene_rasterize_3d(max(3, args.iterations // 6)),
     ]
     print(f"{'workload':<38} {'python ns/op':>14} {'rust ns/op':>14} {'speedup':>9}")
     for row in results:

@@ -4,15 +4,32 @@
 //! Node coordinates arrive pre-scaled to display space (the Python glue applies
 //! sx/sy exactly like the Python rasterizer does).
 
+/// Precomputed camera basis for 3D lowering. Computed Python-side with the
+/// same helpers as the Python rasterizer, so the per-point projection here is
+/// pure IEEE f64 dot products and divides.
+#[derive(Debug, Clone, Copy)]
+pub struct Basis {
+    pub eye: [f64; 3],
+    pub right: [f64; 3],
+    pub up: [f64; 3],
+    pub forward: [f64; 3],
+    pub f: f64,
+    pub near: f64,
+}
+
 #[derive(Debug)]
-pub enum RasterOp {
+pub enum RasterOp<'a> {
     Clear { color: [u8; 4] },
     Rect { x: f64, y: f64, width: f64, height: f64, color: [u8; 4] },
     RoundedRect { x: f64, y: f64, width: f64, height: f64, radius: f64, color: [u8; 4] },
     Circle { cx: f64, cy: f64, radius: f64, stroke_width: f64, fill: [u8; 4], stroke: [u8; 4] },
     Rainbow { t: f64, rotation: f64, scroll_y: f64 },
-    Paste { x: i64, y: i64, width: i64, height: i64, payload: Vec<u8> },
-    MaskBlend { x: i64, y: i64, width: i64, height: i64, mask: Vec<u8>, color: [u8; 4] },
+    Paste { x: i64, y: i64, width: i64, height: i64, payload: &'a [u8] },
+    MaskBlend { x: i64, y: i64, width: i64, height: i64, mask: &'a [u8], color: [u8; 4] },
+    Line { x0: f64, y0: f64, x1: f64, y1: f64, color: [u8; 4] },
+    DebugText { text: String, x: i64, y: i64, scale: i64, color: [u8; 4] },
+    DotGrid3D { center: [f64; 3], extent: f64, spacing: f64, point_size: f64, color: [u8; 4], basis: Basis },
+    DotPlane3D { center: [f64; 3], width: f64, depth: f64, spacing: f64, point_size: f64, color: [u8; 4], basis: Basis },
 }
 
 /// `round()` in Python is ties-to-even; match it for geometry snapping.
@@ -50,7 +67,7 @@ pub fn prepare(buf: &mut [u8]) {
     }
 }
 
-pub fn rasterize(buf: &mut [u8], width: i64, height: i64, ops: &[RasterOp]) {
+pub fn rasterize(buf: &mut [u8], width: i64, height: i64, ops: &[RasterOp<'_>]) {
     for op in ops {
         match op {
             RasterOp::Clear { color } => clear(buf, *color),
@@ -71,6 +88,159 @@ pub fn rasterize(buf: &mut [u8], width: i64, height: i64, ops: &[RasterOp]) {
             }
             RasterOp::MaskBlend { x, y, width: w, height: h, mask, color } => {
                 mask_blend(buf, width, height, *x, *y, *w, *h, mask, *color);
+            }
+            RasterOp::Line { x0, y0, x1, y1, color } => {
+                draw_line(buf, width, height, *x0, *y0, *x1, *y1, *color);
+            }
+            RasterOp::DebugText { text, x, y, scale, color } => {
+                draw_debug_text(buf, width, height, text, *x, *y, *scale, *color);
+            }
+            RasterOp::DotGrid3D { center, extent, spacing, point_size, color, basis } => {
+                draw_dot_grid3d(buf, width, height, *center, *extent, *spacing, *point_size, *color, basis);
+            }
+            RasterOp::DotPlane3D { center, width: w, depth, spacing, point_size, color, basis } => {
+                draw_dot_plane3d(buf, width, height, *center, *w, *depth, *spacing, *point_size, *color, basis);
+            }
+        }
+    }
+}
+
+fn dot3(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+/// Mirrors `_project_point` in scene_rasterizer.py.
+fn project(point: [f64; 3], basis: &Basis, frame_w: i64, frame_h: i64) -> Option<(f64, f64)> {
+    let rel = [
+        point[0] - basis.eye[0],
+        point[1] - basis.eye[1],
+        point[2] - basis.eye[2],
+    ];
+    let x = dot3(rel, basis.right);
+    let y = dot3(rel, basis.up);
+    let z = dot3(rel, basis.forward);
+    if z <= basis.near.max(1e-6) {
+        return None;
+    }
+    let aspect = frame_w as f64 / frame_h.max(1) as f64;
+    let ndc_x = (x * basis.f / aspect) / z;
+    let ndc_y = (y * basis.f) / z;
+    Some(((ndc_x * 0.5 + 0.5) * frame_w as f64, (0.5 - ndc_y * 0.5) * frame_h as f64))
+}
+
+/// DDA line via 2x2 rects, mirroring `_draw_line` in scene_rasterizer.py.
+#[allow(clippy::too_many_arguments)]
+fn draw_line(buf: &mut [u8], frame_w: i64, frame_h: i64, x0: f64, y0: f64, x1: f64, y1: f64, color: [u8; 4]) {
+    let steps = ((x1 - x0).abs().max((y1 - y0).abs())).round_ties_even() as i64;
+    let steps = steps.max(1);
+    for i in 0..=steps {
+        let t = i as f64 / steps as f64;
+        let x = x0 + (x1 - x0) * t;
+        let y = y0 + (y1 - y0) * t;
+        draw_rect(buf, frame_w, frame_h, x - 0.5, y - 0.5, 2.0, 2.0, color);
+    }
+}
+
+fn debug_glyph(ch: char) -> [&'static str; 5] {
+    match ch {
+        ' ' => ["000", "000", "000", "000", "000"],
+        '-' => ["000", "000", "111", "000", "000"],
+        '.' => ["000", "000", "000", "000", "010"],
+        ':' => ["000", "010", "000", "010", "000"],
+        _ => ["111", "101", "101", "101", "111"],
+    }
+}
+
+/// Blocky fallback glyphs, mirroring `_draw_debug_text`. The Python digest
+/// path is unreachable here because encodable text nodes are non-empty.
+#[allow(clippy::too_many_arguments)]
+fn draw_debug_text(buf: &mut [u8], frame_w: i64, frame_h: i64, text: &str, x: i64, y: i64, scale: i64, color: [u8; 4]) {
+    let mut cursor = x;
+    for ch in text.to_uppercase().chars() {
+        let glyph = debug_glyph(ch);
+        for (gy, row) in glyph.iter().enumerate() {
+            for (gx, bit) in row.chars().enumerate() {
+                if bit == '1' {
+                    draw_rect(
+                        buf,
+                        frame_w,
+                        frame_h,
+                        (cursor + gx as i64 * scale) as f64,
+                        (y + gy as i64 * scale) as f64,
+                        scale as f64,
+                        scale as f64,
+                        color,
+                    );
+                }
+            }
+        }
+        cursor += 4 * scale;
+    }
+}
+
+/// Mirrors `_draw_dot_grid3d_fallback` (loop order is painter's order).
+#[allow(clippy::too_many_arguments)]
+fn draw_dot_grid3d(
+    buf: &mut [u8],
+    frame_w: i64,
+    frame_h: i64,
+    center: [f64; 3],
+    extent: f64,
+    spacing: f64,
+    point_size: f64,
+    color: [u8; 4],
+    basis: &Basis,
+) {
+    let half = extent * 0.5;
+    let count = ((extent / spacing).floor() as i64).max(1);
+    let start = -(count as f64) * spacing * 0.5;
+    let radius = point_size.max(1.0);
+    for ix in 0..=count {
+        for iy in 0..=count {
+            for iz in 0..=count {
+                let x = start + ix as f64 * spacing;
+                let y = start + iy as f64 * spacing;
+                let z = start + iz as f64 * spacing;
+                if x.abs() > half || y.abs() > half || z.abs() > half {
+                    continue;
+                }
+                let point = [center[0] + x, center[1] + y, center[2] + z];
+                if let Some((px, py)) = project(point, basis, frame_w, frame_h) {
+                    draw_rect(buf, frame_w, frame_h, px - radius * 0.5, py - radius * 0.5, radius, radius, color);
+                }
+            }
+        }
+    }
+}
+
+/// Mirrors `_draw_dot_plane3d_fallback`.
+#[allow(clippy::too_many_arguments)]
+fn draw_dot_plane3d(
+    buf: &mut [u8],
+    frame_w: i64,
+    frame_h: i64,
+    center: [f64; 3],
+    width: f64,
+    depth: f64,
+    spacing: f64,
+    point_size: f64,
+    color: [u8; 4],
+    basis: &Basis,
+) {
+    let x_count = ((width / spacing).floor() as i64).max(1);
+    let z_count = ((depth / spacing).floor() as i64).max(1);
+    let x_start = -(x_count as f64) * spacing * 0.5;
+    let z_start = -(z_count as f64) * spacing * 0.5;
+    let radius = point_size.max(1.0);
+    for ix in 0..=x_count {
+        for iz in 0..=z_count {
+            let point = [
+                center[0] + x_start + ix as f64 * spacing,
+                center[1],
+                center[2] + z_start + iz as f64 * spacing,
+            ];
+            if let Some((px, py)) = project(point, basis, frame_w, frame_h) {
+                draw_rect(buf, frame_w, frame_h, px - radius * 0.5, py - radius * 0.5, radius, radius, color);
             }
         }
     }

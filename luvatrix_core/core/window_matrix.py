@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import logging
 import os
 import threading
+import struct
 import time
 from typing import TypeAlias
 
@@ -439,6 +440,12 @@ class WindowMatrix:
                 sanitized.append(ShiftFrame(int(op.dx), int(op.dy), fill))
                 offending_pixels += offending
                 continue
+            if isinstance(op, Multiply):
+                color_matrix = _coerce_float32(op.color_matrix_4x4, (4, 4), "color_matrix_4x4")
+                if not accel.all_finite(color_matrix):
+                    raise ValueError("color_matrix_4x4 must contain only finite values")
+                sanitized.append(Multiply(color_matrix))
+                continue
             return None
         encoded = _encode_ops_for_rs(sanitized)
         if encoded is None:
@@ -663,8 +670,45 @@ def _encode_ops_for_rs(operations: list[WriteOp]) -> list[tuple] | None:
                 return None
             encoded.append((6, int(op.dx), int(op.dy), *fill_values[:4]))
             continue
+        if isinstance(op, Multiply):
+            values = _rs_float_matrix_values(op.color_matrix_4x4)
+            if values is None:
+                return None
+            encoded.append((7, *values))
+            continue
         return None
     return encoded
+
+
+def _rs_float_matrix_values(value: object) -> list[float] | None:
+    """Flatten a 4x4 float matrix to 16 row-major floats, or ``None``."""
+    if isinstance(value, (list, tuple)):
+        flat: list[float] = []
+
+        def _walk(node: object) -> None:
+            if isinstance(node, (list, tuple)):
+                for item in node:
+                    _walk(item)
+            else:
+                flat.append(float(node))
+
+        _walk(value)
+        return flat if len(flat) == 16 else None
+    np = accel._np
+    if np is not None and isinstance(value, np.ndarray):
+        if tuple(value.shape) != (4, 4):
+            return None
+        return [float(channel) for channel in value.reshape(-1).tolist()]
+    torch = accel._torch
+    if torch is not None and torch.is_tensor(value):
+        if tuple(value.shape) != (4, 4):
+            return None
+        return [float(channel) for channel in value.reshape(-1).tolist()]
+    if isinstance(value, accel._PureArray):
+        if tuple(value.shape) != (4, 4) or value.dtype != "float32":
+            return None
+        return list(struct.unpack("<16f", bytes(value._data[:64])))
+    return None
 
 
 def _sanitize_rgba_array(
