@@ -1,0 +1,42 @@
+name: rust-matrix-core
+
+on:
+  pull_request:
+    branches: [main, staging, dev]
+  push:
+    branches: [main, staging, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-matrix-core-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-matrix-parity:
+    name: rust-matrix-parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+      - name: Sync deps
+        run: uv sync --frozen --extra desktop
+      - name: Build optional Rust matrix core
+        env:
+          LUVATRIX_BUILD_RUST: "1"
+        run: uv run --with setuptools-rust python setup.py build_ext --inplace
+      - name: Parity tests against the Python reference paths
+        env:
+          PYTHONPATH: .
+        run: |
+          uv run --extra desktop --with pytest pytest -q \
+            tests/test_matrix_rs.py \
+            tests/test_accel_backends.py \
+            tests/test_native_accel.py
+      - name: Freethreaded import smoke
+        run: |
+          uv run python -W error::RuntimeWarning -c "import luvatrix_core._matrix_rs"
