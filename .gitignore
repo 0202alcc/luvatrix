@@ -62,3 +62,7 @@ examples/hello_ios/ios/PyPackages-device/
 examples/hello_ios/ios/PyPackages-simulator/
 examples/hello_ios/ios/Python/
 examples/hello_ios/ios/Luvatrix.xcodeproj/
+
+# Rust build artifacts
+/rust/*/target/
+luvatrix_core/_matrix_rs*.so

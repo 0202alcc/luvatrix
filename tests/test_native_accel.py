@@ -19,7 +19,9 @@ def test_native_alpha_blit_matches_python_reference_with_and_without_mask() -> N
     for active_mask in (None, mask):
         expected = bytearray(rng.randrange(256) for _ in range(width * height * 4))
         actual = bytearray(expected)
+        saved_rs = accel._rs_accel
         accel._native_accel = None
+        accel._rs_accel = None
         try:
             accel._alpha_blit_pure(
                 accel._PureArray(expected, (height, width, 4)),
@@ -34,6 +36,7 @@ def test_native_alpha_blit_matches_python_reference_with_and_without_mask() -> N
             )
         finally:
             accel._native_accel = native
+            accel._rs_accel = saved_rs
 
         native.alpha_blit_rgba_u8(
             actual,

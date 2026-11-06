@@ -1,0 +1,18 @@
+[package]
+name = "luvatrix-matrix"
+version = "0.1.0"
+edition = "2021"
+description = "Rust matrix core for luvatrix: write-op engine, raster primitives, scene lowering"
+license-file = "../../LICENSE"
+
+[lib]
+name = "luvatrix_matrix"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = "0.25"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
