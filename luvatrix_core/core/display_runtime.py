@@ -16,8 +16,10 @@ from luvatrix_core.targets.base import DisplayFrame, RenderTarget
 LOGGER = logging.getLogger(__name__)
 
 try:
+    # From-import of a missing extension submodule raises plain ImportError,
+    # not ModuleNotFoundError; catch the broad form like window_matrix does.
     from luvatrix_core import _matrix_rs as _rs_present  # type: ignore[import-not-found]
-except ModuleNotFoundError:
+except ImportError:
     _rs_present = None  # type: ignore[assignment]
 
 _RS_DISABLE_ENV = "LUVATRIX_DISABLE_MATRIX_RS"

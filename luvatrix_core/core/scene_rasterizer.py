@@ -53,8 +53,10 @@ def _numpy():
 
 
 try:
+    # From-import of a missing extension submodule raises plain ImportError,
+    # not ModuleNotFoundError; catch the broad form like window_matrix does.
     from luvatrix_core import _matrix_rs as _rs_raster  # type: ignore[import-not-found]
-except ModuleNotFoundError:
+except ImportError:
     _rs_raster = None  # type: ignore[assignment]
 
 _RS_DISABLE_ENV = "LUVATRIX_DISABLE_MATRIX_RS"
