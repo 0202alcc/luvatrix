@@ -1,20 +1,34 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 import time
-from typing import Callable
+from typing import Any, Callable
 
+from luvatrix_core import accel
 from luvatrix_core.targets.base import RenderTarget
 from luvatrix_core.targets.scene_target import SceneRenderTarget
 
-from .app_runtime import AppRuntime
+from .app_runtime import AppManifest, AppRuntime
 from .display_runtime import DisplayRuntime
 from .energy_safety import EnergySafetyController
 from .frame_rate_controller import FrameRateController
 from .hdi_thread import HDIThread
+from .mcp_http import McpHttpServer
+from .mcp_runtime import (
+    McpRuntimeBridge,
+    McpScreenshot,
+    RingBufferLogHandler,
+    generate_session_token,
+    mcp_capabilities_for_allow,
+    remove_discovery_file,
+    scene_node_to_dict,
+    write_discovery_file,
+)
 from .scene_display_runtime import SceneDisplayRuntime
 from .scene_graph import SceneGraphBuffer
+from .scene_rasterizer import rasterize_scene_frame
 from .sensor_manager import SensorManagerThread
 from .window_matrix import WindowMatrix
 
@@ -25,6 +39,21 @@ class UnifiedRunResult:
     frames_presented: int
     stopped_by_target_close: bool
     stopped_by_energy_safety: bool
+
+
+@dataclass
+class _McpSession:
+    bridge: McpRuntimeBridge
+    server: McpHttpServer
+    log_handler: RingBufferLogHandler
+    previous_root_log_level: int
+
+    def shutdown(self, app_path: Path) -> None:
+        self.server.stop()
+        root = logging.getLogger()
+        root.removeHandler(self.log_handler)
+        root.setLevel(self.previous_root_log_level)
+        remove_discovery_file(app_path)
 
 
 class _RollingRate:
@@ -67,9 +96,13 @@ class UnifiedRuntime:
         vsync_read_fd: int | None = None,
         host_os: str | None = None,
         host_arch: str | None = None,
+        mcp_enabled: bool = False,
     ) -> None:
         if render_mode not in ("auto", "matrix", "scene"):
             raise ValueError("render_mode must be one of: auto, matrix, scene")
+        self._mcp_enabled = mcp_enabled
+        self._capability_audit_logger = capability_audit_logger
+        self._hdi = hdi
         self._render_mode = render_mode
         self._scene_target = scene_target
         self._active_provider = active_provider
@@ -175,6 +208,7 @@ class UnifiedRuntime:
         rate = FrameRateController(target_fps=target_fps, present_fps=present_fps)
         app_path = Path(app_dir).resolve()
         manifest = self._app_runtime.load_manifest(app_path)
+        mcp_bridge = self._build_mcp_bridge(manifest) if self._mcp_enabled else None
         effective_render_mode = self._render_mode
         if effective_render_mode == "auto":
             if manifest.render_preferred == "matrix":
@@ -195,6 +229,14 @@ class UnifiedRuntime:
             )
         else:
             lifecycle = self._app_runtime.load_lifecycle(resolved.module_dir, resolved.entrypoint)
+        # MCP serving starts only after the lifecycle object exists so
+        # app-defined hooks (mcp_tools/mcp_call/mcp_state) are registered
+        # before clients can discover the session.
+        mcp_session: _McpSession | None = None
+        if mcp_bridge is not None:
+            bridge, log_handler = mcp_bridge
+            bridge.register_app_hooks(lifecycle)
+            mcp_session = self._serve_mcp_session(bridge, log_handler, manifest, app_path)
         runtime_state_setter = self._build_origin_refs_state_setter(lifecycle)
         self._enable_granted_sensors(ctx.sensor_manager, granted)
 
@@ -261,6 +303,14 @@ class UnifiedRuntime:
                 if any(bool(active_target.should_close()) for active_target in active_targets):
                     stopped_by_target_close = True
                     break
+                if mcp_session is not None and mcp_session.bridge.stop_requested:
+                    break
+                if mcp_session is not None and not mcp_session.bridge.gate.tick_permitted():
+                    # MCP gate closed: keep pumping targets, idle briefly, and
+                    # reset the dt anchor so resuming does not produce a huge dt.
+                    last = time.perf_counter()
+                    time.sleep(0.01)
+                    continue
                 now = time.perf_counter()
                 active = self._is_active()
                 if not active:
@@ -288,6 +338,8 @@ class UnifiedRuntime:
                 )
                 ctx.hdi.collect_once()
                 lifecycle.loop(ctx, dt)
+                if mcp_session is not None:
+                    mcp_session.bridge.drain_app_calls()
                 self._app_loop_ticks += 1
                 self._app_loop_rate.mark()
                 ticks_run += 1
@@ -343,6 +395,8 @@ class UnifiedRuntime:
                             self._scene_display_runtime.run_once(timeout=0.0, repeat_latest=True)
                     for active_target in reversed(active_targets):
                         active_target.stop()
+                if mcp_session is not None:
+                    mcp_session.shutdown(app_path)
         if scene_present_loop_started and self._scene_display_runtime is not None:
             frames_presented = self._scene_display_runtime.frames_presented
             self._frames_presented = frames_presented
@@ -352,6 +406,103 @@ class UnifiedRuntime:
             stopped_by_target_close=stopped_by_target_close,
             stopped_by_energy_safety=stopped_by_energy_safety,
         )
+
+    def _build_mcp_bridge(self, manifest: AppManifest) -> tuple[McpRuntimeBridge, RingBufferLogHandler]:
+        """Validate MCP eligibility and build the tool bridge for this run."""
+        if manifest.runtime_kind == "process":
+            raise ValueError(
+                "MCP mode supports in-process apps only in v1 (runtime.kind = process)"
+            )
+        if not manifest.mcp.enabled:
+            raise ValueError(
+                "MCP mode requested but the app has not opted in: "
+                "set [mcp] enabled = true in app.toml"
+            )
+        log_handler = RingBufferLogHandler()
+        bridge = McpRuntimeBridge(
+            app_id=manifest.app_id,
+            granted_capabilities=mcp_capabilities_for_allow(manifest.mcp.allow),
+            state_provider=self._runtime_telemetry,
+            screenshot_provider=self._mcp_screenshot,
+            scene_tree_provider=self._mcp_scene_tree,
+            log_provider=log_handler.entries,
+            input_injector=self._hdi.inject_synthetic_event,
+            audit_logger=self._capability_audit_logger,
+        )
+        return bridge, log_handler
+
+    def _serve_mcp_session(
+        self,
+        bridge: McpRuntimeBridge,
+        log_handler: RingBufferLogHandler,
+        manifest: AppManifest,
+        app_path: Path,
+    ) -> _McpSession:
+        """Start log capture, HTTP transport, and the discovery file."""
+        root_logger = logging.getLogger()
+        previous_root_log_level = root_logger.level
+        # app_logs is only useful if typical INFO-level app logging flows;
+        # lowered for the session and restored on shutdown.
+        if root_logger.level > logging.INFO:
+            root_logger.setLevel(logging.INFO)
+        root_logger.addHandler(log_handler)
+        token = generate_session_token()
+        server = McpHttpServer(bridge.dispatcher(), token=token)
+        try:
+            server.start()
+        except Exception:
+            root_logger.removeHandler(log_handler)
+            root_logger.setLevel(previous_root_log_level)
+            raise
+        write_discovery_file(
+            app_path,
+            url=server.url,
+            token=token,
+            app_id=manifest.app_id,
+            capabilities=bridge.granted_capabilities,
+        )
+        return _McpSession(
+            bridge=bridge,
+            server=server,
+            log_handler=log_handler,
+            previous_root_log_level=previous_root_log_level,
+        )
+
+    def _mcp_screenshot(self) -> McpScreenshot:
+        """Read back the current frame: retained scene raster when available, else matrix."""
+        if self._scene_buffer is not None:
+            frame = self._scene_buffer.latest_frame()
+            if frame is not None:
+                raster = accel.to_contiguous_numpy(rasterize_scene_frame(frame))
+                return McpScreenshot(
+                    width=int(raster.shape[1]),
+                    height=int(raster.shape[0]),
+                    source="scene_retained",
+                    rgba=raster.tobytes(),
+                )
+        snapshot = accel.to_contiguous_numpy(self._matrix.read_snapshot())
+        return McpScreenshot(
+            width=int(snapshot.shape[1]),
+            height=int(snapshot.shape[0]),
+            source="matrix",
+            rgba=snapshot.tobytes(),
+        )
+
+    def _mcp_scene_tree(self) -> dict[str, Any]:
+        if self._scene_buffer is None:
+            return {"available": False, "reason": "scene render mode not active", "nodes": []}
+        frame = self._scene_buffer.latest_frame()
+        if frame is None:
+            return {"available": False, "reason": "no scene frame submitted yet", "nodes": []}
+        return {
+            "available": True,
+            "revision": int(frame.revision),
+            "logical_width": int(frame.logical_width),
+            "logical_height": int(frame.logical_height),
+            "retained": bool(frame.retained),
+            "content_offset": [float(frame.content_offset_x), float(frame.content_offset_y)],
+            "nodes": [scene_node_to_dict(node) for node in frame.nodes],
+        }
 
     def _enable_granted_sensors(self, sensor_manager: SensorManagerThread, granted_capabilities: set[str]) -> None:
         mapping = {

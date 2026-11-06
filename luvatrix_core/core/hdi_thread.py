@@ -127,6 +127,23 @@ class HDIThread:
         with self._lock:
             return len(self._queue) + len(self._motion_slots)
 
+    def inject_synthetic_event(self, event: HDIEvent) -> int:
+        """Inject a synthetic input event through the real normalization path.
+
+        Thread-safe: serialized with source collection on ``_poll_lock`` so
+        keyboard/touch state machines stay consistent. Returns the number of
+        events enqueued (normalization can fan one event out to several).
+        """
+        with self._poll_lock:
+            active = bool(self._window_active_provider())
+            normalized = self._normalize_events(event, active)
+            enqueued = 0
+            for item in normalized:
+                self._enqueue(item)
+                enqueued += 1
+            self._last_window_active = active
+            return enqueued
+
     def consume_telemetry(self) -> dict[str, int]:
         with self._lock:
             samples = sorted(int(v) for v in self._latency_samples_ns)

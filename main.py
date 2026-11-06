@@ -189,6 +189,15 @@ def main() -> None:
         help="Rendering contract to use. scene enables the retained SceneFrame path when supported.",
     )
     run.add_argument(
+        "--mcp",
+        action="store_true",
+        help=(
+            "Enable MCP mode for this run (requires [mcp] enabled = true in app.toml). "
+            "Serves a local MCP session for agent inspection/control and writes "
+            "<app>/.luvatrix/mcp-session.json. Default: run until the client stops the app."
+        ),
+    )
+    run.add_argument(
         "--presentation-mode",
         choices=[mode.value for mode in PresentationMode],
         default=None,
@@ -334,7 +343,22 @@ def main() -> None:
         help="Record provenance for a legacy scaffold without overwriting customized files.",
     )
 
+    mcp_proxy = subparsers.add_parser(
+        "mcp-proxy",
+        help="Bridge MCP stdio clients (NDJSON) to a running app's MCP session",
+    )
+    mcp_proxy.add_argument(
+        "target",
+        type=Path,
+        help="App directory (containing .luvatrix/mcp-session.json) or a session file path",
+    )
+
     args = parser.parse_args()
+
+    if args.command == "mcp-proxy":
+        from luvatrix_core.core.mcp_proxy import run_proxy
+
+        raise SystemExit(run_proxy(args.target))
 
     if args.command == "build-web":
         from luvatrix_core.platform.web.build import build_web_app
@@ -538,7 +562,18 @@ def main() -> None:
             scene_target = None
             if args.render == "headless":
                 target: RenderTarget = _HeadlessTarget()
-                hdi = HDIThread(source=_NoopHDISource())
+                # Describe the virtual window so HDI position normalization
+                # (including MCP app_input injection) maps onto the matrix.
+                hdi = HDIThread(
+                    source=_NoopHDISource(),
+                    window_geometry_provider=lambda: (
+                        0.0,
+                        0.0,
+                        float(matrix_width),
+                        float(matrix_height),
+                    ),
+                    target_extent_provider=lambda: (float(matrix_width), float(matrix_height)),
+                )
             elif args.render in ("macos", "macos-metal") and args.render_mode in ("auto", "scene"):
                 from luvatrix_core.platform.macos.metal_scene_target import MacOSMetalSceneBackend, MacOSMetalSceneTarget
 
@@ -648,9 +683,10 @@ def main() -> None:
                 scene_target=scene_target,
                 render_mode=args.render_mode,
                 host_os=validation.target_platform,
+                mcp_enabled=args.mcp,
             )
             max_ticks = args.ticks
-            if max_ticks is None and args.render == "headless":
+            if max_ticks is None and args.render == "headless" and not args.mcp:
                 max_ticks = 600
             target_fps = _resolve_target_fps(args.fps)
             result = runtime.run_app(

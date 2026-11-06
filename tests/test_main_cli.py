@@ -47,6 +47,86 @@ class MainCliTests(unittest.TestCase):
             _warn_if_not_free_threaded()
         warning.assert_not_called()
 
+    def test_run_app_mcp_flag_wires_runtime_and_runs_until_stopped(self) -> None:
+        captured: dict[str, object] = {}
+
+        class _FakeRuntime:
+            def __init__(self, **kwargs) -> None:
+                captured.update(kwargs)
+
+            def run_app(self, app_dir, **kwargs):
+                captured["run_kwargs"] = kwargs
+                return types.SimpleNamespace(
+                    ticks_run=1,
+                    frames_presented=0,
+                    stopped_by_target_close=False,
+                    stopped_by_energy_safety=False,
+                )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            app_dir = Path(tmpdir)
+            (app_dir / "app.toml").write_text(
+                'app_id = "test.mcp-cli"\n'
+                'protocol_version = "1"\n'
+                'entrypoint = "app_main:create"\n'
+                "\n[mcp]\nenabled = true\n",
+                encoding="utf-8",
+            )
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    ["luvatrix", "run-app", str(app_dir), "--render", "headless", "--mcp"],
+                ),
+                patch("main.validate_app_install"),
+                patch("main.UnifiedRuntime", _FakeRuntime),
+            ):
+                main()
+
+        self.assertTrue(captured["mcp_enabled"])
+        run_kwargs = captured["run_kwargs"]
+        # With MCP active and no explicit --ticks, the session runs until the
+        # client stops it rather than using the headless 600-tick default.
+        self.assertIsNone(run_kwargs["max_ticks"])
+
+    def test_run_app_without_mcp_keeps_headless_tick_default(self) -> None:
+        captured: dict[str, object] = {}
+
+        class _FakeRuntime:
+            def __init__(self, **kwargs) -> None:
+                captured.update(kwargs)
+
+            def run_app(self, app_dir, **kwargs):
+                captured["run_kwargs"] = kwargs
+                return types.SimpleNamespace(
+                    ticks_run=1,
+                    frames_presented=0,
+                    stopped_by_target_close=False,
+                    stopped_by_energy_safety=False,
+                )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            app_dir = Path(tmpdir)
+            (app_dir / "app.toml").write_text(
+                'app_id = "test.no-mcp-cli"\n'
+                'protocol_version = "1"\n'
+                'entrypoint = "app_main:create"\n',
+                encoding="utf-8",
+            )
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    ["luvatrix", "run-app", str(app_dir), "--render", "headless"],
+                ),
+                patch("main.validate_app_install"),
+                patch("main.UnifiedRuntime", _FakeRuntime),
+            ):
+                main()
+
+        self.assertFalse(captured["mcp_enabled"])
+        self.assertEqual(captured["run_kwargs"]["max_ticks"], 600)
+
     def test_run_app_web_delegates_to_static_server(self) -> None:
         calls = []
         fake_server = types.ModuleType("luvatrix_core.platform.web.server")
