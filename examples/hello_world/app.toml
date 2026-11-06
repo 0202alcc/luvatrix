@@ -14,3 +14,6 @@ icon = "assets/icon.png"
 [render]
 preferred = "auto"
 fallbacks = ["scene", "ui", "matrix"]
+
+[mcp]
+enabled = true

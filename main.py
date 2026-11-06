@@ -343,7 +343,22 @@ def main() -> None:
         help="Record provenance for a legacy scaffold without overwriting customized files.",
     )
 
+    mcp_proxy = subparsers.add_parser(
+        "mcp-proxy",
+        help="Bridge MCP stdio clients (NDJSON) to a running app's MCP session",
+    )
+    mcp_proxy.add_argument(
+        "target",
+        type=Path,
+        help="App directory (containing .luvatrix/mcp-session.json) or a session file path",
+    )
+
     args = parser.parse_args()
+
+    if args.command == "mcp-proxy":
+        from luvatrix_core.core.mcp_proxy import run_proxy
+
+        raise SystemExit(run_proxy(args.target))
 
     if args.command == "build-web":
         from luvatrix_core.platform.web.build import build_web_app
