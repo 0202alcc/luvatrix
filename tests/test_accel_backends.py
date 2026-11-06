@@ -453,6 +453,48 @@ assert app.FullSuiteInteractiveApp is not None
         )
         self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
 
+    def test_scene_rasterizer_falls_back_to_python_when_rust_extension_absent(self) -> None:
+        code = r'''
+import builtins
+
+real_import = builtins.__import__
+def blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if (
+        name in ("luvatrix_core._matrix_rs", "_matrix_rs")
+        or (name in ("luvatrix_core", "") and "_matrix_rs" in (fromlist or ()))
+    ):
+        raise ImportError("blocked Rust accelerator to simulate the extension not being built")
+    return real_import(name, globals, locals, fromlist, level)
+builtins.__import__ = blocked_import
+
+from luvatrix_core.core import scene_rasterizer
+from luvatrix_core.core.scene_graph import ClearNode, RectNode, SceneFrame
+
+assert scene_rasterizer._rs_raster is None
+
+frame = SceneFrame(
+    revision=1,
+    logical_width=4,
+    logical_height=4,
+    display_width=4,
+    display_height=4,
+    ts_ns=0,
+    nodes=(ClearNode((10, 20, 30, 255)), RectNode(0.0, 0.0, 2.0, 2.0, (200, 100, 50, 255))),
+)
+out = scene_rasterizer.rasterize_scene_frame(frame)
+assert scene_rasterizer._last_raster_backend() == "python", scene_rasterizer._last_raster_backend()
+assert tuple(out[0, 0]) == (200, 100, 50, 255), tuple(out[0, 0])
+assert tuple(out[3, 3]) == (10, 20, 30, 255), tuple(out[3, 3])
+'''
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
