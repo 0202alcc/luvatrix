@@ -43,6 +43,45 @@ from ..vulkan_scaling import RenderScaleController, compute_blit_rect
 from ..vulkan_compat import SwapchainOutOfDateError, VulkanKHRCompatMixin, decode_vk_string
 from luvatrix_core.perf.copy_telemetry import add_copy_telemetry
 from .vulkan_presenter import VulkanContext
+
+try:
+    # From-import of a missing extension submodule raises plain ImportError,
+    # not ModuleNotFoundError; catch the broad form like window_matrix does.
+    from luvatrix_core import _matrix_rs as _rs_present  # type: ignore[import-not-found]
+except ImportError:
+    _rs_present = None  # type: ignore[assignment]
+
+_RS_DISABLE_ENV = "LUVATRIX_DISABLE_MATRIX_RS"
+
+
+def _swizzle_rgba_to_bgra(frame: torch.Tensor) -> torch.Tensor:
+    """Swap R/B channels for BGRA swapchains; Rust fast path when available."""
+    if _rs_present is not None and os.environ.get(_RS_DISABLE_ENV, "0") != "1":
+        swapped = _swizzle_rgba_to_bgra_rs(frame)
+        if swapped is not None:
+            return swapped
+    return frame[:, :, [2, 1, 0, 3]].contiguous()
+
+
+def _swizzle_rgba_to_bgra_rs(frame: torch.Tensor) -> torch.Tensor | None:
+    # Only CPU tensors take the Rust path; on-device tensors keep the original
+    # torch fancy-index path so device placement is unchanged.
+    if frame.dtype != torch.uint8 or frame.ndim != 3 or int(frame.shape[2]) != 4:
+        return None
+    if frame.device.type != "cpu":
+        return None
+    try:
+        import numpy as np  # noqa: PLC0415
+
+        view = frame.numpy()
+    except Exception:
+        return None
+    out = np.empty(view.shape, dtype=np.uint8)
+    try:
+        _rs_present.swizzle_rgba_bgra_u8(view, out)
+    except Exception:
+        return None
+    return torch.from_numpy(out)
 from .window_system import (
     AppKitWindowSystem,
     MacOSDebugMenuAction,
@@ -748,7 +787,7 @@ class MoltenVKMacOSBackend(VulkanKHRCompatMixin):
             int(getattr(vk, "VK_FORMAT_B8G8R8A8_UNORM", 44)),
             int(getattr(vk, "VK_FORMAT_B8G8R8A8_SRGB", 50)),
         ):
-            rgba_upload = rgba_upload[:, :, [2, 1, 0, 3]].contiguous()
+            rgba_upload = _swizzle_rgba_to_bgra(rgba_upload)
         height, width, _ = rgba_upload.shape
         upload_h, upload_w = height, width
         if self._swapchain_extent is not None:

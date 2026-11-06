@@ -90,9 +90,10 @@ Repository-level operating rules and quick-start context for human and AI contri
 2. App manifest and variant routing:
    - `uv run --extra desktop --with pytest pytest tests/test_app_runtime.py -k "manifest or variant or platform_support"`
 3. Headless CLI smoke:
-   - `uv run python main.py validate-app examples/hello_world --render headless`
-   - `uv run python main.py run-app examples/hello_world --render headless --ticks 1 --energy-safety off`
-   - `uv run python main.py validate-app examples/full_suite_interactive --render web`
+ - `uv run python main.py validate-app examples/hello_world --render headless`
+ - `uv run python main.py run-app examples/hello_world --render headless --ticks 1 --energy-safety off`
+ - `uv run python main.py validate-app examples/full_suite_interactive --render web`
+ - MCP mode smoke: `uv run python main.py run-app examples/hello_world --render headless --mcp`, then read `examples/hello_world/.luvatrix/mcp-session.json` and call tools over HTTP (or pipe NDJSON through `uv run python main.py mcp-proxy examples/hello_world`). Stop with the `app_stop` tool. See `docs/mcp_mode.md`.
 4. `examples/full_suite_interactive` lists `macos`, `ios`, `android`, and `web`. Headless validation on Linux cannot pick one of those platforms. Use `--render web`, or another single platform target, for that app.
 5. Broader runtime checks should be chosen based on touched modules, for example macOS renderer tests for `luvatrix_core/platform/macos/*` changes or planes tests for `luvatrix_ui/planes_*` changes.
 6. Retained scene-scroll throughput: `uv run python tools/perf/macos_scene_scroll_harness.py`.

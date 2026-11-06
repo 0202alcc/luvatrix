@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+import os
 import threading
 import time
 from typing import Optional
@@ -13,6 +14,26 @@ from luvatrix_core.perf.copy_telemetry import begin_copy_telemetry_frame, snapsh
 from luvatrix_core.targets.base import DisplayFrame, RenderTarget
 
 LOGGER = logging.getLogger(__name__)
+
+try:
+    # From-import of a missing extension submodule raises plain ImportError,
+    # not ModuleNotFoundError; catch the broad form like window_matrix does.
+    from luvatrix_core import _matrix_rs as _rs_present  # type: ignore[import-not-found]
+except ImportError:
+    _rs_present = None  # type: ignore[assignment]
+
+_RS_DISABLE_ENV = "LUVATRIX_DISABLE_MATRIX_RS"
+
+
+def _numpy():
+    np = getattr(accel, "_np", None)
+    if np is not None:
+        return np
+    try:
+        import numpy as np  # type: ignore
+    except Exception:
+        return None
+    return np
 
 
 @dataclass(frozen=True)
@@ -175,6 +196,10 @@ def _build_frame(
 
 def _crop_viewport(snapshot: object, viewport: MatrixViewport) -> object:
     """CPU fallback for targets without a retained Matrix texture."""
+    if _rs_present is not None and os.environ.get(_RS_DISABLE_ENV, "0") != "1":
+        cropped = _crop_viewport_rs(snapshot, viewport)
+        if cropped is not None:
+            return cropped
     output = accel.zeros((viewport.height, viewport.width, 4))
     for destination_y in range(viewport.height):
         source_y = (viewport.y + destination_y) % snapshot.shape[0] if viewport.wrap_y else viewport.y + destination_y
@@ -182,6 +207,47 @@ def _crop_viewport(snapshot: object, viewport: MatrixViewport) -> object:
             source_x = (viewport.x + destination_x) % snapshot.shape[1] if viewport.wrap_x else viewport.x + destination_x
             output[destination_y, destination_x, :] = snapshot[source_y, source_x, :]
     return output
+
+
+def _crop_viewport_rs(snapshot: object, viewport: MatrixViewport) -> object | None:
+    """Rust viewport crop for numpy/torch uint8 frames; ``None`` means fall back.
+
+    Returns the same backend type it receives (numpy in -> numpy out, torch in
+    -> torch out) so downstream presenters see no type change.
+    """
+    np = _numpy()
+    if np is None:
+        return None
+    restore_torch = False
+    torch = accel._torch
+    if torch is not None and torch.is_tensor(snapshot):
+        if snapshot.dtype != torch.uint8 or not snapshot.is_cpu:
+            return None
+        try:
+            view = snapshot.numpy()
+        except Exception:
+            return None
+        restore_torch = True
+    elif isinstance(snapshot, np.ndarray):
+        view = snapshot
+    else:
+        return None
+    if view.dtype != np.uint8 or view.ndim != 3 or int(view.shape[2]) != 4:
+        return None
+    cropped = np.empty((int(viewport.height), int(viewport.width), 4), dtype=np.uint8)
+    _rs_present.crop_viewport_rgba_u8(
+        view,
+        int(viewport.x),
+        int(viewport.y),
+        int(viewport.width),
+        int(viewport.height),
+        bool(viewport.wrap_x),
+        bool(viewport.wrap_y),
+        cropped,
+    )
+    if restore_torch:
+        return torch.from_numpy(cropped)
+    return cropped
 
 
 def _union_dirty_rects(
