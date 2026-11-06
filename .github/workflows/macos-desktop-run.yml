@@ -137,8 +137,11 @@ jobs:
           caffeinate -dims -w $$ &
           # exec the venv python directly: the bundle-registered pid becomes
           # the NSApplication process, so LaunchServices sees the launch
-          # finish and the Dock icon stops bouncing.
-          exec "$GITHUB_WORKSPACE/.venv/bin/python" main.py run-app "$APP_DIR" --render "$RENDER" >>"$LOG" 2>&1
+          # finish and the Dock icon stops bouncing. --mcp turns on MCP mode
+          # (paired with [mcp] enabled in the app manifest): the app serves
+          # 127.0.0.1-only agent inspection/control until app_stop, with the
+          # bearer-token session file at $APP_DIR/.luvatrix/mcp-session.json.
+          exec "$GITHUB_WORKSPACE/.venv/bin/python" main.py run-app "$APP_DIR" --render "$RENDER" --mcp >>"$LOG" 2>&1
           EOF_LAUNCH
           chmod +x "$BUNDLE/Contents/MacOS/launch"
           open -n "$BUNDLE"
@@ -163,6 +166,16 @@ jobs:
           defaults read com.apple.dock persistent-apps 2>/dev/null | grep -i -B2 -A2 nomic || echo "  (none pinned)"
           echo "app process:"
           pgrep -fl "main.py run-app $APP_DIR" || echo "  (not running)"
+          echo "MCP session (token intentionally not printed):"
+          if [ -f "$APP_DIR/.luvatrix/mcp-session.json" ]; then
+            uv run python - "$APP_DIR" <<'EOF'
+          import json, pathlib, sys
+          s = json.loads(pathlib.Path(sys.argv[1], ".luvatrix/mcp-session.json").read_text())
+          print("  url:", s["url"], "| pid:", s["pid"], "| capabilities:", s["capabilities"])
+          EOF
+          else
+            echo "  (no .luvatrix/mcp-session.json — MCP off or still starting)"
+          fi
           echo "windows visible to the window server:"
           uv run python - <<'EOF'
           import Quartz
