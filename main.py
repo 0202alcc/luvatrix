@@ -189,6 +189,15 @@ def main() -> None:
         help="Rendering contract to use. scene enables the retained SceneFrame path when supported.",
     )
     run.add_argument(
+        "--mcp",
+        action="store_true",
+        help=(
+            "Enable MCP mode for this run (requires [mcp] enabled = true in app.toml). "
+            "Serves a local MCP session for agent inspection/control and writes "
+            "<app>/.luvatrix/mcp-session.json. Default: run until the client stops the app."
+        ),
+    )
+    run.add_argument(
         "--presentation-mode",
         choices=[mode.value for mode in PresentationMode],
         default=None,
@@ -648,9 +657,10 @@ def main() -> None:
                 scene_target=scene_target,
                 render_mode=args.render_mode,
                 host_os=validation.target_platform,
+                mcp_enabled=args.mcp,
             )
             max_ticks = args.ticks
-            if max_ticks is None and args.render == "headless":
+            if max_ticks is None and args.render == "headless" and not args.mcp:
                 max_ticks = 600
             target_fps = _resolve_target_fps(args.fps)
             result = runtime.run_app(
