@@ -87,6 +87,12 @@ jobs:
           LABEL="ai.nomic.desktop.dev"
           DOMAIN="gui/$(id -u)"
           launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+          for _ in {1..20}; do
+            if ! launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 0.25
+          done
           pkill -f "main.py run-app $APP_DIR" 2>/dev/null || true
           # The app writes to a persistent home-dir log so post-job crashes
           # leave evidence the next run can read; RUNNER_TEMP is per-job.
@@ -169,7 +175,13 @@ jobs:
           </dict>
           </plist>
           EOF_AGENT
-          launchctl bootstrap "$DOMAIN" "$LAUNCH_AGENT"
+          for _ in {1..10}; do
+            if launchctl bootstrap "$DOMAIN" "$LAUNCH_AGENT"; then
+              break
+            fi
+            sleep 1
+          done
+          launchctl print "$DOMAIN/$LABEL" >/dev/null
           launchctl kickstart -k "$DOMAIN/$LABEL"
           sleep 20
           if ! pgrep -f "main.py run-app $APP_DIR" >/dev/null; then
