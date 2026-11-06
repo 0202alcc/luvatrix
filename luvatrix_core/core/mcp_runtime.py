@@ -23,6 +23,8 @@ from typing import Any, Callable, Iterable
 
 from .hdi_thread import HDIEvent
 
+LOGGER = logging.getLogger(__name__)
+
 from .mcp_protocol import (
     MCP_ALLOW_NAMES,
     MCP_CAPABILITIES,
@@ -256,6 +258,7 @@ class McpRuntimeBridge:
         scene_tree_provider: Callable[[], dict[str, Any]] | None = None,
         log_provider: Callable[[int], list[dict[str, Any]]] | None = None,
         input_injector: Callable[[HDIEvent], int] | None = None,
+        app_call_timeout_s: float = 10.0,
         audit_logger: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._app_id = app_id
@@ -265,11 +268,20 @@ class McpRuntimeBridge:
         self._scene_tree_provider = scene_tree_provider
         self._log_provider = log_provider
         self._input_injector = input_injector
+        self._app_call_timeout_s = float(app_call_timeout_s)
         self._synthetic_event_ids = itertools.count(1)
         self.gate = TickGate()
         self._stop_requested = False
+        self._app_tools: dict[str, McpToolSpec] = {}
+        self._app_call_fn: Callable[[str, dict[str, Any]], Any] | None = None
+        self._app_state_hook: Callable[[], Any] | None = None
+        self._app_call_lock = threading.Lock()
+        self._app_call_queue: deque[tuple[str, dict[str, Any], threading.Event, dict[str, Any]]] = deque()
+        self._cached_app_state: dict[str, Any] | None = None
+        self._app_state_lock = threading.Lock()
         self._audit_mcp_capabilities(audit_logger)
         self._tools = self._build_tools()
+        self._tools_by_name = {tool.name: tool for tool in self._tools}
 
     @property
     def app_id(self) -> str:
@@ -286,10 +298,112 @@ class McpRuntimeBridge:
     def dispatcher(self) -> McpDispatcher:
         return McpDispatcher(
             app_id=self._app_id,
-            tools=list(self._tools),
+            tools=[*self._tools, *self._app_tools.values()],
             granted_capabilities=self._granted,
             tool_handler=self._handle_tool,
         )
+
+    def register_app_hooks(self, lifecycle: object) -> int:
+        """Register app-defined MCP hooks from the app's lifecycle object.
+
+        Recognized hooks: ``mcp_tools()`` (tool descriptors), ``mcp_call``
+        (executor, runs on the runtime thread via :meth:`drain_app_calls`),
+        and ``mcp_state()`` (dict merged into ``app_state``, refreshed per
+        drain). Returns the number of app tools registered.
+        """
+        tools_fn = getattr(lifecycle, "mcp_tools", None)
+        call_fn = getattr(lifecycle, "mcp_call", None)
+        state_fn = getattr(lifecycle, "mcp_state", None)
+        self._app_state_hook = state_fn if callable(state_fn) else None
+        self._app_call_fn = call_fn if callable(call_fn) else None
+        self._app_tools = {}
+        if not callable(tools_fn) or self._app_call_fn is None:
+            return 0
+        try:
+            raw_specs = tools_fn() or []
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("app mcp_tools() failed; no app tools registered: %s", exc)
+            return 0
+        if not isinstance(raw_specs, list):
+            LOGGER.warning("app mcp_tools() must return a list; got %r", type(raw_specs).__name__)
+            return 0
+        registered = 0
+        for raw in raw_specs:
+            spec = self._coerce_app_tool(raw)
+            if spec is None:
+                continue
+            if spec.name in self._app_tools:
+                LOGGER.warning("duplicate app MCP tool name skipped: %s", spec.name)
+                continue
+            self._app_tools[spec.name] = spec
+            registered += 1
+        return registered
+
+    def _coerce_app_tool(self, raw: object) -> McpToolSpec | None:
+        if not isinstance(raw, dict):
+            LOGGER.warning("app MCP tool entry is not an object: %r", raw)
+            return None
+        name = raw.get("name")
+        if not isinstance(name, str) or not name:
+            LOGGER.warning("app MCP tool entry missing a valid name: %r", raw)
+            return None
+        if name.startswith("app_") or name in self._tools_by_name:
+            LOGGER.warning("app MCP tool name collides with a built-in and was skipped: %s", name)
+            return None
+        description = raw.get("description", "")
+        if not isinstance(description, str):
+            description = str(description)
+        schema = raw.get("inputSchema", {"type": "object", "properties": {}})
+        if not isinstance(schema, dict):
+            LOGGER.warning("app MCP tool %s has a non-object inputSchema; skipped", name)
+            return None
+        return McpToolSpec(
+            name=name,
+            description=description,
+            input_schema=schema,
+            capability="mcp.app",
+        )
+
+    def call_app_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        """Queue an app tool call for execution on the runtime thread."""
+        if self._app_call_fn is None:
+            raise RuntimeError(f"app tool unavailable (no mcp_call hook): {name}")
+        done = threading.Event()
+        box: dict[str, Any] = {}
+        with self._app_call_lock:
+            self._app_call_queue.append((name, dict(arguments), done, box))
+        if not done.wait(self._app_call_timeout_s):
+            raise RuntimeError(
+                f"app tool '{name}' timed out waiting for execution on the runtime thread "
+                "(app paused or not ticking)"
+            )
+        if "error" in box:
+            raise RuntimeError(box["error"])
+        return box.get("result")
+
+    def drain_app_calls(self) -> None:
+        """Execute queued app tool calls. Must run on the runtime thread."""
+        while True:
+            with self._app_call_lock:
+                if not self._app_call_queue:
+                    break
+                name, arguments, done, box = self._app_call_queue.popleft()
+            try:
+                if self._app_call_fn is None:
+                    raise RuntimeError(f"app tool unavailable (no mcp_call hook): {name}")
+                box["result"] = self._app_call_fn(name, arguments)
+            except Exception as exc:  # noqa: BLE001 - surfaced to the caller as a tool error
+                box["error"] = f"{type(exc).__name__}: {exc}"
+            finally:
+                done.set()
+        if self._app_state_hook is not None:
+            try:
+                state = self._app_state_hook()
+            except Exception:  # noqa: BLE001 - keep the last good snapshot
+                return
+            if isinstance(state, dict):
+                with self._app_state_lock:
+                    self._cached_app_state = state
 
     def _audit_mcp_capabilities(self, audit_logger: Callable[[dict[str, Any]], None] | None) -> None:
         if audit_logger is None:
@@ -401,11 +515,16 @@ class McpRuntimeBridge:
 
     def _handle_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         if name == "app_state":
-            return {
+            payload: dict[str, Any] = {
                 "app_id": self._app_id,
                 "runtime": self._state_provider(),
                 "gate": {"paused": self.gate.paused, "pending_steps": self.gate.pending_steps},
             }
+            with self._app_state_lock:
+                cached = self._cached_app_state
+            if cached is not None:
+                payload["app"] = cached
+            return payload
         if name == "app_input":
             if self._input_injector is None:
                 raise RuntimeError("app_input unavailable: no input injector configured")
@@ -472,4 +591,6 @@ class McpRuntimeBridge:
         if name == "app_stop":
             self._stop_requested = True
             return {"stopping": True}
+        if name in self._app_tools:
+            return self.call_app_tool(name, arguments)
         raise KeyError(f"unknown tool: {name}")

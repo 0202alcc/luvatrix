@@ -208,7 +208,7 @@ class UnifiedRuntime:
         rate = FrameRateController(target_fps=target_fps, present_fps=present_fps)
         app_path = Path(app_dir).resolve()
         manifest = self._app_runtime.load_manifest(app_path)
-        mcp_session = self._start_mcp_session(manifest, app_path) if self._mcp_enabled else None
+        mcp_bridge = self._build_mcp_bridge(manifest) if self._mcp_enabled else None
         effective_render_mode = self._render_mode
         if effective_render_mode == "auto":
             if manifest.render_preferred == "matrix":
@@ -229,6 +229,14 @@ class UnifiedRuntime:
             )
         else:
             lifecycle = self._app_runtime.load_lifecycle(resolved.module_dir, resolved.entrypoint)
+        # MCP serving starts only after the lifecycle object exists so
+        # app-defined hooks (mcp_tools/mcp_call/mcp_state) are registered
+        # before clients can discover the session.
+        mcp_session: _McpSession | None = None
+        if mcp_bridge is not None:
+            bridge, log_handler = mcp_bridge
+            bridge.register_app_hooks(lifecycle)
+            mcp_session = self._serve_mcp_session(bridge, log_handler, manifest, app_path)
         runtime_state_setter = self._build_origin_refs_state_setter(lifecycle)
         self._enable_granted_sensors(ctx.sensor_manager, granted)
 
@@ -330,6 +338,8 @@ class UnifiedRuntime:
                 )
                 ctx.hdi.collect_once()
                 lifecycle.loop(ctx, dt)
+                if mcp_session is not None:
+                    mcp_session.bridge.drain_app_calls()
                 self._app_loop_ticks += 1
                 self._app_loop_rate.mark()
                 ticks_run += 1
@@ -397,12 +407,8 @@ class UnifiedRuntime:
             stopped_by_energy_safety=stopped_by_energy_safety,
         )
 
-    def _start_mcp_session(
-        self,
-        manifest: AppManifest,
-        app_path: Path,
-    ) -> _McpSession:
-        """Start the MCP session for this run: bridge, HTTP server, discovery file."""
+    def _build_mcp_bridge(self, manifest: AppManifest) -> tuple[McpRuntimeBridge, RingBufferLogHandler]:
+        """Validate MCP eligibility and build the tool bridge for this run."""
         if manifest.runtime_kind == "process":
             raise ValueError(
                 "MCP mode supports in-process apps only in v1 (runtime.kind = process)"
@@ -412,18 +418,10 @@ class UnifiedRuntime:
                 "MCP mode requested but the app has not opted in: "
                 "set [mcp] enabled = true in app.toml"
             )
-        granted = mcp_capabilities_for_allow(manifest.mcp.allow)
         log_handler = RingBufferLogHandler()
-        root_logger = logging.getLogger()
-        previous_root_log_level = root_logger.level
-        # app_logs is only useful if typical INFO-level app logging flows;
-        # lowered for the session and restored on shutdown.
-        if root_logger.level > logging.INFO:
-            root_logger.setLevel(logging.INFO)
-        root_logger.addHandler(log_handler)
         bridge = McpRuntimeBridge(
             app_id=manifest.app_id,
-            granted_capabilities=granted,
+            granted_capabilities=mcp_capabilities_for_allow(manifest.mcp.allow),
             state_provider=self._runtime_telemetry,
             screenshot_provider=self._mcp_screenshot,
             scene_tree_provider=self._mcp_scene_tree,
@@ -431,15 +429,37 @@ class UnifiedRuntime:
             input_injector=self._hdi.inject_synthetic_event,
             audit_logger=self._capability_audit_logger,
         )
+        return bridge, log_handler
+
+    def _serve_mcp_session(
+        self,
+        bridge: McpRuntimeBridge,
+        log_handler: RingBufferLogHandler,
+        manifest: AppManifest,
+        app_path: Path,
+    ) -> _McpSession:
+        """Start log capture, HTTP transport, and the discovery file."""
+        root_logger = logging.getLogger()
+        previous_root_log_level = root_logger.level
+        # app_logs is only useful if typical INFO-level app logging flows;
+        # lowered for the session and restored on shutdown.
+        if root_logger.level > logging.INFO:
+            root_logger.setLevel(logging.INFO)
+        root_logger.addHandler(log_handler)
         token = generate_session_token()
         server = McpHttpServer(bridge.dispatcher(), token=token)
-        server.start()
+        try:
+            server.start()
+        except Exception:
+            root_logger.removeHandler(log_handler)
+            root_logger.setLevel(previous_root_log_level)
+            raise
         write_discovery_file(
             app_path,
             url=server.url,
             token=token,
             app_id=manifest.app_id,
-            capabilities=granted,
+            capabilities=bridge.granted_capabilities,
         )
         return _McpSession(
             bridge=bridge,
