@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import tomllib
+from typing import Any
 import unittest
 
 from luvatrix.app import validate_app_install
@@ -10,6 +11,18 @@ from luvatrix_ui.figma import FigmaDocument
 
 APP_DIR = Path(__file__).resolve().parents[1] / "examples" / "nomic_desktop"
 DESIGN = APP_DIR / "design" / "figma_file.json"
+
+
+def _destination_ids(node: dict[str, Any]) -> list[str]:
+    destinations: list[str] = []
+    for interaction in node.get("interactions") or []:
+        for action in interaction.get("actions") or []:
+            destination = action.get("destinationId")
+            if destination:
+                destinations.append(str(destination))
+    for child in node.get("children") or []:
+        destinations.extend(_destination_ids(child))
+    return destinations
 
 
 class NomicDesktopExampleTests(unittest.TestCase):
@@ -28,13 +41,34 @@ class NomicDesktopExampleTests(unittest.TestCase):
                 validation = validate_app_install(APP_DIR, render=render)
                 self.assertTrue(validation.ok)
 
-    def test_design_loads_with_desktop_frames(self) -> None:
+    def test_design_loads_complete_desktop_flow(self) -> None:
         doc = FigmaDocument.load(DESIGN)
 
-        self.assertGreaterEqual(len(doc.frames), 1)
+        self.assertEqual(len(doc.frames), 68)
         self.assertIn(doc.start_frame_id, {frame.id for frame in doc.frames})
-        for frame in doc.frames:
-            self.assertEqual((frame.width, frame.height), (1440.0, 900.0)), frame.name
+        frames_by_name = {frame.name: frame for frame in doc.frames}
+        for name in (
+            "Main page",
+            "Filled input",
+            "Reasoning",
+            "Answer ready",
+            "Questions & Answers",
+        ):
+            with self.subTest(frame=name):
+                frame = frames_by_name[name]
+                self.assertEqual((frame.width, frame.height), (1440.0, 900.0))
+
+    def test_design_interactions_only_target_included_frames(self) -> None:
+        doc = FigmaDocument.load(DESIGN)
+
+        frame_ids = {frame.id for frame in doc.frames}
+        destinations = [
+            destination
+            for frame in doc.frames
+            for destination in _destination_ids(frame.node)
+        ]
+        self.assertGreater(len(destinations), 0)
+        self.assertEqual(set(destinations) - frame_ids, set())
 
     def test_manifest_opts_into_mcp(self) -> None:
         # The desktop run workflow launches this app with --mcp; without the
