@@ -243,5 +243,42 @@ class MainCliTests(unittest.TestCase):
         self.assertEqual(upgrade_native.call_args.kwargs["target"], "android")
 
 
+class MacOSAutoTargetWiringTests(unittest.TestCase):
+    def test_auto_mode_gives_matrix_apps_a_real_window_target(self) -> None:
+        from luvatrix_core.platform.macos.metal_scene_target import MacOSMetalSceneTarget
+        from luvatrix_core.targets.metal_target import MetalTarget
+        from main import _build_macos_auto_targets
+
+        scene_backend, scene_target, matrix_backend, matrix_target = _build_macos_auto_targets(
+            width=1440,
+            height=900,
+            title="Nomic",
+            bar_color_rgba=(0, 0, 0, 255),
+            resizable=False,
+            icon_path=None,
+        )
+
+        # --render-mode auto resolves from the app manifest: a matrix-preferred
+        # app (every Figma conversion) presents only to the matrix target, so a
+        # headless fallback would run it alive but with no window on screen.
+        self.assertIsInstance(scene_target, MacOSMetalSceneTarget)
+        self.assertIsInstance(matrix_target, MetalTarget)
+        self.assertIs(matrix_target.presenter.backend, matrix_backend)
+
+    def test_first_window_backend_reports_whichever_backend_started(self) -> None:
+        from main import _FirstWindowBackend
+
+        class _Idle:
+            _window_handle = None
+
+        class _Started:
+            _window_handle = object()
+
+        proxy = _FirstWindowBackend((_Idle(), _Idle()))
+        self.assertIsNone(proxy._window_handle)
+        proxy = _FirstWindowBackend((_Idle(), _Started()))
+        self.assertIsNotNone(proxy._window_handle)
+
+
 if __name__ == "__main__":
     unittest.main()

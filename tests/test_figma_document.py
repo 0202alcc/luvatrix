@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 from pathlib import Path
 
@@ -76,6 +77,19 @@ def test_load_accepts_a_nodes_endpoint_payload(tmp_path: Path) -> None:
     payload = {"name": "Nodes", "nodes": {"1:1": {"document": home}}}
     path = tmp_path / "design.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+    doc = FigmaDocument.load(path)
+
+    assert doc.start_frame_id == "1:1"
+    assert doc.base_dir == tmp_path
+
+
+def test_load_accepts_a_gzipped_design(tmp_path: Path) -> None:
+    # Full Figma pulls are 100+ MB of vector JSON; shipping them gzipped keeps
+    # the repo lean, so load() must transparently inflate them.
+    path = tmp_path / "figma_file.json.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as f:
+        json.dump(two_screen_file(), f)
 
     doc = FigmaDocument.load(path)
 

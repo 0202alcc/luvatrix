@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+import gzip
 import json
 from pathlib import Path
 from typing import Any
@@ -156,8 +157,13 @@ class FigmaDocument:
     @classmethod
     def load(cls, path: str | Path, *, start: str | None = None) -> "FigmaDocument":
         path = Path(path)
+        raw = path.read_bytes()
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            # Full pulls are 100+ MB of vector JSON, so a design may be stored
+            # gzipped to keep repos lean; sniff the magic bytes rather than the
+            # suffix so "figma_file.json" works either way.
+            text = gzip.decompress(raw).decode("utf-8") if raw[:2] == b"\x1f\x8b" else raw.decode("utf-8")
+            data = json.loads(text)
         except json.JSONDecodeError as exc:
             raise FigmaFormatError(f"{path} is not valid JSON: {exc}") from exc
         return cls(data, base_dir=path.parent, start=start)
