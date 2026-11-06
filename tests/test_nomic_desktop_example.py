@@ -36,6 +36,13 @@ class NomicDesktopExampleTests(unittest.TestCase):
         for frame in doc.frames:
             self.assertEqual((frame.width, frame.height), (1440.0, 900.0)), frame.name
 
+    def test_manifest_opts_into_mcp(self) -> None:
+        # The desktop run workflow launches this app with --mcp; without the
+        # manifest gate the runtime refuses to start MCP and the launch fails.
+        manifest = tomllib.loads((APP_DIR / "app.toml").read_text(encoding="utf-8"))
+
+        self.assertTrue(manifest["mcp"]["enabled"])
+
     def test_display_icon_is_the_nomic_mark(self) -> None:
         manifest = tomllib.loads((APP_DIR / "app.toml").read_text(encoding="utf-8"))
 
