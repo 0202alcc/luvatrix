@@ -11,6 +11,7 @@ from ..frame_pipeline import PresentationMode, normalize_presentation_mode
 class MacOSWindowHandle:
     window: object
     layer: object
+    delegate: object | None = None
 
 
 @dataclass(frozen=True)
@@ -155,10 +156,22 @@ class AppKitWindowSystem:
                 window.setContentMaxSize_(frame.size)
             except Exception:
                 pass
+        # NSMakeRect(0, 0, ...) would otherwise leave the window at the
+        # screen's bottom-left corner, half-hidden under the Dock and other
+        # windows on first launch.
+        window.center()
         window.makeKeyAndOrderFront_(None)
+        delegate = _WindowDelegate.alloc()
+        init = getattr(delegate, "init", None)
+        if callable(init):
+            try:
+                delegate = init()
+            except Exception:
+                pass
+        window.setDelegate_(delegate)
         self._install_main_menu(app=app, menu_config=menu_config)
         app.activateIgnoringOtherApps_(True)
-        return MacOSWindowHandle(window=window, layer=layer)
+        return MacOSWindowHandle(window=window, layer=layer, delegate=delegate)
 
     def _set_application_icon(
         self,
@@ -211,6 +224,9 @@ class AppKitWindowSystem:
     def destroy_window(self, handle: MacOSWindowHandle) -> None:
         window = handle.window
         try:
+            # Detach first so a deliberate teardown does not re-enter via
+            # windowWillClose_ -> terminate_.
+            window.setDelegate_(None)
             window.orderOut_(None)
             window.close()
         except Exception:  # noqa: BLE001
@@ -286,6 +302,56 @@ class AppKitWindowSystem:
 
 
 _MENU_ACTION_TARGET_CLASS_NAME = "_LuvatrixDebugMenuTarget"
+_WINDOW_DELEGATE_CLASS_NAME = "LuvatrixWindowDelegate"
+_WINDOW_DELEGATE_CLASS: type[object] | None = None
+
+
+def _resolve_window_delegate_class() -> type[object] | None:
+    global _WINDOW_DELEGATE_CLASS
+    if _WINDOW_DELEGATE_CLASS is not None:
+        return _WINDOW_DELEGATE_CLASS
+    try:
+        from Foundation import NSObject  # type: ignore
+    except Exception:
+        return None
+    try:
+        import objc  # type: ignore
+
+        existing = objc.lookUpClass(_WINDOW_DELEGATE_CLASS_NAME)
+        if existing is not None:
+            _WINDOW_DELEGATE_CLASS = existing
+            return existing
+    except Exception:
+        pass
+    dynamic = type(
+        _WINDOW_DELEGATE_CLASS_NAME,
+        (NSObject,),
+        {"windowWillClose_": _WindowDelegate.windowWillClose_},
+    )
+    _WINDOW_DELEGATE_CLASS = dynamic
+    return dynamic
+
+
+class _WindowDelegate:
+    @classmethod
+    def alloc(cls):
+        delegate_cls = _resolve_window_delegate_class()
+        if delegate_cls is None:
+            return cls()
+        return delegate_cls.alloc()
+
+    def windowWillClose_(self, _notification):
+        # Closing the only window quits the app: a windowless luvatrix
+        # process has no affordance to open a new one and zombifies in the
+        # Dock.
+        try:
+            from AppKit import NSApplication  # type: ignore
+
+            NSApplication.sharedApplication().terminate_(None)
+        except Exception:
+            pass
+
+
 _MENU_ACTION_TARGET_CLASS: type[object] | None = None
 
 

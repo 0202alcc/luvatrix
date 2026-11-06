@@ -1,0 +1,214 @@
+name: macOS Desktop Run
+
+# Launches a luvatrix app as a native macOS window on the self-hosted Mac
+# runner and leaves it open for interactive use. Never triggers on
+# pull_request: the repository is public and this opens a GUI on someone's
+# machine. Pushes relaunch only when the desktop app itself changed (the
+# previous window is killed first), and workflow_dispatch needs the workflow
+# on the default branch, so the path-scoped push trigger is what makes a
+# feature branch launchable before anything reaches main. The runtime sources
+# are watched too: `run-app` executes main.py and the luvatrix packages from
+# the checkout, so a runtime fix changes what the launch puts on screen.
+on:
+  push:
+    branches: ["feature/**", "dev-alec/**"]
+    paths:
+      - "examples/nomic_desktop/**"
+      - ".github/workflows/macos-desktop-run.yml"
+      - "main.py"
+      - "luvatrix/**"
+      - "luvatrix_core/**"
+      - "luvatrix_ui/**"
+      - "luvatrix_plot/**"
+      - "uv.lock"
+  workflow_dispatch:
+    inputs:
+      app_dir:
+        description: App folder to launch
+        default: examples/nomic_desktop
+      render:
+        description: macOS render target
+        default: macos-metal
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-desktop-run
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: Launch ${{ inputs.app_dir }} on macOS
+    if: ${{ vars.LUVATRIX_IOS_SIM_RUNNER == '1' }}
+    runs-on: [self-hosted, macOS, ios-sim]
+    timeout-minutes: 15
+    env:
+      APP_DIR: ${{ inputs.app_dir || 'examples/nomic_desktop' }}
+      RENDER: ${{ inputs.render || 'macos-metal' }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
+
+      - name: Sync deps
+        # macos-metal checks the macos extra (PyObjC/AppKit/Metal + torch).
+        run: uv sync --frozen --extra macos
+
+      - name: Check app example is present
+        id: app
+        run: |
+          if [ -d "$APP_DIR" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$APP_DIR is not on this branch; skipping launch."
+          fi
+
+      - name: Validate app
+        if: steps.app.outputs.exists == 'true'
+        run: uv run python main.py validate-app "$APP_DIR" --render "$RENDER"
+
+      - name: Launch app detached
+        if: steps.app.outputs.exists == 'true'
+        run: |
+          echo "previous instance (before relaunch):"
+          pgrep -fl "main.py run-app $APP_DIR" || echo "  (none alive — the last launch died after its job)"
+          echo "recent crash reports:"
+          ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -iE "python|caffeinate|^Nomic" | head -5 || true
+          echo "previous app log tail (~/nomic-desktop-run.log):"
+          tail -20 "$HOME/nomic-desktop-run.log" 2>/dev/null || echo "  (no log)"
+          # Capture the screen BEFORE touching anything, so "I don't see a
+          # window" reports can be compared against the pre-relaunch state.
+          screencapture -x "$RUNNER_TEMP/pre-launch.png" 2>/dev/null || true
+          pkill -f "main.py run-app $APP_DIR" 2>/dev/null || true
+          # The app writes to a persistent home-dir log so post-job crashes
+          # leave evidence the next run can read; RUNNER_TEMP is per-job.
+          LOG="$HOME/nomic-desktop-run.log"
+          : > "$LOG"
+          # The runner reaps orphaned processes when the job ends ("Cleaning
+          # up orphan processes") by matching a per-job RUNNER_TRACKING_ID
+          # env marker, so a plain nohup+disown app dies with the job. A
+          # throwaway .app launched via `open` lands fronted in the console
+          # session with a Dock icon; the launch script inside scrubs the
+          # tracking marker so the reaper skips it, and execs the app
+          # directly (no caffeinate/uv middlemen) so the bundle-registered
+          # pid IS the NSApplication process — otherwise LaunchServices
+          # never sees the launch finish and the Dock icon bounces forever.
+          # The bundle must live outside RUNNER_TEMP: the runner deletes
+          # _temp when the job ends, and LaunchServices resolves the Dock
+          # tile's icon/name from the bundle path — a deleted bundle turns
+          # the running app's tile into a blank page, and clicking it
+          # relaunches nothing (endless bounce).
+          BUNDLE="$HOME/.nomic-desktop/NomicDesktop.app"
+          rm -rf "$BUNDLE"
+          mkdir -p "$BUNDLE/Contents/MacOS"
+          cat > "$BUNDLE/Contents/Info.plist" <<'EOF_PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>launch</string>
+            <key>CFBundleIdentifier</key><string>ai.nomic.desktop.dev</string>
+            <key>CFBundleName</key><string>Nomic</string>
+            <key>CFBundleDisplayName</key><string>Nomic</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleVersion</key><string>1</string>
+          </dict>
+          </plist>
+          EOF_PLIST
+          cat > "$BUNDLE/Contents/MacOS/launch" <<EOF_LAUNCH
+          #!/bin/bash
+          # The runner's end-of-job cleanup kills every process carrying its
+          # per-job RUNNER_TRACKING_ID env marker ("Cleaning up orphan
+          # processes"). Scrub it so this deliberately kept-open app is
+          # invisible to the reaper — the same protection the iOS tour gets
+          # from simctl's environment sanitizing.
+          unset RUNNER_TRACKING_ID
+          # Python block-buffers stdout when redirected; without this the
+          # uploaded startup log stays empty.
+          export PYTHONUNBUFFERED=1
+          cd "$GITHUB_WORKSPACE" || exit 1
+          # Keep the Mac awake only while the app lives ($$ becomes the app's
+          # pid after exec).
+          caffeinate -dims -w $$ &
+          # exec the venv python directly: the bundle-registered pid becomes
+          # the NSApplication process, so LaunchServices sees the launch
+          # finish and the Dock icon stops bouncing. --mcp turns on MCP mode
+          # (paired with [mcp] enabled in the app manifest): the app serves
+          # 127.0.0.1-only agent inspection/control until app_stop, with the
+          # bearer-token session file at $APP_DIR/.luvatrix/mcp-session.json.
+          exec "$GITHUB_WORKSPACE/.venv/bin/python" main.py run-app "$APP_DIR" --render "$RENDER" --mcp >>"$LOG" 2>&1
+          EOF_LAUNCH
+          chmod +x "$BUNDLE/Contents/MacOS/launch"
+          open -n "$BUNDLE"
+          sleep 20
+          if ! pgrep -f "main.py run-app $APP_DIR" >/dev/null; then
+            echo "app exited during startup; log follows"
+            cat "$LOG"
+            exit 1
+          fi
+          echo "app is running outside the runner's process tree; window should be on screen"
+          cp "$LOG" "$RUNNER_TEMP/desktop-run.log"
+
+      - name: Diagnose window session
+        if: steps.app.outputs.exists == 'true'
+        run: |
+          echo "runner: user=$(id -un) uid=$(id -u); console owner=$(stat -f %Su /dev/console) uid=$(stat -f %u /dev/console)"
+          echo "frontmost app:"
+          osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null || echo "  (unknown)"
+          echo "displays:"
+          system_profiler SPDisplaysDataType 2>/dev/null | grep -E "Display Type|Resolution|UI Looks like|Main Display|Mirror" || echo "  (unknown)"
+          echo "pinned Dock entries mentioning nomic:"
+          defaults read com.apple.dock persistent-apps 2>/dev/null | grep -i -B2 -A2 nomic || echo "  (none pinned)"
+          echo "app process:"
+          pgrep -fl "main.py run-app $APP_DIR" || echo "  (not running)"
+          echo "MCP session (token intentionally not printed):"
+          if [ -f "$APP_DIR/.luvatrix/mcp-session.json" ]; then
+            uv run python - "$APP_DIR" <<'EOF'
+          import json, pathlib, sys
+          s = json.loads(pathlib.Path(sys.argv[1], ".luvatrix/mcp-session.json").read_text())
+          print("  url:", s["url"], "| pid:", s["pid"], "| capabilities:", s["capabilities"])
+          EOF
+          else
+            echo "  (no .luvatrix/mcp-session.json — MCP off or still starting)"
+          fi
+          echo "windows visible to the window server:"
+          uv run python - <<'EOF'
+          import Quartz
+          wins = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionAll, Quartz.kCGNullWindowID) or []
+          mine = [w for w in wins if "python" in str(w.get("kCGWindowOwnerName", "")).lower() or "nomic" in str(w.get("kCGWindowOwnerName", "")).lower()]
+          print(f"  {len(mine)} matching window(s) of {len(wins)} total")
+          for w in mine:
+              print("  window:", w.get("kCGWindowOwnerName"), w.get("kCGWindowNumber"), w.get("kCGWindowBounds"), w.get("kCGWindowOwnerPID"))
+          EOF
+
+      - name: Bring Nomic to the front
+        if: steps.app.outputs.exists == 'true'
+        run: |
+          # Re-activating the bundle raises the running instance's window;
+          # doing it as the job's last action leaves Nomic frontmost.
+          open "$HOME/.nomic-desktop/NomicDesktop.app"
+          sleep 2
+          osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null || true
+
+      - name: Screenshot
+        run: |
+          # Needs an unlocked GUI session and Screen Recording permission for
+          # the runner's host process; failure is non-fatal, the log is enough.
+          screencapture -x "$RUNNER_TEMP/desktop-app.png" || echo "screencapture failed"
+
+      - name: Upload log and screenshot
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-desktop-run-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/desktop-run.log
+            ${{ runner.temp }}/desktop-app*.png
+            ${{ runner.temp }}/pre-launch*.png
+          if-no-files-found: warn
+          retention-days: 14

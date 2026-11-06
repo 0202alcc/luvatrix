@@ -3,7 +3,9 @@ from __future__ import annotations
 import io
 import json
 from pathlib import Path
+import re
 import sys
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 from PIL import Image
@@ -198,3 +200,211 @@ def test_main_cli_figma_ios_tour_forwards_keep_open(tmp_path: Path) -> None:
 
     assert exit_info.value.code == 0
     assert run.call_args.kwargs["keep_open"] is True
+
+
+def test_parse_figma_folder_link() -> None:
+    from luvatrix_ui.figma.cli import parse_figma_folder_link
+
+    assert parse_figma_folder_link("417193958") == "417193958"
+    assert (
+        parse_figma_folder_link(
+            "https://www.figma.com/files/team/1251537693745638777/folder/417193958?fuid=1691492891469518749"
+        )
+        == "417193958"
+    )
+    with pytest.raises(FigmaApiError, match="folder"):
+        parse_figma_folder_link("https://www.figma.com/design/AbC123/My-App")
+
+
+class _FakeFigmaFolder:
+    """Serves the project file list plus one file payload per file key."""
+
+    def __init__(self, files: list[dict], payloads: dict[str, dict]) -> None:
+        self.files = files
+        self.payloads = payloads
+        self.requests: list[tuple[str, dict[str, str]]] = []
+
+    def __call__(self, request, timeout: float = 0):
+        url = request.full_url
+        self.requests.append((url, dict(request.header_items())))
+        if "/v2/folders/" in url:
+            return _Response(json.dumps({"name": "Folder", "files": self.files}).encode())
+        if "/projects/" in url:
+            return _Response(json.dumps({"files": self.files}).encode())
+        match = re.search(r"/files/([^/?]+)", url)
+        payload = self.payloads.get(match.group(1), {"status": 404, "err": "not found"}) if match else {}
+        return _Response(json.dumps(payload).encode())
+
+
+class _FakeFolderListing:
+    """Serves only the folder listing endpoints, with configurable 403s."""
+
+    def __init__(self, files: list[dict], *, v2_status: int = 200, v1_status: int = 200) -> None:
+        self.files = files
+        self.v2_status = v2_status
+        self.v1_status = v1_status
+        self.requests: list[tuple[str, dict[str, str]]] = []
+
+    def __call__(self, request, timeout: float = 0):
+        url = request.full_url
+        self.requests.append((url, dict(request.header_items())))
+        if "/v2/folders/" in url:
+            if self.v2_status != 200:
+                raise HTTPError(url, self.v2_status, "Forbidden", None, io.BytesIO(b'{"error":true,"status":403,"message":"Invalid scope"}'))
+            return _Response(json.dumps({"name": "Folder", "files": self.files}).encode())
+        if "/projects/" in url:
+            if self.v1_status != 200:
+                raise HTTPError(url, self.v1_status, "Forbidden", None, io.BytesIO(b'{"error":true,"status":403,"message":"Invalid scope"}'))
+            return _Response(json.dumps({"files": self.files}).encode())
+        raise AssertionError(f"unexpected url {url}")
+
+
+def test_pull_folder_lists_and_pulls_every_file(tmp_path: Path) -> None:
+    from luvatrix_ui.figma.cli import pull_folder
+
+    files = [
+        {"key": "AbC123", "name": "Nomic Desktop", "last_modified": "2026-11-01"},
+        {"key": "XyZ789", "name": "Nomic Mobile", "last_modified": "2026-11-02"},
+    ]
+    fake = _FakeFigmaFolder(files, {"AbC123": two_screen_file(), "XyZ789": two_screen_file()})
+
+    results = pull_folder(
+        "https://www.figma.com/files/team/1251537693745638777/folder/417193958?fuid=1",
+        tmp_path,
+        token="secret",
+        opener=fake,
+    )
+
+    assert [r["name"] for r in results] == ["Nomic Desktop", "Nomic Mobile"]
+    assert results[0]["path"] == tmp_path / "nomic_desktop" / "figma_file.json"
+    assert results[1]["path"] == tmp_path / "nomic_mobile" / "figma_file.json"
+    assert results[0]["path"].is_file()
+    assert results[1]["path"].is_file()
+    list_url, headers = fake.requests[0]
+    assert list_url == "https://api.figma.com/v2/folders/417193958/files"
+    assert headers.get("X-figma-token") == "secret"
+
+
+def test_list_project_files_uses_the_v2_folders_endpoint_first() -> None:
+    from luvatrix_ui.figma.cli import list_project_files
+
+    fake = _FakeFolderListing([{"key": "AbC123", "name": "A", "thumbnail_url": "", "last_modified": "x"}])
+
+    files = list_project_files("417193958", token="t", opener=fake)
+
+    assert [f["key"] for f in files] == ["AbC123"]
+    url, headers = fake.requests[0]
+    assert url == "https://api.figma.com/v2/folders/417193958/files"
+    assert headers.get("X-figma-token") == "t"
+
+
+def test_list_project_files_falls_back_to_v1_projects_when_v2_forbids() -> None:
+    from luvatrix_ui.figma.cli import list_project_files
+
+    # Older tokens carry projects:read but not folders:read; newer tokens are
+    # the reverse. The v1 projects endpoint is deprecated but still serves
+    # those older tokens, so a v2 403 falls back to it.
+    fake = _FakeFolderListing([{"key": "AbC123", "name": "A"}], v2_status=403)
+
+    files = list_project_files("417193958", token="t", opener=fake)
+
+    assert [f["key"] for f in files] == ["AbC123"]
+    assert [url for url, _ in fake.requests] == [
+        "https://api.figma.com/v2/folders/417193958/files",
+        "https://api.figma.com/v1/projects/417193958/files",
+    ]
+
+
+def test_list_project_files_raises_a_combined_error_when_both_endpoints_forbid() -> None:
+    from luvatrix_ui.figma.cli import list_project_files
+
+    fake = _FakeFolderListing([], v2_status=403, v1_status=403)
+
+    with pytest.raises(FigmaApiError, match="v2 folders endpoint"):
+        list_project_files("417193958", token="t", opener=fake)
+
+
+def test_pull_folder_continues_past_a_failing_file(tmp_path: Path) -> None:
+    from luvatrix_ui.figma.cli import pull_folder
+
+    files = [
+        {"key": "AbC123", "name": "Good"},
+        {"key": "Bad404", "name": "Restricted"},
+    ]
+    fake = _FakeFigmaFolder(files, {"AbC123": two_screen_file()})
+
+    results = pull_folder("417193958", tmp_path, token="t", opener=fake)
+
+    assert results[0]["path"] == tmp_path / "good" / "figma_file.json"
+    assert "error" in results[1]
+    assert results[1]["name"] == "Restricted"
+
+
+def test_pull_folder_disambiguates_duplicate_file_names(tmp_path: Path) -> None:
+    from luvatrix_ui.figma.cli import pull_folder
+
+    files = [{"key": "AbC123", "name": "Same"}, {"key": "XyZ789", "name": "Same"}]
+    fake = _FakeFigmaFolder(files, {"AbC123": two_screen_file(), "XyZ789": two_screen_file()})
+
+    results = pull_folder("417193958", tmp_path, token="t", opener=fake)
+
+    assert results[0]["path"] != results[1]["path"]
+    assert all(r["path"].is_file() for r in results)
+
+
+def test_init_app_with_design_imports_the_json_and_images(tmp_path: Path) -> None:
+    pulled = tmp_path / "pulled"
+    (pulled / "images").mkdir(parents=True)
+    (pulled / "figma_file.json").write_text(json.dumps(two_screen_file()), encoding="utf-8")
+    (pulled / "images" / "ref1.png").write_bytes(_png_bytes())
+
+    root = init_figma_app(tmp_path / "desktop_app", design=pulled)
+
+    assert (root / "design" / "figma_file.json").read_text() == (pulled / "figma_file.json").read_text()
+    assert (root / "design" / "images" / "ref1.png").read_bytes() == (pulled / "images" / "ref1.png").read_bytes()
+    doc = FigmaDocument.load(root / "design" / "figma_file.json")
+    assert doc.image_path("ref1") == root / "design" / "images" / "ref1.png"
+
+
+def test_init_app_with_design_rejects_a_dir_without_figma_file_json(tmp_path: Path) -> None:
+    pulled = tmp_path / "pulled"
+    pulled.mkdir()
+
+    with pytest.raises(FigmaApiError, match="figma_file.json"):
+        init_figma_app(tmp_path / "desktop_app", design=pulled)
+
+
+def test_main_cli_figma_pull_folder_forwards_arguments(tmp_path: Path) -> None:
+    from main import main
+
+    argv = [
+        "luvatrix", "figma", "pull-folder",
+        "https://www.figma.com/files/team/1251537693745638777/folder/417193958?fuid=1",
+        "--out", str(tmp_path / "designs"),
+    ]
+
+    with patch.object(sys, "argv", argv), patch("luvatrix_ui.figma.cli.pull_folder", return_value=[]) as pull:
+        main()
+
+    pull.assert_called_once_with(
+        "https://www.figma.com/files/team/1251537693745638777/folder/417193958?fuid=1",
+        tmp_path / "designs",
+        token=None,
+    )
+
+
+def test_main_cli_figma_init_app_forwards_design(tmp_path: Path) -> None:
+    from main import main
+
+    argv = [
+        "luvatrix", "figma", "init-app", "examples/nomic_desktop",
+        "--width", "1440", "--height", "900",
+        "--design", str(tmp_path / "pulled"),
+    ]
+
+    with patch.object(sys, "argv", argv), patch("luvatrix_ui.figma.cli.init_figma_app") as init:
+        init.return_value = Path("examples/nomic_desktop")
+        main()
+
+    assert init.call_args.kwargs["design"] == tmp_path / "pulled"
+    assert init.call_args.kwargs["width"] == 1440

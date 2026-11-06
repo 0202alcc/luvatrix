@@ -6,10 +6,12 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
 API = "https://api.figma.com/v1"
+API_V2 = "https://api.figma.com/v2"
 Opener = Callable[..., Any]
 
 APP_TOML = """app_id = "{app_id}"
@@ -47,6 +49,17 @@ def create() -> FigmaApp:
 
 class FigmaApiError(RuntimeError):
     pass
+
+
+def parse_figma_folder_link(link: str) -> str:
+    """Return the project (folder) id from a Figma folder URL or a bare id."""
+    if "://" not in link:
+        return link.strip()
+    parsed = urlparse(link)
+    match = re.search(r"/folder/(\d+)", parsed.path)
+    if match is None:
+        raise FigmaApiError(f"not a Figma folder link: {link}")
+    return match.group(1)
 
 
 def parse_figma_link(link: str) -> tuple[str, list[str] | None]:
@@ -92,6 +105,13 @@ def _image_refs(node: Any) -> Iterator[str]:
             yield from _image_refs(item)
 
 
+def _resolve_token(token: str | None) -> str:
+    token = token or os.environ.get("FIGMA_TOKEN")
+    if not token:
+        raise FigmaApiError("set FIGMA_TOKEN (a Figma personal access token) or pass --token")
+    return token
+
+
 def pull_design(
     file_key: str,
     out_dir: str | Path,
@@ -101,9 +121,7 @@ def pull_design(
     opener: Opener | None = None,
 ) -> Path:
     """Download a Figma file (or nodes) with vector geometry plus its image fills."""
-    token = token or os.environ.get("FIGMA_TOKEN")
-    if not token:
-        raise FigmaApiError("set FIGMA_TOKEN (a Figma personal access token) or pass --token")
+    token = _resolve_token(token)
     out = Path(out_dir)
     ids = list(node_ids or ())
     if ids:
@@ -161,7 +179,99 @@ def render_design(design: str | Path, out_dir: str | Path, *, frame: str | None 
     return written
 
 
-def init_figma_app(app_dir: str | Path, *, app_id: str | None = None, width: int = 393, height: int = 852) -> Path:
+def _list_files_payload(url: str, token: str, opener: Opener | None) -> dict[str, Any]:
+    payload = json.loads(_get(url, token, opener))
+    if payload.get("err") or payload.get("status", 200) >= 400:
+        raise FigmaApiError(f"Figma API error: {payload.get('err') or payload}")
+    return payload
+
+
+def list_project_files(project_id: str, *, token: str | None = None, opener: Opener | None = None) -> list[dict[str, Any]]:
+    """List the files directly inside a Figma project (folder).
+
+    Prefers the v2 folders endpoint (scope ``folders:read``). The deprecated
+    v1 projects endpoint 403s for tokens minted after Aug 2026 but still
+    serves older tokens that carry ``projects:read`` without ``folders:read``,
+    so a v2 failure falls back to it.
+    """
+    token = _resolve_token(token)
+    v2_url = f"{API_V2}/folders/{project_id}/files"
+    v1_url = f"{API}/projects/{project_id}/files"
+    try:
+        payload = _list_files_payload(v2_url, token, opener)
+    except FigmaApiError as v2_error:
+        try:
+            payload = _list_files_payload(v1_url, token, opener)
+        except FigmaApiError as v1_error:
+            raise FigmaApiError(
+                f"could not list folder {project_id}: v2 folders endpoint failed ({v2_error}); "
+                f"v1 projects endpoint failed ({v1_error})"
+            ) from v1_error
+    files = payload.get("files")
+    if not isinstance(files, list):
+        raise FigmaApiError(f"unexpected project files response: {payload}")
+    return [f for f in files if isinstance(f, dict) and f.get("key")]
+
+
+def _design_slug(name: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9._ -]+", "_", name).strip().lower().replace(" ", "_").strip("_")
+    return slug or "design"
+
+
+def pull_folder(
+    link: str,
+    out_dir: str | Path,
+    *,
+    token: str | None = None,
+    opener: Opener | None = None,
+) -> list[dict[str, Any]]:
+    """Pull every file in a Figma folder into per-file design dirs under ``out_dir``.
+
+    Returns one entry per file: ``{"key", "name", "path"}`` on success, or
+    ``{"key", "name", "error"}`` when that file could not be pulled (e.g. the
+    token cannot access it); one restricted file does not stop the rest.
+    """
+    token = _resolve_token(token)
+    project_id = parse_figma_folder_link(link)
+    out = Path(out_dir)
+    results: list[dict[str, Any]] = []
+    used: set[str] = set()
+    for file in list_project_files(project_id, token=token, opener=opener):
+        key = str(file["key"])
+        name = str(file.get("name") or key)
+        entry: dict[str, Any] = {"key": key, "name": name}
+        slug = _design_slug(name)
+        if slug in used:
+            slug = f"{slug}-{key[:6].lower()}"
+        used.add(slug)
+        try:
+            entry["path"] = pull_design(key, out / slug, token=token, opener=opener)
+        except FigmaApiError as exc:
+            entry["error"] = str(exc)
+        results.append(entry)
+    return results
+
+
+def _import_design(target: Path, source: Path) -> None:
+    """Copy a pulled design (figma_file.json plus images/) into an app folder."""
+    source_dir = source if source.is_dir() else source.parent
+    json_path = source_dir / "figma_file.json"
+    if not json_path.is_file():
+        raise FigmaApiError(f"{source_dir} has no figma_file.json; pull the design first")
+    shutil.copy2(json_path, target / "figma_file.json")
+    images = source_dir / "images"
+    if images.is_dir():
+        shutil.copytree(images, target / "images", dirs_exist_ok=True)
+
+
+def init_figma_app(
+    app_dir: str | Path,
+    *,
+    app_id: str | None = None,
+    width: int = 393,
+    height: int = 852,
+    design: str | Path | None = None,
+) -> Path:
     """Create a Luvatrix app folder that runs `design/figma_file.json` as a prototype."""
     root = Path(app_dir)
     if (root / "app.toml").exists():
@@ -172,6 +282,8 @@ def init_figma_app(app_dir: str | Path, *, app_id: str | None = None, width: int
         APP_TOML.format(app_id=app_id or f"figma.{root.name}", width=width, height=height, title=title), encoding="utf-8"
     )
     (root / "app_main.py").write_text(APP_MAIN, encoding="utf-8")
+    if design is not None:
+        _import_design(root / "design", Path(design))
     return root
 
 
@@ -184,6 +296,11 @@ def add_figma_parser(subparsers: Any) -> None:
     pull.add_argument("--out", type=Path, required=True, help="Directory for figma_file.json and images/")
     pull.add_argument("--token", default=None, help="Personal access token (defaults to $FIGMA_TOKEN)")
     pull.add_argument("--ids", default=None, help="Comma-separated node ids to fetch instead of the whole file")
+
+    pullf = sub.add_parser("pull-folder", help="Download every file in a Figma folder into per-file design dirs")
+    pullf.add_argument("link", help="Figma folder URL (…/folder/<id>) or project id")
+    pullf.add_argument("--out", type=Path, required=True, help="Directory for one <file-slug>/ design dir per file")
+    pullf.add_argument("--token", default=None, help="Personal access token (defaults to $FIGMA_TOKEN)")
 
     render = sub.add_parser("render", help="Render frames of a saved Figma export to PNG")
     render.add_argument("design", type=Path, help="Path to figma_file.json")
@@ -210,6 +327,7 @@ def add_figma_parser(subparsers: Any) -> None:
     init.add_argument("--app-id", default=None)
     init.add_argument("--width", type=int, default=393, help="Device width in points")
     init.add_argument("--height", type=int, default=852, help="Device height in points")
+    init.add_argument("--design", type=Path, default=None, help="Import a pulled design dir (figma_file.json + images/) into the app")
 
     tour = sub.add_parser("ios-tour", help="Run a scripted tour in the iOS Simulator and screenshot each capture")
     tour.add_argument("app_dir", type=Path)
@@ -228,6 +346,15 @@ def run_figma_command(args: Any) -> None:
         ids = [i.strip() for i in args.ids.split(",")] if args.ids else link_ids
         path = pull_design(key, args.out, token=args.token, node_ids=ids)
         print(f"[luvatrix] Saved Figma design to {path}")
+    elif args.figma_command == "pull-folder":
+        results = pull_folder(args.link, args.out, token=args.token)
+        for entry in results:
+            if "path" in entry:
+                print(f"[luvatrix] Pulled {entry['name']} → {entry['path']}")
+            else:
+                print(f"[luvatrix] FAILED {entry['name']}: {entry['error']}")
+        if any("error" in entry for entry in results):
+            raise SystemExit(1)
     elif args.figma_command == "render":
         for path in render_design(args.design, args.out, frame=args.frame, scale=args.scale):
             print(f"[luvatrix] Rendered {path}")
@@ -255,8 +382,11 @@ def run_figma_command(args: Any) -> None:
             f"({len(result.images)} images, {len(result.clickables)} clickables)"
         )
     elif args.figma_command == "init-app":
-        root = init_figma_app(args.app_dir, app_id=args.app_id, width=args.width, height=args.height)
-        print(f"[luvatrix] Created Figma app at {root}; pull a design into {root / 'design'}")
+        root = init_figma_app(args.app_dir, app_id=args.app_id, width=args.width, height=args.height, design=args.design)
+        if args.design is not None:
+            print(f"[luvatrix] Created Figma app at {root} with the design from {args.design}")
+        else:
+            print(f"[luvatrix] Created Figma app at {root}; pull a design into {root / 'design'}")
     elif args.figma_command == "ios-tour":
         from . import ios_tour
 

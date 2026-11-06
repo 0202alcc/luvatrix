@@ -61,6 +61,69 @@ class _MacOSPresenterHDISource:
         return self._inner.poll(window_active, ts_ns)
 
 
+class _FirstWindowBackend:
+    """Exposes the window handle of whichever macOS backend actually started.
+
+    With --render-mode auto the runtime starts either the scene target or the
+    matrix fallback target, never both, so exactly one backend owns a window.
+    """
+
+    def __init__(self, backends: tuple[object, ...]) -> None:
+        self._backends = backends
+
+    @property
+    def _window_handle(self):
+        for backend in self._backends:
+            handle = getattr(backend, "_window_handle", None)
+            if handle is not None:
+                return handle
+        return None
+
+
+def _build_macos_auto_targets(
+    *,
+    width: int,
+    height: int,
+    title: str,
+    bar_color_rgba: tuple[int, int, int, int],
+    resizable: bool,
+    icon_path: str | None,
+) -> tuple[object, object, object, object]:
+    """Build (scene_backend, scene_target, matrix_backend, matrix_target) for
+    --render macos[-metal] with --render-mode auto/scene.
+
+    The matrix fallback must be a real windowed target: --render-mode auto
+    resolves from the app manifest, and a matrix-preferred app (every Figma
+    conversion) presents only to the matrix target. A headless fallback runs
+    the app alive with no window on screen.
+    """
+    from luvatrix_core.platform.macos.metal_presenter import MacOSMetalPresenter
+    from luvatrix_core.platform.macos.metal_scene_target import MacOSMetalSceneBackend, MacOSMetalSceneTarget
+    from luvatrix_core.targets.metal_target import MetalTarget
+
+    scene_backend = MacOSMetalSceneBackend(
+        bar_color_rgba=bar_color_rgba,
+        resizable=resizable,
+        icon_path=icon_path,
+    )
+    scene_target = MacOSMetalSceneTarget(
+        width=width,
+        height=height,
+        title=title,
+        backend=scene_backend,
+    )
+    matrix_presenter = MacOSMetalPresenter(
+        width=width,
+        height=height,
+        title=title,
+        bar_color_rgba=bar_color_rgba,
+        resizable=resizable,
+        icon_path=icon_path,
+    )
+    matrix_target = MetalTarget(presenter=matrix_presenter)
+    return scene_backend, scene_target, matrix_presenter.backend, matrix_target
+
+
 def _make_macos_window_geometry_provider(backend) -> tuple[float, float, float, float]:
     def _provider() -> tuple[float, float, float, float]:
         handle = getattr(backend, "_window_handle", None)
@@ -585,29 +648,24 @@ def main() -> None:
                     target_extent_provider=lambda: (float(matrix_width), float(matrix_height)),
                 )
             elif args.render in ("macos", "macos-metal") and args.render_mode in ("auto", "scene"):
-                from luvatrix_core.platform.macos.metal_scene_target import MacOSMetalSceneBackend, MacOSMetalSceneTarget
-
-                scene_backend = MacOSMetalSceneBackend(
+                scene_backend, scene_target, matrix_backend, target = _build_macos_auto_targets(
+                    width=width,
+                    height=height,
+                    title=app_title,
                     bar_color_rgba=bar_color,
                     resizable=not has_native,
                     icon_path=icon_path,
                 )
-                scene_target = MacOSMetalSceneTarget(
-                    width=width,
-                    height=height,
-                    title=app_title,
-                    backend=scene_backend,
-                )
-                target = _HeadlessTarget()
                 hdi_source = _MacOSPresenterHDISource()
+                window_backend = _FirstWindowBackend((scene_backend, matrix_backend))
                 hdi = HDIThread(
                     source=hdi_source,
                     poll_interval_s=1.0 / 1000.0,
-                    window_geometry_provider=_make_macos_window_geometry_provider(scene_backend),
+                    window_geometry_provider=_make_macos_window_geometry_provider(window_backend),
                     target_extent_provider=lambda: (float(width), float(height)),
                 )
 
-                def on_targets_started(_src=hdi_source, _backend=scene_backend):  # type: ignore[misc]
+                def on_targets_started(_src=hdi_source, _backend=window_backend):  # type: ignore[misc]
                     handle = getattr(_backend, "_window_handle", None)
                     if handle is not None:
                         from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource
