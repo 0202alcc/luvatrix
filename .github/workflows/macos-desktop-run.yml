@@ -84,6 +84,9 @@ jobs:
           # Capture the screen BEFORE touching anything, so "I don't see a
           # window" reports can be compared against the pre-relaunch state.
           screencapture -x "$RUNNER_TEMP/pre-launch.png" 2>/dev/null || true
+          LABEL="ai.nomic.desktop.dev"
+          DOMAIN="gui/$(id -u)"
+          launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
           pkill -f "main.py run-app $APP_DIR" 2>/dev/null || true
           # The app writes to a persistent home-dir log so post-job crashes
           # leave evidence the next run can read; RUNNER_TEMP is per-job.
@@ -144,7 +147,30 @@ jobs:
           exec "$GITHUB_WORKSPACE/.venv/bin/python" main.py run-app "$APP_DIR" --render "$RENDER" --mcp >>"$LOG" 2>&1
           EOF_LAUNCH
           chmod +x "$BUNDLE/Contents/MacOS/launch"
-          open -n "$BUNDLE"
+          # Let the user's GUI launchd domain own the app. A process started
+          # only by `open` can disappear after the Actions job even when its
+          # runner-tracking marker is scrubbed. launchd also restarts an
+          # abnormal exit, while a normal window-close remains respected.
+          LAUNCH_AGENT="$HOME/Library/LaunchAgents/$LABEL.plist"
+          mkdir -p "$(dirname "$LAUNCH_AGENT")"
+          cat > "$LAUNCH_AGENT" <<EOF_AGENT
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>Label</key><string>$LABEL</string>
+            <key>ProgramArguments</key>
+            <array><string>$BUNDLE/Contents/MacOS/launch</string></array>
+            <key>RunAtLoad</key><true/>
+            <key>KeepAlive</key>
+            <dict><key>SuccessfulExit</key><false/></dict>
+            <key>ProcessType</key><string>Interactive</string>
+            <key>LimitLoadToSessionType</key><string>Aqua</string>
+          </dict>
+          </plist>
+          EOF_AGENT
+          launchctl bootstrap "$DOMAIN" "$LAUNCH_AGENT"
+          launchctl kickstart -k "$DOMAIN/$LABEL"
           sleep 20
           if ! pgrep -f "main.py run-app $APP_DIR" >/dev/null; then
             echo "app exited during startup; log follows"
@@ -262,3 +288,31 @@ jobs:
             ${{ runner.temp }}/pre-launch*.png
           if-no-files-found: warn
           retention-days: 14
+
+  verify-persistence:
+    name: Verify app survives job cleanup
+    needs: run
+    if: ${{ vars.LUVATRIX_IOS_SIM_RUNNER == '1' }}
+    runs-on: [self-hosted, macOS, ios-sim]
+    timeout-minutes: 5
+    env:
+      APP_DIR: ${{ inputs.app_dir || 'examples/nomic_desktop' }}
+    steps:
+      - name: Check launchd-owned app and MCP session
+        run: |
+          sleep 5
+          pgrep -fl "main.py run-app $APP_DIR"
+          test -f "$GITHUB_WORKSPACE/$APP_DIR/.luvatrix/mcp-session.json"
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"app_state","arguments":{}}}' \
+            | "$GITHUB_WORKSPACE/.venv/bin/python" "$GITHUB_WORKSPACE/main.py" \
+                mcp-proxy "$GITHUB_WORKSPACE/$APP_DIR" \
+            | "$GITHUB_WORKSPACE/.venv/bin/python" -c '
+          import json, sys
+          response = json.loads(sys.stdin.readline())
+          state = json.loads(response["result"]["content"][0]["text"])
+          assert state["app_id"] == "figma.nomic_desktop", state
+          assert state["runtime"]["app_active"] == 1, state
+          print(json.dumps(state, indent=2, sort_keys=True))
+          '
+          open "$HOME/.nomic-desktop/NomicDesktop.app"
