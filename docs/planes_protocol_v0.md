@@ -332,3 +332,9 @@ Loader responsibilities:
 2. compile Planes to shared UI IR
 3. handle component mounting + frame render pipeline
 4. dispatch HDI-normalized hooks to registered handlers
+
+## 18. Companion: App Container Schema
+
+For the first-class container format that wraps planes/components with
+routes, route transitions, component animations, and a Figma reference
+importer, see `docs/planes_container.md`.
