@@ -162,5 +162,159 @@ class FigmaImportComponentTests(unittest.TestCase):
         self.assertEqual(text["size"]["height"], {"unit": "px", "value": 32})
 
 
+def _gradient_fill() -> dict[str, object]:
+    return {
+        "type": "GRADIENT_LINEAR",
+        "gradientHandlePositions": [
+            {"x": 0.0, "y": 0.0},
+            {"x": 1.0, "y": 0.0},
+            {"x": 0.0, "y": 1.0},
+        ],
+        "gradientStops": [
+            {"position": 0.0, "color": {"r": 1.0, "g": 0.0, "b": 0.0, "a": 1.0}},
+            {"position": 1.0, "color": {"r": 0.0, "g": 0.0, "b": 1.0, "a": 1.0}},
+        ],
+    }
+
+
+class FigmaImportGradientTests(unittest.TestCase):
+    def test_linear_gradient_becomes_svg_gradient_def(self) -> None:
+        document = _figma_document()
+        home_frame = document["document"]["children"][0]["children"][0]
+        home_frame["children"][1]["fills"] = [_gradient_fill()]
+
+        result = import_figma_document(document)
+
+        markup = result.assets["assets/svg_10_3.svg"]
+        self.assertIn("<linearGradient", markup)
+        self.assertIn('offset="0.000"', markup)
+        self.assertIn('offset="1.000"', markup)
+        self.assertIn('stop-color="#FF0000"', markup)
+        self.assertIn('stop-color="#0000FF"', markup)
+        self.assertIn("url(#grad_10_3)", markup)
+
+    def test_radial_gradient_maps_to_radial_gradient_def(self) -> None:
+        document = _figma_document()
+        home_frame = document["document"]["children"][0]["children"][0]
+        radial = dict(_gradient_fill())
+        radial["type"] = "GRADIENT_RADIAL"
+        home_frame["children"][1]["fills"] = [radial]
+
+        result = import_figma_document(document)
+
+        markup = result.assets["assets/svg_10_3.svg"]
+        self.assertIn("<radialGradient", markup)
+        self.assertIn("url(#grad_10_3)", markup)
+
+
+class FigmaImportAutoLayoutTests(unittest.TestCase):
+    def test_auto_layout_children_without_bounds_get_computed_positions(self) -> None:
+        document = _figma_document()
+        home_frame = document["document"]["children"][0]["children"][0]
+        home_frame["layoutMode"] = "VERTICAL"
+        home_frame["itemSpacing"] = 10
+        home_frame["paddingTop"] = 10
+        home_frame["paddingLeft"] = 10
+        stack_child = {
+            "id": "20:1",
+            "name": "Row",
+            "type": "RECTANGLE",
+            "width": 180,
+            "height": 40,
+            "fills": [_solid(0.5, 0.5, 0.5)],
+        }
+        stack_child2 = {
+            "id": "20:2",
+            "name": "Row2",
+            "type": "RECTANGLE",
+            "width": 180,
+            "height": 40,
+            "fills": [_solid(0.6, 0.6, 0.6)],
+        }
+        home_frame["children"] = [stack_child, stack_child2]
+
+        result = import_figma_document(document)
+
+        components = result.container_payload["components"]
+        by_id = {c["id"]: c for c in components}
+        first = by_id["svg_20_1"]
+        second = by_id["svg_20_2"]
+        self.assertEqual(first["position"], {"x": 10, "y": 10, "frame": "screen_tl"})
+        # Stacked below the first child plus itemSpacing.
+        self.assertEqual(second["position"], {"x": 10, "y": 60, "frame": "screen_tl"})
+
+    def test_horizontal_auto_layout_stacks_along_x(self) -> None:
+        document = _figma_document()
+        home_frame = document["document"]["children"][0]["children"][0]
+        home_frame["layoutMode"] = "HORIZONTAL"
+        home_frame["itemSpacing"] = 8
+        home_frame["paddingLeft"] = 4
+        home_frame["paddingTop"] = 0
+        first = {"id": "21:1", "name": "A", "type": "RECTANGLE", "width": 100, "height": 40, "fills": [_solid(0.1, 0.1, 0.1)]}
+        second = {"id": "21:2", "name": "B", "type": "RECTANGLE", "width": 100, "height": 40, "fills": [_solid(0.2, 0.2, 0.2)]}
+        home_frame["children"] = [first, second]
+
+        result = import_figma_document(document)
+
+        by_id = {c["id"]: c for c in result.container_payload["components"]}
+        self.assertEqual(by_id["svg_21_1"]["position"]["x"], 4)
+        self.assertEqual(by_id["svg_21_2"]["position"]["x"], 112)
+
+
+class FigmaImportComponentInstanceTests(unittest.TestCase):
+    def test_top_level_component_nodes_do_not_become_routes(self) -> None:
+        document = _figma_document()
+        page = document["document"]["children"][0]
+        page["children"].append(
+            {
+                "id": "30:1",
+                "name": "ButtonTemplate",
+                "type": "COMPONENT",
+                "absoluteBoundingBox": {"x": 800, "y": 0, "width": 100, "height": 40},
+                "fills": [_solid(0.2, 0.4, 1.0)],
+                "children": [],
+            }
+        )
+
+        result = import_figma_document(document)
+
+        routes = result.container_payload["routes"]
+        self.assertEqual([route["id"] for route in routes], ["home", "settings"])
+        planes = result.container_payload["planes"]
+        self.assertEqual([p["id"] for p in planes], ["plane_home", "plane_settings"])
+
+    def test_instance_node_imports_children_like_frame(self) -> None:
+        document = _figma_document()
+        home_frame = document["document"]["children"][0]["children"][0]
+        home_frame["children"].append(
+            {
+                "id": "31:1",
+                "name": "Badge",
+                "type": "INSTANCE",
+                "absoluteBoundingBox": {"x": 200, "y": 100, "width": 60, "height": 24},
+                "fills": [_solid(0.9, 0.9, 0.9)],
+                "children": [
+                    {
+                        "id": "31:2",
+                        "name": "BadgeLabel",
+                        "type": "TEXT",
+                        "absoluteBoundingBox": {"x": 205, "y": 105, "width": 50, "height": 14},
+                        "characters": "New",
+                        "style": {"fontFamily": "Inter", "fontSize": 12},
+                        "fills": [_solid(0, 0, 0)],
+                    }
+                ],
+            }
+        )
+
+        result = import_figma_document(document)
+
+        components = result.container_payload["components"]
+        text_ids = [c["id"] for c in components if c["type"] == "text"]
+        self.assertIn("text_31_2", text_ids)
+        badge_text = next(c for c in components if c["id"] == "text_31_2")
+        self.assertEqual(badge_text["position"], {"x": 5, "y": 5, "frame": "screen_tl"})
+
+
 if __name__ == "__main__":
     unittest.main()

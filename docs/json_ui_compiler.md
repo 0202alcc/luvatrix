@@ -4,6 +4,11 @@ This document defines the intended first-party JSON-to-component compiler for ap
 
 The compiler goal is deterministic conversion from design JSON (page JSON now, Lottie-derived JSON later) into a renderable component tree and action wiring that can be compiled into matrix writes for the next frame.
 
+For design-tool import at the app level (routes, transitions, animations),
+see `docs/planes_container.md`: the container schema plus the reference
+Figma importer (`luvatrix_ui.figma_import`) compile Figma documents into
+container payloads that feed this same IR pipeline.
+
 ## 1. Position in the Runtime
 
 1. App code loads JSON.

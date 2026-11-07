@@ -86,6 +86,7 @@ class ComponentAnimation:
     delay_ms: int = 0
     loop: str = ANIMATION_DEFAULT_LOOP
     keyframes: tuple[Keyframe, ...] = ()
+    state_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -260,6 +261,16 @@ def _compile_animation(raw: Any, index: int, component_ids: frozenset[str]) -> C
     loop = animation.get("loop", ANIMATION_DEFAULT_LOOP)
     if loop not in ANIMATION_LOOP_MODES:
         raise PlanesValidationError(f"animations[{index}].loop must be one of {sorted(ANIMATION_LOOP_MODES)}")
+    state_key = animation.get("state_key")
+    if trigger == "on_state":
+        if not isinstance(state_key, str) or not state_key.strip():
+            raise PlanesValidationError(
+                f"animations[{index}].state_key must be a non-empty string when trigger is `on_state`"
+            )
+    elif state_key is not None:
+        raise PlanesValidationError(
+            f"animations[{index}].state_key is only valid when trigger is `on_state`"
+        )
     keyframes = _compile_keyframes(animation.get("keyframes", []), f"animations[{index}].keyframes")
     return ComponentAnimation(
         target=target,
@@ -270,6 +281,7 @@ def _compile_animation(raw: Any, index: int, component_ids: frozenset[str]) -> C
         delay_ms=delay_ms,
         loop=str(loop),
         keyframes=keyframes,
+        state_key=str(state_key) if state_key is not None else None,
     )
 
 

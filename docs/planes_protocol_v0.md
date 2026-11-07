@@ -337,4 +337,6 @@ Loader responsibilities:
 
 For the first-class container format that wraps planes/components with
 routes, route transitions, component animations, and a Figma reference
-importer, see `docs/planes_container.md`.
+importer, see `docs/planes_container.md`. The planes runtime consumes
+container payloads natively: `PlaneApp.activate_route()` applies declared
+transition and animation specs during the present pipeline.
