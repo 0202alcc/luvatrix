@@ -2,7 +2,7 @@
 
 ## Pull Request Security Gate
 
-Pull requests targeting `dev`, `staging`, or `main` run the required `security-review` workflow. It currently includes:
+Pushes and pull requests touching `dev` (local; dormant until published), `staging`, or `main` run the required `security-review` workflow. It currently includes:
 
 - `pip-audit` for known vulnerabilities in locked Python dependencies;
 - Bandit for high-confidence, high-severity Python findings;
