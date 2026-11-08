@@ -56,24 +56,25 @@ Repository-level operating rules and quick-start context for human and AI contri
 2. Confirm the new or changed test fails for the expected reason before implementation, then make the smallest change that makes it pass.
 3. Tests must describe externally meaningful behavior and include relevant error or boundary cases; do not couple assertions to implementation details merely to raise coverage.
 4. Keep tests and implementation on the same feature branch. Separate test and implementation commits are encouraged when practical, but commit shape is not a merge requirement.
-5. Behavior-changing pull requests must complete the test-first evidence in the pull request template and pass the `required-tests` check before merging into `dev`.
+5. Behavior-changing pull requests must complete the test-first evidence in the pull request template. The `required-tests` check (`dev-required-tests` workflow) triggers on `dev` activity; while `dev` is local-only, run the same check locally on feature branches and PRs before they land on the integration ladder.
 6. Documentation, metadata, generated artifacts, and provably behavior-neutral mechanical refactors may use the documented exception, with the reason recorded in the pull request.
 7. See `CONTRIBUTING.md` for the complete workflow and reviewer expectations.
 
 ## Security Gate Policy
-1. Pull requests into `dev`, `staging`, and `main` must pass the aggregate `security-review` check described in `SECURITY.md`.
+1. Changes landing on `dev` (local), `staging`, and `main` must pass the aggregate `security-review` check described in `SECURITY.md`; the workflow runs on pushes and PRs for those branches.
 2. Do not weaken or suppress dependency, secret, Python SAST, or GitHub Actions findings merely to make CI green. Document narrow false-positive or accepted-risk exceptions.
 3. The agent-review files under `.github/security/` are a provider-neutral contract only. Do not add credentials or enable model execution without an explicit security review of the workflow trust boundary.
 
 ## Git and Branch Policy
 1. Use one descriptive feature branch per feature, such as `feature/platform-scoped-package` or `fix/lazy-platform-imports`.
-2. Use the promotion ladder `feature/* -> dev -> staging -> main`.
-3. Every promotion happens through a pull request: feature branches target `dev`, `dev` targets `staging`, and `staging` targets `main`.
-4. Treat `main` as production and `staging` as the pre-production soak branch for catching integration issues before release.
-5. Local git inspection, staging, commits, and branch-local checks are allowed without extra permission.
-6. Merge, rebase, pull request, or push activity involving `main` requires explicit human permission.
-7. Stage only files that belong to the current task. If unrelated changes exist, leave them untouched and mention them in the handoff.
-8. Never use destructive git commands such as `git reset --hard` or broad restore/checkout commands unless the human explicitly asks.
+2. The integration ladder is `feature/* -> dev (local) -> staging -> main`.
+3. `dev` is a local integration branch, not a remote branch. Integrate feature/fix branches into local `dev` as work progresses; there is no `dev` on the remote, and `dev`-scoped CI workflows stay dormant until one exists.
+4. When the local `dev` state is ready for integration testing, push it to the remote `staging` branch. Repository automations land validated staging state onto `main`; pushes to `main` trigger the PyPI publish workflow, which publishes when it detects a version not yet on PyPI.
+5. Treat `main` as production and `staging` as the pre-production soak branch for catching integration issues before release. The `security-review` workflow runs on pushes and PRs for `dev`, `staging`, and `main`.
+6. Local git inspection, staging, commits, and branch-local checks are allowed without extra permission.
+7. Merge, rebase, pull request, or push activity involving `main` requires explicit human permission.
+8. Stage only files that belong to the current task. If unrelated changes exist, leave them untouched and mention them in the handoff.
+9. Never use destructive git commands such as `git reset --hard` or broad restore/checkout commands unless the human explicitly asks.
 
 ## Pull Request Format
 1. Use a concise title that names the behavior changed.
