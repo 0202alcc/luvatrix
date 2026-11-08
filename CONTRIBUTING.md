@@ -2,11 +2,11 @@
 
 ## Branch and Promotion Model
 
-Keep tests and implementation together on one task-focused branch. The promotion ladder remains:
+Keep tests and implementation together on one task-focused branch. The integration ladder is:
 
-`feature/* -> dev -> staging -> main`
+`feature/* -> dev (local) -> staging -> main`
 
-Feature and fix pull requests target `dev`; `dev` promotes to `staging`; and `staging` promotes to `main`. Test-first development is a requirement within feature work, not an additional long-lived branch.
+`dev` is a local integration branch, not a remote branch. Integrate feature and fix branches into local `dev` as work progresses. When the local `dev` state is ready for integration testing, push it to the remote `staging` branch; repository automations land validated staging state onto `main`, and pushes to `main` trigger the PyPI publish workflow, which publishes when it detects a version not yet on PyPI. The `dev`-scoped `required-tests` workflow stays dormant until a `dev` branch exists on the remote; while it does not, run the same check locally before pushing to `staging`. Test-first development is a requirement within feature work, not an additional long-lived branch.
 
 ## Test-First Workflow
 
@@ -39,13 +39,13 @@ Behavior-changing pull requests must:
 - state how that test failed before the implementation;
 - include focused and relevant broader verification commands;
 - include negative, boundary, or error-path coverage when relevant; and
-- pass the `required-tests` GitHub Actions check before merging into `dev`.
+- run the same checks the `required-tests` GitHub Actions workflow enforces; that check triggers on `dev` activity, and while `dev` is local-only the equivalent commands must pass on the feature branch before pushing to `staging`.
 
-All pull requests into `dev`, `staging`, or `main` must also pass the aggregate `security-review` check. See `SECURITY.md` for its deterministic scanners and finding-handling policy.
+All pushes and pull requests touching `dev`, `staging`, or `main` must pass the aggregate `security-review` check. See `SECURITY.md` for its deterministic scanners and finding-handling policy.
 
 Reviewers should evaluate whether the tests independently express the intended contract. Passing tests are necessary but are not sufficient when the test merely repeats the implementation's assumptions.
 
-Repository administrators should configure the `dev` branch protection ruleset to require the `required-tests` status check. Workflow files define the check, but GitHub branch protection makes it mandatory.
+If a `dev` branch is later published to the remote, repository administrators should configure the `dev` branch protection ruleset to require the `required-tests` status check. Workflow files define the check, but GitHub branch protection makes it mandatory.
 
 ## Exceptions
 

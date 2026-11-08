@@ -85,7 +85,7 @@ def import_figma_document(document: Mapping[str, Any]) -> FigmaImportResult:
 
     for page in _walk_pages(root):
         page_start = page.get("prototypeStartNodeID")
-        frames = [child for child in _children(page) if _node_type(child) == "FRAME"]
+        frames = [child for child in _children(page) if _node_type(child) in ("FRAME", "INSTANCE")]
         for frame in frames:
             route_id = _slug(frame.get("name"))
             plane_id = f"plane_{route_id}"
@@ -153,7 +153,7 @@ def _pages_frames(root: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     frames: list[Mapping[str, Any]] = []
     for page in _walk_pages(root):
         for child in _children(page):
-            if _node_type(child) == "FRAME":
+            if _node_type(child) in ("FRAME", "INSTANCE"):
                 frames.append(child)
     return frames
 
@@ -167,8 +167,11 @@ def _import_frame_tree(
     parent_origin: tuple[float, float] = (0.0, 0.0),
     *,
     is_top_level: bool = True,
+    fallback_origin: tuple[float, float] | None = None,
 ) -> None:
     origin = _absolute_origin(frame)
+    if fallback_origin is not None and not _bounds(frame):
+        origin = fallback_origin
     if not is_top_level:
         relative_origin = (origin[0] - parent_origin[0], origin[1] - parent_origin[1])
         components.append(
@@ -176,15 +179,18 @@ def _import_frame_tree(
                 frame,
                 plane_id,
                 relative_origin,
-                _bounds(frame),
                 assets,
             )
         )
+    computed_offsets = _auto_layout_child_offsets(frame, origin)
     for child in _children(frame):
         node_type = _node_type(child)
+        child_fallback = computed_offsets.get(str(child.get("id")))
         if node_type == "TEXT":
-            components.append(_text_component(child, plane_id, origin))
-        elif node_type in _SHAPE_NODE_TYPES or node_type == "FRAME":
+            components.append(
+                _text_component(child, plane_id, origin, fallback_origin=child_fallback)
+            )
+        elif node_type in _SHAPE_NODE_TYPES or node_type in ("FRAME", "INSTANCE"):
             _import_frame_tree(
                 child,
                 plane_id,
@@ -193,9 +199,50 @@ def _import_frame_tree(
                 warnings,
                 parent_origin=origin,
                 is_top_level=False,
+                fallback_origin=child_fallback,
             )
         else:
             warnings.append(f"skipped unsupported node type `{node_type}` ({child.get('id')})")
+
+
+def _auto_layout_child_offsets(
+    frame: Mapping[str, Any],
+    frame_origin: tuple[float, float],
+) -> dict[str, tuple[float, float]]:
+    """Compute absolute origins for auto-layout children lacking bounds.
+
+    Figma's REST API resolves auto-layout into `absoluteBoundingBox`, but
+    plugin/file JSON exports may omit bounds on stacked children. When the
+    frame declares `layoutMode`, stack children along the primary axis from
+    the padding origin with `itemSpacing` gaps.
+    """
+    layout_mode = str(frame.get("layoutMode", "NONE"))
+    if layout_mode not in ("HORIZONTAL", "VERTICAL"):
+        return {}
+    horizontal = layout_mode == "HORIZONTAL"
+    spacing = float(frame.get("itemSpacing", 0) or 0)
+    cursor = (
+        frame_origin[0] + float(frame.get("paddingLeft", 0) or 0),
+        frame_origin[1] + float(frame.get("paddingTop", 0) or 0),
+    )
+    offsets: dict[str, tuple[float, float]] = {}
+    for child in _children(frame):
+        if _bounds(child):
+            continue
+        offsets[str(child.get("id"))] = cursor
+        size = _node_size(child)
+        if horizontal:
+            cursor = (cursor[0] + size[0] + spacing, cursor[1])
+        else:
+            cursor = (cursor[0], cursor[1] + size[1] + spacing)
+    return offsets
+
+
+def _node_size(node: Mapping[str, Any]) -> tuple[float, float]:
+    bounds = _bounds(node)
+    width = node.get("width", bounds.get("width"))
+    height = node.get("height", bounds.get("height"))
+    return (max(0.0, float(width or 0.0)), max(0.0, float(height or 0.0)))
 
 
 def _collect_interactions(frames: list[Mapping[str, Any]]) -> list[tuple[str, Mapping[str, Any]]]:
@@ -270,12 +317,21 @@ def _text_component(
     node: Mapping[str, Any],
     plane_id: str,
     parent_origin: tuple[float, float],
+    *,
+    fallback_origin: tuple[float, float] | None = None,
 ) -> dict[str, Any]:
     bounds = _bounds(node)
-    x = bounds.get("x", 0.0) - parent_origin[0]
-    y = bounds.get("y", 0.0) - parent_origin[1]
+    if bounds:
+        x = bounds.get("x", 0.0) - parent_origin[0]
+        y = bounds.get("y", 0.0) - parent_origin[1]
+    elif fallback_origin is not None:
+        x = fallback_origin[0] - parent_origin[0]
+        y = fallback_origin[1] - parent_origin[1]
+    else:
+        x, y = 0.0, 0.0
     style = node.get("style") if isinstance(node.get("style"), Mapping) else {}
     font_size = float(style.get("fontSize", 16))
+    width, height = _node_size(node)
     return {
         "id": f"text_{_node_token(node)}",
         "type": "text",
@@ -284,8 +340,8 @@ def _text_component(
         "blend_mode": "absolute_rgba",
         "position": {"x": x, "y": y, "frame": "screen_tl"},
         "size": {
-            "width": {"unit": "px", "value": max(0.0, float(bounds.get("width", 0.0)))},
-            "height": {"unit": "px", "value": max(0.0, float(bounds.get("height", 0.0)))},
+            "width": {"unit": "px", "value": width},
+            "height": {"unit": "px", "value": height},
         },
         "z_index": 0,
         "props": {
@@ -313,11 +369,11 @@ def _shape_component(
     node: Mapping[str, Any],
     plane_id: str,
     relative_origin: tuple[float, float],
-    bounds: Mapping[str, Any],
     assets: dict[str, str],
 ) -> dict[str, Any]:
     asset_path = f"assets/svg_{_node_token(node)}.svg"
-    assets[asset_path] = _shape_svg_markup(node, bounds)
+    assets[asset_path] = _shape_svg_markup(node)
+    width, height = _node_size(node)
     return {
         "id": f"svg_{_node_token(node)}",
         "type": "svg",
@@ -326,35 +382,93 @@ def _shape_component(
         "blend_mode": "absolute_rgba",
         "position": {"x": relative_origin[0], "y": relative_origin[1], "frame": "screen_tl"},
         "size": {
-            "width": {"unit": "px", "value": max(0.0, float(bounds.get("width", 0.0)))},
-            "height": {"unit": "px", "value": max(0.0, float(bounds.get("height", 0.0)))},
+            "width": {"unit": "px", "value": width},
+            "height": {"unit": "px", "value": height},
         },
         "z_index": 0,
         "props": {"svg": asset_path},
     }
 
 
-def _shape_svg_markup(node: Mapping[str, Any], bounds: Mapping[str, Any]) -> str:
-    width = max(1.0, float(bounds.get("width", 1.0)))
-    height = max(1.0, float(bounds.get("height", 1.0)))
-    fill = _fill_color_hex(node, "#CCCCCC")
+def _shape_svg_markup(node: Mapping[str, Any]) -> str:
+    width, height = _node_size(node)
+    width = max(1.0, width)
+    height = max(1.0, height)
+    fill_attr, defs = _shape_fill(node, _node_token(node))
     radius = node.get("cornerRadius")
     rx = ""
     if isinstance(radius, (int, float)) and float(radius) > 0:
         rx = f' rx="{min(float(radius), width / 2, height / 2):.2f}"'
-    ellipse = _node_type(node) == "ELLIPSE"
-    if ellipse:
-        return (
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.2f}" height="{height:.2f}" '
-            f'viewBox="0 0 {width:.2f} {height:.2f}">'
-            f'<ellipse cx="{width / 2:.2f}" cy="{height / 2:.2f}" rx="{width / 2:.2f}" ry="{height / 2:.2f}" '
-            f'fill="{fill}"/></svg>'
+    if _node_type(node) == "ELLIPSE":
+        shape = (
+            f'<ellipse cx="{width / 2:.2f}" cy="{height / 2:.2f}" '
+            f'rx="{width / 2:.2f}" ry="{height / 2:.2f}" fill="{fill_attr}"/>'
         )
+    else:
+        shape = f'<rect width="{width:.2f}" height="{height:.2f}"{rx} fill="{fill_attr}"/>'
+    defs_markup = f"<defs>{defs}</defs>" if defs else ""
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.2f}" height="{height:.2f}" '
-        f'viewBox="0 0 {width:.2f} {height:.2f}">'
-        f'<rect width="{width:.2f}" height="{height:.2f}"{rx} fill="{fill}"/></svg>'
+        f'viewBox="0 0 {width:.2f} {height:.2f}">{defs_markup}{shape}</svg>'
     )
+
+
+def _shape_fill(node: Mapping[str, Any], node_token: str) -> tuple[str, str]:
+    fills = node.get("fills")
+    if not isinstance(fills, list) or not fills:
+        return "#CCCCCC", ""
+    first = fills[0]
+    if not isinstance(first, Mapping):
+        return "#CCCCCC", ""
+    if first.get("type") in ("GRADIENT_LINEAR", "GRADIENT_RADIAL"):
+        return _gradient_fill(first, node_token)
+    return _fill_color_hex(node, "#CCCCCC"), ""
+
+
+def _gradient_fill(fill: Mapping[str, Any], node_token: str) -> tuple[str, str]:
+    gradient_id = f"grad_{node_token}"
+    stops = fill.get("gradientStops")
+    stops_markup = ""
+    if isinstance(stops, list):
+        for stop in stops:
+            if not isinstance(stop, Mapping):
+                continue
+            color = stop.get("color")
+            if not isinstance(color, Mapping):
+                continue
+            r = round(float(color.get("r", 0.0)) * 255)
+            g = round(float(color.get("g", 0.0)) * 255)
+            b = round(float(color.get("b", 0.0)) * 255)
+            alpha = float(color.get("a", 1.0))
+            opacity_attr = ""
+            if alpha < 1.0:
+                opacity_attr = f' stop-opacity="{max(0.0, min(1.0, alpha)):.3f}"'
+            stops_markup += (
+                f'<stop offset="{float(stop.get("position", 0.0)):.3f}" '
+                f'stop-color="#{r:02X}{g:02X}{b:02X}"{opacity_attr}/>'
+            )
+    if fill.get("type") == "GRADIENT_RADIAL":
+        gradient = f'<radialGradient id="{gradient_id}">{stops_markup}</radialGradient>'
+    else:
+        handles = fill.get("gradientHandlePositions")
+        x1, y1, x2, y2 = 0.0, 0.0, 1.0, 0.0
+        if isinstance(handles, list) and handles:
+            start = handles[0]
+            # Figma handles are [start, end, width-direction]; fall back to
+            # the last handle when only two are present.
+            end = handles[1] if len(handles) >= 3 else handles[-1]
+            if isinstance(start, Mapping) and isinstance(end, Mapping):
+                x1 = float(start.get("x", 0.0))
+                y1 = float(start.get("y", 0.0))
+                x2 = float(end.get("x", 1.0))
+                y2 = float(end.get("y", 0.0))
+        gradient = (
+            f'<linearGradient id="{gradient_id}" '
+            f'x1="{max(0.0, min(1.0, x1)):.3f}" y1="{max(0.0, min(1.0, y1)):.3f}" '
+            f'x2="{max(0.0, min(1.0, x2)):.3f}" y2="{max(0.0, min(1.0, y2)):.3f}">'
+            f"{stops_markup}</linearGradient>"
+        )
+    return f"url(#{gradient_id})", gradient
 
 
 def _background_color(frame: Mapping[str, Any]) -> str:
