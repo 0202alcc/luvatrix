@@ -256,6 +256,12 @@ the browser.
 6. Transition completion now forces one full-frame present
    (`transition_complete` invalidation reason) so the settled route
    reaches the screen even when nothing else is dirty — on every target.
+7. Native GUI targets whose default `--render-mode auto` prefers the
+   retained scene path (macos-metal, iOS) require `--render-mode matrix`
+   for UI-frame apps like planes/container apps; Android passes the mode
+   through to the native layer, where `matrix` is the safe choice too.
+   The web tiers are unaffected. Platform validation for every render
+   target is pinned in `tests/test_container_platform_matrix.py`.
 
 Web bridge limitations (v1): stained-glass button drawables are skipped
 (counted in `WebAppContext.skipped_mount_types`); keyboard events are not
