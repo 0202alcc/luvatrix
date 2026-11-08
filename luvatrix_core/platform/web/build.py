@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
+import re
 import shutil
 
 from luvatrix_core.core.app_runtime import AppManifest, AppRuntime
@@ -37,11 +38,18 @@ def build_web_app(app_dir: str | Path, out_dir: str | Path) -> WebBuildResult:
     out_path.mkdir(parents=True, exist_ok=True)
 
     _copy_runtime_assets(out_path)
-    _copy_python_shim(out_path)
-    _copy_first_party_python_packages(out_path / "py")
+    static_bundle = _compile_static_bundle_if_declared(app_path, manifest)
+    if static_bundle is None:
+        _copy_python_shim(out_path)
+        _copy_first_party_python_packages(out_path / "py")
+        _write_file_manifest(out_path / "py", out_path / "py_manifest.json", url_prefix="./py")
+    else:
+        (out_path / "static_bundle.json").write_text(
+            json.dumps(static_bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        _rewrite_index_for_static(out_path)
     _copy_app_files(app_path, out_path / "app", exclude_paths={out_path})
     _copy_declared_assets(app_path, out_path / "assets", manifest.web.assets)
-    _write_file_manifest(out_path / "py", out_path / "py_manifest.json", url_prefix="./py")
     _write_file_manifest(out_path / "app", out_path / "app_files.json", url_prefix="./app")
 
     manifest_json_path = out_path / "app_manifest.json"
@@ -53,6 +61,40 @@ def build_web_app(app_dir: str | Path, out_dir: str | Path) -> WebBuildResult:
         index_path=out_path / "index.html",
         manifest_json_path=manifest_json_path,
     )
+
+
+def _compile_static_bundle_if_declared(app_path: Path, manifest: object) -> dict[str, object] | None:
+    """Compile the static bundle when the app opts in via `[web] static_container`."""
+    static_container = getattr(manifest.web, "static_container", None)
+    if not static_container or not str(static_container).strip():
+        return None
+    from luvatrix_ui.planes_static_compile import compile_static_bundle, is_static_eligible
+
+    container_path = (app_path / str(static_container)).resolve()
+    if not container_path.exists():
+        raise FileNotFoundError(
+            f"app `{manifest.app_id}` declares web.static_container `{static_container}` but the file is missing"
+        )
+    if not is_static_eligible(container_path):
+        raise RuntimeError(
+            f"app `{manifest.app_id}` container `{static_container}` is not static-tier eligible: "
+            "all component function bindings must be `trigger:<name>` and no `on_state` animations may exist"
+        )
+    return compile_static_bundle(container_path)
+
+
+def _rewrite_index_for_static(out_path: Path) -> None:
+    """Point the built index at the static (no-Pyodide) runtime entry."""
+    index_path = out_path / "index.html"
+    index = index_path.read_text(encoding="utf-8")
+    rewritten = re.sub(
+        r"\./runtime/luvatrix-web\.js\?v=[^\"']+",
+        "./runtime/luvatrix-static.js?v=static-20261108",
+        index,
+    )
+    if rewritten == index:
+        raise RuntimeError("static build could not find the luvatrix-web.js entry in index.html")
+    index_path.write_text(rewritten, encoding="utf-8")
 
 
 def _load_web_manifest(app_path: Path) -> AppManifest:

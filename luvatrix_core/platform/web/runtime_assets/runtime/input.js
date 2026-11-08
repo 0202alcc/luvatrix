@@ -64,7 +64,12 @@ export function createInputAdapter(canvas) {
   });
   canvas.addEventListener("pointerdown", (event) => {
     canvas.focus();
-    canvas.setPointerCapture?.(event.pointerId);
+    try {
+      canvas.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Synthetic/automation pointers have no active pointer entry; the
+      // rest of the handler must still record the press.
+    }
     const pt = point(event);
     state.mouse_x = pt.x;
     state.mouse_y = pt.y;

@@ -119,6 +119,7 @@ class AppWebConfig:
     api_base_url: str = "/api"
     title: str | None = None
     icon: str | None = None
+    static_container: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1512,12 +1513,14 @@ def _coerce_web_config(value: object, *, display_title: str | None, display_icon
     api_base_url = _coerce_optional_str(value.get("api_base_url"), "web.api_base_url") or "/api"
     title = _coerce_optional_str(value.get("title"), "web.title") or display_title
     icon = _coerce_optional_str(value.get("icon"), "web.icon") or display_icon
+    static_container = _coerce_optional_str(value.get("static_container"), "web.static_container")
     return AppWebConfig(
         pyodide_packages=packages,
         assets=assets,
         api_base_url=api_base_url,
         title=title,
         icon=icon,
+        static_container=static_container,
     )
 
 
