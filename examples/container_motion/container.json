@@ -5,45 +5,98 @@
     "id": "examples.container_motion",
     "title": "Container Motion Demo",
     "icon": "assets/icon.svg",
-    "web": {"tab_title": null, "tab_icon": null}
+    "web": {
+      "tab_title": null,
+      "tab_icon": null
+    }
   },
   "planes": [
     {
       "id": "home_plane",
       "default_frame": "screen_tl",
-      "background": {"color": "#0B1020"},
+      "background": {
+        "color": "#0B1020"
+      },
       "plane_global_z": 0,
-      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 320}, "height": {"unit": "px", "value": 180}}
+      "position": {
+        "x": 0,
+        "y": 0,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 1280
+        },
+        "height": {
+          "unit": "px",
+          "value": 720
+        }
+      }
     },
     {
       "id": "settings_plane",
       "default_frame": "screen_tl",
-      "background": {"color": "#10251B"},
+      "background": {
+        "color": "#10251B"
+      },
       "plane_global_z": 1,
-      "position": {"x": 0, "y": 0, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 320}, "height": {"unit": "px", "value": 180}}
+      "position": {
+        "x": 0,
+        "y": 0,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 1280
+        },
+        "height": {
+          "unit": "px",
+          "value": 720
+        }
+      }
     }
   ],
   "routes": [
     {
       "id": "home",
       "default": true,
-      "active_planes": ["home_plane"],
+      "active_planes": [
+        "home_plane"
+      ],
       "transitions": [
-        {"trigger": "navigate_settings", "to_route": "settings", "kind": "fade", "duration_ms": 300, "easing": "ease_out"}
+        {
+          "trigger": "navigate_settings",
+          "to_route": "settings",
+          "kind": "fade",
+          "duration_ms": 300,
+          "easing": "ease_out"
+        }
       ]
     },
     {
       "id": "settings",
-      "active_planes": ["settings_plane"],
+      "active_planes": [
+        "settings_plane"
+      ],
       "transitions": [
-        {"trigger": "navigate_home", "to_route": "home", "kind": "slide_left", "duration_ms": 300, "easing": "ease_out"}
+        {
+          "trigger": "navigate_home",
+          "to_route": "home",
+          "kind": "slide_left",
+          "duration_ms": 300,
+          "easing": "ease_out"
+        }
       ]
     }
   ],
   "scripts": [
-    {"id": "handlers", "lang": "python", "src": "scripts/handlers.py"}
+    {
+      "id": "handlers",
+      "lang": "python",
+      "src": "scripts/handlers.py"
+    }
   ],
   "components": [
     {
@@ -52,10 +105,27 @@
       "attach_to": "home_plane",
       "component_local_z": 1,
       "blend_mode": "absolute_rgba",
-      "position": {"x": 20, "y": 20, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 200}, "height": {"unit": "px", "value": 24}},
+      "position": {
+        "x": 80,
+        "y": 80,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 800
+        },
+        "height": {
+          "unit": "px",
+          "value": 96
+        }
+      },
       "z_index": 1,
-      "props": {"text": "Home", "font_size_px": 20, "color_hex": "#F5FBFF"}
+      "props": {
+        "text": "Home",
+        "font_size_px": 80,
+        "color_hex": "#F5FBFF"
+      }
     },
     {
       "id": "home_hint",
@@ -63,10 +133,27 @@
       "attach_to": "home_plane",
       "component_local_z": 2,
       "blend_mode": "absolute_rgba",
-      "position": {"x": 20, "y": 140, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 280}, "height": {"unit": "px", "value": 16}},
+      "position": {
+        "x": 80,
+        "y": 560,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 1120
+        },
+        "height": {
+          "unit": "px",
+          "value": 64
+        }
+      },
       "z_index": 2,
-      "props": {"text": "Alternating routes every 1.2s (fade out, slide back)", "font_size_px": 10, "color_hex": "#9BC9F8"}
+      "props": {
+        "text": "Alternating routes every 1.2s (fade out, slide back)",
+        "font_size_px": 40,
+        "color_hex": "#9BC9F8"
+      }
     },
     {
       "id": "settings_title",
@@ -74,10 +161,27 @@
       "attach_to": "settings_plane",
       "component_local_z": 1,
       "blend_mode": "absolute_rgba",
-      "position": {"x": 20, "y": 20, "frame": "screen_tl"},
-      "size": {"width": {"unit": "px", "value": 200}, "height": {"unit": "px", "value": 24}},
+      "position": {
+        "x": 80,
+        "y": 80,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 800
+        },
+        "height": {
+          "unit": "px",
+          "value": 96
+        }
+      },
       "z_index": 1,
-      "props": {"text": "Settings", "font_size_px": 20, "color_hex": "#E8FFE8"}
+      "props": {
+        "text": "Settings",
+        "font_size_px": 80,
+        "color_hex": "#E8FFE8"
+      }
     }
   ],
   "animations": [
@@ -89,8 +193,18 @@
       "easing": "ease_in_out",
       "loop": "none",
       "keyframes": [
-        {"at": 0.0, "props": {"opacity": 0.0}},
-        {"at": 1.0, "props": {"opacity": 1.0}}
+        {
+          "at": 0.0,
+          "props": {
+            "opacity": 0.0
+          }
+        },
+        {
+          "at": 1.0,
+          "props": {
+            "opacity": 1.0
+          }
+        }
       ]
     }
   ]

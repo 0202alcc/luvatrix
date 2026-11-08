@@ -9,8 +9,8 @@ optional_capabilities = [
 ]
 
 [display]
-native_width = 320
-native_height = 180
+native_width = 1280
+native_height = 720
 bar_color_rgba = [0, 0, 0, 255]
 default_coordinate_frame = "screen_tl"
 title = "Container Motion Demo"
