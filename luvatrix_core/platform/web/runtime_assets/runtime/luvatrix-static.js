@@ -4,9 +4,9 @@
 // The app opt-in is `[web] static_container` in app.toml; build-web then
 // emits `static_bundle.json` and points index.html at this entry.
 
-import { createInputAdapter } from "./input.js?v=static-20261108c";
-import { createRenderer } from "./renderers.js?v=static-20261108c";
-import { createStaticCore } from "./static-core.js?v=static-20261108c";
+import { createInputAdapter } from "./input.js?v=static-20261108d";
+import { createRenderer } from "./renderers.js?v=static-20261108d";
+import { createStaticCore } from "./static-core.js?v=static-20261108d";
 
 async function main() {
   const canvas = document.getElementById("stage");
@@ -32,7 +32,7 @@ async function main() {
   canvas.style.top = "50%";
   canvas.style.transform = "translate(-50%, -50%)";
 
-  const core = createStaticCore(bundle);
+  const core = createStaticCore(bundle, { handlers: await loadHandlers(bundle) });
   const input = createInputAdapter(canvas);
   const renderer = await createRenderer(canvas, status, { webglCanvas: null });
 
@@ -71,9 +71,8 @@ async function main() {
     const snapshot = input.snapshot();
     if (snapshot.left_clicked && snapshot.mouse_in_window) {
       const point = toDesignCoords(snapshot.mouse_x, snapshot.mouse_y);
-      const target = core.hitTest(point.x, point.y);
-      if (target && target.trigger) {
-        core.fireTrigger(target.trigger);
+      const handled = core.press(point.x, point.y);
+      if (handled) {
         onActivation(core.route);
       }
     }
@@ -87,6 +86,20 @@ async function main() {
     status.dataset.ready = "true";
   }
   requestAnimationFrame(tickFrame);
+}
+
+async function loadHandlers(bundle) {
+  const handlers = new Map();
+  for (const script of bundle.scripts || []) {
+    if (script.lang !== "javascript") continue;
+    const module = await import(cacheBust(`./${script.src}`, Date.now().toString(36)));
+    for (const [name, fn] of Object.entries(module)) {
+      if (typeof fn === "function") {
+        handlers.set(`${script.id}::${name}`, fn);
+      }
+    }
+  }
+  return handlers;
 }
 
 function displayViewportSize() {

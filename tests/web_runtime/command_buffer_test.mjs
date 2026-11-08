@@ -35,6 +35,7 @@ test("canvas fallback consumes command buffer", () => {
     strokeStyle: "",
     lineWidth: 0,
     font: "",
+    setTransform: (...args) => calls.push(["setTransform", ...args]),
     fillRect: (...args) => calls.push(["fillRect", ...args]),
     beginPath: () => calls.push(["beginPath"]),
     arc: (...args) => calls.push(["arc", ...args]),

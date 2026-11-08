@@ -42,7 +42,7 @@ def is_static_eligible(payload: Mapping[str, Any] | str | Path) -> bool:
         return False
     if compiled.planes_payload is None:
         return False
-    if not _bindings_are_declarative(compiled.planes_payload.get("components", [])):
+    if not _bindings_are_statically_servable(compiled.planes_payload):
         return False
     for animation in compiled.animations:
         if animation.trigger == "on_state":
@@ -88,6 +88,7 @@ def compile_static_bundle(source: Mapping[str, Any] | str | Path) -> dict[str, A
             for route in compiled.routes
         ],
         "components": _serialize_components(payload.get("components", []), planes_bundle, container_root),
+        "scripts": _serialize_scripts(payload.get("scripts", [])),
         "animations": [
             {
                 "target": animation.target,
@@ -231,6 +232,7 @@ def _serialize_components(
             "height": height,
             "opacity": float(component.get("opacity", 1.0)),
             "trigger": _component_trigger(component, index),
+            "handler": _component_handler(component),
         }
         if comp_type == "text":
             entry["text"] = str(props_obj.get("text", ""))
@@ -279,6 +281,38 @@ def _size_unit_value(raw: Any, axis: str) -> float:
     raise PlanesValidationError(f"size {axis} must be a number or unitized object")
 
 
+def _serialize_scripts(scripts_raw: Any) -> list[dict[str, Any]]:
+    """Emit JS handler modules; app files land under `app/` in the build."""
+    if not isinstance(scripts_raw, list):
+        return []
+    serialized: list[dict[str, Any]] = []
+    for script in scripts_raw:
+        if not isinstance(script, Mapping):
+            continue
+        lang = str(script.get("lang", ""))
+        if lang != "javascript":
+            raise PlanesValidationError(
+                f"static tier scripts must be javascript (got `{lang}`); "
+                "Python scripts require the Pyodide tier"
+            )
+        src = str(script.get("src", "")).strip()
+        if not src:
+            raise PlanesValidationError("static tier scripts require `src`")
+        serialized.append({"id": str(script.get("id", "")), "lang": "javascript", "src": f"app/{src}"})
+    return serialized
+
+
+def _component_handler(component: Mapping[str, Any]) -> str | None:
+    """Return the `<script_id>::<fn>` JS handler binding, if any."""
+    functions = component.get("functions")
+    if not isinstance(functions, Mapping):
+        return None
+    for target in functions.values():
+        if isinstance(target, str) and "::" in target and not target.startswith("trigger:"):
+            return target
+    return None
+
+
 def _component_trigger(component: Mapping[str, Any], index: int) -> str | None:
     functions = component.get("functions")
     if not isinstance(functions, Mapping):
@@ -313,7 +347,25 @@ def _svg_data_url(svg_source: Any, container_root: Path | None, index: int) -> s
     return f"data:image/svg+xml;base64,{encoded}"
 
 
-def _bindings_are_declarative(components_raw: Any) -> bool:
+def _bindings_are_statically_servable(payload: Mapping[str, Any]) -> bool:
+    """Bindings must be trigger-based or resolve to JavaScript scripts.
+
+    `lang: "javascript"` scripts execute natively in the browser, so they
+    keep the container static-tier eligible. Any other script language
+    (Python today) requires the Pyodide runtime instead.
+    """
+    components_raw = payload.get("components", [])
+    js_script_ids = {
+        str(script.get("id", ""))
+        for script in _as_list(payload.get("scripts"))
+        if isinstance(script, Mapping) and str(script.get("lang", "")) == "javascript"
+    }
+    has_non_js_script = any(
+        isinstance(script, Mapping) and str(script.get("lang", "python")) != "javascript"
+        for script in _as_list(payload.get("scripts"))
+    )
+    if has_non_js_script:
+        return False
     if not isinstance(components_raw, list):
         return True
     for raw in components_raw:
@@ -322,6 +374,15 @@ def _bindings_are_declarative(components_raw: Any) -> bool:
         if not isinstance(functions, Mapping):
             continue
         for target in functions.values():
-            if not isinstance(target, str) or not target.startswith("trigger:"):
+            if not isinstance(target, str):
+                return False
+            if target.startswith("trigger:"):
+                continue
+            script_id = target.split("::", 1)[0] if "::" in target else ""
+            if script_id not in js_script_ids:
                 return False
     return True
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
