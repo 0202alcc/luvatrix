@@ -91,7 +91,13 @@
       ]
     }
   ],
-  "scripts": [],
+  "scripts": [
+    {
+      "id": "ui",
+      "lang": "javascript",
+      "src": "scripts/ui.js"
+    }
+  ],
   "components": [
     {
       "id": "home_title",
@@ -207,6 +213,37 @@
         "text": "Settings (click me)",
         "font_size_px": 14,
         "color_hex": "#E8FFE8"
+      }
+    },
+    {
+      "id": "js_button",
+      "type": "text",
+      "attach_to": "home_plane",
+      "component_local_z": 4,
+      "blend_mode": "absolute_rgba",
+      "position": {
+        "x": 10,
+        "y": 60,
+        "frame": "screen_tl"
+      },
+      "size": {
+        "width": {
+          "unit": "px",
+          "value": 140
+        },
+        "height": {
+          "unit": "px",
+          "value": 18
+        }
+      },
+      "z_index": 4,
+      "functions": {
+        "on_press_single": "ui::go_settings"
+      },
+      "props": {
+        "text": "JS handler: go",
+        "font_size_px": 11,
+        "color_hex": "#89F0B4"
       }
     }
   ],

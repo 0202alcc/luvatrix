@@ -27,9 +27,10 @@ export class CanvasRenderer {
     this._resize(buffer.width * scale, buffer.height * scale);
     if (scale !== 1) {
       this.ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    } else {
-      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
+    // At scale 1 no transform call is needed: assigning canvas.width (in
+    // _resize on size change) already resets the context transform, and a
+    // scale change always implies a size change.
     if (options.transparent) {
       this.ctx.clearRect(0, 0, buffer.width, buffer.height);
     }

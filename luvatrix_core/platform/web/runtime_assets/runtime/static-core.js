@@ -157,10 +157,11 @@ class StaticBufferBuilder {
   }
 }
 
-export function createStaticCore(bundle) {
+export function createStaticCore(bundle, { handlers } = {}) {
   if (!bundle || typeof bundle !== "object") {
     throw new Error("static core requires a bundle object");
   }
+  const handlerMap = handlers instanceof Map ? handlers : new Map(Object.entries(handlers || {}));
   const planes = new Map(bundle.planes.map((plane) => [plane.id, plane]));
   const routes = new Map(bundle.routes.map((route) => [route.id, route]));
   const sourceOrder = new Map(bundle.components.map((component, index) => [component, index]));
@@ -188,6 +189,7 @@ export function createStaticCore(bundle) {
     prevPlaneIds: [],
     playbacks: new Map(),
     mountedOnce: new Set(),
+    app: {},
   };
 
   function routePlaneIds(routeId) {
@@ -402,7 +404,7 @@ export function createStaticCore(bundle) {
     for (let i = components.length - 1; i >= 0; i -= 1) {
       const component = components[i];
       if (!active.has(component.plane_id)) continue;
-      if (!component.trigger) continue;
+      if (!component.trigger && !component.handler) continue;
       const geo = resolveDesignGeometry(component);
       if (px >= geo.x && px <= geo.x + geo.width && py >= geo.y && py <= geo.y + geo.height) {
         return component;
@@ -411,14 +413,47 @@ export function createStaticCore(bundle) {
     return null;
   }
 
+  function press(px, py) {
+    const component = hitTest(px, py);
+    if (!component) {
+      return false;
+    }
+    if (component.trigger) {
+      fireTrigger(component.trigger);
+      return true;
+    }
+    if (component.handler) {
+      const handler = handlerMap.get(component.handler);
+      if (!handler) {
+        throw new Error(`missing JS handler for target: ${component.handler}`);
+      }
+      handler(
+        {
+          component_id: component.id,
+          event_type: "click",
+          hook: "on_press_single",
+          payload: { x: px, y: py },
+          fireTrigger,
+        },
+        state.app,
+      );
+      return true;
+    }
+    return false;
+  }
+
   return {
     bundle,
     get route() {
       return state.route;
     },
+    get state() {
+      return state.app;
+    },
     activateRoute,
     fireTrigger,
     tick,
     hitTest,
+    press,
   };
 }
