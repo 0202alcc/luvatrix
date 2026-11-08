@@ -312,7 +312,19 @@ Runtime behavior:
 3. `trigger:<name>` bindings also work on the native runtime
    (`PlaneApp` dispatches them to `activate_route` without a handler).
 
-`examples/static_motion` demonstrates the full static tier.
+`examples/static_motion` demonstrates the full static tier, including
+JavaScript handler scripts (`scripts[].lang = "javascript"`): the build
+copies the module under `app/`, the bundle references it, and the browser
+entry dispatches component `handler` bindings to its exported functions
+(`event = {component_id, event_type, hook, payload, fireTrigger}`,
+`state` shared mutable app state) — arbitrary JS runs with no Python.
+
+The compiled bundle format is specified normatively in
+`docs/static_bundle_format.md` (parity-tested, so other-language builders
+have a conformance target). For dynamic backends behind any container, the
+draft HTTP+JSON contract is `docs/container_data_sources.md` — the
+backend stays writable in any language because the container declares
+endpoints, not implementations.
 
 ## 10. Known Limitations and Follow-ups
 
