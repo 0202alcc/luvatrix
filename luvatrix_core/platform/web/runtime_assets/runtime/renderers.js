@@ -23,9 +23,15 @@ export class CanvasRenderer {
 
   render(rawBuffer, options = {}) {
     const buffer = normalizeCommandBuffer(rawBuffer);
-    this._resize(buffer.width, buffer.height);
+    const scale = Math.max(1e-6, Number(options.scale || 1));
+    this._resize(buffer.width * scale, buffer.height * scale);
+    if (scale !== 1) {
+      this.ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    } else {
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
     if (options.transparent) {
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      this.ctx.clearRect(0, 0, buffer.width, buffer.height);
     }
     for (const command of decodeCommandBuffer(buffer)) {
       const a = command.args;
@@ -34,7 +40,7 @@ export class CanvasRenderer {
           continue;
         }
         this.ctx.fillStyle = cssRgba(a, 0);
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.fillRect(0, 0, buffer.width, buffer.height);
       } else if (command.opcode === OPCODES.SHADER_RECT) {
         if (command.shader === "full_suite_background") {
           drawFullSuiteBackground(this.ctx, a);
@@ -1052,9 +1058,9 @@ export class WebGpuRenderer {
     return this;
   }
 
-  render(rawBuffer) {
+  render(rawBuffer, options = {}) {
     // V1 keeps the command-buffer contract identical while GPU pipelines mature.
-    this.canvasFallback.render(rawBuffer);
+    this.canvasFallback.render(rawBuffer, options);
   }
 }
 

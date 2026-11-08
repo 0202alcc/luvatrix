@@ -345,6 +345,24 @@ export function createStaticCore(bundle) {
     return result;
   }
 
+  function resolveDesignGeometry(component) {
+    const designW = Number(bundle.display?.width || 0);
+    const designH = Number(bundle.display?.height || 0);
+    let x = Number(component.x);
+    let y = Number(component.y);
+    let width = Number(component.width);
+    let height = Number(component.height);
+    if (component.unit === "vw") {
+      // Mirrors planes_protocol: vw = (v / 100) * viewport width.
+      x = (x / 100.0) * designW;
+      width = (width / 100.0) * designW;
+    } else if (component.unit === "vh") {
+      y = (y / 100.0) * designH;
+      height = (height / 100.0) * designH;
+    }
+    return { x, y, width, height };
+  }
+
   function tick(dt) {
     advance(dt);
     const active = activePlaneIds();
@@ -355,8 +373,9 @@ export function createStaticCore(bundle) {
       if (!active.has(component.plane_id)) continue;
       const override = overrideMap.get(component.id) || { opacity: 1.0, offsetX: 0.0, offsetY: 0.0 };
       const opacity = clamp01(Number(component.opacity) * override.opacity);
-      const x = Number(component.x) + override.offsetX;
-      const y = Number(component.y) + override.offsetY;
+      const geo = resolveDesignGeometry(component);
+      const x = geo.x + override.offsetX;
+      const y = geo.y + override.offsetY;
       if (component.type === "text") {
         builder.text(String(component.text), {
           x,
@@ -368,8 +387,8 @@ export function createStaticCore(bundle) {
         builder.image({
           x,
           y,
-          width: Number(component.width),
-          height: Number(component.height),
+          width: geo.width,
+          height: geo.height,
           opacity,
           asset: component.svg_data_url,
         });
@@ -378,28 +397,13 @@ export function createStaticCore(bundle) {
     return builder.finish();
   }
 
-  function resolveGeometry(component, canvasWidth, canvasHeight) {
-    let x = Number(component.x);
-    let y = Number(component.y);
-    let width = Number(component.width);
-    let height = Number(component.height);
-    if (component.unit === "vw") {
-      x = (x / 100.0) * canvasWidth;
-      width = (width / 100.0) * canvasWidth;
-    } else if (component.unit === "vh") {
-      y = (y / 100.0) * canvasHeight;
-      height = (height / 100.0) * canvasHeight;
-    }
-    return { x, y, width, height };
-  }
-
-  function hitTest(px, py, canvasWidth, canvasHeight) {
+  function hitTest(px, py) {
     const active = activePlaneIds();
     for (let i = components.length - 1; i >= 0; i -= 1) {
       const component = components[i];
       if (!active.has(component.plane_id)) continue;
       if (!component.trigger) continue;
-      const geo = resolveGeometry(component, canvasWidth, canvasHeight);
+      const geo = resolveDesignGeometry(component);
       if (px >= geo.x && px <= geo.x + geo.width && py >= geo.y && py <= geo.y + geo.height) {
         return component;
       }

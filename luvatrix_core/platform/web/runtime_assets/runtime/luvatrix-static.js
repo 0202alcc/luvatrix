@@ -4,9 +4,9 @@
 // The app opt-in is `[web] static_container` in app.toml; build-web then
 // emits `static_bundle.json` and points index.html at this entry.
 
-import { createInputAdapter } from "./input.js?v=static-20261108";
-import { createRenderer } from "./renderers.js?v=static-20261108";
-import { createStaticCore } from "./static-core.js?v=static-20261108";
+import { createInputAdapter } from "./input.js?v=static-20261108c";
+import { createRenderer } from "./renderers.js?v=static-20261108c";
+import { createStaticCore } from "./static-core.js?v=static-20261108c";
 
 async function main() {
   const canvas = document.getElementById("stage");
@@ -18,14 +18,30 @@ async function main() {
   });
   document.title = bundle.app?.title || "Luvatrix";
   const viewport = displayViewportSize();
-  const width = bundle.display?.width || viewport.width;
-  const height = bundle.display?.height || viewport.height;
-  canvas.width = width;
-  canvas.height = height;
+  const designWidth = bundle.display?.width || viewport.width;
+  const designHeight = bundle.display?.height || viewport.height;
+  const fitScale = Math.min(viewport.width / designWidth, viewport.height / designHeight);
+  const dpr = Number(window.devicePixelRatio || 1);
+  const renderScale = fitScale * dpr;
+  canvas.width = Math.max(1, Math.round(designWidth * renderScale));
+  canvas.height = Math.max(1, Math.round(designHeight * renderScale));
+  canvas.style.width = `${Math.round(designWidth * fitScale)}px`;
+  canvas.style.height = `${Math.round(designHeight * fitScale)}px`;
+  canvas.style.position = "absolute";
+  canvas.style.left = "50%";
+  canvas.style.top = "50%";
+  canvas.style.transform = "translate(-50%, -50%)";
 
   const core = createStaticCore(bundle);
   const input = createInputAdapter(canvas);
   const renderer = await createRenderer(canvas, status, { webglCanvas: null });
+
+  function toDesignCoords(canvasX, canvasY) {
+    return {
+      x: (canvasX / canvas.width) * designWidth,
+      y: (canvasY / canvas.height) * designHeight,
+    };
+  }
 
   activateFromHash();
   window.addEventListener("hashchange", activateFromHash);
@@ -54,14 +70,15 @@ async function main() {
     last = now;
     const snapshot = input.snapshot();
     if (snapshot.left_clicked && snapshot.mouse_in_window) {
-      const target = core.hitTest(snapshot.mouse_x, snapshot.mouse_y, canvas.width, canvas.height);
+      const point = toDesignCoords(snapshot.mouse_x, snapshot.mouse_y);
+      const target = core.hitTest(point.x, point.y);
       if (target && target.trigger) {
         core.fireTrigger(target.trigger);
         onActivation(core.route);
       }
     }
     const buffer = core.tick(dt);
-    renderer.render(buffer);
+    renderer.render(buffer, { scale: renderScale });
     input.endFrame();
     requestAnimationFrame(tickFrame);
   }

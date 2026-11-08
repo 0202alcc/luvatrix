@@ -373,6 +373,64 @@ class StaticCoreParityTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, msg=f"node stderr: {proc.stderr}\nstdout: {proc.stdout}")
             self.assertIn("PARITY_OK", proc.stdout)
 
+    def test_node_static_core_resolves_unitized_geometry(self) -> None:
+        """vw/vh components must resolve identically to the Python compile."""
+        payload = _static_container_payload()
+        payload["components"][0]["size"]["width"] = {"unit": "vw", "value": 50}
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_app(root, payload)
+            bundle = compile_static_bundle(root / "container.json")
+
+            from luvatrix_ui.planes_web import PlaneWebApp
+
+            app = PlaneWebApp(root / "container.json", handlers={})
+            app.init_browser(
+                width=320,
+                height=180,
+                input_provider=lambda: {
+                    "mouse_x": 0.0,
+                    "mouse_y": 0.0,
+                    "mouse_in_window": False,
+                    "left_clicked": False,
+                },
+                manifest={},
+            )
+            golden = [app.loop_browser(0.016)]
+
+            repo_root = Path(__file__).resolve().parents[1]
+            script_path = repo_root / "tools" / "web" / "static_core_parity.mjs"
+            core_path = repo_root / "luvatrix_core" / "platform" / "web" / "runtime_assets" / "runtime" / "static-core.js"
+            proc = subprocess.run(
+                [
+                    NODE,
+                    str(script_path),
+                    "--core",
+                    str(core_path),
+                    "--bundle",
+                    json.dumps(bundle),
+                    "--golden",
+                    json.dumps(
+                        [
+                            {
+                                "headers": list(f["headers"]),
+                                "floats": list(f["floats"]),
+                                "strings": list(f["strings"]),
+                            }
+                            for f in golden
+                        ]
+                    ),
+                    "--ticks",
+                    json.dumps([0.016]),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            self.assertEqual(proc.returncode, 0, msg=f"node stderr: {proc.stderr}\nstdout: {proc.stdout}")
+            self.assertIn("PARITY_OK", proc.stdout)
+
 
 class _FakeMatrix:
     width: int = 320

@@ -89,7 +89,7 @@ def _rewrite_index_for_static(out_path: Path) -> None:
     index = index_path.read_text(encoding="utf-8")
     rewritten = re.sub(
         r"\./runtime/luvatrix-web\.js\?v=[^\"']+",
-        "./runtime/luvatrix-static.js?v=static-20261108",
+        "./runtime/luvatrix-static.js?v=static-20261108c",
         index,
     )
     if rewritten == index:
