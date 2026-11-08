@@ -159,6 +159,7 @@ def compile_container(
     route_ids = _collect_route_ids(routes_raw)
     routes = tuple(_compile_route(raw, index, plane_ids, route_ids) for index, raw in enumerate(routes_raw))
     entry_route = routes[0].id if defaults[0] is routes_raw[0] else _find_default_route_id(routes_raw)
+    _validate_trigger_bindings(payload.get("components", []), routes)
 
     animations = _compile_animations(payload.get("animations", []), payload.get("components", []))
     planes_payload = _strip_container_keys(payload)
@@ -172,6 +173,33 @@ def compile_container(
         animations=animations,
         planes_payload=planes_payload,
     )
+
+
+def _validate_trigger_bindings(components_raw: Any, routes: tuple[ContainerRoute, ...]) -> None:
+    """Declarative `trigger:<name>` function bindings must name a real trigger.
+
+    Trigger bindings let a component activate a route transition without a
+    Python handler (native runtime dispatch and the static web tier both
+    consume them), so an unknown trigger must fail validation up front.
+    """
+    if not isinstance(components_raw, list):
+        return
+    known_triggers = {
+        transition.trigger for route in routes for transition in route.transitions
+    }
+    for index, raw in enumerate(components_raw):
+        component = _expect_obj(raw, f"components[{index}]")
+        functions = component.get("functions")
+        if not isinstance(functions, Mapping):
+            continue
+        for hook, target in functions.items():
+            if not isinstance(target, str) or not target.startswith("trigger:"):
+                continue
+            trigger_name = target[len("trigger:") :].strip()
+            if not trigger_name or trigger_name not in known_triggers:
+                raise PlanesValidationError(
+                    f"components[{index}].functions[{hook}] references unknown trigger `{trigger_name}`"
+                )
 
 
 def _compile_route(

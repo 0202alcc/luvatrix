@@ -262,7 +262,53 @@ Web bridge limitations (v1): stained-glass button drawables are skipped
 bridged (planes has no key hooks yet); dirty rects and scroll shifts are
 ignored (the browser redraws the full command buffer each frame).
 
-## 9. Known Limitations and Follow-ups
+## 9. Static Web Tier (AOT, No Python)
+
+For containers whose bindings are purely declarative, `build-web` can
+compile the app to a **static JS bundle** — no Pyodide, no Python at
+request time. The container is data; the frontend is compiled from it.
+
+Opt in via the app manifest:
+
+```toml
+[web]
+static_container = "container.json"
+```
+
+Eligibility (`luvatrix_ui.planes_static_compile.is_static_eligible`):
+
+1. Every component `functions` value is `trigger:<name>` (validated
+   against route transition triggers by `compile_container`; no Python
+   handlers).
+2. No `on_state` animations (they require runtime state).
+3. Plane-attached, `screen_tl`-framed components; planes sized in px.
+
+What the build emits:
+
+1. `static_bundle.json` — app metadata, planes, routes + transitions,
+   components (px/vw/vh unitized geometry, trigger bindings, svg assets
+   inlined as base64 data URLs), animations with keyframes.
+2. `index.html` rewritten to load `runtime/luvatrix-static.js`, which
+   drives `static-core.js` (pure, node-testable motion port) and the
+   existing Canvas command-buffer renderer.
+3. The Python payload (`py/`) is not shipped at all.
+
+Runtime behavior:
+
+1. Motion semantics are a byte-for-byte port of `planes_motion.py`
+   (easings, transition playback incl. the completion present, animation
+   delay/loop/keyframes, rest-state persistence). The node parity test
+   asserts the JS core emits **identical command buffers** to the
+   Python runtime for the same bundle and tick sequence.
+2. Interactions: components bound with `trigger:<name>` hit-test on
+   click (reverse paint order) and activate the matching transition;
+   the URL hash tracks the active route and hash changes navigate.
+3. `trigger:<name>` bindings also work on the native runtime
+   (`PlaneApp` dispatches them to `activate_route` without a handler).
+
+`examples/static_motion` demonstrates the full static tier.
+
+## 10. Known Limitations and Follow-ups
 
 1. `scale`/`rotation_deg` animation props interpolate and report but are
    not yet rasterized by the text/svg mount pipeline.

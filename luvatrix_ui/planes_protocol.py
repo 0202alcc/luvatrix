@@ -928,6 +928,11 @@ def _validate_components(
         for hook_name, target in functions.items():
             if hook_name not in SUPPORTED_HDI_HOOKS:
                 raise PlanesValidationError(f"unsupported hook `{hook_name}`")
+            if isinstance(target, str) and target.startswith("trigger:"):
+                # Declarative route-transition trigger: dispatched by the
+                # runtime (native `_fire_trigger`) or the static web tier;
+                # container-level validation checks the trigger exists.
+                continue
             if not isinstance(target, str) or "::" not in target:
                 raise PlanesValidationError(
                     f"components[{i}].functions.{hook_name} must use <script_id>::<function_name>"

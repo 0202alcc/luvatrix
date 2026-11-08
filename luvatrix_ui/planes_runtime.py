@@ -1065,6 +1065,19 @@ class PlaneApp:
                     return handler
         return None
 
+    def _fire_trigger(self, trigger_name: str) -> None:
+        """Activate the route transition bound to `trigger_name` on the active route."""
+        if not trigger_name:
+            return
+        route_id = str(self.state.get("active_route", ""))
+        route = next((entry for entry in self._container_routes if entry.id == route_id), None)
+        if route is None:
+            return
+        spec = next((t for t in route.transitions if t.trigger == trigger_name), None)
+        if spec is None:
+            return
+        self.activate_route(spec.to_route)
+
     def _invoke_bindings(
         self,
         component,
@@ -1075,6 +1088,15 @@ class PlaneApp:
     ) -> None:
         for binding in component.interactions:
             if binding.event != hook:
+                continue
+            if binding.handler.startswith("trigger:"):
+                self._input_debug_log(
+                    "trigger_invoke",
+                    component_id=str(component.component_id),
+                    hook=str(hook),
+                    target=str(binding.handler),
+                )
+                self._fire_trigger(binding.handler[len("trigger:") :].strip())
                 continue
             handler = self._resolve_handler(binding.handler)
             if handler is None:
