@@ -80,6 +80,33 @@ def _copy_python_shim(out_path: Path) -> None:
     shutil.copytree(src, out_path / "py")
 
 
+def _copy_pure_core_modules(dest: Path) -> None:
+    """Ship the pure `luvatrix_core` subset the planes runtime needs.
+
+    The web bundle must not import heavyweight core modules (torch,
+    AppKit, Vulkan), so only the pure modules `luvatrix_ui` depends on
+    are shipped, with minimal package `__init__` files that avoid the
+    real `core/__init__.py` re-export chain.
+    """
+    project_root = Path(__file__).resolve().parents[3]
+    core_source = project_root / "luvatrix_core"
+    package_dir = dest / "luvatrix_core"
+    package_dir.mkdir(parents=True, exist_ok=True)
+    (package_dir / "__init__.py").write_text(
+        '"""Luvatrix pure core subset (web bundle)."""\n__version__ = "0"\n',
+        encoding="utf-8",
+    )
+    core_dir = package_dir / "core"
+    core_dir.mkdir(parents=True, exist_ok=True)
+    (core_dir / "__init__.py").write_text(
+        '"""Pure core modules shipped to the browser (see build.py)."""\n',
+        encoding="utf-8",
+    )
+    for module_name in ("coordinates", "hdi_thread"):
+        source = core_source / "core" / f"{module_name}.py"
+        shutil.copy2(source, core_dir / f"{module_name}.py")
+
+
 def _copy_first_party_python_packages(dest: Path) -> None:
     project_root = Path(__file__).resolve().parents[3]
     for package_name in ("luvatrix_ui",):
@@ -87,6 +114,7 @@ def _copy_first_party_python_packages(dest: Path) -> None:
         if not source.exists():
             continue
         _copy_python_package(source, dest / package_name)
+    _copy_pure_core_modules(dest)
 
 
 def _copy_python_package(source: Path, dest: Path) -> None:

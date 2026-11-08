@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_test_first_policy_is_documented() -> None:
     policy = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
 
-    assert "feature/* -> dev -> staging -> main" in policy
+    assert "feature/* -> dev (local) -> staging -> main" in policy
     assert "Write or update the test before implementing the behavior" in policy
     assert "separate test and implementation commits" in policy.lower()
     assert "Exceptions" in policy
