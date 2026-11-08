@@ -178,6 +178,7 @@ class MotionState:
     state_values: dict[str, object] = field(default_factory=dict)
     mounted_targets: set[str] = field(default_factory=set)
     just_completed: set[str] = field(default_factory=set)
+    transition_just_completed: bool = False
     epoch: int = 0
 
     def start_transition(
@@ -206,11 +207,13 @@ class MotionState:
 
     def advance(self, dt: float) -> None:
         self.just_completed = set()
+        self.transition_just_completed = False
         changed = False
         if self.transition is not None:
             if self.transition.advance(dt):
                 self.transition = None
                 self.prev_plane_ids = ()
+                self.transition_just_completed = True
             changed = True
         for target, playback in list(self.animations.items()):
             before = playback.elapsed_s

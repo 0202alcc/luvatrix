@@ -24,6 +24,20 @@ from luvatrix_ui.text.renderer import FontSpec, TextAppearance, TextMeasureReque
 EventHandler = Callable[[dict[str, Any], dict[str, Any]], object | None]
 
 
+def _construct_matrix_ui_frame_renderer():
+    """Build the native matrix UI frame renderer when heavy deps are available.
+
+    Returns None on browser/embedded targets where the torch-backed frame
+    pipeline is not importable; those targets provide their own AppContext
+    (for example the web command-buffer bridge) that ignores the renderer.
+    """
+    try:
+        from luvatrix_core.core.ui_frame_renderer import MatrixUIFrameRenderer  # lazy: breaks import cycle
+    except Exception:  # noqa: BLE001 - torch/accel optional off native targets
+        return None
+    return MatrixUIFrameRenderer()
+
+
 @dataclass(frozen=True)
 class ScrollIntent:
     delta_x: float
@@ -56,8 +70,7 @@ class PlaneApp:
         self._plane_dir = self._plane_path.parent
         self._handlers: dict[str, EventHandler] = dict(handlers or {})
         self._strict = strict
-        from luvatrix_core.core.ui_frame_renderer import MatrixUIFrameRenderer  # lazy: breaks import cycle
-        self._renderer = MatrixUIFrameRenderer()
+        self._renderer = _construct_matrix_ui_frame_renderer()
         self.state: dict[str, Any] = {}
         self._svg_markup_cache: dict[Path, str] = {}
         self._incremental_present_enabled_default = _env_flag(
@@ -3021,6 +3034,11 @@ class PlaneApp:
         self._detect_state_animations()
         self._detect_mount_animations()
         self._motion.advance(dt)
+        if self._motion.transition_just_completed:
+            # The settled route must reach the screen even when nothing else
+            # is dirty; otherwise the display stays on the mid-crossfade.
+            self.state["force_full_invalidation"] = True
+            self.state["force_full_invalidation_reason"] = "transition_complete"
         component_plane_ids = {
             str(component.component_id): str(getattr(component, "plane_id", "") or "")
             for component in self._ui_page.components

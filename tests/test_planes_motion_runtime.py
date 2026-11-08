@@ -242,6 +242,26 @@ class RouteTransitionRuntimeTests(unittest.TestCase):
             opacities = _mounted_opacities(app)
             self.assertAlmostEqual(opacities["settings_title"], 1.0, places=4)
 
+    def test_transition_completion_frame_presents_settled_state(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app = PlaneApp(_write_app(Path(td), _container_payload()), handlers={})
+            ctx = _FakeCtx()
+            app.init(ctx)
+            app.loop(ctx, 0.016)
+
+            app.activate_route("settings")
+            app.loop(ctx, 0.05)
+            begin_calls_after_crossfade = ctx.begin_calls
+
+            # The completion frame must present the settled route even when
+            # nothing else is dirty; the screen may not stay mid-crossfade.
+            app.loop(ctx, 0.3)
+
+            self.assertEqual(ctx.begin_calls, begin_calls_after_crossfade + 1)
+            mounted_ids = {m.component_id for m in app._mounted_last_frame}
+            self.assertEqual(mounted_ids, {"settings_title"})
+            self.assertIsNone(app.state["perf"]["active_transition"])
+
     def test_transition_marks_full_frame_dirty(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             app = PlaneApp(_write_app(Path(td), _container_payload()), handlers={})

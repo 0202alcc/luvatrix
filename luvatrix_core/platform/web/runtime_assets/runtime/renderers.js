@@ -14,6 +14,7 @@ export class CanvasRenderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
+    this._imageCache = new Map();
   }
 
   static isSupported(canvas) {
@@ -73,6 +74,8 @@ export class CanvasRenderer {
         } else {
           this.ctx.fillText(command.text, a[0], a[1], a[7] || undefined);
         }
+      } else if (command.opcode === OPCODES.IMAGE) {
+        this._drawImageAsset(a, command.asset);
       }
     }
   }
@@ -84,6 +87,31 @@ export class CanvasRenderer {
       this.canvas.width = w;
       this.canvas.height = h;
     }
+  }
+
+  _drawImageAsset(a, asset) {
+    if (!asset) {
+      return;
+    }
+    const entry = this._imageCache.get(asset);
+    if (entry) {
+      if (entry.ready) {
+        const opacity = Number(a[4] ?? 1);
+        if (opacity < 1) {
+          this.ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
+        }
+        this.ctx.drawImage(entry.image, a[0], a[1], a[2], a[3]);
+        this.ctx.globalAlpha = 1;
+      }
+      return;
+    }
+    const image = new Image();
+    const pending = { image, ready: false };
+    this._imageCache.set(asset, pending);
+    image.onload = () => {
+      pending.ready = true;
+    };
+    image.src = asset;
   }
 }
 

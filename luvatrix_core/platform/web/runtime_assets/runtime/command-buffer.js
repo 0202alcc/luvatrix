@@ -21,6 +21,7 @@ export const OPCODES = Object.freeze({
   MODEL_3D: 20,
   ROUNDED_CUBOID_3D: 21,
   IMAGE_3D: 22,
+  IMAGE: 23,
 });
 
 export const SHADERS = Object.freeze({
@@ -42,7 +43,7 @@ export function decodeCommandBuffer(buffer) {
     if (opcode === OPCODES.TEXT || opcode === OPCODES.TEXT_3D) {
       const fontId = headers[i++] ?? 0;
       commands.push({ opcode, args, text: strings[meta0] || "", font: strings[fontId] || "sans-serif" });
-    } else if (opcode === OPCODES.MODEL_3D || opcode === OPCODES.IMAGE_3D) {
+    } else if (opcode === OPCODES.MODEL_3D || opcode === OPCODES.IMAGE_3D || opcode === OPCODES.IMAGE) {
       commands.push({ opcode, args, asset: strings[meta0] || "" });
     } else {
       commands.push({ opcode, args, meta: meta0, shader: SHADERS[meta0] || "" });

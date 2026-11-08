@@ -224,7 +224,45 @@ the runtime keeps the normalized routes/transitions/animations for motion.
 Still skipped (with warnings): boolean operations, complex vector
 geometry beyond bounding shapes, and Lottie sources.
 
-## 8. Known Limitations and Follow-ups
+## 8. Web Target Support (Implemented)
+
+Container and planes apps run in the browser through the same `PlaneApp`
+runtime. `build-web` / `serve-web` ship a pure-Python bundle: the `luvatrix`
+shim, all of `luvatrix_ui`, and a curated `luvatrix_core` subset
+(`coordinates`, `hdi_thread`, with minimal package `__init__` files so
+heavyweight modules never import). No torch and no native extensions reach
+the browser.
+
+1. `luvatrix_ui/planes_web.py` provides the bridge: `PlaneWebApp` adapts
+   the browser contract (`init_browser` / `loop_browser`) to `PlaneApp`
+   through `WebAppContext`, which (a) converts JS input snapshots into HDI
+   events (pointer move, click, scroll) and (b) translates mounted
+   drawables into the web command-buffer format the JS renderers decode.
+2. App entrypoints implement a dual contract to run on both targets:
+   native `init(ctx)` / `loop(ctx, dt)` / `stop(ctx)` plus browser
+   `init_browser(...)` / `loop_browser(dt)` (see
+   `examples/container_motion/app_main.py`).
+3. Transitions and animations work identically: `planes_motion.py` is pure
+   Python, so route crossfades and keyframe animations run as-is in
+   Pyodide; the transition/animation state (opacity multipliers,
+   offsets) is applied to the mounted drawables before translation.
+4. `TextComponent` maps to the `TEXT` op; `SVGComponent` maps to the
+   `IMAGE` op (SVG markup inlined as a base64 data URL, drawn by the JS
+   Canvas renderer with an image cache). A new `IMAGE` opcode (23) is
+   defined on both the Python and JS sides.
+5. `MatrixUIFrameRenderer` construction is optional in `PlaneApp`
+   (`_construct_matrix_ui_frame_renderer` returns `None` when the torch
+   pipeline is not importable); native behavior is unchanged.
+6. Transition completion now forces one full-frame present
+   (`transition_complete` invalidation reason) so the settled route
+   reaches the screen even when nothing else is dirty — on every target.
+
+Web bridge limitations (v1): stained-glass button drawables are skipped
+(counted in `WebAppContext.skipped_mount_types`); keyboard events are not
+bridged (planes has no key hooks yet); dirty rects and scroll shifts are
+ignored (the browser redraws the full command buffer each frame).
+
+## 9. Known Limitations and Follow-ups
 
 1. `scale`/`rotation_deg` animation props interpolate and report but are
    not yet rasterized by the text/svg mount pipeline.
