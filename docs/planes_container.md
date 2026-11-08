@@ -161,42 +161,74 @@ and so on).
 }
 ```
 
-## 6. Figma Reference Importer
+## 6. Runtime Behavior (Implemented)
 
-`import_figma_document(document)` compiles a Figma REST-style document JSON
-into a container payload plus generated assets. The reference subset:
+The planes runtime consumes container documents natively: a payload with
+`container_protocol_version` is compiled through `compile_container`, and
+the runtime keeps the normalized routes/transitions/animations for motion.
 
-1. Top-level `FRAME` nodes on each `CANVAS` page become one plane and one
-   route each; route ids are slugs of frame names, plane ids are
-   `plane_<slug>`.
-2. The page-level `prototypeStartNodeID` (when it matches a top-level
-   frame) selects the entry route; otherwise the first frame is the entry.
-3. Frame `fills` map to the plane background color.
-4. `TEXT` nodes become `text` components: `characters` as text, `style`
-   font family/size/weight, first solid fill as `color_hex`. Positions are
-   converted from absolute bounding boxes to coordinates relative to the
-   parent frame (`screen_tl`).
-5. Shape nodes (`RECTANGLE`, `ELLIPSE`, `POLYGON`, `STAR`, `LINE`,
-   `VECTOR`) and nested `FRAME` leaves become `svg` components. The
-   importer generates the SVG markup into `FigmaImportResult.assets` keyed
-   by `assets/svg_<node_id>.svg`; callers materialize those files next to
-   the container document.
-6. Node `interactions` with `NODE` actions become route transitions on the
-   route containing the interacting node, with trigger
-   `navigate_<target_route>`. Figma transition types map as:
-   `MOVE_IN_LEFT` → `slide_left` (and the right/top/bottom variants),
-   `DISSOLVE` and `SMART_ANIMATE` → `fade`, others → `none`. Figma easing
-   types map to the container easing enum. Durations convert from seconds
-   to milliseconds.
+1. `PlaneApp.activate_route(route_id)` swaps the active-plane set
+   immediately, then plays the declared transition (looked up on the
+   source route by `to_route`; an explicit `transition=` argument
+   overrides). Without a matching spec the switch is immediate.
+2. `fade` transitions crossfade: entering components take the eased
+   progress as an opacity multiplier, exiting components take
+   `1 - progress`. `slide_left`/`slide_right`/`slide_up`/`slide_down`
+   offset the entering plane in from the named edge and the exiting plane
+   out the opposite edge (offsets in pixels over the matrix size). During
+   a transition both routes' planes render.
+3. Component animations interpolate their keyframes each frame (`opacity`,
+   `offset_x`, `offset_y`, `scale`, `rotation_deg` props). Opacity
+   composes multiplicatively with transition multipliers; offsets add.
+   `scale`/`rotation_deg` interpolate and are exposed in
+   overrides/telemetry, but are not yet rasterized by the text/svg mount
+   pipeline.
+4. Triggers: `route_enter` starts when their route activates; `route_exit`
+   when their route deactivates; `on_mount` when the target component
+   first becomes active; `on_state` when the referenced `state_key` value
+   changes between frames (re-setting the same value does not restart).
+5. `delay_ms` holds the first keyframe; `loop: repeat` wraps raw progress;
+   `ping_pong` reflects it (triangle wave). When a `none`-loop animation
+   completes, its final keyframe props persist as the rest state, and the
+   completion frame is presented once.
+6. Determinism: all motion is driven by the frame `dt`. Route changes
+   force the full-frame invalidation boundary (existing escape hatch,
+   reason `route_change:<from>-><to>`); running animations contribute
+   their component bounds (plus offsets) as dirty rects so incremental
+   present still applies between transition frames.
+7. Telemetry: `state["perf"]["active_transition"]` is `null` or
+   `{from_route, to_route, kind, progress, duration_ms}`;
+   `state["perf"]["animation_progress"]` maps target component id to raw
+   progress for running animations. Both sit alongside `compose_mode`.
 
-Unmapped Figma node types are skipped and reported in
-`FigmaImportResult.warnings`.
+## 7. Figma Reference Importer
 
-## 7. Known Limitations and Follow-ups
+`import_figma_document` covers:
 
-1. Transitions and animations are schema/normalization only in this
-   revision; the Planes runtime does not yet interpolate them at present
-   time. Wiring into the planes runtime present pipeline is the next step.
-2. The Figma importer covers the reference subset above; gradients,
-   auto-layout, components/instances, and Lottie sources are future work.
-3. `on_state` animations have no state-binding wiring yet.
+1. Top-level `FRAME` and `INSTANCE` nodes become one plane and one route
+   each; `prototypeStartNodeID` selects the entry route.
+2. Solid fills map to hex colors; `GRADIENT_LINEAR`/`GRADIENT_RADIAL`
+   fills compile to SVG gradient defs using Figma handle order (start,
+   end, width direction).
+3. Auto-layout frames (`layoutMode`) stack bounds-less children along the
+   primary axis from padding with `itemSpacing` (REST JSON normally
+   carries resolved bounds; this covers plugin/file exports that omit
+   them).
+4. `TEXT` nodes become text components; shapes and nested
+   frames/instances become svg components with generated markup returned
+   in `FigmaImportResult.assets`.
+5. `NODE` prototype interactions become route transitions with mapped
+   kinds and easings.
+6. Top-level `COMPONENT` definitions are excluded from routes/planes.
+
+Still skipped (with warnings): boolean operations, complex vector
+geometry beyond bounding shapes, and Lottie sources.
+
+## 8. Known Limitations and Follow-ups
+
+1. `scale`/`rotation_deg` animation props interpolate and report but are
+   not yet rasterized by the text/svg mount pipeline.
+2. Route activation is currently API-driven (`activate_route`); wiring
+   transition triggers to HDI-dispatched handler actions is future work.
+3. Gradients import as SVG defs and rasterize through the existing SVG
+   pipeline.

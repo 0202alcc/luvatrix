@@ -14,6 +14,8 @@ from luvatrix_ui.component_schema import CoordinatePoint
 from luvatrix_ui.controls.stained_glass_button import StainedGlassButtonComponent
 from luvatrix_ui.controls.svg_component import SVGComponent
 from luvatrix_ui.planes_protocol import compile_planes_to_ui_ir, resolve_web_metadata
+from luvatrix_ui.planes_container import ComponentAnimation, ContainerRoute, compile_container
+from luvatrix_ui.planes_motion import MotionOverride, MotionState
 from luvatrix_ui.ui_ir import BoundingBoxSpec
 from luvatrix_ui.text.component import TextComponent
 from luvatrix_ui.text.renderer import FontSpec, TextAppearance, TextMeasureRequest, TextSizeSpec
@@ -89,6 +91,20 @@ class PlaneApp:
         self._planes_v2_rollout_flags = resolve_planes_v2_rollout_flags()
 
         self._planes = json.loads(self._plane_path.read_text(encoding="utf-8"))
+        self._container_routes: tuple[ContainerRoute, ...] = ()
+        self._container_animations: tuple[ComponentAnimation, ...] = ()
+        self._container_entry_route: str | None = None
+        if isinstance(self._planes.get("container_protocol_version"), str):
+            compiled_container = compile_container(self._planes, strict=strict)
+            self._container_routes = compiled_container.routes
+            self._container_animations = compiled_container.animations
+            self._container_entry_route = compiled_container.entry_route
+            self._planes = compiled_container.planes_payload
+        self._motion = MotionState()
+        self._motion_overrides: dict[str, MotionOverride] = {}
+        self._active_plane_ids_override: tuple[str, ...] | None = None
+        self._mounted_last_frame: list[Any] = []
+        self._mounted_frame_start_index = 0
         self.metadata = resolve_web_metadata(self._planes["app"])
         self._ui_page = None
         self._bg_color = (0, 0, 0, 255)
@@ -179,11 +195,13 @@ class PlaneApp:
         self._frame_scroll_shift = None
         self._ensure_compiled(ctx)
         assert self._ui_page is not None
+        self._mounted_frame_start_index = len(getattr(ctx, "mounted", []) or [])
         pre_plane_scroll = self._plane_scroll_position()
         pre_signature = self._current_dirty_signature()
         input_start_ns = time.perf_counter_ns()
         self._dispatch_events(ctx, dt)
         self._add_perf_ns("input_ns", time.perf_counter_ns() - input_start_ns)
+        self._advance_motion(dt)
         self._bg_color = self._resolve_background()
         post_plane_scroll = self._plane_scroll_position()
         post_signature = self._current_dirty_signature()
@@ -211,6 +229,16 @@ class PlaneApp:
             self._reset_scroll_shift_residual()
             dirty_rects = [(0, 0, int(self._ui_page.matrix.width), int(self._ui_page.matrix.height))]
             scroll_shift = None
+        if self._motion.transition_active() and self._ui_page is not None:
+            # Route changes are a full-frame boundary class: the crossfade or
+            # slide touches every pixel of the entering and exiting planes.
+            self._reset_scroll_shift_residual()
+            dirty_rects = [(0, 0, int(self._ui_page.matrix.width), int(self._ui_page.matrix.height))]
+            scroll_shift = None
+        else:
+            animation_rects = self._motion_dirty_rects()
+            if animation_rects:
+                dirty_rects = self._merge_dirty_rects(dirty_rects, animation_rects)
         dirty_count = int(len(dirty_rects))
         dirty_area = int(self._dirty_rect_union_area(dirty_rects))
         full_area = (
@@ -279,6 +307,8 @@ class PlaneApp:
                 "dirty_rect_area_px": 0,
                 "dirty_rect_area_ratio": 0.0,
                 "compose_mode": "idle_skip",
+                "active_transition": self._motion.transition_telemetry(),
+                "animation_progress": self._motion.animation_telemetry(),
                 "incremental_present_pct": float(counters.get("incremental_present_pct", 0.0)),
                 "full_present_pct": float(counters.get("full_present_pct", 0.0)),
                 "presented_frames": int(counters.get("presented_frames", 0)),
@@ -324,6 +354,7 @@ class PlaneApp:
             }
             self._merge_renderer_bitmap_cache_stats()
             self._merge_renderer_stained_glass_cache_stats()
+            self._mounted_last_frame = []
             return
         if compose_mode == "full_frame":
             self._reset_scroll_shift_residual()
@@ -392,6 +423,8 @@ class PlaneApp:
         mounted += self._mount_origin_reference_overlay(ctx)
         self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_origin_refs_start_ns)
         present_start_ns = time.perf_counter_ns()
+        mounted_snapshot = getattr(ctx, "mounted", []) or []
+        self._mounted_last_frame = list(mounted_snapshot[self._mounted_frame_start_index :])
         counters = self._update_present_counters(compose_mode)
         self.state["perf"] = {
             "components_considered": int(considered),
@@ -437,6 +470,8 @@ class PlaneApp:
             "dirty_rect_area_px": dirty_area,
             "dirty_rect_area_ratio": float(dirty_area_ratio),
             "compose_mode": compose_mode,
+            "active_transition": self._motion.transition_telemetry(),
+            "animation_progress": self._motion.animation_telemetry(),
             "incremental_present_pct": float(counters.get("incremental_present_pct", 0.0)),
             "full_present_pct": float(counters.get("full_present_pct", 0.0)),
             "presented_frames": int(counters.get("presented_frames", 0)),
@@ -523,6 +558,14 @@ class PlaneApp:
         self._initialize_viewport_scroll_state()
         self._initialize_plane_scroll_state()
         self._bg_color = _parse_hex_rgba(self._ui_page.background)
+        if self._container_routes and "active_route" not in self.state:
+            self.state["active_route"] = self._container_entry_route or str(self._ui_page.active_route_id or "")
+        if self._container_routes:
+            active_route_id = str(self.state.get("active_route", ""))
+            for route in self._container_routes:
+                if route.id == active_route_id:
+                    self._active_plane_ids_override = tuple(route.active_planes)
+                    break
 
     def _dispatch_events(self, ctx, dt: float) -> None:
         if self._ui_page is None:
@@ -1102,12 +1145,12 @@ class PlaneApp:
                 plane_x, plane_y = self._plane_scroll_position()
                 x -= plane_x
                 y -= plane_y
-            return (x, y)
+            return self._apply_motion_offset(component_id, x, y)
         key = self._resolved_position_cache_key(component)
         cached = self._layout_position_cache.get(component.component_id)
         if cached is not None and cached[0] == key:
             self._frame_counts["layout_cache_hits"] = int(self._frame_counts.get("layout_cache_hits", 0)) + 1
-            return cached[1]
+            return self._apply_motion_offset(component_id, cached[1][0], cached[1][1])
         self._layout_resolve_stack.add(component_id)
         try:
             x, y = self._resolved_position_base(component)
@@ -1120,7 +1163,13 @@ class PlaneApp:
         resolved = (x, y)
         self._layout_position_cache[component.component_id] = (key, resolved)
         self._frame_counts["layout_cache_misses"] = int(self._frame_counts.get("layout_cache_misses", 0)) + 1
-        return resolved
+        return self._apply_motion_offset(component_id, resolved[0], resolved[1])
+
+    def _apply_motion_offset(self, component_id: str, x: float, y: float) -> tuple[float, float]:
+        override = self._motion_overrides.get(component_id)
+        if override is None or (override.offset_x == 0.0 and override.offset_y == 0.0):
+            return (x, y)
+        return (x + override.offset_x, y + override.offset_y)
 
     def _resolved_position_cache_key(self, component) -> tuple[Any, ...]:
         props = component.style if isinstance(component.style, dict) else {}
@@ -1276,7 +1325,7 @@ class PlaneApp:
             asset_src = ""
             if component.asset is not None:
                 asset_src = str(component.asset.source)
-            return ("svg", asset_src, round(float(component.opacity), 4))
+            return ("svg", asset_src, round(self._component_opacity(component), 4))
         if kind == "button":
             props = component.style if isinstance(component.style, dict) else {}
             return (
@@ -1285,12 +1334,12 @@ class PlaneApp:
                 int(round(float(component.height))),
                 int(props.get("kernel_size", 9)),
                 round(float(props.get("sigma_px", 3.0)), 3),
-                round(float(component.opacity), 4),
+                round(self._component_opacity(component), 4),
             )
         props = component.style if isinstance(component.style, dict) else {}
         return (
             "text",
-            round(float(component.opacity), 4),
+            round(self._component_opacity(component), 4),
             round(float(props.get("font_size_px", 14.0)), 4),
         )
 
@@ -1344,7 +1393,7 @@ class PlaneApp:
                             frame=frame,
                             font_size_px=font_size_px,
                             color_hex=color_hex,
-                            opacity=float(component.opacity),
+                            opacity=self._component_opacity(component),
                             max_width_px=max_width_px,
                         )
                     )
@@ -1362,7 +1411,7 @@ class PlaneApp:
                             frame=frame,
                             width=float(component.width),
                             height=float(component.height),
-                            opacity=float(component.opacity),
+                            opacity=self._component_opacity(component),
                             props=props,
                         )
                     )
@@ -1383,7 +1432,7 @@ class PlaneApp:
                         frame=frame,
                         width=float(component.width),
                         height=float(component.height),
-                        opacity=float(component.opacity),
+                        opacity=self._component_opacity(component),
                     )
                 )
                 self._add_perf_ns("mount_ns", time.perf_counter_ns() - mount_start_ns)
@@ -1766,7 +1815,7 @@ class PlaneApp:
             return []
         points: list[tuple[str, float, float]] = [("camera", 0.0, 0.0)]
         plane_scroll_x, plane_scroll_y = self._plane_scroll_position()
-        active_plane_ids = set(self._ui_page.active_plane_ids)
+        active_plane_ids = self._active_plane_ids()
         for plane in sorted(self._plane_index.values(), key=lambda item: (int(item.plane_global_z), item.plane_id)):
             if active_plane_ids and plane.plane_id not in active_plane_ids:
                 continue
@@ -1871,6 +1920,8 @@ class PlaneApp:
         }
 
     def _hit_index_active_planes(self) -> tuple[str, ...]:
+        if self._active_plane_ids_override is not None:
+            return tuple(sorted(self._active_plane_ids()))
         if self._ui_page is None or self._ui_page.ir_version != "planes-v2":
             return ()
         raw = getattr(self._ui_page, "active_plane_ids", ())
@@ -1886,6 +1937,7 @@ class PlaneApp:
             self._viewport_scroll_snapshot(),
             self._hit_index_active_planes(),
             self._drag_override_snapshot(),
+            self._motion.epoch,
         )
 
     def _refresh_hit_test_index(self, *, force: bool = False) -> None:
@@ -2884,17 +2936,170 @@ class PlaneApp:
     def _component_is_active(self, component) -> bool:
         if self._ui_page is None:
             return True
+        if self._active_plane_ids_override is not None:
+            if self._is_overlay_attached(component):
+                return True
+            plane_id = getattr(component, "plane_id", None)
+            if not isinstance(plane_id, str):
+                return False
+            return plane_id in self._active_plane_ids()
         if self._ui_page.ir_version != "planes-v2":
             return True
         if self._is_overlay_attached(component):
             return True
-        active = set(getattr(self._ui_page, "active_plane_ids", ()))
+        active = self._active_plane_ids()
         if not active:
             return True
         plane_id = getattr(component, "plane_id", None)
         if not isinstance(plane_id, str):
             return False
         return plane_id in active
+
+    def _active_plane_ids(self) -> set[str]:
+        if self._active_plane_ids_override is not None:
+            active = set(self._active_plane_ids_override)
+            if self._motion.transition_active():
+                active.update(self._motion.prev_plane_ids)
+            return active
+        if self._ui_page is None:
+            return set()
+        return set(getattr(self._ui_page, "active_plane_ids", ()) or ())
+
+    def activate_route(
+        self,
+        route_id: str,
+        *,
+        transition: object | None = None,
+    ) -> None:
+        """Activate a container route, applying its transition spec if declared.
+
+        The active-plane swap is immediate; the transition (fade/slide) then
+        plays over the following frames until its duration elapses. Without a
+        matching spec the switch is immediate.
+        """
+        if not self._container_routes:
+            raise RuntimeError("activate_route requires a container payload (container_protocol_version)")
+        route = next((entry for entry in self._container_routes if entry.id == route_id), None)
+        if route is None:
+            raise KeyError(f"unknown route `{route_id}`")
+        from_route_id = str(self.state.get("active_route", ""))
+        prev_route = next((entry for entry in self._container_routes if entry.id == from_route_id), None)
+        spec = transition
+        if spec is None and prev_route is not None:
+            spec = next((t for t in prev_route.transitions if t.to_route == route_id), None)
+        prev_plane_ids = (
+            tuple(prev_route.active_planes)
+            if prev_route is not None
+            else tuple(sorted(self._active_plane_ids()))
+        )
+        self._active_plane_ids_override = tuple(route.active_planes)
+        self.state["active_route"] = route_id
+        self._motion.start_transition(
+            from_route=from_route_id,
+            to_route=route_id,
+            spec=spec,
+            prev_plane_ids=prev_plane_ids,
+        )
+        for animation in self._container_animations:
+            if animation.trigger == "route_exit" and self._animation_targets_route(animation, prev_route):
+                self._motion.start_animation(animation)
+            elif animation.trigger == "route_enter" and self._animation_targets_route(animation, route):
+                self._motion.start_animation(animation)
+        self.state["force_full_invalidation"] = True
+        self.state["force_full_invalidation_reason"] = f"route_change:{from_route_id}->{route_id}"
+
+    def _animation_targets_route(self, animation: ComponentAnimation, route: ContainerRoute | None) -> bool:
+        if route is None:
+            return False
+        component = self._component_index.get(animation.target)
+        if component is None:
+            return False
+        plane_id = getattr(component, "plane_id", None)
+        return isinstance(plane_id, str) and plane_id in route.active_planes
+
+    def _advance_motion(self, dt: float) -> None:
+        self._detect_state_animations()
+        self._detect_mount_animations()
+        self._motion.advance(dt)
+        component_plane_ids = {
+            str(component.component_id): str(getattr(component, "plane_id", "") or "")
+            for component in self._ui_page.components
+            if self._ui_page is not None
+        }
+        current_plane_ids = frozenset(self._active_plane_ids()) - frozenset(self._motion.prev_plane_ids)
+        exiting_plane_ids = frozenset(self._motion.prev_plane_ids) & frozenset(self._active_plane_ids())
+        self._motion_overrides = self._motion.overrides(
+            component_plane_ids=component_plane_ids,
+            entering_plane_ids=current_plane_ids,
+            exiting_plane_ids=exiting_plane_ids,
+        )
+
+    def _detect_state_animations(self) -> None:
+        for animation in self._container_animations:
+            if animation.trigger != "on_state" or not animation.state_key:
+                continue
+            key = str(animation.state_key)
+            value = self.state.get(key)
+            if key in self._motion.state_values:
+                if value != self._motion.state_values[key]:
+                    self._motion.start_animation(animation)
+            self._motion.state_values[key] = value
+
+    def _detect_mount_animations(self) -> None:
+        for animation in self._container_animations:
+            if animation.trigger != "on_mount":
+                continue
+            target = str(animation.target)
+            if target in self._motion.mounted_targets:
+                continue
+            component = self._component_index.get(target)
+            if component is not None and self._component_is_active(component):
+                self._motion.mounted_targets.add(target)
+                self._motion.start_animation(animation)
+
+    def _component_opacity(self, component) -> float:
+        base = float(component.opacity)
+        override = self._motion_overrides.get(str(component.component_id))
+        if override is None:
+            return base
+        return max(0.0, min(1.0, base * override.opacity_multiplier))
+
+    def _motion_dirty_rects(self) -> list[tuple[int, int, int, int]]:
+        if self._ui_page is None:
+            return []
+        rects: list[tuple[int, int, int, int]] = []
+        matrix_w = int(self._ui_page.matrix.width)
+        matrix_h = int(self._ui_page.matrix.height)
+        for target, playback in self._motion.animations.items():
+            component = self._component_index.get(target)
+            if component is None or not self._component_is_active(component):
+                continue
+            if playback.finished() and target not in self._motion.just_completed:
+                continue
+            override = self._motion_overrides.get(target)
+            bounds = self._resolved_interaction_bounds(component)
+            x0 = float(bounds.x) + (override.offset_x if override else 0.0)
+            y0 = float(bounds.y) + (override.offset_y if override else 0.0)
+            x1 = x0 + float(bounds.width)
+            y1 = y0 + float(bounds.height)
+            rects.append(
+                (
+                    max(0, int(math.floor(x0))),
+                    max(0, int(math.floor(y0))),
+                    min(matrix_w, int(math.ceil(x1))),
+                    min(matrix_h, int(math.ceil(y1))),
+                )
+            )
+        return [rect for rect in rects if rect[2] > rect[0] and rect[3] > rect[1]]
+
+    def _merge_dirty_rects(
+        self,
+        base: list[tuple[int, int, int, int]] | None,
+        extra: list[tuple[int, int, int, int]],
+    ) -> list[tuple[int, int, int, int]]:
+        merged = list(base or [])
+        merged.extend(extra)
+        return merged
 
     def _mount_viewport_cutout_mask(self, ctx, component) -> None:
         if self._ui_page is None:
