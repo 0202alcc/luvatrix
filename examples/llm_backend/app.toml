@@ -1,0 +1,12 @@
+# llm_backend — mini LLM backend exposed as luvatrix MCP app tools.
+#
+# No platform_support: the app is headless (no rendering), so it runs anywhere
+# with `--render headless --mcp`.
+app_id = "examples.llm_backend"
+protocol_version = "3"
+entrypoint = "app_main:create"
+required_capabilities = []
+optional_capabilities = []
+
+[mcp]
+enabled = true
