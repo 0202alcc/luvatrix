@@ -620,7 +620,8 @@ class TestUiHelpers:
 
     def test_truncate_adds_ellipsis(self):
         assert sl_ui.truncate("short", 10) == "short"
-        assert sl_ui.truncate("a much longer title", 10) == "a much l…"
+        assert sl_ui.truncate("a much longer title", 10) == "a much lo…"
+        assert len(sl_ui.truncate("a much longer title", 10)) == 10
         assert sl_ui.truncate("abc", 3) == "abc"
         assert sl_ui.truncate("abcd", 3) == "ab…"
 
