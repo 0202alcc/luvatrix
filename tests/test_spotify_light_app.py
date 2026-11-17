@@ -25,6 +25,7 @@ from luvatrix_core.core.mcp_runtime import MCP_CAPABILITIES, McpRuntimeBridge  #
 from luvatrix_core.core.scene_graph import (  # noqa: E402
     ClearNode,
     CpuLayerNode,
+    RectNode,
     SceneGraphBuffer,
     TextNode,
 )
@@ -256,12 +257,15 @@ class TestSearchView:
 
 
 class _FakeNativeField:
-    def __init__(self, *, x, y, width, height, placeholder, value, on_change, on_submit):
+    def __init__(self, *, x, y, width, height, placeholder, value, on_change, on_submit,
+                 within=None, bordered=True):
         self.frame = (x, y, width, height)
         self.placeholder = placeholder
         self.value = value
         self.on_change = on_change
         self.on_submit = on_submit
+        self.within = within
+        self.bordered = bordered
         self.is_visible = True
         self.destroyed = False
 
@@ -289,15 +293,42 @@ class _FakeNativeField:
         self.destroyed = True
 
 
+class _FakeGlassSurface:
+    def __init__(self, *, x, y, width, height, corner_radius=0.0, style="regular"):
+        self.frame = (x, y, width, height)
+        self.corner_radius = corner_radius
+        self.style = style
+        self.is_visible = True
+        self.destroyed = False
+
+    def set_frame(self, x, y, width, height):
+        self.frame = (x, y, width, height)
+
+    def show(self):
+        self.is_visible = True
+
+    def hide(self):
+        self.is_visible = False
+
+    def destroy(self):
+        self.destroyed = True
+
+
 class _FakeNativeBridge:
     def __init__(self):
         self.available = True
         self.created: list[_FakeNativeField] = []
+        self.glass: list[_FakeGlassSurface] = []
 
     def create_text_field(self, **kwargs):
         field = _FakeNativeField(**kwargs)
         self.created.append(field)
         return field
+
+    def create_glass_surface(self, **kwargs):
+        surface = _FakeGlassSurface(**kwargs)
+        self.glass.append(surface)
+        return surface
 
     def suppress_keyboard(self):
         return False
@@ -393,6 +424,112 @@ class TestPlayerBar:
         assert any(t in ("0:30", "0:31") for t in texts)
         actions = {region.action for region in app._hits}
         assert {"toggle_shuffle", "prev", "next", "cycle_repeat", "pick_device"} <= actions
+
+
+class TestGlassSurfaces:
+    """Liquid Glass: app-declared glass regions via the native-controls bridge."""
+
+    def test_login_field_glass_container_borderless_field(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+
+        _tick(app, ctx, 2)
+
+        containers = [g for g in bridge.glass if g.style == "regular"]
+        assert len(containers) == 1
+        container = containers[0]
+        assert container.frame == (450.0, 420.0, 380.0, 40.0)
+        assert container.corner_radius == 20.0
+        field = bridge.created[0]
+        assert field.within is container
+        assert field.bordered is False
+
+    def test_chrome_glass_for_sidebar_and_player_bar(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        app.authenticated = True
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+
+        _tick(app, ctx, 2)
+
+        by_style = {g.style: g for g in bridge.glass}
+        assert by_style["sidebar"].frame == (0.0, 0.0, sl_views.SIDEBAR_W, 800.0)
+        assert by_style["regular"].frame == (0.0, 800.0 - sl_views.PLAYER_H, 1280.0,
+                                             sl_views.PLAYER_H)
+        assert app.glass_active is True
+
+    def test_glass_active_suppresses_drawn_backgrounds(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        monkeypatch.setattr(app_main, "native_controls", lambda: _FakeNativeBridge())
+
+        _tick(app, ctx, 2)
+
+        rects = _nodes(scene_buffer, RectNode)
+        sidebar_bg = [n for n in rects if n.color_rgba == sl_views.SIDEBAR_BG
+                      and n.width == sl_views.SIDEBAR_W and n.height == 800]
+        bar_bg = [n for n in rects if n.color_rgba == sl_views.BAR_BG
+                  and n.height == sl_views.PLAYER_H]
+        assert sidebar_bg == []
+        assert bar_bg == []
+
+    def test_drawn_backgrounds_return_without_bridge(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        monkeypatch.setattr(app_main, "native_controls", lambda: None)
+
+        _tick(app, ctx, 2)
+
+        rects = _nodes(scene_buffer, RectNode)
+        assert any(n.color_rgba == sl_views.SIDEBAR_BG and n.width == sl_views.SIDEBAR_W
+                   for n in rects)
+        assert any(n.color_rgba == sl_views.BAR_BG and n.height == sl_views.PLAYER_H
+                   for n in rects)
+        assert app.glass_active is False
+
+    def test_content_flows_under_bar_only_with_glass(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        app.view = "library"
+        app.playlists = tuple(_playlist(f"Mix {i:02d}") for i in range(48))
+        app.content_scroll = 400.0
+
+        def card_bottoms() -> list[float]:
+            frame = scene_buffer.latest_frame()
+            assert frame is not None
+            return [node.y + node.height for node in frame.nodes
+                    if getattr(node, "color_rgba", None) == sl_views.CARD_BG
+                    and node.x >= sl_views.SIDEBAR_W]
+
+        monkeypatch.setattr(app_main, "native_controls", lambda: None)
+        _tick(app, ctx, 2)
+        no_glass_bottom = max(card_bottoms())
+
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+        app.invalidate()
+        _tick(app, ctx, 2)
+        glass_bottom = max(card_bottoms())
+
+        assert glass_bottom > no_glass_bottom
+        assert glass_bottom > 800.0 - sl_views.PLAYER_H
+
+    def test_glass_destroyed_when_bridge_goes_away(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        app.authenticated = True
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+        _tick(app, ctx, 2)
+        surfaces = list(bridge.glass)
+        assert surfaces
+
+        bridge.available = False
+        app.invalidate()
+        _tick(app, ctx, 2)
+
+        assert all(surface.destroyed for surface in surfaces)
+        assert app.glass_active is False
 
 
 class TestMcpHooks:

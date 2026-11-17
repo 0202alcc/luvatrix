@@ -118,8 +118,22 @@ def _daypart() -> str:
 # -- sidebar -------------------------------------------------------------------
 
 
+def _cull_bottom(app, height: float) -> float:
+    """Bottom cull edge for content views.
+
+    With native glass up, the player bar is translucent, so content flows under it;
+    otherwise cull at the opaque bar's top edge.
+    """
+    return height if getattr(app, "glass_active", False) else height - PLAYER_H
+
+
 def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
-    frame.rect(x=0, y=0, width=SIDEBAR_W, height=height, color=SIDEBAR_BG, z_index=1)
+    if getattr(app, "glass_active", False):
+        # Low-alpha tint: the NSGlassEffectView/NSVisualEffectView plate carries the chrome.
+        frame.rect(x=0, y=0, width=SIDEBAR_W, height=height,
+                   color=(SIDEBAR_BG[0], SIDEBAR_BG[1], SIDEBAR_BG[2], 70), z_index=1)
+    else:
+        frame.rect(x=0, y=0, width=SIDEBAR_W, height=height, color=SIDEBAR_BG, z_index=1)
     _text(frame, "Spotify Light", x=22, y=20, size=20, color=ACCENT, z=3)
 
     nav = [("home", "Home"), ("search", "Search"), ("library", "Your Library")]
@@ -205,7 +219,7 @@ def _draw_track_table(frame, app, out: FrameOut, rows, *, x0, y0, width, height,
     table_w = width - SIDEBAR_W - CONTENT_PAD * 2
     for row in rows:
         row_y = y0 + (row.index - 1) * ROW_H
-        if row_y + ROW_H < 0 or row_y > height - PLAYER_H:
+        if row_y + ROW_H < 0 or row_y > _cull_bottom(app, height):
             continue
         hovering = _hover(mouse, x0 - 8, row_y, table_w + 8, ROW_H)
         if hovering:
@@ -251,7 +265,7 @@ def draw_home(frame, app, out: FrameOut, *, width: float, height: float, mouse) 
             row, col = divmod(idx, cols)
             cx = x0 + col * (CARD_W + CARD_GAP)
             cy = y + row * (CARD_H + CARD_GAP)
-            if cy + CARD_H > 0 and cy < height - PLAYER_H:
+            if cy + CARD_H > 0 and cy < _cull_bottom(app, height):
                 _draw_card(frame, app, out, card, x=cx, y=cy, mouse=mouse)
         y += rows * (CARD_H + CARD_GAP) + 12
 
@@ -354,7 +368,7 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
             row, col = divmod(idx, cols)
             cx = x0 + col * (CARD_W + CARD_GAP)
             cy = y + row * (CARD_H + CARD_GAP)
-            if cy + CARD_H > 0 and cy < height - PLAYER_H:
+            if cy + CARD_H > 0 and cy < _cull_bottom(app, height):
                 _draw_card(frame, app, out, card, x=cx, y=cy, mouse=mouse)
         y += rows_n * (CARD_H + CARD_GAP) + 12
     out.content_height = y + app.content_scroll
@@ -380,7 +394,7 @@ def draw_library(frame, app, out: FrameOut, *, width: float, height: float, mous
         row, col = divmod(idx, cols)
         cx = x0 + col * (CARD_W + CARD_GAP)
         cy = y + row * (CARD_H + CARD_GAP)
-        if cy + CARD_H > 0 and cy < height - PLAYER_H:
+        if cy + CARD_H > 0 and cy < _cull_bottom(app, height):
             _draw_card(frame, app, out, card, x=cx, y=cy, mouse=mouse)
     out.content_height = y + rows * (CARD_H + CARD_GAP) + app.content_scroll
 
@@ -390,8 +404,9 @@ def draw_library(frame, app, out: FrameOut, *, width: float, height: float, mous
 
 def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
     bar_y = height - PLAYER_H
-    frame.rect(x=0, y=bar_y, width=width, height=PLAYER_H, color=BAR_BG, z_index=10)
-    frame.rect(x=0, y=bar_y, width=width, height=1, color=(45, 45, 45, 255), z_index=10)
+    if not getattr(app, "glass_active", False):
+        frame.rect(x=0, y=bar_y, width=width, height=PLAYER_H, color=BAR_BG, z_index=10)
+        frame.rect(x=0, y=bar_y, width=width, height=1, color=(45, 45, 45, 255), z_index=10)
 
     player = app.player
     track = player.track if player else None

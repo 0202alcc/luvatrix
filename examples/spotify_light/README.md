@@ -57,6 +57,39 @@ press **Enter** to save, and
 resize-independence is covered by the window's fixed logical size. Typing must
 not trigger the app's keyboard shortcuts while the field is focused.
 
+## Liquid Glass (macOS 26 Tahoe)
+
+On macOS the chrome is backed by real system glass plates via the
+native-controls bridge's `create_glass_surface(...)`:
+
+- **macOS 26+**: `NSGlassEffectView` (looked up at runtime — no hard PyObjC
+  symbol requirement).
+- **Below macOS 26**: `NSVisualEffectView` fallback (Sidebar material for the
+  sidebar, HUD elsewhere, within-window blending, always active).
+- **Off macOS / headless**: an unavailable bridge, and the app draws its
+  original opaque backgrounds — pixel-identical to the pre-glass layout.
+
+App-declared glass regions:
+
+- **Sidebar** — full-height plate; the scene draws only a low-alpha tint over
+  it so artwork and content glow through.
+- **Now-playing bar** — full-width plate at the bottom. The opaque bar
+  background and separator are skipped, and content rows/cards flow under the
+  glass instead of being culled at the bar's top edge (scroll clamping is
+  unchanged, so the last row still lands above the bar).
+- **Client ID field (login)** — the field sits borderless inside a rounded
+  glass container (corner radius 20) instead of painting its own bezel.
+
+Glass plates are decorative AppKit siblings layered above the Metal surface;
+they never intercept scene input. Creating three plates adds a low
+single-digit MB of AppKit/memory overhead.
+
+Manual check on macOS 26+: sidebar and player bar show real glass blur/vibrancy
+over the desktop wallpaper tint, scrolling content visibly flows under the
+player bar, and the login Client ID field is borderless inside a frosted
+capsule. On macOS 15 and below the same layout renders with vibrancy plates;
+on Linux/headless everything looks exactly as before glass landed.
+
 ## Agent control (MCP)
 
 The app is drivable by a local MCP client (agent, IDE, test harness) — useful
@@ -166,3 +199,8 @@ PR description, or on macOS run the app under `--render macos-metal` and sample
   releases, and your playlists instead.
 - Artist detail pages and horizontally scrolling sections are not wired yet;
   the seek and volume bars are the draggable surfaces in v1.
+- The window does not yet opt into the full-size-content-view titlebar style
+  that lets glass extend behind the title bar; that needs a `create_window`
+  flag plumbed through the render targets, so it is a follow-up. Glass v1 also
+  lets text scroll under the translucent player bar without a legibility
+  scrim, matching Apple Music's own trade-off.

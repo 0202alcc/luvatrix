@@ -119,6 +119,8 @@ class SpotifyLightApp(App):
         self.client_id_draft = ""
         self.client_id_focused = False
         self._native_client_id_field = None  # real NSTextField when the bridge is up
+        self._glass_surfaces: dict[str, object] = {}  # keyed glass regions (liquid glass)
+        self.glass_active = False  # True while chrome glass plates are up
         self.show_devices = False
         self._hits: list[sl_views.HitRegion] = []
         self._mouse = (0.0, 0.0)
@@ -642,6 +644,37 @@ class SpotifyLightApp(App):
 
     # -- native controls -------------------------------------------------------------
 
+    def _sync_glass_surfaces(self, width: float, height: float, *,
+                             want_chrome: bool, want_login_field: bool) -> None:
+        """Create/update/destroy app-declared glass regions to match the layout."""
+        bridge = native_controls()
+        available = bool(bridge is not None and bridge.available)
+        wanted: dict[str, dict] = {}
+        if available:
+            if want_chrome:
+                wanted["chrome_sidebar"] = dict(
+                    x=0.0, y=0.0, width=sl_views.SIDEBAR_W, height=float(height),
+                    corner_radius=0.0, style="sidebar")
+                wanted["chrome_player_bar"] = dict(
+                    x=0.0, y=float(height) - sl_views.PLAYER_H, width=float(width),
+                    height=sl_views.PLAYER_H, corner_radius=0.0, style="regular")
+            if want_login_field:
+                x, y, w, h = sl_views.login_field_rect(width, height)
+                wanted["login_field"] = dict(x=x, y=y, width=w, height=h,
+                                             corner_radius=20.0, style="regular")
+        for key in list(self._glass_surfaces):
+            if key not in wanted:
+                self._glass_surfaces.pop(key).destroy()
+        for key, spec in wanted.items():
+            surface = self._glass_surfaces.get(key)
+            if surface is None:
+                self._glass_surfaces[key] = bridge.create_glass_surface(**spec)
+            else:
+                frame = (spec["x"], spec["y"], spec["width"], spec["height"])
+                if surface.frame != frame:
+                    surface.set_frame(*frame)
+        self.glass_active = "chrome_sidebar" in self._glass_surfaces
+
     def _sync_native_login_field(self, width: float, height: float) -> None:
         """Create/position/destroy the native Client ID field to match the login view."""
         bridge = native_controls()
@@ -654,11 +687,14 @@ class SpotifyLightApp(App):
         )
         if want and self._native_client_id_field is None:
             x, y, w, h = sl_views.login_field_rect(width, height)
+            glass = self._glass_surfaces.get("login_field")
             self._native_client_id_field = bridge.create_text_field(
                 x=x,
                 y=y,
                 width=w,
                 height=h,
+                within=glass,
+                bordered=glass is None,
                 placeholder="Client ID",
                 value=self.client_id_draft,
                 on_change=self._on_native_client_id_change,
@@ -775,10 +811,19 @@ class SpotifyLightApp(App):
         mouse = self._mouse
 
         if not self.authenticated:
+            bridge = native_controls()
+            want_field = bool(
+                bridge is not None and bridge.available
+                and not self.client_id and not self.auth_working
+            )
+            self._sync_glass_surfaces(width, height, want_chrome=False,
+                                      want_login_field=want_field)
             self._sync_native_login_field(width, height)
             sl_views.draw_login(frame, self, out, width=width, height=height, mouse=mouse,
                                 native_field_active=self._native_client_id_field is not None)
         else:
+            self._sync_glass_surfaces(width, height, want_chrome=True,
+                                      want_login_field=False)
             if self.view == "search":
                 sl_views.draw_search(frame, self, out, width=width, height=height, mouse=mouse)
             elif self.view.startswith("playlist:"):
@@ -858,6 +903,10 @@ class SpotifyLightApp(App):
         if self._native_client_id_field is not None:
             self._native_client_id_field.destroy()
             self._native_client_id_field = None
+        for surface in self._glass_surfaces.values():
+            surface.destroy()
+        self._glass_surfaces.clear()
+        self.glass_active = False
         if self._login_receiver is not None:
             self._login_receiver.close()
         self.worker.shutdown()
