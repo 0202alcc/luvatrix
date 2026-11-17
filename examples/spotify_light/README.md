@@ -33,7 +33,8 @@ uv run python main.py run-app examples/spotify_light --render macos-metal
 ## Native macOS controls (luvatrix feature)
 
 The Client ID setup field is a **real `NSTextField`** on macOS Metal — native
-focus ring, key handling, paste, and IME — not a painted imitation. This is the
+focus ring, key handling, paste (⌘V or the field's right-click context menu),
+and IME — not a painted imitation. This is the
 first consumer of the luvatrix native-controls feature:
 
 - `main.py` wires every macOS render path through
@@ -51,7 +52,8 @@ first consumer of the luvatrix native-controls feature:
   same hit regions.
 
 Manual check on a Mac: launch with `--render macos-metal`, click the Client ID
-field (blue focus ring appears), type/paste, press **Enter** to save, and
+field (blue focus ring appears), type or paste (⌘V, or right-click → Paste),
+press **Enter** to save, and
 resize-independence is covered by the window's fixed logical size. Typing must
 not trigger the app's keyboard shortcuts while the field is focused.
 
