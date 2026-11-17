@@ -47,6 +47,11 @@ first consumer of the luvatrix native-controls feature:
   fields with `bridge.create_text_field(...)`; frames are given in scene
   logical coordinates (top-left origin), and the bridge converts to AppKit
   view points (including the Y-flip and any content-scale factor).
+- The bridge also embeds glass buttons (`create_button`) and a full web view
+  (`create_web_view`, WKWebView) — the latter powers the embedded Spotify
+  sign-in: navigations matching the loopback redirect URI are cancelled by
+  the navigation delegate and reported to the app, so the OAuth handshake
+  completes without leaving the window.
 - Off macOS (or without PyObjC) `native_controls()` returns an unavailable
   bridge and the app falls back to its drawn field unchanged — same geometry,
   same hit regions.
@@ -73,12 +78,21 @@ App-declared glass regions:
 
 - **Sidebar** — full-height plate; the scene draws only a low-alpha tint over
   it so artwork and content glow through.
-- **Now-playing bar** — full-width plate at the bottom. The opaque bar
-  background and separator are skipped, and content rows/cards flow under the
-  glass instead of being culled at the bar's top edge (scroll clamping is
-  unchanged, so the last row still lands above the bar).
+- **Now-playing pill** — the player chrome is a centered floating capsule
+  (scene-drawn simulated glass) flanked by circular nav buttons. Content
+  rows/cards flow under the dock zone instead of being culled, but a bottom
+  scrim (transparent → near-opaque backdrop gradient) dissolves them before
+  they reach the pill, and the bottom scroll inset lets the last row scroll
+  fully clear of the pill.
 - **Client ID field (login)** — the field sits borderless inside a rounded
-  glass container (corner radius 20) instead of painting its own bezel.
+  glass container (corner radius 20) instead of painting its own bezel. The
+  native focus ring is suppressed (`NSFocusRingTypeNone`): the capsule is the
+  affordance, not an accent-colored rectangle.
+- **Auth-wall buttons** — Save and Connect Spotify are real borderless
+  `NSButton`s inside matching glass capsules (created via
+  `bridge.create_button(...)`); the drawn versions return when no bridge is
+  available. Each capsule gets a low-alpha light tint drawn beneath it so the
+  glass reads on the near-black backdrop.
 
 Glass plates are decorative AppKit siblings layered above the Metal surface;
 they never intercept scene input. Creating three plates adds a low
@@ -119,9 +133,10 @@ uv run python main.py run-app examples/spotify_light --render macos-metal --mcp
 **Native-field caveat:** while the Client ID `NSTextField` is up, AppKit owns
 its key path — synthetic `app_input` keystrokes cannot type into it. Use
 `sl_set_client_id` to set the text and `sl_submit_client_id` to save; that's
-what they're for. The OAuth browser consent that follows stays human-driven
-(out-of-process browser), but the agent can click **Connect Spotify** via
-`app_input` and poll `app_state` for `authenticated`.
+what they're for. The OAuth consent that follows stays human-driven inside
+the embedded web view (Spotify's own page; credentials never touch app code),
+but the agent can click **Connect Spotify** via `app_input` and poll
+`app_state` for `authenticated`.
 
 ## Spotify app setup (one time)
 
@@ -132,8 +147,12 @@ what they're for. The OAuth browser consent that follows stays human-driven
 4. Launch Spotify Light and paste the app's **Client ID** into the setup field
    (saved to the config dir), or export it first:
    `export SPOTIFY_LIGHT_CLIENT_ID=<your client id>`.
-5. Click **Connect Spotify** — the browser opens for consent, then returns to
-   the app automatically.
+5. Click **Connect Spotify** — on macOS the Spotify authorize page opens in an
+   embedded web view inside the app: sign in there, the loopback redirect is
+   intercepted in-app, and the view dismisses itself. (Spotify requires
+   credentials to go through their own page; nothing you type reaches the
+   app's code.) Without a native bridge — headless or an unsupported host —
+   the same button falls back to opening your system browser.
 
 Playback control requires **Spotify Premium**.
 
@@ -201,6 +220,6 @@ PR description, or on macOS run the app under `--render macos-metal` and sample
   the seek and volume bars are the draggable surfaces in v1.
 - The window does not yet opt into the full-size-content-view titlebar style
   that lets glass extend behind the title bar; that needs a `create_window`
-  flag plumbed through the render targets, so it is a follow-up. Glass v1 also
-  lets text scroll under the translucent player bar without a legibility
-  scrim, matching Apple Music's own trade-off.
+  flag plumbed through the render targets, so it is a follow-up. Text
+  scrolling under the dock zone is dissolved by the bottom scrim before it
+  reaches the pill (round 8b), matching Apple Music's own trade-off.

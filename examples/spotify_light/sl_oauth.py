@@ -147,6 +147,15 @@ def parse_callback_query(query: str, expected_state: str) -> str:
     return code
 
 
+def parse_callback_url(url: str, expected_state: str) -> str:
+    """Full loopback callback URL -> authorization code.
+
+    Used by the embedded web-view flow, which intercepts the redirect before
+    any request hits the loopback receiver.
+    """
+    return parse_callback_query(urllib.parse.urlsplit(url).query, expected_state)
+
+
 def extract_callback_query(request_line: str) -> str | None:
     parts = request_line.split(" ")
     if len(parts) < 2 or parts[0] != "GET":

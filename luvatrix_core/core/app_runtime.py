@@ -205,6 +205,9 @@ class AppContext:
     _scene_content_offset: tuple[float, float] = field(default=(0.0, 0.0), init=False, repr=False)
     _scene_retained: bool = field(default=False, init=False, repr=False)
     _render_permitted: bool = field(default=True, init=False, repr=False)
+    _backing_scale_provider: Callable[[], float] | None = field(default=None, init=False, repr=False)
+    _text_measure_provider: Callable[[str, float, str | None], float] | None = field(
+        default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.logical_width_px is None:
@@ -248,6 +251,55 @@ class AppContext:
         return self.matrix.set_presentation_viewport(
             MatrixViewport(x=int(x), y=int(y), width=int(width), height=int(height), wrap_x=wrap_x, wrap_y=wrap_y)
         )
+
+    @property
+    def backing_scale(self) -> float:
+        """Display backing scale (device px per logical point); 1.0 when unknown.
+
+        Apps use this to size raster payloads (album art, image caches) for the
+        actual display: a 180pt slot on a 2x Retina screen wants ~360px.
+        """
+        provider = self._backing_scale_provider
+        if provider is None:
+            return 1.0
+        try:
+            return max(0.05, float(provider()))
+        except Exception:  # noqa: BLE001 — best-effort; never break the app loop
+            return 1.0
+
+    def set_backing_scale_provider(self, provider: Callable[[], float] | None) -> None:
+        """Set by the runtime to report the live display backing scale."""
+        self._backing_scale_provider = provider
+
+    def measure_text(self, text: str, *, font_size_px: float,
+                     font_family: str | None = None) -> float:
+        """Rendered advance width of ``text`` at ``font_size_px`` in ``font_family``.
+
+        Matches what the scene rasterizer draws on this host (same font
+        resolution + fallback cascade), so apps can position carets, underlines,
+        and trailing decorations at the true end of a proportional string.
+        Falls back to a mono-width heuristic when fonts are unavailable; never
+        raises into the app loop.
+        """
+        if not text:
+            return 0.0
+        provider = self._text_measure_provider
+        if provider is not None:
+            try:
+                return max(0.0, float(provider(text, float(font_size_px), font_family)))
+            except Exception:  # noqa: BLE001 — best-effort; never break the app loop
+                pass
+        try:
+            from luvatrix_core.core import font_fallback as ff
+
+            chain = ff.get_font_chain(font_family or "Helvetica Neue", float(font_size_px))
+            return max(0.0, float(ff.measure_runs(ff.split_runs(chain, text))[0]))
+        except Exception:  # noqa: BLE001 — fonts/PIL missing: degrade, don't crash
+            return max(0.0, float(len(text)) * float(font_size_px) * 0.5)
+
+    def set_text_measure_provider(self, provider: Callable[[str, float, str | None], float] | None) -> None:
+        """Set by the runtime to measure text with the active target's pipeline."""
+        self._text_measure_provider = provider
 
     @property
     def render_permitted(self) -> bool:

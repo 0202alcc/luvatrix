@@ -15,6 +15,11 @@ class CpuSceneTarget(SceneRenderTarget):
     target: RenderTarget
     _started: bool = False
     _raster_buffer: object = None
+    _last_backing_scale: float = 1.0
+
+    def backing_scale(self) -> float:
+        """Display/logical pixel ratio of the last presented frame."""
+        return float(self._last_backing_scale)
 
     def start(self) -> None:
         if self._started:
@@ -26,7 +31,9 @@ class CpuSceneTarget(SceneRenderTarget):
         _ = target_present_time
         if not self._started:
             raise RuntimeError("CpuSceneTarget must be started before presenting scenes")
-        
+
+        logical = max(1, int(frame.logical_width))
+        self._last_backing_scale = max(0.05, float(frame.display_width) / float(logical))
         self._raster_buffer = rasterize_scene_frame(frame, out=self._raster_buffer)
         rgba = self._raster_buffer
 

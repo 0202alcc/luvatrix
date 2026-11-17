@@ -23,6 +23,10 @@ class SceneRenderTarget(Protocol):
     def should_close(self) -> bool:
         ...
 
+    def backing_scale(self) -> float:
+        """Device pixels per logical point (2.0 on Retina); 1.0 when unknown."""
+        return 1.0
+
 
 @dataclass
 class SceneTargetAdapter(RenderTarget):

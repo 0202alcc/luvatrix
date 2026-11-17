@@ -8,6 +8,7 @@ render loop only draws cached state and stays render-on-invalidation.
 """
 from __future__ import annotations
 
+import logging
 import sys
 import threading
 import time
@@ -37,12 +38,17 @@ import sl_ui
 import sl_views
 import sl_worker
 
+log = logging.getLogger("spotify_light")
+
 POLL_PLAYING_SECS = 3.0
 POLL_IDLE_SECS = 5.0
 POLL_AFTER_ACTION_SECS = 0.7
 SEARCH_DEBOUNCE_SECS = 0.4
 STATUS_TOAST_SECS = 6.0
 LOGIN_TIMEOUT_SECS = 180.0
+# How long a failed art fetch backs off before one retry: a dead CDN URL must
+# not be re-fetched on every redraw while its card is on screen.
+ART_FAIL_TTL_SECS = 300.0
 
 CONTROL_KEYCODES = {
     36: "enter",
@@ -104,7 +110,10 @@ class SpotifyLightApp(App):
         self.playlists: list[sl_models.Playlist] = []
         self.home_sections: list[sl_ui.SectionView] = []
         self.bootstrap_error = ""
+        self._bootstrap_done = False
+        self.bootstrap_notices: list[str] = []
         self.playlist_detail: tuple[sl_models.Playlist, list[sl_models.Track]] | None = None
+        self.playlist_error = ""
         self.search_results: sl_models.SearchResults | None = None
         self.search_error = ""
         self.player: sl_models.PlayerState | None = None
@@ -119,6 +128,7 @@ class SpotifyLightApp(App):
         self.client_id_draft = ""
         self.client_id_focused = False
         self._native_client_id_field = None  # real NSTextField when the bridge is up
+        self._native_buttons: dict[str, object] = {}  # keyed native glass buttons (auth wall)
         self._glass_surfaces: dict[str, object] = {}  # keyed glass regions (liquid glass)
         self.glass_active = False  # True while chrome glass plates are up
         self.show_devices = False
@@ -134,8 +144,19 @@ class SpotifyLightApp(App):
         self._next_player_poll = 0.0
         self._next_progress_tick = 0.0
         self._art_in_flight: set[str] = set()
+        self._art_failures: dict[str, float] = {}
         self._art_pending: dict[str, tuple[str, int]] = {}
         self._login_receiver: sl_oauth.LoopbackReceiver | None = None
+        # Embedded login (native web view): set only while the in-app flow is up.
+        self._login_web_view = None
+        self._login_cancel_button = None
+        self._login_cancel_capsule = None
+        self._login_back_button = None
+        self._login_back_capsule = None
+        self._embedded_callback: str | None = None
+        self._login_verifier: str | None = None
+        self._login_state: str | None = None
+        self._login_redirect_uri: str | None = None
 
         self.set_continuous_render(False)
 
@@ -148,6 +169,8 @@ class SpotifyLightApp(App):
         self._token_manager = TokenManager(self.cfg_dir, self.client_id, tokens)
         self._client = sl_api.SpotifyClient(token_provider=self._token_manager.access_token)
         self.authenticated = True
+        self._bootstrap_done = False
+        self.bootstrap_notices = []
         self.worker.submit("bootstrap", self._job_bootstrap)
         self._next_player_poll = 0.0  # poll immediately
 
@@ -161,6 +184,7 @@ class SpotifyLightApp(App):
         self.playlists = []
         self.home_sections = []
         self.playlist_detail = None
+        self.playlist_error = ""
         self.search_results = None
         self.player = None
         self.devices = []
@@ -170,17 +194,152 @@ class SpotifyLightApp(App):
     # -- worker jobs (background thread) --------------------------------------
 
     def _job_bootstrap(self):
+        """Fetch the home-view data. Per-section degradation: Spotify dev-mode
+        apps get 403s on whole endpoint families regardless of scopes (Alec's
+        first session), so a non-401 ApiError degrades THAT section to an
+        inline note naming the call while the rest of the library loads. A
+        401 means the token is dead — that still fails the job (and the
+        session) outright, named. Generic exceptions likewise fail named."""
         assert self._client is not None
-        profile = self._client.me()
-        playlists = self._client.my_playlists()
-        top_tracks = self._client.top_tracks(limit=10)
-        new_releases = self._client.new_releases(limit=12)
+        notices: list[str] = []
+
+        def section(label: str, fn, fallback):
+            try:
+                return fn()
+            except sl_api.ApiError as exc:
+                if exc.kind == sl_api.ErrorKind.UNAUTHORIZED:
+                    raise sl_api.ApiError(exc.kind, f"{label}: {exc}",
+                                          status=exc.status) from exc
+                # UI copy stays human; the raw API detail goes to the log.
+                log.info("bootstrap section %r degraded: %s", label, exc)
+                notices.append(f"Couldn't load {label} right now")
+                return fallback
+            except Exception as exc:  # noqa: BLE001 — surfaced via bootstrap_error
+                raise RuntimeError(f"{label}: {exc}") from exc
+
+        profile = section("profile", self._client.me, None)
+        playlists = section("playlists", self._client.my_playlists, [])
+        top_tracks = section("top tracks", lambda: self._client.top_tracks(limit=10), [])
+        new_releases = section("new releases", lambda: self._client.new_releases(limit=12), [])
         top_artists: list = []
         try:
             top_artists = self._client.top_artists(limit=12)
         except sl_api.ApiError:
             pass  # top/artists can 403 for some accounts; home still works
-        return (profile, playlists, top_tracks, new_releases, top_artists)
+        return (profile, playlists, top_tracks, new_releases, top_artists, notices)
+
+    # -- embedded login (native web view) ----------------------------------------
+
+    def _start_login(self) -> None:
+        """Connect Spotify: embedded web-view flow when a bridge is up, else browser."""
+        self.auth_error = ""
+        bridge = native_controls()
+        if bridge is not None and bridge.available and self._try_embedded_login(bridge):
+            return
+        self.auth_working = True
+        self.worker.submit("login", self._job_login)
+        self.invalidate()
+
+    def _try_embedded_login(self, bridge) -> bool:
+        """Open Spotify's authorize page in an in-app web view. False -> browser flow."""
+        try:
+            verifier = sl_oauth.generate_verifier()
+            state = sl_oauth.generate_state()
+            redirect_uri = sl_oauth.redirect_uri_for_port(sl_oauth.DEFAULT_PORT)
+            url = sl_oauth.authorize_url(
+                client_id=self.client_id,
+                redirect_uri=redirect_uri,
+                challenge=sl_oauth.challenge_s256(verifier),
+                state=state,
+            )
+            width = float(self.ctx.display_width_px)
+            height = float(self.ctx.display_height_px)
+            web_view = bridge.create_web_view(
+                x=0.0, y=0.0, width=width, height=height,
+                redirect_prefix=redirect_uri, on_redirect=self._on_embedded_redirect,
+                on_navigation_state=self._on_embedded_nav_state)
+        except Exception:  # noqa: BLE001 — no WebKit, no window: browser still works
+            return False
+        web_view.load_url(url)
+        self._login_verifier = verifier
+        self._login_state = state
+        self._login_redirect_uri = redirect_uri
+        self._login_web_view = web_view
+        try:
+            # Sheet controls ride their own frosted capsules (same
+            # construction as Save/Connect) so they stay visible over
+            # arbitrary page content. Cancel top-right is the way out; Back
+            # top-left steps through the provider's own pages (Google's
+            # sign-in offers no way back to the email step otherwise).
+            cancel_capsule = bridge.create_glass_surface(
+                x=width - 106, y=16, width=90, height=36,
+                corner_radius=18.0, style="regular")
+            cancel = bridge.create_button(
+                x=width - 106, y=16, width=90, height=36, title="Cancel",
+                within=cancel_capsule,
+                on_press=lambda: self._dispatch_action("cancel_login", None, 0.0))
+            back_capsule = bridge.create_glass_surface(
+                x=16, y=16, width=90, height=36,
+                corner_radius=18.0, style="regular")
+            back = bridge.create_button(
+                x=16, y=16, width=90, height=36, title="Back",
+                within=back_capsule,
+                on_press=lambda: web_view.go_back())
+            back.set_enabled(False)  # quiet until the page has history
+        except Exception as exc:  # noqa: BLE001
+            # Escape is suppressed while the sheet is live: without Cancel
+            # there is no way out — tear the sheet down and use the browser
+            # flow, which has its own cancel path.
+            print(f"[luvatrix] embedded login sheet controls failed: {exc!r}; "
+                  "using browser flow", file=sys.stderr, flush=True)
+            self._login_web_view = None
+            web_view.destroy()
+            return False
+        self._login_cancel_capsule = cancel_capsule
+        self._login_cancel_button = cancel
+        self._login_back_capsule = back_capsule
+        self._login_back_button = back
+        self.auth_working = True
+        self.invalidate()
+        return True
+
+    def _on_embedded_nav_state(self) -> None:
+        """Web view history changed (KVO on canGoBack): arm/disarm Back."""
+        back = self._login_back_button
+        view = self._login_web_view
+        if back is not None and view is not None:
+            back.set_enabled(bool(view.can_go_back))
+
+    def _on_embedded_redirect(self, url: str) -> None:
+        """Navigation delegate callback; stash for the app thread, never handle inline."""
+        self._embedded_callback = url
+        self.invalidate()
+
+    def _end_embedded_login(self) -> None:
+        if self._login_web_view is not None:
+            self._login_web_view.destroy()
+            self._login_web_view = None
+        if self._login_cancel_button is not None:
+            self._login_cancel_button.destroy()
+            self._login_cancel_button = None
+        if self._login_cancel_capsule is not None:
+            self._login_cancel_capsule.destroy()
+            self._login_cancel_capsule = None
+        if self._login_back_button is not None:
+            self._login_back_button.destroy()
+            self._login_back_button = None
+        if self._login_back_capsule is not None:
+            self._login_back_capsule.destroy()
+            self._login_back_capsule = None
+
+    def _job_embedded_exchange(self, callback_url: str):
+        code = sl_oauth.parse_callback_url(callback_url, self._login_state)
+        return sl_oauth.exchange_code(
+            client_id=self.client_id,
+            redirect_uri=self._login_redirect_uri,
+            code=code,
+            verifier=self._login_verifier,
+        )
 
     def _job_login(self):
         receiver = sl_oauth.LoopbackReceiver(sl_oauth.DEFAULT_PORT)
@@ -236,10 +395,22 @@ class SpotifyLightApp(App):
     # -- worker results (app thread) -------------------------------------------
 
     def _handle_worker_results(self) -> None:
+        if self._embedded_callback is not None:
+            # Spotify redirected inside the embedded web view: dismiss it and
+            # finish PKCE off-thread. The callback URL never left the app.
+            callback_url = self._embedded_callback
+            self._embedded_callback = None
+            self._end_embedded_login()
+            self.worker.submit("login", lambda: self._job_embedded_exchange(callback_url))
+            self.invalidate()
         for label, outcome in self.worker.poll():
             self._apply_result(label, outcome)
 
     def _apply_result(self, label: str, outcome) -> None:
+        if label == "bootstrap":
+            # Any outcome means the job finished: the home view must leave the
+            # loading state regardless of success, failure, or empty data.
+            self._bootstrap_done = True
         if isinstance(outcome, sl_api.ApiError):
             self._apply_api_error(label, outcome)
             return
@@ -248,6 +419,8 @@ class SpotifyLightApp(App):
                 if self.auth_working:  # not a user cancel
                     self.auth_error = str(outcome)
                 self.auth_working = False
+            elif label == "bootstrap":
+                self.bootstrap_error = f"Could not load your library: {outcome}"
             else:
                 self._toast(str(outcome))
             self.invalidate()
@@ -259,22 +432,28 @@ class SpotifyLightApp(App):
                 self.auth_working = False
             elif label.startswith("art:"):
                 self._art_in_flight.discard(label[4:])
+                self._art_failures[label[4:]] = time.monotonic()
             elif label == "bootstrap":
                 self.bootstrap_error = f"Could not load your library: {outcome}"
+            elif label.startswith("playlist:"):
+                # Inline error state in the playlist view, not a vanishing toast.
+                self.playlist_error = str(outcome)
             else:
                 self._toast(str(outcome))
             self.invalidate()
             return
 
         if label == "bootstrap":
-            profile, playlists, top_tracks, new_releases, top_artists = outcome
+            profile, playlists, top_tracks, new_releases, top_artists, notices = outcome
             self.profile = profile
             self.playlists = playlists
+            self.bootstrap_notices = list(notices)
             self.home_sections = sl_ui.build_home_sections(
                 top_tracks=top_tracks,
                 new_releases=new_releases,
                 playlists=playlists[:12],
                 top_artists=top_artists,
+                image_target_px=self._art_pick_target(sl_views.CARD_ART),
             )
             self.bootstrap_error = ""
         elif label == "login":
@@ -297,8 +476,10 @@ class SpotifyLightApp(App):
             playlist, tracks = outcome
             if playlist is not None:
                 self.playlist_detail = (playlist, tracks)
+                self.playlist_error = ""
         elif label.startswith("art:"):
             self._art_in_flight.discard(label[4:])
+            self._art_failures.pop(label[4:], None)
         self.invalidate()
 
     def _apply_api_error(self, label: str, error: sl_api.ApiError) -> None:
@@ -312,6 +493,14 @@ class SpotifyLightApp(App):
             self._toast("No active device — pick one under Devices")
         elif label == "search":
             self.search_error = str(error)
+        elif label.startswith("playlist:"):
+            # The playlist view renders this as a persistent inline state with
+            # a Retry affordance; a 6s toast would leave "Loading…" forever.
+            self.playlist_error = str(error)
+        elif label == "bootstrap":
+            # Persistent, not a 6s toast: a failed bootstrap must not leave
+            # the home view claiming "Loading your music…" forever.
+            self.bootstrap_error = f"Could not load your library: {error}"
         else:
             self._toast(str(error))
         self.invalidate()
@@ -360,22 +549,22 @@ class SpotifyLightApp(App):
                 self._handle_key(event)
 
         # Scrollbar drags get first claim on the mouse.
-        list_top = 64 + 44 * 3 + 34
+        list_top = sl_views.SIDEBAR_LIST_TOP
         sidebar_update = self.scrollbar_sidebar.update(
             state,
             x=sl_views.SIDEBAR_W - 10,
             y=list_top,
             width=13,
-            height=max(0.0, self.display.height_px - sl_views.PLAYER_H - 64 - list_top),
+            height=max(0.0, self.display.height_px - 64 - list_top),
             content_extent=30.0 * len(self.playlists),
-            viewport_extent=max(1.0, self.display.height_px - sl_views.PLAYER_H - 64 - list_top),
+            viewport_extent=max(1.0, self.display.height_px - 64 - list_top),
             offset=self.sidebar_scroll,
         )
         if sidebar_update.consumed:
             self.sidebar_scroll = sidebar_update.offset
             self.invalidate()
             return
-        viewport = self.display.height_px - sl_views.PLAYER_H
+        viewport = self.display.height_px - sl_views.DOCK_H
         content_update = self.scrollbar_content.update(
             state,
             x=self.display.width_px - 11,
@@ -408,10 +597,10 @@ class SpotifyLightApp(App):
         if mx < sl_views.SIDEBAR_W:
             self.sidebar_scroll = self._clamp_scroll(
                 self.sidebar_scroll - delta_y, 30.0 * len(self.playlists),
-                self.display.height_px - sl_views.PLAYER_H - 64 - (64 + 44 * 3 + 34),
+                self.display.height_px - 64 - sl_views.SIDEBAR_LIST_TOP,
             )
         else:
-            viewport = self.display.height_px - sl_views.PLAYER_H
+            viewport = self.display.height_px - sl_views.DOCK_H
             self.content_scroll = self._clamp_scroll(
                 self.content_scroll - delta_y, self._content_height, viewport
             )
@@ -471,6 +660,12 @@ class SpotifyLightApp(App):
             self.view = f"playlist:{payload}"
             self.content_scroll = 0.0
             self.playlist_detail = None
+            self.playlist_error = ""
+            self.worker.submit(f"playlist:{payload}", lambda: self._job_playlist(payload))
+            self.invalidate()
+        elif action == "retry_playlist":
+            self.playlist_detail = None
+            self.playlist_error = ""
             self.worker.submit(f"playlist:{payload}", lambda: self._job_playlist(payload))
             self.invalidate()
         elif action == "open_card":
@@ -540,14 +735,24 @@ class SpotifyLightApp(App):
             self.client_id_focused = False
             self.invalidate()
         elif action == "start_login":
-            self.auth_working = True
-            self.auth_error = ""
-            self.worker.submit("login", self._job_login)
-            self.invalidate()
+            self._start_login()
         elif action == "cancel_login":
+            sheet_up = self._login_web_view is not None
+            self._end_embedded_login()
+            # Cancel wins over a same-tick redirect intercept: never let a
+            # stashed callback submit the exchange after the user bailed.
+            self._embedded_callback = None
             if self._login_receiver is not None:
                 self._login_receiver.close()
             self.auth_working = False
+            if sheet_up:
+                # Sheet closed without a redirect intercept: user bailed, or
+                # the provider dead-ended on its own error page (Spotify's
+                # authorize page defers client_id validation until after IdP
+                # sign-in, rendering a bare `client_id: Invalid`). Don't drop
+                # back to a silent wall.
+                self.auth_error = ("Login didn't complete — double-check your "
+                                   "Client ID and try again.")
             self.invalidate()
         elif action == "logout":
             self._end_session()
@@ -610,18 +815,32 @@ class SpotifyLightApp(App):
 
     # -- art -----------------------------------------------------------------------
 
+    def _backing_scale(self) -> float:
+        try:
+            return max(0.25, float(self.display.backing_scale))
+        except Exception:  # noqa: BLE001 — pre-init or headless: point size is fine
+            return 1.0
+
+    def _art_pick_target(self, point_size: float) -> int:
+        """Source-image pixels that cover ``point_size`` on the current display."""
+        return max(1, int(round(float(point_size) * self._backing_scale())))
+
     def art_for(self, url: str | None, size: int):
         """Cached RGBA pixels, or None (and a scheduled fetch) on a miss."""
         if not url:
             return None
-        key = f"{url}|{size}"
+        device_size = self._art_pick_target(size)
+        key = f"{url}|{device_size}"
         try:
-            return self.art_cache.fetch(url, size, http_get=self._fail_offline)
+            return self.art_cache.fetch(url, device_size, http_get=self._fail_offline)
         except sl_art.ArtError:
             pass
+        failed_at = self._art_failures.get(key)
+        if failed_at is not None and time.monotonic() - failed_at < ART_FAIL_TTL_SECS:
+            return None  # backing off: keep the placeholder, skip the refetch
         if key not in self._art_in_flight:
             self._art_in_flight.add(key)
-            self.worker.submit(f"art:{key}", lambda: self._job_art(url, size))
+            self.worker.submit(f"art:{key}", lambda: self._job_art(url, device_size))
         return None
 
     @staticmethod
@@ -645,23 +864,31 @@ class SpotifyLightApp(App):
     # -- native controls -------------------------------------------------------------
 
     def _sync_glass_surfaces(self, width: float, height: float, *,
-                             want_chrome: bool, want_login_field: bool) -> None:
-        """Create/update/destroy app-declared glass regions to match the layout."""
+                             want_login_field: bool,
+                             want_save_button: bool = False,
+                             want_connect_button: bool = False) -> None:
+        """Create/update/destroy app-declared glass regions to match the layout.
+
+        Native glass is kept ONLY behind native content (login-wall capsules);
+        text-bearing authed chrome draws scene tint plates instead, because an
+        AppKit plate above the Metal layer blurs every scene glyph beneath it.
+        """
         bridge = native_controls()
         available = bool(bridge is not None and bridge.available)
         wanted: dict[str, dict] = {}
         if available:
-            if want_chrome:
-                wanted["chrome_sidebar"] = dict(
-                    x=0.0, y=0.0, width=sl_views.SIDEBAR_W, height=float(height),
-                    corner_radius=0.0, style="sidebar")
-                wanted["chrome_player_bar"] = dict(
-                    x=0.0, y=float(height) - sl_views.PLAYER_H, width=float(width),
-                    height=sl_views.PLAYER_H, corner_radius=0.0, style="regular")
             if want_login_field:
                 x, y, w, h = sl_views.login_field_rect(width, height)
                 wanted["login_field"] = dict(x=x, y=y, width=w, height=h,
                                              corner_radius=20.0, style="regular")
+            if want_save_button:
+                x, y, w, h = sl_views.login_save_button_rect(width, height)
+                wanted["login_save_button"] = dict(x=x, y=y, width=w, height=h,
+                                                   corner_radius=20.0, style="regular")
+            if want_connect_button:
+                x, y, w, h = sl_views.login_connect_button_rect(width, height)
+                wanted["login_connect_button"] = dict(x=x, y=y, width=w, height=h,
+                                                      corner_radius=24.0, style="regular")
         for key in list(self._glass_surfaces):
             if key not in wanted:
                 self._glass_surfaces.pop(key).destroy()
@@ -670,10 +897,56 @@ class SpotifyLightApp(App):
             if surface is None:
                 self._glass_surfaces[key] = bridge.create_glass_surface(**spec)
             else:
-                frame = (spec["x"], spec["y"], spec["width"], spec["height"])
-                if surface.frame != frame:
-                    surface.set_frame(*frame)
-        self.glass_active = "chrome_sidebar" in self._glass_surfaces
+                # Always re-apply: the bridge derives the AppKit frame from the
+                # content view's current bounds, which can change under an
+                # unchanged logical frame (window resize). Early-outing here
+                # baked a stale offset into the native plate.
+                surface.set_frame(spec["x"], spec["y"], spec["width"], spec["height"])
+
+    def _sync_native_login_buttons(self, width: float, height: float) -> None:
+        """Create/update/destroy the native glass buttons on the auth wall."""
+        bridge = native_controls()
+        wanted: dict[str, tuple] = {}
+        if (bridge is not None and bridge.available
+                and not self.authenticated and not self.auth_working):
+            if not self.client_id:
+                wanted["save"] = (sl_views.login_save_button_rect(width, height),
+                                  "Save", "save_client_id")
+            else:
+                wanted["connect"] = (sl_views.login_connect_button_rect(width, height),
+                                     "Connect Spotify", "start_login")
+        for key in list(self._native_buttons):
+            if key not in wanted:
+                self._native_buttons.pop(key).destroy()
+                self.invalidate()
+        for key, (rect, title, action) in wanted.items():
+            button = self._native_buttons.get(key)
+            if button is None:
+                capsule = self._glass_surfaces.get(f"login_{key}_button")
+                x, y, w, h = rect
+                button = bridge.create_button(
+                    x=x, y=y, width=w, height=h, title=title, within=capsule,
+                    on_press=lambda a=action: self._dispatch_action(a, None, 0.0))
+                self._native_buttons[key] = button
+                self.invalidate()
+            else:
+                button.set_frame(*rect)  # re-apply against current bounds, always
+        save = self._native_buttons.get("save")
+        if save is not None:
+            save.set_enabled(bool(self.client_id_draft.strip()))
+
+    def _login_field_editor_rect(self, width: float, height: float,
+                                 glass) -> tuple[float, float, float, float]:
+        """Rect for the native Client ID editor.
+
+        Inside a glass capsule the borderless editor insets 14pt at the sides
+        and vertically centers a 20pt-high line, so the placeholder and text
+        sit mid-plate instead of top-aligned in the 40pt plate.
+        """
+        x, y, w, h = sl_views.login_field_rect(width, height)
+        if glass is not None:
+            return (x + 14.0, y + (h - 20.0) / 2.0, w - 28.0, 20.0)
+        return (x, y, w, h)
 
     def _sync_native_login_field(self, width: float, height: float) -> None:
         """Create/position/destroy the native Client ID field to match the login view."""
@@ -686,8 +959,8 @@ class SpotifyLightApp(App):
             and not self.auth_working
         )
         if want and self._native_client_id_field is None:
-            x, y, w, h = sl_views.login_field_rect(width, height)
             glass = self._glass_surfaces.get("login_field")
+            x, y, w, h = self._login_field_editor_rect(width, height, glass)
             self._native_client_id_field = bridge.create_text_field(
                 x=x,
                 y=y,
@@ -706,13 +979,35 @@ class SpotifyLightApp(App):
             self._native_client_id_field = None
             self.invalidate()
         if self._native_client_id_field is not None:
-            x, y, w, h = sl_views.login_field_rect(width, height)
-            if self._native_client_id_field.frame != (x, y, w, h):
-                self._native_client_id_field.set_frame(x, y, w, h)
+            # Re-apply every render: the bridge derives the AppKit frame from
+            # the content view's current bounds, which can change under an
+            # unchanged logical frame (window resize drifted the plate).
+            glass = self._glass_surfaces.get("login_field")
+            x, y, w, h = self._login_field_editor_rect(width, height, glass)
+            self._native_client_id_field.set_frame(x, y, w, h)
 
     def _on_native_client_id_change(self, value: str) -> None:
         self.client_id_draft = value
         self.invalidate()
+
+    def _sync_embedded_sheet_geometry(self, width: float, height: float) -> None:
+        """Re-apply embedded-login sheet frames every render.
+
+        The web view and Cancel/Back controls bake their frames at creation;
+        a window resize after the sheet opened left them shifted (measured:
+        Cancel capsule ~22pt right of its design slot). Same re-apply policy
+        as the login field/buttons.
+        """
+        if self._login_web_view is not None:
+            self._login_web_view.set_frame(0.0, 0.0, width, height)
+        if self._login_cancel_capsule is not None:
+            self._login_cancel_capsule.set_frame(width - 106.0, 16.0, 90.0, 36.0)
+        if self._login_cancel_button is not None:
+            self._login_cancel_button.set_frame(width - 106.0, 16.0, 90.0, 36.0)
+        if self._login_back_capsule is not None:
+            self._login_back_capsule.set_frame(16.0, 16.0, 90.0, 36.0)
+        if self._login_back_button is not None:
+            self._login_back_button.set_frame(16.0, 16.0, 90.0, 36.0)
 
     # -- MCP agent surface -----------------------------------------------------
     # Hooks run on the runtime thread between ticks (queued by the MCP server
@@ -812,18 +1107,29 @@ class SpotifyLightApp(App):
 
         if not self.authenticated:
             bridge = native_controls()
-            want_field = bool(
-                bridge is not None and bridge.available
-                and not self.client_id and not self.auth_working
-            )
-            self._sync_glass_surfaces(width, height, want_chrome=False,
-                                      want_login_field=want_field)
+            bridge_up = bridge is not None and bridge.available
+            self.glass_active = False  # chrome glass is an authed-only concern
+            want_field = bool(bridge_up and not self.client_id and not self.auth_working)
+            want_connect = bool(bridge_up and self.client_id and not self.auth_working)
+            self._sync_glass_surfaces(width, height,
+                                      want_login_field=want_field,
+                                      want_save_button=want_field,
+                                      want_connect_button=want_connect)
             self._sync_native_login_field(width, height)
+            self._sync_native_login_buttons(width, height)
+            self._sync_embedded_sheet_geometry(width, height)
             sl_views.draw_login(frame, self, out, width=width, height=height, mouse=mouse,
-                                native_field_active=self._native_client_id_field is not None)
+                                native_field_active=self._native_client_id_field is not None,
+                                native_save_active="save" in self._native_buttons,
+                                native_connect_active="connect" in self._native_buttons,
+                                embedded_active=self._login_web_view is not None)
         else:
-            self._sync_glass_surfaces(width, height, want_chrome=True,
-                                      want_login_field=False)
+            bridge = native_controls()
+            # Text-bearing chrome draws scene tint plates (crisp by
+            # construction); glass_active keeps the translucent treatment and
+            # content-under-bar flow while the bridge is up.
+            self.glass_active = bridge is not None and bridge.available
+            self._sync_glass_surfaces(width, height, want_login_field=False)
             if self.view == "search":
                 sl_views.draw_search(frame, self, out, width=width, height=height, mouse=mouse)
             elif self.view.startswith("playlist:"):
@@ -834,7 +1140,7 @@ class SpotifyLightApp(App):
                 sl_views.draw_home(frame, self, out, width=width, height=height, mouse=mouse)
 
             # Content-area scrollbar for tall views.
-            viewport = height - sl_views.PLAYER_H
+            viewport = height - sl_views.DOCK_H
             if self._content_height > viewport:
                 metrics = self.scrollbar_content.metrics(
                     track_extent=viewport, content_extent=self._content_height,
@@ -846,6 +1152,7 @@ class SpotifyLightApp(App):
                         height=metrics.thumb_extent, radius=2.5, color=(90, 90, 90, 255), z_index=5,
                     )
 
+            sl_views.draw_dock_scrim(frame, width=width, height=height)
             sl_views.draw_sidebar(frame, self, out, width=width, height=height, mouse=mouse)
             sl_views.draw_player_bar(frame, self, out, width=width, height=height, mouse=mouse)
 
@@ -860,7 +1167,7 @@ class SpotifyLightApp(App):
     def _draw_toast(self, frame, message: str, width: float, height: float) -> None:
         toast_w = min(520.0, width - 40)
         toast_x = (width - toast_w) / 2
-        toast_y = height - sl_views.PLAYER_H - 56
+        toast_y = height - sl_views.DOCK_H - 56
         frame.rounded_rect(x=toast_x, y=toast_y, width=toast_w, height=40, radius=8,
                            color=(50, 50, 50, 255), z_index=30)
         frame.text(
@@ -871,6 +1178,7 @@ class SpotifyLightApp(App):
             color=sl_views.TEXT,
             z_index=31,
             cache_key=f"toast|{message}",
+            font_family=sl_views.FONT_FAMILY,
         )
 
     def _render_matrix(self, frame) -> None:
@@ -900,9 +1208,13 @@ class SpotifyLightApp(App):
             y += 14
 
     def teardown(self) -> None:
+        self._end_embedded_login()
         if self._native_client_id_field is not None:
             self._native_client_id_field.destroy()
             self._native_client_id_field = None
+        for button in self._native_buttons.values():
+            button.destroy()
+        self._native_buttons.clear()
         for surface in self._glass_surfaces.values():
             surface.destroy()
         self._glass_surfaces.clear()

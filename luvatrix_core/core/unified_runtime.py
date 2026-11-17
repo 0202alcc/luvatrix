@@ -33,6 +33,17 @@ from .sensor_manager import SensorManagerThread
 from .window_matrix import WindowMatrix
 
 
+def _wire_scene_backing_scale(ctx, scene_target) -> None:
+    """Connect the scene target's live backing scale to the app context.
+
+    Targets that cannot report a scale simply lack the method (or return the
+    protocol default of 1.0); the context falls back to 1.0 either way.
+    """
+    scale_getter = getattr(scene_target, "backing_scale", None)
+    if callable(scale_getter):
+        ctx.set_backing_scale_provider(scale_getter)
+
+
 @dataclass(frozen=True)
 class UnifiedRunResult:
     ticks_run: int
@@ -219,6 +230,7 @@ class UnifiedRuntime:
         granted = self._app_runtime.resolve_capabilities(manifest)
         ctx = self._app_runtime.build_context(granted_capabilities=granted, manifest=manifest)
         ctx.runtime_telemetry_provider = self._runtime_telemetry
+        _wire_scene_backing_scale(ctx, self._scene_target)
         resolved = self._app_runtime.resolve_variant(app_path, manifest)
         if manifest.runtime_kind == "process":
             from .process_runtime import ProcessLifecycleClient  # noqa: PLC0415

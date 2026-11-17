@@ -205,17 +205,62 @@ class TestNullBridgeGlass:
                                          within=glass, bordered=False)
         assert field.frame == (10, 10, 100, 40)
 
+    def test_button_stub(self):
+        bridge = NullNativeControlBridge()
+        glass = bridge.create_glass_surface(x=10, y=10, width=100, height=40)
+        button = bridge.create_button(x=10, y=10, width=100, height=40,
+                                      title="Save", within=glass)
+        assert button.frame == (10, 10, 100, 40)
+        button.set_enabled(False)  # inert, must not raise
+        button.destroy()
+        assert button.destroyed is True
+
+    def test_web_view_stub(self):
+        bridge = NullNativeControlBridge()
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800,
+                                      redirect_prefix="http://127.0.0.1:8888/callback",
+                                      on_redirect=lambda url: None)
+        assert view.frame == (0, 0, 1280, 800)
+        view.load_url("https://accounts.spotify.com/authorize?x=1")  # inert, records
+        assert view.loaded_urls == ["https://accounts.spotify.com/authorize?x=1"]
+        view.destroy()
+        assert view.destroyed is True
+
+    def test_web_view_stub_back_navigation_inert(self):
+        bridge = NullNativeControlBridge()
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800,
+                                      on_navigation_state=lambda: None)
+        assert view.can_go_back is False
+        view.go_back()  # inert, must not raise
+        view.destroy()
+
 
 # -- Fake AppKit stack for bridge-level glass tests ----------------------------
+
+
+class _FakeCALayer:
+    def __init__(self) -> None:
+        self.corner_radius = None
+        self.masks_to_bounds = None
+
+    def setCornerRadius_(self, radius):
+        self.corner_radius = radius
+
+    def setMasksToBounds_(self, value):
+        self.masks_to_bounds = value
 
 
 class _FakeNSView:
     def __init__(self) -> None:
         self.frame = None
         self.subviews: list = []
+        self.positioned: list = []
         self.hidden = False
         self.removed = False
         self.wants_layer = False
+        self._layer = None
+        self.bounds_width = 1280.0
+        self.bounds_height = 800.0
 
     @classmethod
     def alloc(cls):
@@ -231,6 +276,16 @@ class _FakeNSView:
     def addSubview_(self, view):
         self.subviews.append(view)
 
+    def addSubview_positioned_relativeTo_(self, view, mode, relative):
+        self.positioned.append((view, mode, relative))
+        if relative is None and mode == 2:  # NSWindowBelow: bottom of z-order
+            self.subviews.insert(0, view)
+        else:
+            self.subviews.append(view)
+
+    def respondsToSelector_(self, _selector):
+        return False
+
     def removeFromSuperview(self):
         self.removed = True
 
@@ -243,22 +298,39 @@ class _FakeNSView:
     def setWantsLayer_(self, wants):
         self.wants_layer = wants
 
+    def layer(self):
+        if self._layer is None:
+            self._layer = _FakeCALayer()
+        return self._layer
+
+    def convertPoint_fromView_(self, point, _view):
+        # Content view fills the window: window base coords == view coords.
+        return point
+
     def bounds(self):
-        size = type("S", (), {"width": 1280.0, "height": 800.0})()
+        size = type("S", (), {"width": self.bounds_width, "height": self.bounds_height})()
         return type("B", (), {"size": size})()
 
 
 class _FakeGlassEffectView(_FakeNSView):
+    """Mirrors real AppKit: contentView() is nil until setContentView_ is called."""
+
     def __init__(self) -> None:
         super().__init__()
         self.corner_radius = None
-        self._content = _FakeNSView()
+        self._content = None
 
     def setCornerRadius_(self, radius):
         self.corner_radius = radius
 
+    def cornerRadius(self):
+        return self.corner_radius or 0.0
+
     def contentView(self):
         return self._content
+
+    def setContentView_(self, view):
+        self._content = view
 
 
 class _FakeVisualEffectView(_FakeNSView):
@@ -284,6 +356,7 @@ class _FakeNSTextField(_FakeNSView):
         self.bezeled = None
         self.bordered = None
         self.draws_background = None
+        self.focus_ring_type = None
         self.string = ""
         self.placeholder = None
         self.delegate = None
@@ -301,6 +374,9 @@ class _FakeNSTextField(_FakeNSView):
 
     def setDrawsBackground_(self, value):
         self.draws_background = value
+
+    def setFocusRingType_(self, value):
+        self.focus_ring_type = value
 
     def setEditable_(self, _value):
         pass
@@ -330,6 +406,46 @@ class _FakeNSTextField(_FakeNSView):
         return None
 
 
+class _FakeNSButton(_FakeNSView):
+    def __init__(self) -> None:
+        super().__init__()
+        self.title = None
+        self.bordered = None
+        self.focus_ring_type = None
+        self.button_type = None
+        self.enabled = True
+        self.target = None
+        self.action = None
+        self.content_tint = None
+
+    def setContentTintColor_(self, color):
+        self.content_tint = color
+
+    def setTitle_(self, title):
+        self.title = title
+
+    def setBordered_(self, value):
+        self.bordered = value
+
+    def setFocusRingType_(self, value):
+        self.focus_ring_type = value
+
+    def setButtonType_(self, value):
+        self.button_type = value
+
+    def setEnabled_(self, value):
+        self.enabled = bool(value)
+
+    def isEnabled(self):
+        return self.enabled
+
+    def setTarget_(self, target):
+        self.target = target
+
+    def setAction_(self, action):
+        self.action = action
+
+
 class _FakeWindow:
     def __init__(self, content: _FakeNSView) -> None:
         self._content = content
@@ -356,16 +472,124 @@ class _FakeNSObject:
         return cls()
 
 
+class _FakeMouseEvent:
+    """Left-mouse-down at a window-base point (AppKit bottom-left origin)."""
+
+    def __init__(self, x: float, y: float) -> None:
+        self._point = type("NSPoint", (), {"x": x, "y": y})()
+
+    def locationInWindow(self):
+        return self._point
+
+
 def _fake_appkit_module(glass_view_cls=_FakeGlassEffectView):
+    class _FakeNSEvent:
+        monitors: list = []
+        removed: list = []
+
+        @classmethod
+        def addLocalMonitorForEventsMatchingMask_handler_(cls, mask, handler):
+            cls.monitors.append((mask, handler))
+            return ("monitor", len(cls.monitors))
+
+        @classmethod
+        def removeMonitor_(cls, token):
+            cls.removed.append(token)
+
     return type("AppKit", (), {
         "NSTextField": _FakeNSTextField,
         "NSSecureTextField": _FakeNSTextField,
         "NSMakeRect": lambda x, y, w, h: (x, y, w, h),
+        "NSView": _FakeNSView,
+        "NSButton": _FakeNSButton,
+        "NSFocusRingTypeNone": 1,
+        "NSEvent": _FakeNSEvent,
+        "NSLeftMouseDownMask": 2,
+        "NSWindowBelow": 2,
+        "NSWindowAbove": 1,
+        "NSColor": type("NSColor", (), {"whiteColor": classmethod(lambda cls: "NSColor.white")}),
         "NSVisualEffectView": _FakeVisualEffectView,
         "NSVisualEffectMaterialSidebar": 7,
         "NSVisualEffectMaterialHUD": 10,
         "NSVisualEffectBlendingModeWithinWindow": 0,
         "NSVisualEffectStateActive": 0,
+    })
+
+
+class _FakeNSURL:
+    def __init__(self, string) -> None:
+        self._string = string
+
+    @classmethod
+    def URLWithString_(cls, string):
+        return cls(string)
+
+    def absoluteString(self):
+        return self._string
+
+
+class _FakeNSURLRequest:
+    def __init__(self, url) -> None:
+        self._url = url
+
+    @classmethod
+    def requestWithURL_(cls, url):
+        return cls(url)
+
+    def URL(self):
+        return self._url
+
+
+class _FakeWKWebView(_FakeNSView):
+    def __init__(self) -> None:
+        super().__init__()
+        self.navigation_delegate = None
+        self.loaded_requests: list = []
+        self._can_go_back = False
+        self.went_back = 0
+        self.kvo_observers: list = []
+        self.removed_kvo: list = []
+
+    def setNavigationDelegate_(self, delegate):
+        self.navigation_delegate = delegate
+
+    def loadRequest_(self, request):
+        self.loaded_requests.append(request)
+
+    def canGoBack(self):
+        return self._can_go_back
+
+    def goBack(self):
+        self.went_back += 1
+
+    def addObserver_forKeyPath_options_context_(self, observer, key_path, _options, _ctx):
+        self.kvo_observers.append((observer, key_path))
+
+    def removeObserver_forKeyPath_(self, observer, key_path):
+        self.removed_kvo.append((observer, key_path))
+
+    def set_can_go_back(self, value):
+        """Test helper: flip history state and fire KVO like WebKit would."""
+        self._can_go_back = value
+        for observer, key_path in list(self.kvo_observers):
+            if key_path == "canGoBack":
+                observer.observeValueForKeyPath_ofObject_change_context_(
+                    "canGoBack", self, {}, None)
+
+
+class _FakeNavigationAction:
+    def __init__(self, url: str) -> None:
+        self._request = _FakeNSURLRequest(_FakeNSURL(url))
+
+    def request(self):
+        return self._request
+
+
+def _fake_foundation_module():
+    return type("Foundation", (), {
+        "NSObject": _FakeNSObject,
+        "NSURL": _FakeNSURL,
+        "NSURLRequest": _FakeNSURLRequest,
     })
 
 
@@ -433,6 +657,64 @@ class TestAppKitGlassSurfaces:
         assert view.state == 0  # Active
         assert view in handle.content.subviews
 
+    def test_fallback_visual_effect_view_applies_corner_radius(self):
+        """The pre-Tahoe path must round capsules too (via its layer)."""
+        bridge, handle = self._bridge(with_glass=False)
+        surface = bridge.create_glass_surface(x=450, y=420, width=380, height=40,
+                                              corner_radius=20.0, style="regular")
+        view = surface._view
+        assert view.wants_layer is True
+        assert view.layer().corner_radius == 20.0
+        assert view.layer().masks_to_bounds is True
+
+    def test_glass_effect_view_rounds_its_layer(self):
+        """Mac round-2: NSGlassEffectView accepted setCornerRadius_ without
+        error yet rendered pixel-square — the property alone does not produce
+        the visible edge. The view's own layer must clip it."""
+        bridge, handle = self._bridge(with_glass=True)
+        surface = bridge.create_glass_surface(x=450, y=420, width=380, height=40,
+                                              corner_radius=20.0, style="regular")
+        view = surface._view
+        assert view.corner_radius == 20.0  # property still applied
+        assert view.wants_layer is True
+        assert view.layer().corner_radius == 20.0
+        assert view.layer().masks_to_bounds is True
+
+    def test_glass_radius_readback_logged(self, capsys):
+        """The Mac pass needs to see what the property actually held."""
+        bridge, handle = self._bridge(with_glass=True)
+        capsys.readouterr()  # drop the one-time path line
+        bridge.create_glass_surface(x=450, y=420, width=380, height=40,
+                                    corner_radius=20.0, style="regular")
+        err = capsys.readouterr().err
+        assert "set=20.0" in err
+        assert "readback=20.0" in err
+
+    def test_set_frame_reapplies_with_current_bounds(self):
+        """Logical frame unchanged but the content view resized (e.g. window
+        grew after creation): re-applying must re-derive the AppKit frame."""
+        bridge, handle = self._bridge(with_glass=True)
+        handle.content.bounds_height = 772.0  # 800-pt window minus title bar
+        field = bridge.create_text_field(x=450, y=420, width=380, height=40,
+                                         placeholder="Client ID")
+        frame_small = field.ns_field.frame
+        handle.content.bounds_height = 800.0
+        field.set_frame(450, 420, 380, 40)  # same logical rect, fresh bounds
+        frame_full = field.ns_field.frame
+        assert frame_small != frame_full
+        assert frame_full == (450.0, 800.0 - 420.0 - 40.0, 380.0, 40.0)
+
+    def test_glass_surface_installs_content_view_when_absent(self):
+        """NSGlassEffectView does not auto-create its contentView (probe-verified
+        on macOS 26.6); the bridge must install one before parenting controls."""
+        bridge, handle = self._bridge(with_glass=True)
+        surface = bridge.create_glass_surface(x=450, y=420, width=380, height=40,
+                                              corner_radius=20.0, style="regular")
+        view = surface._view
+        assert isinstance(view._content, _FakeNSView)
+        assert view._content.frame == (0.0, 0.0, 380.0, 40.0)
+        assert surface._content_host() is view._content
+
     def test_text_field_within_glass_uses_host_local_frame(self):
         bridge, handle = self._bridge(with_glass=True)
         glass = bridge.create_glass_surface(x=450, y=420, width=380, height=40,
@@ -448,7 +730,18 @@ class TestAppKitGlassSurfaces:
         assert field.ns_field.bezeled is False
         assert field.ns_field.bordered is False
         assert field.ns_field.draws_background is False
+        # Borderless glass fields suppress the accent-colored focus ring
+        # (NSFocusRingTypeNone); the capsule itself is the affordance.
+        assert field.ns_field.focus_ring_type == 1
         assert bridge.consume_point(460.0, 430.0) is True
+
+    def test_bordered_field_keeps_default_focus_ring(self):
+        bridge, handle = self._bridge(with_glass=True)
+        field = bridge.create_text_field(x=10, y=10, width=200, height=30,
+                                         placeholder="Name")
+        assert field.ns_field.focus_ring_type is None  # never touched
+        assert field.ns_field.bezeled is True
+        assert field.ns_field.draws_background is True
 
     def test_glass_only_points_not_consumed_and_close_destroys(self):
         bridge, handle = self._bridge(with_glass=True)
@@ -458,6 +751,327 @@ class TestAppKitGlassSurfaces:
         bridge.close()
         assert surface._view.removed is True
         assert bridge.available is False
+
+
+class TestAppKitNativeButtons:
+    """Borderless NSButton on a glass capsule — the auth-wall CTA pattern."""
+
+    def test_button_title_tinted_white(self):
+        """A borderless button's title defaults to controlTextColor — black in
+        light mode, invisible over the dark login page. Pin a light tint so
+        the affordance cannot disappear."""
+        bridge, handle = self._bridge()
+        button = bridge.create_button(x=1174, y=16, width=90, height=36,
+                                      title="Cancel", on_press=lambda: None)
+        assert button._ns.content_tint == "NSColor.white"
+
+    def setup_method(self):
+        import luvatrix_core.platform.macos.native_controls as mac_native
+
+        self._mac = mac_native
+        self._patchers = []
+        mac_native._GLASS_EFFECT_VIEW_CLASS = None
+
+    def teardown_method(self):
+        for patcher in self._patchers:
+            patcher.stop()
+        self._mac._GLASS_EFFECT_VIEW_CLASS = None
+        unregister_native_control_bridge()
+
+    def _bridge(self, *, with_glass: bool = True):
+        from unittest.mock import patch
+
+        handle = _FakeWindowHandle()
+        modules = {
+            "AppKit": _fake_appkit_module(),
+            "objc": _fake_objc_module(with_glass=with_glass),
+            "Foundation": type("Foundation", (), {"NSObject": _FakeNSObject}),
+        }
+        patcher = patch.dict("sys.modules", modules)
+        patcher.start()
+        self._patchers.append(patcher)
+        bridge = self._mac.AppKitNativeControlBridge(handle)
+        return bridge, handle
+
+    def test_button_within_glass_borderless_no_focus_ring(self):
+        bridge, handle = self._bridge()
+        capsule = bridge.create_glass_surface(x=580, y=476, width=120, height=40,
+                                              corner_radius=20.0, style="regular")
+        button = bridge.create_button(x=580, y=476, width=120, height=40,
+                                      title="Save", within=capsule, on_press=lambda: None)
+        ns = button.ns_button
+        assert isinstance(ns, _FakeNSButton)
+        assert ns.title == "Save"
+        assert ns.bordered is False
+        assert ns.focus_ring_type == 1  # NSFocusRingTypeNone
+        host = capsule._view.contentView()
+        assert ns in host.subviews
+        # Parent-local frame fills the capsule; window-local frame kept for the gate.
+        assert ns.frame == (0.0, 0.0, 120.0, 40.0)
+        assert button.frame == (580.0, 476.0, 120.0, 40.0)
+
+    def test_button_press_invokes_on_press(self):
+        bridge, handle = self._bridge()
+        pressed = []
+        button = bridge.create_button(x=0, y=0, width=100, height=40,
+                                      title="Go", on_press=lambda: pressed.append(True))
+        ns = button.ns_button
+        assert ns.target is not None and ns.action == "onButtonPress:"
+        getattr(ns.target, ns.action.replace(":", "_"))(ns)
+        assert pressed == [True]
+
+    def test_button_set_enabled(self):
+        bridge, handle = self._bridge()
+        button = bridge.create_button(x=0, y=0, width=100, height=40, title="Go")
+        assert button.ns_button.isEnabled() is True
+        button.set_enabled(False)
+        assert button.ns_button.isEnabled() is False
+        button.set_enabled(True)
+        assert button.ns_button.isEnabled() is True
+
+    def test_button_points_consumed_and_close_destroys(self):
+        bridge, handle = self._bridge()
+        button = bridge.create_button(x=580, y=476, width=120, height=40, title="Save")
+        assert bridge.consume_point(600.0, 490.0) is True
+        assert bridge.consume_point(10.0, 10.0) is False
+        bridge.close()
+        assert button.ns_button.removed is True
+
+    def test_button_without_glass_parents_to_content_view(self):
+        bridge, handle = self._bridge()
+        button = bridge.create_button(x=10, y=10, width=100, height=40, title="Plain")
+        assert button.ns_button in handle.content.subviews
+        # Window-local frame with Y-flip at 1:1 scale (content height 800).
+        assert button.ns_button.frame == (10.0, 800 - 10 - 40, 100.0, 40.0)
+
+
+class TestAppKitWebViews:
+    """Embedded WKWebView for OAuth: load, redirect intercept, dismiss."""
+
+    def setup_method(self):
+        import luvatrix_core.platform.macos.native_controls as mac_native
+
+        self._mac = mac_native
+        self._patchers = []
+        mac_native._GLASS_EFFECT_VIEW_CLASS = None
+
+    def teardown_method(self):
+        for patcher in self._patchers:
+            patcher.stop()
+        self._mac._GLASS_EFFECT_VIEW_CLASS = None
+        unregister_native_control_bridge()
+
+    def _bridge(self, *, with_webkit: bool = True):
+        from unittest.mock import patch
+
+        handle = _FakeWindowHandle()
+        modules = {
+            "AppKit": _fake_appkit_module(),
+            "objc": _fake_objc_module(with_glass=True),
+            "Foundation": _fake_foundation_module(),
+        }
+        if with_webkit:
+            modules["WebKit"] = type("WebKit", (), {"WKWebView": _FakeWKWebView})
+        self.appkit = modules["AppKit"]
+        patcher = patch.dict("sys.modules", modules)
+        patcher.start()
+        self._patchers.append(patcher)
+        bridge = self._mac.AppKitNativeControlBridge(handle)
+        return bridge, handle
+
+    def _monitor(self):
+        monitors = self.appkit.NSEvent.monitors
+        assert len(monitors) == 1
+        mask, handler = monitors[0]
+        assert mask == 2  # NSLeftMouseDownMask
+        return handler
+
+    def test_load_url_builds_and_loads_request(self):
+        bridge, handle = self._bridge()
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800)
+        url = "https://accounts.spotify.com/authorize?client_id=cid"
+        view.load_url(url)
+        assert view in bridge._web_views
+        requests = view.ns_web_view.loaded_requests
+        assert len(requests) == 1
+        assert requests[0].URL().absoluteString() == url
+        assert view.ns_web_view in handle.content.subviews
+
+    def test_redirect_matching_prefix_cancels_and_reports(self):
+        bridge, _ = self._bridge()
+        seen = []
+        view = bridge.create_web_view(
+            x=0, y=0, width=1280, height=800,
+            redirect_prefix="http://127.0.0.1:8888/callback",
+            on_redirect=seen.append)
+        delegate = view.ns_web_view.navigation_delegate
+        assert delegate is not None
+        policies = []
+        callback_url = "http://127.0.0.1:8888/callback?code=abc&state=s"
+        delegate.webView_decidePolicyForNavigationAction_decisionHandler_(
+            view.ns_web_view, _FakeNavigationAction(callback_url), policies.append)
+        assert policies == [0]  # WKNavigationActionPolicyCancel
+        assert seen == [callback_url]
+
+    def test_non_matching_navigation_allows(self):
+        bridge, _ = self._bridge()
+        seen = []
+        view = bridge.create_web_view(
+            x=0, y=0, width=1280, height=800,
+            redirect_prefix="http://127.0.0.1:8888/callback",
+            on_redirect=seen.append)
+        delegate = view.ns_web_view.navigation_delegate
+        policies = []
+        delegate.webView_decidePolicyForNavigationAction_decisionHandler_(
+            view.ns_web_view,
+            _FakeNavigationAction("https://accounts.spotify.com/login"),
+            policies.append)
+        assert policies == [1]  # WKNavigationActionPolicyAllow
+        assert seen == []
+
+    def test_web_view_consumes_points_and_suppresses_keyboard(self):
+        bridge, _ = self._bridge()
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800)
+        assert bridge.consume_point(640.0, 400.0) is True
+        # Typing into Spotify's form must not leak to app shortcuts.
+        assert bridge.suppress_keyboard() is True
+        view.destroy()
+        assert view.ns_web_view.removed is True
+        assert bridge.consume_point(640.0, 400.0) is False
+        assert bridge.suppress_keyboard() is False
+
+    def test_create_web_view_without_webkit_raises_actionable(self):
+        bridge, _ = self._bridge(with_webkit=False)
+        with pytest.raises(RuntimeError, match="pyobjc-framework-WebKit"):
+            bridge.create_web_view(x=0, y=0, width=100, height=100)
+
+    # -- back navigation --------------------------------------------------------
+
+    def test_can_go_back_and_go_back(self):
+        """The sheet's Back button reads canGoBack (via KVO-driven refresh)
+        and presses through to WKWebView.goBack."""
+        bridge, handle = self._bridge()
+        states = []
+        view = bridge.create_web_view(
+            x=0, y=0, width=1280, height=800,
+            on_navigation_state=lambda: states.append(view.can_go_back))
+        assert view.can_go_back is False
+        view._wk.set_can_go_back(True)
+        assert view.can_go_back is True
+        assert states == [True]  # KVO change notified the app callback
+        view.go_back()
+        assert view._wk.went_back == 1
+
+    def test_kvo_observer_removed_on_destroy(self):
+        """A leaked KVO observer crashes the process on the next notification."""
+        bridge, handle = self._bridge()
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800,
+                                      on_navigation_state=lambda: None)
+        view.destroy()
+        assert len(view._wk.removed_kvo) == 1
+        assert view._wk.removed_kvo[0][1] == "canGoBack"
+
+    def test_monitor_routes_top_left_back_button(self):
+        """The Back button sits top-LEFT (Cancel is top-right); the monitor
+        must route its clicks the same way."""
+        bridge, handle = self._bridge()
+        fired = []
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800)
+        button = bridge.create_button(x=16, y=16, width=90, height=36,
+                                      title="Back", on_press=lambda: fired.append(True))
+        handler = self._monitor()
+        event = _FakeMouseEvent(61, 800 - 34)  # Back frame center
+        assert handler(event) is None
+        assert fired == [True]
+
+    # -- button event routing while a web view is live --------------------------
+    # WKWebView's remote layer tree can win AppKit hit-testing over siblings on
+    # the CAMetalLayer-hosted content view (Cancel never fired on the Mac
+    # build). While a web view is live, the bridge routes left-mouse-downs to
+    # native buttons through an NSEvent monitor instead of view hit-testing.
+
+    def test_mousedown_inside_button_fires_and_swallows(self):
+        bridge, handle = self._bridge()
+        fired = []
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800)
+        button = bridge.create_button(x=1174, y=16, width=90, height=36,
+                                      title="Cancel", on_press=lambda: fired.append(True))
+        handler = self._monitor()
+        # Button center (1219, 34) logical top-left -> window base y = 800-34.
+        event = _FakeMouseEvent(1219, 800 - 34)
+        assert handler(event) is None  # swallowed: the page must not see it
+        assert fired == [True]
+
+    def test_mousedown_outside_button_passes_through(self):
+        bridge, handle = self._bridge()
+        fired = []
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800)
+        button = bridge.create_button(x=1174, y=16, width=90, height=36,
+                                      title="Cancel", on_press=lambda: fired.append(True))
+        handler = self._monitor()
+        event = _FakeMouseEvent(640, 400)
+        assert handler(event) is event
+        assert fired == []
+
+    def test_mousedown_on_disabled_button_passes_through(self):
+        bridge, handle = self._bridge()
+        fired = []
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800)
+        button = bridge.create_button(x=1174, y=16, width=90, height=36,
+                                      title="Cancel", on_press=lambda: fired.append(True))
+        button.set_enabled(False)
+        handler = self._monitor()
+        event = _FakeMouseEvent(1219, 800 - 34)
+        assert handler(event) is event
+        assert fired == []
+
+    def test_monitor_removed_when_last_web_view_destroyed(self):
+        bridge, handle = self._bridge()
+        first_appkit = self.appkit
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800)
+        assert len(first_appkit.NSEvent.monitors) == 1
+        view.destroy()
+        assert len(first_appkit.NSEvent.removed) == 1
+        # No monitor installed until a web view exists.
+        bridge2, handle2 = self._bridge()
+        assert len(self.appkit.NSEvent.monitors) == 0
+        assert len(first_appkit.NSEvent.monitors) == 1  # still just the first
+
+    def test_web_view_inserts_below_native_buttons(self):
+        """Mac round-2: the compositing WKWebView can obscure sibling native
+        controls on the layer tree (Cancel never visibly rendered). Web views
+        must insert at the bottom of the z-order so controls composite above."""
+        bridge, handle = self._bridge()
+        button = bridge.create_button(x=1174, y=16, width=90, height=36,
+                                      title="Cancel", on_press=lambda: None)
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800)
+        subs = handle.content.subviews
+        assert subs.index(view._wk) < subs.index(button._ns)
+
+    def test_create_button_logs_completion(self, capsys):
+        """Disambiguates 'create_button threw' from 'button not matched' on the
+        Mac pass (stdout is block-buffered when piped — must be stderr)."""
+        bridge, handle = self._bridge()
+        capsys.readouterr()
+        bridge.create_button(x=1174, y=16, width=90, height=36,
+                             title="Cancel", on_press=lambda: None)
+        err = capsys.readouterr().err
+        assert "Cancel" in err
+        assert "1174.0" in err
+
+    def test_button_monitor_logs_install_and_route(self, capsys):
+        bridge, handle = self._bridge()
+        fired = []
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800)
+        button = bridge.create_button(x=1174, y=16, width=90, height=36,
+                                      title="Cancel", on_press=lambda: fired.append(True))
+        err = capsys.readouterr().err
+        assert "button monitor installed" in err
+        handler = self._monitor()
+        handler(_FakeMouseEvent(1219, 800 - 34))
+        err = capsys.readouterr().err
+        assert "match" in err and "Cancel" in err
+        assert fired == [True]
 
 
 class TestGlassEffectViewClassSelection:

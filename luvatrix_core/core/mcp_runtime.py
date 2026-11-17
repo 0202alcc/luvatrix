@@ -22,6 +22,7 @@ import time
 from typing import Any, Callable, Iterable
 
 from .hdi_thread import HDIEvent
+from .scene_graph import CpuLayerNode, ImageNode
 
 LOGGER = logging.getLogger(__name__)
 
@@ -166,6 +167,17 @@ class RingBufferLogHandler(logging.Handler):
 def scene_node_to_dict(node: object) -> dict[str, Any]:
     """Serialize one scene-graph node for ``app_scene_tree``."""
     payload: dict[str, Any] = {"type": type(node).__name__}
+    if isinstance(node, (CpuLayerNode, ImageNode)):
+        # Skip the raw pixel payload (megabytes of noise that asdict would also
+        # deep-copy); report its dimensions so Retina sizing is inspectable.
+        for field_info in dataclasses.fields(node):
+            if field_info.name == "rgba":
+                continue
+            payload[field_info.name] = getattr(node, field_info.name)
+        layer = getattr(node, "rgba", None)
+        if layer is not None and hasattr(layer, "shape"):
+            payload["payload_px"] = [int(layer.shape[1]), int(layer.shape[0])]
+        return payload
     if dataclasses.is_dataclass(node):
         payload.update(dataclasses.asdict(node))
     return payload

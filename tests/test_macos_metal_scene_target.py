@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+import types
 import unittest
+import unittest.mock
+import contextlib
 import ctypes
+import io
 
-from luvatrix_core.core.scene_graph import CircleNode, ClearNode, RectNode, RoundedRectNode, SceneFrame, ShaderRectNode, TextNode
+from luvatrix_core.core.scene_graph import CircleNode, ClearNode, CpuLayerNode, ImageNode, RectNode, RoundedRectNode, SceneFrame, ShaderRectNode, TextNode
+from luvatrix_core.core.scene_rasterizer import rasterize_scene_frame
+from luvatrix_core.platform.macos import metal_scene_target as mst
 from luvatrix_core.platform.macos.metal_scene_target import (
+    _MacOSMetalSceneState,
     _ReusableMetalBuffer,
     _clear_color,
     _collect_circle_instances,
     _collect_rect_instances,
+    _collect_rounded_rect_instances,
+    _needs_z_ordered_batches,
+    _plan_z_ordered_batches,
     _scene_view_uniform,
     _write_reusable_float_buffer,
 )
@@ -72,7 +82,10 @@ class MacOSMetalSceneTargetTests(unittest.TestCase):
             nodes=(
                 ClearNode((1, 2, 3, 255)),
                 RectNode(1, 2, 3, 4, (10, 20, 30, 255)),
+                # radius > 0 leaves the plain-rect batch (rounded pipeline)
                 RoundedRectNode(5, 6, 7, 8, 2, (40, 50, 60, 128)),
+                # radius == 0 stays on the cheap plain-rect path
+                RoundedRectNode(13, 14, 15, 16, 0, (50, 60, 70, 128)),
                 ShaderRectNode(9, 10, 11, 12, shader="solid", color_rgba=(70, 80, 90, 64)),
                 CircleNode(20, 30, 5, (100, 110, 120, 255)),
                 TextNode("not batched", 1, 1),
@@ -83,8 +96,65 @@ class MacOSMetalSceneTargetTests(unittest.TestCase):
 
         self.assertEqual(len(rects), 3)
         self.assertEqual(rects[0][:4], (1.0, 2.0, 3.0, 4.0))
-        self.assertEqual(rects[1][:4], (5.0, 6.0, 7.0, 8.0))
+        self.assertEqual(rects[1][:4], (13.0, 14.0, 15.0, 16.0))
         self.assertEqual(rects[2][:4], (9.0, 10.0, 11.0, 12.0))
+
+    def test_collect_rounded_rect_instances_honors_radius(self) -> None:
+        """Mac round-3 evidence: RoundedRectNode.radius was dropped entirely,
+        so the login wall's glass-tint underlay rasterized square behind the
+        (correctly rounded) native glass. The rounded pipeline must receive
+        the radius in points alongside the fill."""
+        frame = SceneFrame(
+            logical_width=1280,
+            logical_height=800,
+            display_width=1280,
+            display_height=800,
+            revision=1,
+            ts_ns=1,
+            nodes=(
+                RoundedRectNode(450, 420, 380, 40, 20, (255, 255, 255, 24)),
+                RectNode(0, 0, 1280, 800, (18, 18, 18, 255)),
+                CircleNode(20, 30, 5, (100, 110, 120, 255)),
+            ),
+        )
+
+        rounded = _collect_rounded_rect_instances(frame)
+
+        self.assertEqual(len(rounded), 1)
+        inst = rounded[0]
+        self.assertEqual(len(inst), 16)  # same packing as circle instances
+        self.assertEqual(inst[:4], (450.0, 420.0, 380.0, 40.0))
+        self.assertEqual(inst[4:8], (1.0, 1.0, 1.0, 24 / 255.0))
+        self.assertEqual(inst[8:12], (0.0, 0.0, 0.0, 0.0))  # no stroke
+        self.assertEqual(inst[12], 20.0)  # corner radius in points
+
+    def test_collect_rounded_rect_instances_clamps_radius(self) -> None:
+        frame = SceneFrame(
+            logical_width=100,
+            logical_height=80,
+            display_width=100,
+            display_height=80,
+            revision=1,
+            ts_ns=1,
+            nodes=(RoundedRectNode(0, 0, 90, 36, 50, (1, 2, 3, 255)),),
+        )
+
+        rounded = _collect_rounded_rect_instances(frame)
+
+        self.assertEqual(rounded[0][12], 18.0)  # min(w, h) / 2
+
+    def test_collect_rounded_rect_instances_skips_zero_radius(self) -> None:
+        frame = SceneFrame(
+            logical_width=100,
+            logical_height=80,
+            display_width=100,
+            display_height=80,
+            revision=1,
+            ts_ns=1,
+            nodes=(RoundedRectNode(1, 2, 3, 4, 0, (10, 20, 30, 255)),),
+        )
+
+        self.assertEqual(_collect_rounded_rect_instances(frame), [])
 
     def test_collect_circle_instances_batches_circles_separately(self) -> None:
         frame = SceneFrame(
@@ -112,6 +182,382 @@ class MacOSMetalSceneTargetTests(unittest.TestCase):
         frame = SceneFrame(10, 10, 10, 10, 1, 1, nodes=(ClearNode((4, 5, 6, 7)),))
 
         self.assertEqual(_clear_color(frame, (0, 0, 0, 255)), (4, 5, 6, 7))
+
+
+class RetinaScaleTests(unittest.TestCase):
+    """Live Mac bug (Alec on `9f8b157`): "everything looks pixelated". The
+    window is sized in POINTS (1280x800), so the submitted frame's display ==
+    logical dims and `_frame_scale` is 1.0 — text textures rasterized at 1x
+    while the Retina drawable is 2560x1600 → 2x GPU upscale → chunky text.
+    Text must raster at the DRAWABLE scale, same as the viewport."""
+
+    def _points_frame(self, presentation_mode=None) -> SceneFrame:
+        return SceneFrame(
+            logical_width=1280,
+            logical_height=800,
+            display_width=1280,   # points, not device pixels — the trap
+            display_height=800,
+            revision=1,
+            ts_ns=1,
+            nodes=(),
+            presentation_mode=presentation_mode,
+        )
+
+    def test_frame_scale_is_1_for_points_frames(self) -> None:
+        # Characterization of the bug: display==logical yields 1.0 even on a
+        # 2x Retina drawable — this is why text rastered at 1x.
+        self.assertEqual(mst._frame_scale(self._points_frame()), 1.0)
+
+    def test_text_raster_scale_follows_drawable(self) -> None:
+        frame = self._points_frame()
+        self.assertEqual(mst._text_raster_scale(frame, 2560.0, 1600.0), 2.0)
+        self.assertEqual(mst._text_raster_scale(frame, 1280.0, 800.0), 1.0)
+
+    def test_text_raster_scale_matches_viewport_policy(self) -> None:
+        # Default presentation: min() like _viewport; crop_fit: max().
+        frame = self._points_frame()
+        self.assertEqual(mst._text_raster_scale(frame, 2560.0, 800.0), 1.0)
+        crop = self._points_frame(presentation_mode="crop_fit")
+        self.assertEqual(mst._text_raster_scale(crop, 2560.0, 800.0), 2.0)
+
+
+class _FakeScaleWindow:
+    def __init__(self, scale: float) -> None:
+        self.scale = scale
+
+    def backingScaleFactor(self) -> float:
+        return self.scale
+
+
+class _FakeScaleLayer:
+    def __init__(self) -> None:
+        self.contents_scale: float | None = None
+        self.drawable_size = None
+
+    def setContentsScale_(self, scale) -> None:
+        self.contents_scale = scale
+
+    def setDrawableSize_(self, size) -> None:
+        self.drawable_size = size
+
+
+class LayerScaleLogTests(unittest.TestCase):
+    """The Mac pass needs a stderr line proving what scale took — silent
+    1x is exactly the failure mode we're killing."""
+
+    def test_resize_applies_backing_scale_and_logs_once_per_change(self) -> None:
+        from luvatrix_core.platform.macos.window_system import MacOSWindowHandle
+
+        layer = _FakeScaleLayer()
+        window = _FakeScaleWindow(2.0)
+        handle = MacOSWindowHandle(window=window, layer=layer)
+        log_state: dict = {}
+
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            mst._resize_layer_for_window(layer, handle, 1280, 800, _log_state=log_state)
+            mst._resize_layer_for_window(layer, handle, 1280, 800, _log_state=log_state)
+
+        self.assertEqual(layer.contents_scale, 2.0)
+        self.assertEqual((layer.drawable_size.width, layer.drawable_size.height), (2560.0, 1600.0))
+        self.assertIn("contentsScale=2.0", buf.getvalue())
+        self.assertIn("drawable=2560x1600", buf.getvalue())
+        self.assertEqual(buf.getvalue().count("contentsScale="), 1,
+                         "called every present — must log only on change")
+
+        window.scale = 1.0  # dragged to a 1x external display
+        buf2 = io.StringIO()
+        with contextlib.redirect_stderr(buf2):
+            mst._resize_layer_for_window(layer, handle, 1280, 800, _log_state=log_state)
+        self.assertIn("contentsScale=1.0", buf2.getvalue())
+
+
+class _FakeTexture:
+    def __init__(self, width: int, height: int) -> None:
+        self.width = width
+        self.height = height
+        self.uploads: list[bytes] = []
+
+    def replaceRegion_mipmapLevel_withBytes_bytesPerRow_(self, _region, _level, payload, _bpr) -> None:
+        self.uploads.append(bytes(payload))
+
+
+def _bare_state() -> _MacOSMetalSceneState:
+    return _MacOSMetalSceneState(
+        device=object(),
+        command_queue=None,
+        rect_pipeline_state=None,
+        circle_pipeline_state=None,
+        rounded_rect_pipeline_state=None,
+        textured_pipeline_state=None,
+        atlas_pipeline_state=None,
+        sampler_state=None,
+        window_handle=None,
+        window_system=None,
+    )
+
+
+class DynamicLayerTextureCacheTests(unittest.TestCase):
+    """Live Mac bug (round-6c screenshot): every track card rendered the SAME
+    photo. Root cause — one shared `state.dynamic_texture` re-uploaded per
+    CpuLayerNode; Metal samples at execution time, so every quad drew the
+    LAST upload of the frame. Textures must be keyed by content."""
+
+    def _layer(self, rgba, x: float = 0.0):
+        from luvatrix_core.core.scene_graph import CpuLayerNode
+
+        return CpuLayerNode(x, 0.0, float(rgba.shape[1]), float(rgba.shape[0]), rgba, 2)
+
+    def _rgba(self, rgb, size: int = 8):
+        np = __import__("numpy")
+        return np.full((size, size, 4), (*rgb, 255), dtype=np.uint8)
+
+    def _patched_create(self, made: list):
+        def fake_create(_device, w, h):
+            tex = _FakeTexture(w, h)
+            made.append(tex)
+            return tex
+
+        return unittest.mock.patch.object(mst, "_create_texture", side_effect=fake_create)
+
+    def test_distinct_content_gets_distinct_textures(self) -> None:
+        state = _bare_state()
+        made: list = []
+        with self._patched_create(made):
+            red = mst._cached_dynamic_layer_texture(state, self._layer(self._rgba((200, 0, 0))))
+            blue = mst._cached_dynamic_layer_texture(state, self._layer(self._rgba((0, 0, 200)), x=40.0))
+        self.assertIsNot(red, blue, "two art images must not share one texture")
+        self.assertEqual(len(made), 2)
+
+    def test_repeat_content_reuses_texture_without_reupload(self) -> None:
+        state = _bare_state()
+        made: list = []
+        art = self._rgba((0, 200, 0))
+        with self._patched_create(made):
+            first = mst._cached_dynamic_layer_texture(state, self._layer(art))
+            second = mst._cached_dynamic_layer_texture(state, self._layer(art, x=40.0))
+        self.assertIs(first, second)
+        self.assertEqual(len(first.uploads), 1, "cache hit must not re-upload pixels")
+        self.assertEqual(len(made), 1)
+
+    def test_cache_is_bounded_lru(self) -> None:
+        state = _bare_state()
+        made: list = []
+        limit = mst._DYNAMIC_LAYER_TEXTURE_LIMIT
+        with self._patched_create(made):
+            for i in range(limit + 8):
+                mst._cached_dynamic_layer_texture(state, self._layer(self._rgba((i % 250, 0, 0))))
+            self.assertLessEqual(len(state.dynamic_layer_textures), limit)
+            evicted = mst._cached_dynamic_layer_texture(state, self._layer(self._rgba((0, 0, 0))))
+        # The oldest entry was evicted, so image 0 creates a fresh texture.
+        self.assertIn(evicted, made[1:])
+
+
+class MacOSMetalZOrderedBatchTests(unittest.TestCase):
+    """Mac round-11 evidence: the Metal encoder drew every rect, then every
+    circle, then every rounded rect, then every texture — z_index only ordered
+    nodes *within* a kind. A CircleNode at z=12 (spotify_light's play/pause
+    button) was painted over by the pill's RoundedRectNode plates at z=10, so
+    the white circle read as the pill's dark tint (43,43,43) on screen while
+    the CPU raster and the MCP scene readback — both z-ordered — showed white.
+    The z-ordered batch planner must interleave kinds exactly like the CPU
+    raster does."""
+
+    @staticmethod
+    def _frame(nodes) -> SceneFrame:
+        return SceneFrame(
+            logical_width=200,
+            logical_height=100,
+            display_width=200,
+            display_height=100,
+            revision=1,
+            ts_ns=1,
+            nodes=tuple(nodes),
+        )
+
+    def test_grouped_kind_passes_do_not_need_z_ordered_batches(self) -> None:
+        frame = self._frame([
+            RectNode(0, 0, 10, 10, (1, 2, 3, 255), z_index=0),
+            CircleNode(5, 5, 4, (255, 255, 255, 255), z_index=1),
+            RoundedRectNode(0, 0, 10, 10, 4, (9, 9, 9, 255), z_index=2),
+            TextNode("hi", 0, 0, z_index=3),
+        ])
+        self.assertFalse(_needs_z_ordered_batches(frame))
+
+    def test_circle_between_rounded_and_text_needs_z_ordered_batches(self) -> None:
+        # The dock pattern that rendered the pause circle dark on Mac.
+        frame = self._frame([
+            RoundedRectNode(0, 0, 100, 40, 20, (22, 22, 22, 255), z_index=10),
+            CircleNode(50, 20, 15, (225, 225, 225, 255), z_index=12),
+            TextNode("||", 45, 14, z_index=13),
+        ])
+        self.assertTrue(_needs_z_ordered_batches(frame))
+
+    def test_scrim_rect_over_image_needs_z_ordered_batches(self) -> None:
+        # The scroll scrim (rect z=6) must cover card art (image z=3).
+        frame = self._frame([
+            ImageNode("art", 0, 0, 50, 50, z_index=3),
+            RectNode(0, 0, 50, 8, (13, 13, 13, 200), z_index=6),
+        ])
+        self.assertTrue(_needs_z_ordered_batches(frame))
+
+    def test_plan_batches_coalesces_runs_and_preserves_order(self) -> None:
+        a = RectNode(0, 0, 5, 5, (1, 1, 1, 255), z_index=0)
+        b = RectNode(5, 0, 5, 5, (2, 2, 2, 255), z_index=1)
+        c = CircleNode(10, 10, 4, (3, 3, 3, 255), z_index=2)
+        d = RectNode(0, 5, 5, 5, (4, 4, 4, 255), z_index=3)
+
+        batches, deferred = _plan_z_ordered_batches((a, b, c, d))
+
+        self.assertEqual(deferred, [])
+        self.assertEqual([kind for kind, _ in batches], ["rect", "circle", "rect"])
+        self.assertEqual(batches[0][1], (a, b))
+        self.assertEqual(batches[1][1], (c,))
+        self.assertEqual(batches[2][1], (d,))
+
+    def test_plan_batches_maps_degenerate_rounded_and_solid_shader_to_rect(self) -> None:
+        a = RectNode(0, 0, 5, 5, (1, 1, 1, 255), z_index=0)
+        b = RoundedRectNode(5, 0, 5, 5, 0.0, (2, 2, 2, 255), z_index=1)
+        c = ShaderRectNode(10, 0, 5, 5, shader="solid", color_rgba=(3, 3, 3, 255), z_index=2)
+
+        batches, _ = _plan_z_ordered_batches((a, b, c))
+
+        self.assertEqual(len(batches), 1)
+        self.assertEqual(batches[0][0], "rect")
+        self.assertEqual(batches[0][1], (a, b, c))
+
+    def test_plan_batches_groups_textureish_nodes_in_order(self) -> None:
+        t = TextNode("x", 0, 0, z_index=1)
+        i = ImageNode("art", 0, 0, 8, 8, z_index=2)
+        cpu = CpuLayerNode(0, 0, 8, 8, object(), z_index=3)
+
+        batches, _ = _plan_z_ordered_batches((t, i, cpu))
+
+        self.assertEqual([kind for kind, _ in batches], ["texture"])
+        self.assertEqual(batches[0][1], (t, i, cpu))
+
+    def test_plan_batches_defers_rotated_text_to_the_atlas_pass(self) -> None:
+        r = TextNode("spin", 0, 0, rotation_deg=90.0, z_index=0)
+        t = TextNode("flat", 0, 0, z_index=1)
+
+        batches, deferred = _plan_z_ordered_batches((r, t))
+
+        self.assertEqual(deferred, [r])
+        self.assertEqual([kind for kind, _ in batches], ["texture"])
+        self.assertEqual(batches[0][1], (t,))
+
+    def test_cpu_raster_pins_cross_target_compositing_contract(self) -> None:
+        # Spec lock: a light circle above a dark rounded plate composites over
+        # it. The CPU raster is the reference the Metal target must match.
+        frame = self._frame([
+            RoundedRectNode(0, 0, 60, 60, 30, (22, 22, 22, 255), z_index=10),
+            CircleNode(30, 30, 15, (225, 225, 225, 255), z_index=12),
+        ])
+        rgba = rasterize_scene_frame(frame)
+        pixel = rgba[30][30]
+        self.assertEqual(tuple(int(channel) for channel in pixel[:3]), (225, 225, 225))
+
+
+class MacOSMetalBackingScaleTests(unittest.TestCase):
+    """The app loop reads the display backing scale through the scene target so
+    raster artwork can be requested at device pixels, not logical points."""
+
+    class _Layer:
+        def __init__(self) -> None:
+            self.calls: dict[str, object] = {}
+
+        def setContentsScale_(self, value) -> None:
+            self.calls["contents"] = value
+
+        def setDrawableSize_(self, size) -> None:
+            self.calls["drawable"] = (float(size.width), float(size.height))
+
+    class _Window:
+        def __init__(self, scale: float) -> None:
+            self._scale = scale
+
+        def backingScaleFactor(self) -> float:
+            return self._scale
+
+    class _Handle:
+        def __init__(self, scale: float) -> None:
+            self.window = MacOSMetalBackingScaleTests._Window(scale)
+
+    def test_resize_layer_reports_backing_scale(self) -> None:
+        layer = self._Layer()
+        scale = mst._resize_layer_for_window(layer, self._Handle(2.0), 1280, 800)
+        self.assertEqual(scale, 2.0)
+        self.assertEqual(layer.calls["contents"], 2.0)
+        self.assertEqual(layer.calls["drawable"], (2560.0, 1600.0))
+
+    def test_resize_layer_returns_none_on_failure(self) -> None:
+        class _Broken:
+            @property
+            def window(self):
+                raise RuntimeError("window gone")
+
+        self.assertIsNone(mst._resize_layer_for_window(self._Layer(), _Broken(), 100, 100))
+
+    def test_backend_last_backing_scale_defaults_to_one(self) -> None:
+        backend = object.__new__(mst.MacOSMetalSceneBackend)
+        self.assertEqual(backend.last_backing_scale, 1.0)
+
+    def test_target_exposes_backend_backing_scale(self) -> None:
+        backend = types.SimpleNamespace(last_backing_scale=2.0)
+        target = mst.MacOSMetalSceneTarget(width=100, height=100, backend=backend)
+        self.assertEqual(target.backing_scale(), 2.0)
+
+    def test_target_defaults_to_one_without_backend_scale(self) -> None:
+        target = mst.MacOSMetalSceneTarget(width=100, height=100, backend=types.SimpleNamespace())
+        self.assertEqual(target.backing_scale(), 1.0)
+
+    def test_resize_layer_logs_failure_reason_once(self) -> None:
+        class _Broken:
+            @property
+            def window(self):
+                raise RuntimeError("window gone")
+
+        log_state: dict = {}
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            self.assertIsNone(mst._resize_layer_for_window(self._Layer(), _Broken(), 100, 100, _log_state=log_state))
+            self.assertIsNone(mst._resize_layer_for_window(self._Layer(), _Broken(), 100, 100, _log_state=log_state))
+        out = buf.getvalue()
+        self.assertIn("layer resize failed", out)
+        self.assertIn("window gone", out)
+        self.assertEqual(out.count("layer resize failed"), 1)
+
+    def test_resize_layer_coerces_struct_for_pyobjc_setter(self) -> None:
+        class _ExpectedCGSize(ctypes.Structure):
+            _fields_ = [("width", ctypes.c_double), ("height", ctypes.c_double)]
+
+        class _PyObjCLikeSetter:
+            """Mimics a PyObjC bound method: exposes .method.method_argtypes and
+            rejects any struct that is not the declared argtype (PyObjC does not
+            marshal a foreign hand-rolled ctypes.Structure)."""
+
+            def __init__(self, layer) -> None:
+                self._layer = layer
+                self.method = types.SimpleNamespace(method_argtypes=[_ExpectedCGSize])
+
+            def __call__(self, arg) -> None:
+                if not isinstance(arg, _ExpectedCGSize):
+                    raise TypeError("NSInvalidArgumentException - expected struct of type {CGSize=dd}")
+                self._layer.calls["drawable"] = (float(arg.width), float(arg.height))
+
+        class _StrictLayer:
+            def __init__(self) -> None:
+                self.calls: dict[str, object] = {}
+                self.setDrawableSize_ = _PyObjCLikeSetter(self)
+
+            def setContentsScale_(self, value) -> None:
+                self.calls["contents"] = value
+
+        layer = _StrictLayer()
+        scale = mst._resize_layer_for_window(layer, self._Handle(2.0), 1280, 800)
+        self.assertEqual(scale, 2.0)
+        self.assertEqual(layer.calls["contents"], 2.0)
+        self.assertEqual(layer.calls["drawable"], (2560.0, 1600.0))
 
 
 if __name__ == "__main__":
