@@ -678,6 +678,76 @@ class SpotifyLightApp(App):
         self.client_id_draft = value
         self.invalidate()
 
+    # -- MCP agent surface -----------------------------------------------------
+    # Hooks run on the runtime thread between ticks (queued by the MCP server
+    # thread), so no locking is needed here. Tool names must not start with
+    # "app_" (reserved for built-ins).
+
+    def mcp_state(self) -> dict:
+        player = self.player
+        now_playing = None
+        if player is not None and player.track is not None:
+            now_playing = {
+                "track": player.track.name,
+                "artists": ", ".join(artist.name for artist in player.track.artists),
+                "duration_ms": player.track.duration_ms,
+                "progress_ms": player.progress_ms,
+                "is_playing": player.is_playing,
+                "device": player.device.name if player.device is not None else None,
+            }
+        return {
+            "view": self.view,
+            "authenticated": self.authenticated,
+            "client_id_configured": bool(self.client_id),
+            "client_id_draft_len": len(self.client_id_draft),  # never the value
+            "native_field_active": self._native_client_id_field is not None,
+            "search_query": self.search_query,
+            "content_scroll": round(self.content_scroll, 1),
+            "hit_actions": sorted({region.action for region in self._hits}),
+            "now_playing": now_playing,
+        }
+
+    def mcp_tools(self) -> list[dict]:
+        return [
+            {
+                "name": "sl_set_client_id",
+                "description": (
+                    "Set the Spotify Client ID into the login field. Uses the native "
+                    "text field when present (synthetic keyboard input cannot enter "
+                    "AppKit controls), otherwise the drawn-field draft."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"value": {"type": "string"}},
+                    "required": ["value"],
+                },
+            },
+            {
+                "name": "sl_submit_client_id",
+                "description": "Save the current Client ID draft (same as pressing Enter in the field).",
+                "inputSchema": {"type": "object", "properties": {}},
+            },
+        ]
+
+    def mcp_call(self, name: str, arguments: dict) -> dict:
+        if name == "sl_set_client_id":
+            value = str((arguments or {}).get("value", ""))
+            field = self._native_client_id_field
+            if field is not None:
+                # Programmatic setStringValue does not fire controlTextDidChange,
+                # so the draft is set explicitly below for both paths.
+                field.set_value(value)
+            self.client_id_draft = value
+            self.invalidate()
+            return {
+                "client_id_draft_len": len(self.client_id_draft),
+                "native_field_active": field is not None,
+            }
+        if name == "sl_submit_client_id":
+            self._dispatch_action("save_client_id", None, 0.0)
+            return {"client_id_configured": bool(self.client_id)}
+        raise KeyError(name)
+
     # -- app loop ---------------------------------------------------------------------
 
     def update(self, dt: float) -> None:

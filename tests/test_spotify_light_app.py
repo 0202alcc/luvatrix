@@ -7,7 +7,9 @@ schedule jobs, and authenticated views are given in-memory state.
 """
 from __future__ import annotations
 
+import json
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -19,6 +21,7 @@ if str(APP_DIR) not in sys.path:
 
 from luvatrix_core.core.app_runtime import AppRuntime  # noqa: E402
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread  # noqa: E402
+from luvatrix_core.core.mcp_runtime import MCP_CAPABILITIES, McpRuntimeBridge  # noqa: E402
 from luvatrix_core.core.scene_graph import (  # noqa: E402
     ClearNode,
     CpuLayerNode,
@@ -30,6 +33,7 @@ from luvatrix_core.core.window_matrix import WindowMatrix  # noqa: E402
 
 import app_main  # noqa: E402
 import sl_models  # noqa: E402
+import sl_store  # noqa: E402
 import sl_ui  # noqa: E402
 import sl_views  # noqa: E402
 
@@ -389,3 +393,117 @@ class TestPlayerBar:
         assert any(t in ("0:30", "0:31") for t in texts)
         actions = {region.action for region in app._hits}
         assert {"toggle_shuffle", "prev", "next", "cycle_repeat", "pick_device"} <= actions
+
+
+class TestMcpHooks:
+    """Agent-facing MCP surface: mcp_state snapshot + sl_* app tools."""
+
+    def test_mcp_state_exposes_agent_surface(self, app_ctx):
+        app, ctx, _ = app_ctx
+        _tick(app, ctx, 2)
+
+        state = app.mcp_state()
+        assert state["view"] == "home"
+        assert state["authenticated"] is False
+        assert state["client_id_configured"] is False
+        assert state["client_id_draft_len"] == 0  # length only, never the value
+        assert state["native_field_active"] is False
+        assert state["search_query"] == ""
+        assert state["content_scroll"] == 0.0
+        assert state["now_playing"] is None
+        # Affordance discovery: the login view's actionable hit regions.
+        assert "focus_client_id" in state["hit_actions"]
+
+    def test_mcp_state_now_playing_summary(self, app_ctx):
+        app, ctx, _ = app_ctx
+        artist = _artist("Nirvana")
+        album = _album("Nevermind", artist)
+        device = sl_models.Device(id="d1", name="MacBook Pro", kind="Computer",
+                                  is_active=True, is_restricted=False, volume_percent=65)
+        app.player = sl_models.PlayerState(
+            is_playing=True, progress_ms=61_000,
+            track=_track("Lithium", artist, album, ms=257_000),
+            device=device, shuffle=False, repeat="off")
+
+        summary = app.mcp_state()["now_playing"]
+        assert summary == {
+            "track": "Lithium",
+            "artists": "Nirvana",
+            "duration_ms": 257_000,
+            "progress_ms": 61_000,
+            "is_playing": True,
+            "device": "MacBook Pro",
+        }
+
+    def test_set_client_id_drawn_fallback(self, app_ctx):
+        app, _, _ = app_ctx
+        result = app.mcp_call("sl_set_client_id", {"value": "abc-123"})
+        assert app.client_id_draft == "abc-123"
+        assert result == {"client_id_draft_len": 7, "native_field_active": False}
+
+    def test_set_client_id_native_field(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+        _tick(app, ctx, 1)
+        field = bridge.created[0]
+
+        result = app.mcp_call("sl_set_client_id", {"value": "abc-123"})
+        assert field.value == "abc-123"
+        assert app.client_id_draft == "abc-123"
+        assert result["native_field_active"] is True
+
+    def test_submit_client_id_saves_and_reports(self, app_ctx):
+        app, _, _ = app_ctx
+        app.mcp_call("sl_set_client_id", {"value": "  abc-123  "})
+        result = app.mcp_call("sl_submit_client_id", {})
+        assert app.client_id == "abc-123"
+        assert sl_store.load_client_id(app.cfg_dir) == "abc-123"
+        assert result == {"client_id_configured": True}
+
+    def test_hooks_register_list_and_call_via_bridge(self, app_ctx):
+        app, _, _ = app_ctx
+        bridge = McpRuntimeBridge(
+            app_id="test.spotify-light",
+            granted_capabilities=set(MCP_CAPABILITIES),
+            state_provider=lambda: {},
+            app_call_timeout_s=5.0,
+        )
+        assert bridge.register_app_hooks(app) == 2
+
+        listing = bridge.dispatcher().handle_payload(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        wire = {tool["name"]: tool for tool in listing["result"]["tools"]}
+        assert "sl_set_client_id" in wire and "sl_submit_client_id" in wire
+        schema = wire["sl_set_client_id"]["inputSchema"]
+        assert schema["required"] == ["value"]
+        assert schema["properties"]["value"]["type"] == "string"
+
+        stop = threading.Event()
+
+        def _drain() -> None:
+            import time
+
+            while not stop.is_set():
+                bridge.drain_app_calls()
+                time.sleep(0.005)
+
+        thread = threading.Thread(target=_drain, daemon=True)
+        thread.start()
+        try:
+            response = bridge.dispatcher().handle_payload(
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                 "params": {"name": "sl_set_client_id", "arguments": {"value": "abc-123"}}})
+        finally:
+            stop.set()
+        payload = json.loads(response["result"]["content"][0]["text"])
+        assert payload == {"client_id_draft_len": 7, "native_field_active": False}
+        assert app.client_id_draft == "abc-123"
+
+        bridge.drain_app_calls()  # refreshes the cached mcp_state snapshot
+        state_response = bridge.dispatcher().handle_payload(
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+             "params": {"name": "app_state", "arguments": {}}})
+        app_state = json.loads(state_response["result"]["content"][0]["text"])
+        assert app_state["app"]["client_id_draft_len"] == 7
+        assert app_state["app"]["view"] == "home"

@@ -57,6 +57,39 @@ press **Enter** to save, and
 resize-independence is covered by the window's fixed logical size. Typing must
 not trigger the app's keyboard shortcuts while the field is focused.
 
+## Agent control (MCP)
+
+The app is drivable by a local MCP client (agent, IDE, test harness) — useful
+for agentic building and validation instead of synthetic OS events. The app
+opts in via `[mcp] enabled = true` in `app.toml`; add the runtime flag:
+
+```bash
+uv run python main.py run-app examples/spotify_light --render macos-metal --mcp
+```
+
+- **Discovery** — the session lands in `examples/spotify_light/.luvatrix/mcp-session.json`
+  (mode `0600`): JSON-RPC over HTTP at `http://127.0.0.1:<port>/mcp` with a
+  per-run bearer token. Stdio-only clients bridge with
+  `uv run python main.py mcp-proxy examples/spotify_light` (NDJSON on
+  stdin/stdout). See `docs/mcp_mode.md`.
+- **Built-ins** — `app_state` (includes the `mcp_state()` snapshot below),
+  `app_scene_tree`, `app_screenshot` (raw RGBA), `app_logs`, `app_input`
+  (synthetic HDI events through the real input path — clicks drive scene hit
+  regions), and deterministic control: `app_pause` / `app_step` / `app_resume`
+  / `app_stop`.
+- **App snapshot** (`mcp_state()`, merged into `app_state` under `"app"`) —
+  `view`, `authenticated`, `client_id_configured`, `client_id_draft_len`
+  (never the value), `native_field_active`, `search_query`, `content_scroll`,
+  `hit_actions` (affordance discovery), `now_playing` summary.
+- **App tools** — `sl_set_client_id {value}` and `sl_submit_client_id {}`.
+
+**Native-field caveat:** while the Client ID `NSTextField` is up, AppKit owns
+its key path — synthetic `app_input` keystrokes cannot type into it. Use
+`sl_set_client_id` to set the text and `sl_submit_client_id` to save; that's
+what they're for. The OAuth browser consent that follows stays human-driven
+(out-of-process browser), but the agent can click **Connect Spotify** via
+`app_input` and poll `app_state` for `authenticated`.
+
 ## Spotify app setup (one time)
 
 1. Create an app at <https://developer.spotify.com/dashboard> → *Create app*.
