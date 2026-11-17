@@ -1876,6 +1876,7 @@ _LAZY_EXPORTS = {
     ),
     "MatrixViewport": ("luvatrix_core.core.matrix_viewport", "MatrixViewport"),
     "NativeControlBridge": ("luvatrix_core.core.native_controls", "NativeControlBridge"),
+    "NativeGlassSurface": ("luvatrix_core.core.native_controls", "NativeGlassSurface"),
     "NativeTextField": ("luvatrix_core.core.native_controls", "NativeTextField"),
     "NullNativeControlBridge": ("luvatrix_core.core.native_controls", "NullNativeControlBridge"),
     "native_controls": ("luvatrix_core.core.native_controls", "active_native_control_bridge"),

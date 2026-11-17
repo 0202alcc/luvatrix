@@ -113,6 +113,31 @@ class NativeTextField(Protocol):
 
 
 @runtime_checkable
+class NativeGlassSurface(Protocol):
+    """Handle for one embedded native glass/material surface.
+
+    Decorative material plate (Liquid Glass on macOS 26+, vibrancy below)
+    placed over the render surface. Coordinates are window-local, top-left
+    origin, logical points. Glass surfaces never consume input — the bridge
+    gate only claims points inside interactive controls.
+    """
+
+    @property
+    def frame(self) -> tuple[float, float, float, float]: ...
+
+    def set_frame(self, x: float, y: float, width: float, height: float) -> None: ...
+
+    def show(self) -> None: ...
+
+    def hide(self) -> None: ...
+
+    @property
+    def is_visible(self) -> bool: ...
+
+    def destroy(self) -> None: ...
+
+
+@runtime_checkable
 class NativeControlBridge(Protocol):
     """Factory + input gate for native controls over one window."""
 
@@ -131,9 +156,22 @@ class NativeControlBridge(Protocol):
         placeholder: str = "",
         value: str = "",
         secure: bool = False,
+        within: NativeGlassSurface | None = None,
+        bordered: bool = True,
         on_change: Callable[[str], None] | None = None,
         on_submit: Callable[[str], None] | None = None,
     ) -> NativeTextField: ...
+
+    def create_glass_surface(
+        self,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        corner_radius: float = 0.0,
+        style: str = "regular",
+    ) -> NativeGlassSurface: ...
 
     def close(self) -> None: ...
 
@@ -178,6 +216,29 @@ class _NullTextField:
         self.destroyed = True
 
 
+class _NullGlassSurface:
+    """In-memory stand-in for a glass surface on unsupported hosts."""
+
+    def __init__(self, *, x, y, width, height, corner_radius=0.0, style="regular") -> None:
+        self.frame = (x, y, width, height)
+        self.corner_radius = corner_radius
+        self.style = style
+        self.is_visible = True
+        self.destroyed = False
+
+    def set_frame(self, x: float, y: float, width: float, height: float) -> None:
+        self.frame = (x, y, width, height)
+
+    def show(self) -> None:
+        self.is_visible = True
+
+    def hide(self) -> None:
+        self.is_visible = False
+
+    def destroy(self) -> None:
+        self.destroyed = True
+
+
 class NullNativeControlBridge:
     """Bridge for hosts without native-control support.
 
@@ -199,6 +260,16 @@ class NullNativeControlBridge:
             value=kwargs.get("value", ""),
             on_change=kwargs.get("on_change"),
             on_submit=kwargs.get("on_submit"),
+        )
+
+    def create_glass_surface(self, **kwargs) -> _NullGlassSurface:
+        return _NullGlassSurface(
+            x=kwargs.get("x", 0.0),
+            y=kwargs.get("y", 0.0),
+            width=kwargs.get("width", 0.0),
+            height=kwargs.get("height", 0.0),
+            corner_radius=kwargs.get("corner_radius", 0.0),
+            style=kwargs.get("style", "regular"),
         )
 
     def suppress_keyboard(self) -> bool:
