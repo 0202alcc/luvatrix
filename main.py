@@ -601,7 +601,11 @@ def main() -> None:
                     handle = getattr(_backend, "_window_handle", None)
                     if handle is not None:
                         from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource
-                        _src.inject(MacOSWindowHDISource(handle))
+                        from luvatrix_core.platform.macos.native_controls import wire_native_controls
+                        _src.inject(wire_native_controls(
+                            handle, MacOSWindowHDISource(handle),
+                            logical_extent=(float(width), float(height)),
+                        ))
             elif args.render == "macos-metal":
                 from luvatrix_core.platform.macos.metal_presenter import MacOSMetalPresenter
                 from luvatrix_core.targets.metal_target import MetalTarget
@@ -628,7 +632,11 @@ def main() -> None:
                     handle = getattr(_backend, "_window_handle", None)
                     if handle is not None:
                         from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource
-                        _src.inject(MacOSWindowHDISource(handle))
+                        from luvatrix_core.platform.macos.native_controls import wire_native_controls
+                        _src.inject(wire_native_controls(
+                            handle, MacOSWindowHDISource(handle),
+                            logical_extent=(float(width), float(height)),
+                        ))
             else:
                 from luvatrix_core.platform.macos import MacOSVulkanPresenter
                 from luvatrix_core.platform.vulkan_setup import detect_vulkan_preflight_issue
@@ -662,7 +670,11 @@ def main() -> None:
                     handle = getattr(_backend, "_window_handle", None)
                     if handle is not None:
                         from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource
-                        _src.inject(MacOSWindowHDISource(handle))
+                        from luvatrix_core.platform.macos.native_controls import wire_native_controls
+                        _src.inject(wire_native_controls(
+                            handle, MacOSWindowHDISource(handle),
+                            logical_extent=(float(width), float(height)),
+                        ))
 
             if scene_target is None and args.render_mode == "scene":
                 from luvatrix_core.targets.cpu_scene_target import CpuSceneTarget

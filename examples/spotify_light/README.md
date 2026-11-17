@@ -30,6 +30,31 @@ uv run python main.py run-app examples/spotify_light --render macos-metal
 - **Efficiency** — render-on-invalidation scheduling (`set_continuous_render(False)`);
   the loop idles until input, poll results, or playback ticks request a frame.
 
+## Native macOS controls (luvatrix feature)
+
+The Client ID setup field is a **real `NSTextField`** on macOS Metal — native
+focus ring, key handling, paste, and IME — not a painted imitation. This is the
+first consumer of the luvatrix native-controls feature:
+
+- `main.py` wires every macOS render path through
+  `luvatrix_core.platform.macos.native_controls.wire_native_controls`, which
+  registers an `AppKitNativeControlBridge` for the window and wraps the HDI
+  source in a `GatedHDIEventSource`. The gate drops keyboard events while a
+  native field is first responder and clicks/scrolls that land on a native
+  control, so the app never double-handles input the OS already consumed.
+- Apps read the active bridge via `luvatrix.app.native_controls()` and create
+  fields with `bridge.create_text_field(...)`; frames are given in scene
+  logical coordinates (top-left origin), and the bridge converts to AppKit
+  view points (including the Y-flip and any content-scale factor).
+- Off macOS (or without PyObjC) `native_controls()` returns an unavailable
+  bridge and the app falls back to its drawn field unchanged — same geometry,
+  same hit regions.
+
+Manual check on a Mac: launch with `--render macos-metal`, click the Client ID
+field (blue focus ring appears), type/paste, press **Enter** to save, and
+resize-independence is covered by the window's fixed logical size. Typing must
+not trigger the app's keyboard shortcuts while the field is focused.
+
 ## Spotify app setup (one time)
 
 1. Create an app at <https://developer.spotify.com/dashboard> → *Create app*.
@@ -51,7 +76,7 @@ Playback control requires **Spotify Premium**.
 | macOS (Metal UI) | `uv sync --extra macos && uv run python main.py run-app examples/spotify_light --render macos-metal` |
 | Linux headless smoke | `uv run python main.py validate-app examples/spotify_light --render headless` |
 | Linux headless run | `uv run python main.py run-app examples/spotify_light --render headless --ticks 3 --energy-safety off` |
-| Tests | `uv run --extra desktop --with pytest pytest tests/test_spotify_light.py tests/test_spotify_light_app.py` |
+| Tests | `uv run --extra desktop --with pytest pytest tests/test_spotify_light.py tests/test_spotify_light_app.py tests/test_native_controls.py` |
 
 Headless runs use the matrix fallback (a text status dashboard); the full UI
 needs the scene target. Config lives in `~/.config/spotify-light` (override with

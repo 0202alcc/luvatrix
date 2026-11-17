@@ -24,6 +24,7 @@ from luvatrix.app import (
     App,
     ScrollbarController,
     apply_hdi_events,
+    native_controls,
     reset_transient_input,
 )
 
@@ -117,6 +118,7 @@ class SpotifyLightApp(App):
         self._search_dirty_at: float | None = None
         self.client_id_draft = ""
         self.client_id_focused = False
+        self._native_client_id_field = None  # real NSTextField when the bridge is up
         self.show_devices = False
         self._hits: list[sl_views.HitRegion] = []
         self._mouse = (0.0, 0.0)
@@ -638,6 +640,44 @@ class SpotifyLightApp(App):
             playing=self.player.is_playing,
         )
 
+    # -- native controls -------------------------------------------------------------
+
+    def _sync_native_login_field(self, width: float, height: float) -> None:
+        """Create/position/destroy the native Client ID field to match the login view."""
+        bridge = native_controls()
+        want = bool(
+            bridge is not None
+            and bridge.available
+            and not self.authenticated
+            and not self.client_id
+            and not self.auth_working
+        )
+        if want and self._native_client_id_field is None:
+            x, y, w, h = sl_views.login_field_rect(width, height)
+            self._native_client_id_field = bridge.create_text_field(
+                x=x,
+                y=y,
+                width=w,
+                height=h,
+                placeholder="Client ID",
+                value=self.client_id_draft,
+                on_change=self._on_native_client_id_change,
+                on_submit=lambda _value: self._dispatch_action("save_client_id", None, 0.0),
+            )
+            self.invalidate()
+        elif not want and self._native_client_id_field is not None:
+            self._native_client_id_field.destroy()
+            self._native_client_id_field = None
+            self.invalidate()
+        if self._native_client_id_field is not None:
+            x, y, w, h = sl_views.login_field_rect(width, height)
+            if self._native_client_id_field.frame != (x, y, w, h):
+                self._native_client_id_field.set_frame(x, y, w, h)
+
+    def _on_native_client_id_change(self, value: str) -> None:
+        self.client_id_draft = value
+        self.invalidate()
+
     # -- app loop ---------------------------------------------------------------------
 
     def update(self, dt: float) -> None:
@@ -665,7 +705,9 @@ class SpotifyLightApp(App):
         mouse = self._mouse
 
         if not self.authenticated:
-            sl_views.draw_login(frame, self, out, width=width, height=height, mouse=mouse)
+            self._sync_native_login_field(width, height)
+            sl_views.draw_login(frame, self, out, width=width, height=height, mouse=mouse,
+                                native_field_active=self._native_client_id_field is not None)
         else:
             if self.view == "search":
                 sl_views.draw_search(frame, self, out, width=width, height=height, mouse=mouse)
@@ -743,6 +785,9 @@ class SpotifyLightApp(App):
             y += 14
 
     def teardown(self) -> None:
+        if self._native_client_id_field is not None:
+            self._native_client_id_field.destroy()
+            self._native_client_id_field = None
         if self._login_receiver is not None:
             self._login_receiver.close()
         self.worker.shutdown()

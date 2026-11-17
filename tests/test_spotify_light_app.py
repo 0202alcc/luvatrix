@@ -45,7 +45,7 @@ def _runtime(scene_buffer: SceneGraphBuffer) -> AppRuntime:
     # host_os="macos" mirrors the CLI: with a single platform_support entry the
     # headless target platform resolves to macOS even on a Linux host.
     return AppRuntime(
-        matrix=WindowMatrix(WIDTH, HEIGHT),
+        matrix=WindowMatrix(HEIGHT, WIDTH),  # constructor is (height, width)
         hdi=HDIThread(source=_NoopHDISource()),
         sensor_manager=SensorManagerThread(providers={}),
         scene_buffer=scene_buffer,
@@ -239,10 +239,126 @@ class TestSearchView:
 
         texts = _texts(scene_buffer)
         for expected in ("nirvana", "Songs", "Albums", "Artists", "Playlists",
-                         "Lithium", "Nevermind", "Nirvana", "90s Rock"):
+                         "Lithium", "Nevermind", "Nirvana"):
             assert expected in texts, f"missing text: {expected!r}"
         # Track rows outside a playlist context play bare uris.
         assert any(region.action == "play_uris" for region in app._hits)
+
+        # The playlist card sits below the fold at 1280x800; scroll to reveal it.
+        app.content_scroll = 480.0
+        app.invalidate()
+        _tick(app, ctx, 2)
+        assert "90s Rock" in _texts(scene_buffer)
+
+
+class _FakeNativeField:
+    def __init__(self, *, x, y, width, height, placeholder, value, on_change, on_submit):
+        self.frame = (x, y, width, height)
+        self.placeholder = placeholder
+        self.value = value
+        self.on_change = on_change
+        self.on_submit = on_submit
+        self.is_visible = True
+        self.destroyed = False
+
+    def set_frame(self, x, y, width, height):
+        self.frame = (x, y, width, height)
+
+    def set_value(self, value):
+        self.value = value
+        if self.on_change is not None:
+            self.on_change(value)
+
+    def show(self):
+        self.is_visible = True
+
+    def hide(self):
+        self.is_visible = False
+
+    def focus(self):
+        pass
+
+    def resign(self):
+        pass
+
+    def destroy(self):
+        self.destroyed = True
+
+
+class _FakeNativeBridge:
+    def __init__(self):
+        self.available = True
+        self.created: list[_FakeNativeField] = []
+
+    def create_text_field(self, **kwargs):
+        field = _FakeNativeField(**kwargs)
+        self.created.append(field)
+        return field
+
+    def suppress_keyboard(self):
+        return False
+
+    def consume_point(self, x, y):
+        return False
+
+    def close(self):
+        pass
+
+
+class TestNativeClientIdField:
+    def test_native_field_replaces_drawn_field(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+
+        _tick(app, ctx, 2)
+
+        assert len(bridge.created) == 1
+        field = bridge.created[0]
+        # Same rect the drawn field uses: x=cx-190, y=height*0.42+84, 380x40.
+        assert field.frame == (450.0, 420.0, 380.0, 40.0)
+        texts = _texts(scene_buffer)
+        assert "Client ID" not in texts  # drawn placeholder replaced by the native field
+        assert any("developer.spotify.com/dashboard" in t for t in texts)  # instructions stay
+        actions = {region.action for region in app._hits}
+        assert "focus_client_id" not in actions
+        assert "save_client_id" not in actions  # disabled while the draft is empty
+
+        # Typing into the native field flows into the app draft and arms Save.
+        field.set_value("abc-123")
+        assert app.client_id_draft == "abc-123"
+        _tick(app, ctx, 1)
+        assert "save_client_id" in {region.action for region in app._hits}
+
+    def test_field_destroyed_once_client_id_saved(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+        _tick(app, ctx, 1)
+        field = bridge.created[0]
+        field.set_value("abc-123")
+        app._dispatch_action("save_client_id", None, 0.0)
+        assert app.client_id == "abc-123"
+
+        _tick(app, ctx, 1)
+
+        assert field.destroyed is True
+        assert len(bridge.created) == 1  # not recreated for the Connect view
+
+    def test_no_field_when_bridge_unavailable(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        monkeypatch.setattr(app_main, "native_controls", lambda: None)
+        _tick(app, ctx, 2)
+        assert "Client ID" in _texts(scene_buffer)
+        assert app._native_client_id_field is None
+
+    def test_keyboard_events_do_not_edit_draft_while_native_active(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+        _tick(app, ctx, 1)
+        app._handle_key(type("E", (), {"payload": {"key": "x", "code": 7, "phase": "down"}})())
+        assert app.client_id_draft == ""
 
 
 class TestPlayerBar:

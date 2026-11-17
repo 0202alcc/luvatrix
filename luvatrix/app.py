@@ -1875,6 +1875,10 @@ _LAZY_EXPORTS = {
         "InteractionAwareWorkScheduler",
     ),
     "MatrixViewport": ("luvatrix_core.core.matrix_viewport", "MatrixViewport"),
+    "NativeControlBridge": ("luvatrix_core.core.native_controls", "NativeControlBridge"),
+    "NativeTextField": ("luvatrix_core.core.native_controls", "NativeTextField"),
+    "NullNativeControlBridge": ("luvatrix_core.core.native_controls", "NullNativeControlBridge"),
+    "native_controls": ("luvatrix_core.core.native_controls", "active_native_control_bridge"),
 }
 
 
@@ -1923,6 +1927,9 @@ __all__ = [
     "MatrixFrame",
     "MatrixViewport",
     "MissingOptionalDependencyError",
+    "NativeControlBridge",
+    "NativeTextField",
+    "NullNativeControlBridge",
     "ResolvedAppVariant",
     "SceneFrame",
     "ScrollbarController",
@@ -1938,5 +1945,6 @@ __all__ = [
     "draw_rounded_rect_to_matrix",
     "draw_text_to_matrix",
     "load_app_manifest",
+    "native_controls",
     "validate_app_install",
 ]

@@ -501,8 +501,18 @@ def _draw_device_popup(frame, app, out: FrameOut, *, width: float, bar_y: float,
 
 # -- login ---------------------------------------------------------------------
 
+LOGIN_FIELD_W = 380.0
+LOGIN_FIELD_H = 40.0
 
-def draw_login(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
+
+def login_field_rect(width: float, height: float) -> tuple[float, float, float, float]:
+    """Where the Client ID field lives; shared by the drawn and native versions."""
+    cx = width / 2
+    return (cx - 190, height * 0.42 + 84, LOGIN_FIELD_W, LOGIN_FIELD_H)
+
+
+def draw_login(frame, app, out: FrameOut, *, width: float, height: float, mouse,
+               native_field_active: bool = False) -> None:
     cx = width / 2
     _text(frame, "Spotify Light", x=cx - 90, y=height * 0.24, size=32, color=ACCENT, z=3)
     _text(frame, "A lightweight Spotify desktop client, native on luvatrix.",
@@ -529,16 +539,18 @@ def draw_login(frame, app, out: FrameOut, *, width: float, height: float, mouse)
         ]
         for i, line in enumerate(lines):
             _text(frame, line, x=cx - 190, y=y + i * 24, size=13, color=SUBTEXT, z=3)
-        field_y = y + 84
-        border = ACCENT if app.client_id_focused else FIELD_BORDER
-        frame.rounded_rect(x=cx - 190, y=field_y, width=380, height=40, radius=8, color=FIELD_BG,
-                           z_index=2)
-        frame.rect(x=cx - 190, y=field_y, width=380, height=1.5, color=border, z_index=3)
-        frame.rect(x=cx - 190, y=field_y + 39, width=380, height=1.5, color=border, z_index=3)
-        shown = app.client_id_draft or "Client ID"
-        _text(frame, shown, x=cx - 176, y=field_y + 12, size=13,
-              color=TEXT if app.client_id_draft else FAINT, z=4, max_chars=44)
-        out.hit(cx - 190, field_y, 380, 40, "focus_client_id")
+        field_x, field_y, field_w, field_h = login_field_rect(width, height)
+        if not native_field_active:
+            border = ACCENT if app.client_id_focused else FIELD_BORDER
+            frame.rounded_rect(x=field_x, y=field_y, width=field_w, height=field_h, radius=8,
+                               color=FIELD_BG, z_index=2)
+            frame.rect(x=field_x, y=field_y, width=field_w, height=1.5, color=border, z_index=3)
+            frame.rect(x=field_x, y=field_y + field_h - 1, width=field_w, height=1.5,
+                       color=border, z_index=3)
+            shown = app.client_id_draft or "Client ID"
+            _text(frame, shown, x=field_x + 14, y=field_y + 12, size=13,
+                  color=TEXT if app.client_id_draft else FAINT, z=4, max_chars=44)
+            out.hit(field_x, field_y, field_w, field_h, "focus_client_id")
         save_y = field_y + 56
         enabled = bool(app.client_id_draft.strip())
         hovering = _hover(mouse, cx - 60, save_y, 120, 40)
