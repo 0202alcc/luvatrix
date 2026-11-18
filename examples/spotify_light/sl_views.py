@@ -51,7 +51,9 @@ GLASS_FILL = (255, 255, 255, 18)
 GLASS_FILL_HOVER = (255, 255, 255, 34)
 GLASS_BORDER = (255, 255, 255, 36)
 GLASS_BORDER_HOVER = (255, 255, 255, 56)
-GLASS_HIGHLIGHT = (255, 255, 255, 68)
+# Specular top-edge peak alpha. Round 28: 68 read as a hard thin line across
+# every plate; 44 with ends fading to zero keeps the light without the wire.
+GLASS_HIGHLIGHT = (255, 255, 255, 44)
 GLASS_SHEEN = (255, 255, 255, 12)
 GLASS_SHADOW_NEAR = (0, 0, 0, 64)
 GLASS_SHADOW_FAR = (0, 0, 0, 34)
@@ -198,7 +200,7 @@ _ICON_OPTICAL_BIAS_EM = {
     sl_icons.PREV: (0.175, 0.031),
     sl_icons.NEXT: (0.262, 0.031),
     sl_icons.PLAY: (0.289, -0.021),
-    sl_icons.NOTE: (0.131, -0.002),
+    sl_icons.NOTE: (0.131, -0.100),  # bottom-heavy glyph: lift ~2px at the 20px tile
 }
 
 
@@ -229,11 +231,17 @@ def _text(frame, text, *, x, y, size=14.0, color=TEXT, z=2, max_chars=0,
     )
 
 
-def _art(frame, app, image_url, *, x, y, size, seed, z=2) -> None:
+def _art(frame, app, image_url, *, x, y, size, seed, z=2, corner_radius=0.0) -> None:
     """Draw album art from the cache, or a placeholder while the fetch lands."""
     rgba = app.art_for(image_url, int(size)) if image_url else None
     if rgba is None:
         rgba = app.art_cache.placeholder(seed, int(size))
+    if corner_radius > 0.0:
+        # Alpha-clip to the rounded tile (the renderer has no image clip):
+        # square corners crossing a rounded silhouette read as a glitch.
+        # Buffers are device-pixel sized, so the radius scales with them.
+        radius_px = corner_radius * rgba.shape[0] / float(size)
+        rgba = app.art_cache.masked(rgba, radius_px, key=image_url or f"placeholder:{seed}")
     # SceneFrame exposes no image primitive; CpuLayerNode carries the pixels.
     frame._ctx.add_scene_node(
         CpuLayerNode(x=float(x), y=float(y), width=float(size), height=float(size), rgba=rgba, z_index=z)
@@ -286,9 +294,20 @@ def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
                        height=rh, color=(255, 255, 255, alpha), z_index=z)
         yy += rh
         drawn += int(rh)
+    # Specular top highlight: one uniform full-span 1px line reads as a hard
+    # artifact (Alec, round 28). Draw it as segments whose alpha falls to
+    # nothing at the ends — same chord-safe span, no hard wire.
     inset = radius * 0.7
-    frame.rect(x=x + inset, y=y + 1, width=max(0.0, w - inset * 2), height=1,
-               color=GLASS_HIGHLIGHT, z_index=z)
+    line_x = x + inset
+    line_w = max(0.0, w - inset * 2)
+    segments = 16
+    seg_w = line_w / segments
+    for i in range(segments):
+        d = abs((i + 0.5) / segments - 0.5) * 2  # 0 at the centre, ~1 at the ends
+        alpha = int(round(GLASS_HIGHLIGHT[3] * max(0.0, (1.0 - d * d) ** 2)))
+        if alpha > 0:
+            frame.rect(x=line_x + i * seg_w, y=y + 1, width=seg_w + 0.5, height=1,
+                       color=(255, 255, 255, alpha), z_index=z)
 
 
 def _daypart() -> str:
@@ -670,14 +689,16 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     player = app.player
     track = player.track if player else None
 
-    # Album art thumb with a hairline ring (image pixels stay square —
-    # renderer clip is a known follow-up; the ring suggests the rounding).
+    # Album art thumb with a hairline ring, alpha-clipped to the same r8
+    # tile the idle state draws — a square image sits flush at the pill's
+    # left cap and its corners cross the rounded silhouette (Alec, round 28).
     frame.rounded_rect(x=px + 9, y=py + 9, width=46, height=46, radius=9,
                        color=(255, 255, 255, 24), z_index=11)
     meta_w = pw - 64 - PILL_META_RIGHT_PAD
     if track is not None:
         image_url = sl_models.pick_image_url(track.album.images if track.album else (), app._art_pick_target(44))
-        _art(frame, app, image_url, x=px + 10, y=py + 10, size=44, seed=track.name, z=12)
+        _art(frame, app, image_url, x=px + 10, y=py + 10, size=44, seed=track.name, z=12,
+             corner_radius=8.0)
         _text(frame, _fit_width(frame._ctx.measure_text, track.name, max_w=meta_w, size=13),
               x=px + 64, y=py + 11, size=13, z=12)
         artists = ", ".join(a.name for a in track.artists if a.name)

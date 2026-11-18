@@ -644,6 +644,59 @@ class TestApiClient:
         assert excinfo.value.kind == sl_api.ErrorKind.API
         assert "500" in str(excinfo.value)
 
+    def test_error_mapping_403_no_active_device_reason(self):
+        """Round 28 (Alec): pressing play errored 403. Spotify answers
+        play-without-an-active-device as 403 + reason NO_ACTIVE_DEVICE on
+        some surfaces (not only the 404 mapping already handled) — that is
+        the device flow, not a generic failure and not premium."""
+        http = FakeHttp()
+        http.add("PUT", "/me/player/play", 403,
+                 {"error": {"status": 403,
+                            "message": "Player command failed: No active device found",
+                            "reason": "NO_ACTIVE_DEVICE"}})
+        with pytest.raises(sl_api.ApiError) as excinfo:
+            _client(http).play(uris=["spotify:track:t1"])
+        assert excinfo.value.kind == sl_api.ErrorKind.DEVICE_NOT_FOUND
+
+    def test_error_mapping_no_active_device_message_without_reason(self):
+        """Same condition, body carrying only the message string."""
+        http = FakeHttp()
+        http.add("PUT", "/me/player/play", 403,
+                 {"error": {"status": 403,
+                            "message": "Player command failed: No active device found"}})
+        with pytest.raises(sl_api.ApiError) as excinfo:
+            _client(http).play(uris=["spotify:track:t1"])
+        assert excinfo.value.kind == sl_api.ErrorKind.DEVICE_NOT_FOUND
+
+    def test_error_mapping_restricted_device_is_not_premium(self):
+        """A restricted device is not a premium problem: the old
+        substring map misreported it as PREMIUM_REQUIRED, which toasted
+        'Spotify Premium is required' at a paying user."""
+        http = FakeHttp()
+        http.add("PUT", "/me/player/play", 403,
+                 {"error": {"status": 403,
+                            "message": "Player command failed: Restricted device",
+                            "reason": "UNKNOWN"}})
+        with pytest.raises(sl_api.ApiError) as excinfo:
+            _client(http).play(uris=["spotify:track:t1"])
+        assert excinfo.value.kind == sl_api.ErrorKind.API
+        assert "Restricted device" in str(excinfo.value)
+
+    def test_error_reason_is_carried_verbatim(self):
+        """The reason token is the actionable half of a Spotify player error
+        (e.g. a development-mode restriction). It must reach the user
+        verbatim — the toast is how Alec reports it."""
+        http = FakeHttp()
+        http.add("PUT", "/me/player/play", 403,
+                 {"error": {"status": 403,
+                            "message": "Player command failed: unsupported for this app",
+                            "reason": "UNSUPPORTED_ACTION"}})
+        with pytest.raises(sl_api.ApiError) as excinfo:
+            _client(http).play(uris=["spotify:track:t1"])
+        message = str(excinfo.value)
+        assert "unsupported for this app" in message
+        assert "UNSUPPORTED_ACTION" in message
+
 
 # --------------------------------------------------------------------------
 # UI helpers (pure presentation logic)
@@ -827,6 +880,51 @@ class TestArtCache:
         cache = sl_art.ArtCache(tmp_path)
         with pytest.raises(sl_art.ArtError):
             cache.fetch("https://bad", 64, http_get=lambda url: b"not an image")
+
+
+class TestRoundedArt:
+    """Round 28 (Alec): the pill's square album art sits flush at the pill's
+    left cap, so its corners cross the rounded silhouette. The thumb is
+    alpha-clipped to the same rounded tile the idle state draws."""
+
+    def test_rounded_rgba_clips_corners_keeps_centre(self):
+        import numpy as np
+
+        rgba = np.full((44, 44, 4), (10, 20, 30, 255), dtype=np.uint8)
+        out = sl_art.rounded_rgba(rgba, 8.0)
+        assert out.shape == rgba.shape
+        assert int(out[0, 0, 3]) == 0 and int(out[0, 43, 3]) == 0
+        assert int(out[43, 0, 3]) == 0 and int(out[43, 43, 3]) == 0
+        assert int(out[22, 22, 3]) == 255, "centre stays opaque"
+        assert int(out[0, 22, 3]) == 255, "mid-edge stays opaque"
+        partial = (out[:, :, 3] > 0) & (out[:, :, 3] < 255)
+        assert partial.any(), "the arc needs supersampled partial-alpha pixels, not a hard step"
+        assert int(rgba[0, 0, 3]) == 255, "the source (often a cache entry) stays untouched"
+
+    def test_rounded_rgba_radius_scales_with_buffer(self):
+        """Retina art buffers are device-pixel sized (88px for a 44pt thumb);
+        the caller passes radius in buffer pixels and the same corner fraction
+        is clipped."""
+        import numpy as np
+
+        rgba = np.full((88, 88, 4), (10, 20, 30, 255), dtype=np.uint8)
+        out = sl_art.rounded_rgba(rgba, 16.0)
+        assert int(out[0, 0, 3]) == 0
+        assert int(out[44, 44, 3]) == 255
+        # At half the corner radius from the corner the arc still clips.
+        assert int(out[2, 2, 3]) == 0
+
+    def test_masked_is_cached_per_key_and_radius(self, tmp_path):
+        cache = sl_art.ArtCache(tmp_path)
+        rgba = cache.placeholder("Chill", 44)
+        a = cache.masked(rgba, 8.0, key="url-a")
+        b = cache.masked(rgba, 8.0, key="url-a")
+        assert a is b, "masked variants must hit the memory cache"
+        assert int(a[0, 0, 3]) == 0
+        c = cache.masked(rgba, 12.0, key="url-a")
+        assert c is not a, "radius is part of the cache key"
+        # The square original is still intact for other consumers.
+        assert int(cache.placeholder("Chill", 44)[0, 0, 3]) == 255
 
 
 # --------------------------------------------------------------------------

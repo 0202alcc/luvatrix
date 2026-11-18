@@ -149,6 +149,7 @@ class SpotifyLightApp(App):
         self.now_monotonic = time.monotonic()
         self._next_player_poll = 0.0
         self._next_progress_tick = 0.0
+        self._last_player_action = None  # for no-active-device transfer+retry
         self._art_in_flight: set[str] = set()
         self._art_failures: dict[str, float] = {}
         self._art_pending: dict[str, tuple[str, int]] = {}
@@ -496,7 +497,17 @@ class SpotifyLightApp(App):
         if error.kind == sl_api.ErrorKind.PREMIUM_REQUIRED:
             self._toast("Spotify Premium is required for playback control")
         elif error.kind == sl_api.ErrorKind.DEVICE_NOT_FOUND:
-            self._toast("No active device — pick one under Devices")
+            if label == "player-action" and self._auto_pick_device():
+                pass  # obvious target: transfer + retry, like the real app
+            elif label == "player-action" and len(self.devices) > 1 and not any(
+                    d.is_active for d in self.devices):
+                # Genuinely ambiguous — the only case that prompts.
+                self.show_devices = True
+                self._toast("Pick a device")
+            elif label == "player-action" and not self.devices:
+                self._toast("No devices found — open Spotify on a device first")
+            else:
+                self._toast("No active device — pick one under Devices")
         elif label == "search":
             self.search_error = str(error)
         elif label.startswith("playlist:"):
@@ -725,7 +736,10 @@ class SpotifyLightApp(App):
                 self.worker.submit("poll-player", self._job_poll_player)
             self.invalidate()
         elif action == "pick_device":
-            self._player_action(lambda c: c.transfer(payload, play=True))
+            _transfer = lambda c: c.transfer(payload, play=True)  # noqa: E731
+            # An explicit pick that fails must not auto-transfer elsewhere.
+            _transfer._sl_device_retry = True  # type: ignore[attr-defined]
+            self._player_action(_transfer)
             self.show_devices = False
         elif action == "focus_search":
             self.search_focused = True
@@ -771,9 +785,39 @@ class SpotifyLightApp(App):
         if self._client is None:
             self._toast("Connect Spotify first")
             return
+        self._last_player_action = fn
         self.worker.submit("player-action", lambda: self._job_player_action(fn))
         self._next_player_poll = time.monotonic() + POLL_AFTER_ACTION_SECS
         self.invalidate()
+
+    def _auto_pick_device(self) -> bool:
+        """Transfer to the obvious device and re-issue the failed action.
+
+        The real Spotify app never asks which device to use when the answer
+        is obvious: the active one, or the only one there is. Returns True
+        when a transfer+retry was queued. A retry that itself failed is
+        marked and never chains another, and an explicit pick_device
+        transfer is marked too (it must not auto-transfer elsewhere).
+        """
+        action = self._last_player_action
+        if action is None or getattr(action, "_sl_device_retry", False):
+            return False
+        active = [d for d in self.devices if d.is_active]
+        if len(active) == 1:
+            target = active[0]
+        elif len(self.devices) == 1:
+            target = self.devices[0]
+        else:
+            return False
+
+        def _retry(client, _action=action, _device_id=target.id):
+            client.transfer(_device_id, play=False)
+            _action(client)
+
+        _retry._sl_device_retry = True  # type: ignore[attr-defined]
+        self._player_action(_retry)
+        self._toast(f"No active device — switching to {target.name}")
+        return True
 
     def _handle_key(self, event) -> None:
         payload = getattr(event, "payload", None) or {}

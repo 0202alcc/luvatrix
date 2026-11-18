@@ -34,25 +34,43 @@ class ApiError(Exception):
         self.status = status
 
 
-def _extract_error_message(body: object, fallback: str) -> str:
+def _extract_error(body: object, fallback: str) -> tuple[str, str | None]:
+    """(message, reason) from a Spotify error body; reason is None when absent."""
     if isinstance(body, dict):
         error = body.get("error")
-        if isinstance(error, dict) and isinstance(error.get("message"), str):
-            return error["message"]
+        if isinstance(error, dict):
+            message = error.get("message")
+            reason = error.get("reason")
+            return (
+                message if isinstance(message, str) else fallback,
+                reason if isinstance(reason, str) else None,
+            )
         if isinstance(error, str):
-            return error
-    return fallback
+            return error, None
+    return fallback, None
+
+
+def _extract_error_message(body: object, fallback: str) -> str:
+    return _extract_error(body, fallback)[0]
 
 
 def classify_error(status: int, body: object) -> ApiError:
-    message = _extract_error_message(body, f"Spotify request failed ({status})")
+    message, reason = _extract_error(body, f"Spotify request failed ({status})")
     lowered = message.lower()
     if status == 401:
         return ApiError(ErrorKind.UNAUTHORIZED, message, status)
-    if status == 403 and ("premium" in lowered or "restricted" in lowered):
-        return ApiError(ErrorKind.PREMIUM_REQUIRED, message, status)
-    if status == 404:
+    # No-active-device arrives as 404 on some endpoints and as 403 + a
+    # NO_ACTIVE_DEVICE reason (or message) on others — it is always the
+    # device flow, never a generic failure.
+    if status == 404 or reason == "NO_ACTIVE_DEVICE" or "no active device" in lowered:
         return ApiError(ErrorKind.DEVICE_NOT_FOUND, message, status)
+    if status == 403 and (reason == "PREMIUM_REQUIRED" or "premium" in lowered):
+        return ApiError(ErrorKind.PREMIUM_REQUIRED, message, status)
+    # Everything else stays verbatim, reason token included: Spotify puts the
+    # actionable half of a player error there (e.g. a development-mode
+    # restriction), and the toast string is the user's bug report.
+    if reason:
+        return ApiError(ErrorKind.API, f"{status}: {message} [{reason}]", status)
     return ApiError(ErrorKind.API, f"{status}: {message}", status)
 
 
