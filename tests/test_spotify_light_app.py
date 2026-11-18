@@ -43,6 +43,7 @@ import sl_api  # noqa: E402
 import sl_art  # noqa: E402
 import sl_models  # noqa: E402
 import sl_oauth  # noqa: E402
+import sl_icons  # noqa: E402
 import sl_store  # noqa: E402
 import sl_ui  # noqa: E402
 import sl_views  # noqa: E402
@@ -180,7 +181,7 @@ class TestHomeView:
             "Your Library", "PLAYLISTS", "Roadtrip", "Focus",
             "Top tracks", "New releases", "Your playlists", "Top artists",
             "Come As You Are", "Nevermind", "Nirvana", "Alec", "Log out",
-            "Nothing playing", "⌂", "⚲",
+            "Nothing playing", sl_icons.HOME, sl_icons.SEARCH,
         ):
             assert expected in texts, f"missing text: {expected!r}"
         assert any(t.startswith("Good ") for t in texts)
@@ -504,17 +505,26 @@ class TestSansTypography:
     """The whole UI rendered in the renderer's monospace default because the
     public frame API exposed no font family. Spotify Light is a music app,
     not a terminal: every scene text node the app emits must use its chosen
-    sans family, on every view."""
+    sans family, on every view. Dock/card icons are the one exception: they
+    use the bundled Phosphor families (see sl_icons)."""
 
-    def _families(self, scene_buffer) -> set[str]:
-        return {node.font_family for node in _nodes(scene_buffer, TextNode)}
+    def _assert_typography(self, scene_buffer) -> None:
+        icon_chars = {ch for ch, _ in sl_icons.GLYPHS.values()}
+        icon_fonts = {sl_icons.ICON_FONT, sl_icons.ICON_FONT_FILL}
+        for node in _nodes(scene_buffer, TextNode):
+            if node.text in icon_chars:
+                assert node.font_family in icon_fonts, \
+                    f"icon U+{ord(node.text):04X} in {node.font_family!r}"
+            else:
+                assert node.font_family == sl_views.FONT_FAMILY, \
+                    f"prose {node.text!r} in {node.font_family!r}"
 
     def test_home_view_text_uses_sans_family(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
         app.authenticated = True
         app._bootstrap_done = True
         _tick(app, ctx, 2)
-        assert self._families(scene_buffer) == {sl_views.FONT_FAMILY}
+        self._assert_typography(scene_buffer)
 
     def test_library_view_text_uses_sans_family(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
@@ -522,14 +532,14 @@ class TestSansTypography:
         app.playlists = [_playlist("breaks")]
         app.view = "library"
         _tick(app, ctx, 2)
-        assert self._families(scene_buffer) == {sl_views.FONT_FAMILY}
+        self._assert_typography(scene_buffer)
 
     def test_search_view_text_uses_sans_family(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
         app.authenticated = True
         app.view = "search"
         _tick(app, ctx, 2)
-        assert self._families(scene_buffer) == {sl_views.FONT_FAMILY}
+        self._assert_typography(scene_buffer)
 
     def test_playlist_view_text_uses_sans_family(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
@@ -540,13 +550,13 @@ class TestSansTypography:
         app.view = f"playlist:{playlist.id}"
         app.playlist_detail = (playlist, [_track("Lithium", artist, _album("Nevermind", artist))])
         _tick(app, ctx, 2)
-        assert self._families(scene_buffer) == {sl_views.FONT_FAMILY}
+        self._assert_typography(scene_buffer)
 
     def test_login_view_text_uses_sans_family(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
         assert app.authenticated is False
         _tick(app, ctx, 2)
-        assert self._families(scene_buffer) == {sl_views.FONT_FAMILY}
+        self._assert_typography(scene_buffer)
 
     def test_toast_text_uses_sans_family(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
@@ -555,8 +565,7 @@ class TestSansTypography:
         app.status_message = "Saved"
         app._status_until = app.now_monotonic + 60
         _tick(app, ctx, 2)
-        families = self._families(scene_buffer)
-        assert families == {sl_views.FONT_FAMILY}
+        self._assert_typography(scene_buffer)
         assert "Saved" in _texts(scene_buffer)
 
     def test_family_is_a_sans_face(self):
@@ -628,7 +637,7 @@ class TestTransportAndOverflow:
         app.authenticated = True
         app._bootstrap_done = True
         _tick(app, ctx, 2)
-        assert ">" in _texts(scene_buffer)
+        assert sl_icons.PLAY in _texts(scene_buffer)
 
     def test_overflow_hit_region_matches_nav_circle_size(self, app_ctx):
         app, ctx, _ = app_ctx
@@ -1176,10 +1185,11 @@ class TestFloatingPill:
         assert home[0].x >= sl_views.SIDEBAR_W + sl_views.PILL_FLOAT, \
             "the home circle never crosses the sidebar"
         texts = _texts(scene_buffer)
-        assert "⌂" in texts and "⚲" in texts, "nav circles carry glyphs"
+        assert sl_icons.HOME in texts and sl_icons.SEARCH in texts, \
+            "nav circles carry icon glyphs"
         frame = scene_buffer.latest_frame()
         home_glyph = [n for n in frame.nodes
-                      if isinstance(n, TextNode) and n.text == "⌂"]
+                      if isinstance(n, TextNode) and n.text == sl_icons.HOME]
         assert home_glyph and home_glyph[0].color_rgba == sl_views.ACCENT, \
             "the active view's circle glyph lights up"
 
@@ -1238,7 +1248,7 @@ class TestFloatingPill:
                         if n.x == px + 10 and n.y == py + 10]
         assert not thumb_layers, \
             "the empty pill must not render a hash-colored placeholder tile"
-        notes = [n for n in _nodes(scene_buffer, TextNode) if n.text == "♪"]
+        notes = [n for n in _nodes(scene_buffer, TextNode) if n.text == sl_icons.NOTE]
         assert notes, "the empty thumb shows a calm note glyph"
         note = notes[0]
         cx, cy = px + 10 + 22, py + 10 + 22
@@ -2319,11 +2329,38 @@ class TestArtFailureBackoff:
 
 
 # ---------------------------------------------------------------------------
-# Round 23 (Alec's eyeball pass on 1b71bac): dock glyphs sit off-center inside
-# their circles — x offsets were hardcoded for an old mono font and y assumed
-# the text node's y was a baseline, while the rasterizer treats it as the ink
-# top. The contract: each glyph's INK centroid lands on its target center.
-class TestDockGlyphCentering:
+# Icon switch (Alec-approved): dock glyphs are Phosphor icons from the bundled
+# TTFs — regular weight for nav/search/more/note, Phosphor-Fill for the
+# transport play/prev/next — rendered through the same text path as prose, so
+# macOS Metal and the headless CI rasterizer draw identical pixels. The
+# round-23 ink-centroid contract carries over: each icon's INK centroid lands
+# on its target center.
+class TestIconFontResolution:
+    """The bundled Phosphor fonts must be what the resolver picks — a missing
+    file would silently fall back to a system font and draw .notdef boxes."""
+
+    @staticmethod
+    def _resolved(family: str) -> str:
+        from luvatrix_core.core.ui_frame_renderer import _resolve_system_font_path
+        return _resolve_system_font_path(family) or ""
+
+    def test_phosphor_regular_resolves_to_the_bundled_file(self):
+        path = self._resolved(sl_icons.ICON_FONT).replace("\\", "/")
+        assert path.endswith("assets/fonts/Phosphor.ttf"), path
+
+    def test_phosphor_fill_resolves_to_the_bundled_file(self):
+        path = self._resolved(sl_icons.ICON_FONT_FILL).replace("\\", "/")
+        assert path.endswith("assets/fonts/Phosphor-Fill.ttf"), path
+
+    def test_every_dock_icon_is_covered_by_its_primary_font(self):
+        from luvatrix_core.core import font_fallback
+        for name, (ch, family) in sl_icons.GLYPHS.items():
+            chain = font_fallback.get_font_chain(family, 17.0)
+            assert chain.font_for(ch) is chain.primary, \
+                f"{name} U+{ord(ch):04X} falls off the {family} primary"
+
+
+class TestDockIconCentering:
     TOL = 1.5
 
     def _render_idle_dock(self, app, ctx, scene_buffer):
@@ -2333,7 +2370,7 @@ class TestDockGlyphCentering:
         _tick(app, ctx, 2)
         frame = scene_buffer.latest_frame()
         assert frame is not None
-        return rasterize_scene_frame(frame)
+        return rasterize_scene_frame(frame), frame
 
     def _ink_centroid(self, img, box, mask):
         x0, y0, x1, y1 = box
@@ -2357,40 +2394,58 @@ class TestDockGlyphCentering:
     def _bright(r, g, b, _x, _y) -> bool:
         return (r + g + b) / 3 >= 140
 
-    def test_nav_circle_glyphs_center_on_their_circles(self, app_ctx):
+    def test_dock_icons_are_phosphor_glyphs(self, app_ctx):
+        """Every dock glyph is the Phosphor icon char in its approved family,
+        and no legacy text glyph survives the switch."""
         app, ctx, scene_buffer = app_ctx
-        img = self._render_idle_dock(app, ctx, scene_buffer)
+        _, frame = self._render_idle_dock(app, ctx, scene_buffer)
+        nodes = {n.text: n for n in frame.nodes
+                 if isinstance(n, TextNode) and len(n.text) == 1}
+        for name, (ch, family) in sl_icons.GLYPHS.items():
+            node = nodes.get(ch)
+            assert node is not None, f"{name} icon missing from the dock"
+            assert node.font_family == family, \
+                f"{name} icon renders in {node.font_family!r}, want {family!r}"
+        legacy = {"⌂", "⚲", "…", "♪", ">"} & set(nodes)
+        assert not legacy, f"legacy text glyphs still present: {legacy}"
+        wide = [n.text for n in frame.nodes
+                if isinstance(n, TextNode) and n.text in ("<<", ">>")]
+        assert not wide, f"legacy transport glyphs still present: {wide}"
+
+    def test_nav_circle_icons_center_on_their_circles(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img, _ = self._render_idle_dock(app, ctx, scene_buffer)
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         cy = py + ph / 2
         home_cx = px - sl_views.NAV_CIRCLE_GAP - sl_views.NAV_CIRCLE_R
         search_cx = px + pw + sl_views.NAV_CIRCLE_GAP + sl_views.NAV_CIRCLE_R
         self._assert_centered(img, (int(home_cx) - 20, int(cy) - 20, int(home_cx) + 20,
-                                    int(cy) + 20), self._bright, (home_cx, cy), "home ⌂")
+                                    int(cy) + 20), self._bright, (home_cx, cy), "home")
         self._assert_centered(img, (int(search_cx) - 20, int(cy) - 20, int(search_cx) + 20,
-                                    int(cy) + 20), self._bright, (search_cx, cy), "search ⚲")
+                                    int(cy) + 20), self._bright, (search_cx, cy), "search")
 
-    def test_overflow_ellipsis_centers_on_its_circle(self, app_ctx):
+    def test_overflow_icon_centers_on_its_circle(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
-        img = self._render_idle_dock(app, ctx, scene_buffer)
+        img, _ = self._render_idle_dock(app, ctx, scene_buffer)
         px, py, _, ph = sl_views.pill_rect(1280, 800)
         cy = py + ph / 2
         ocx = 1280 - sl_views.PILL_FLOAT - sl_views.OVERFLOW_R
         self._assert_centered(img, (int(ocx) - 20, int(cy) - 20, int(ocx) + 20, int(cy) + 20),
-                              self._bright, (ocx, cy), "overflow …")
+                              self._bright, (ocx, cy), "overflow more")
 
-    def test_transport_glyphs_center_on_their_hit_regions(self, app_ctx):
+    def test_transport_icons_center_on_their_hit_regions(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
-        img = self._render_idle_dock(app, ctx, scene_buffer)
+        img, _ = self._render_idle_dock(app, ctx, scene_buffer)
         hits = {r.action: r for r in app._hits}
-        for action, label in (("prev", "<<"), ("next", ">>")):
+        for action, label in (("prev", "skip-back"), ("next", "skip-forward")):
             r = hits[action]
             target = (r.x + r.w / 2, r.y + r.h / 2)
             self._assert_centered(img, (int(r.x), int(r.y), int(r.x + r.w), int(r.y + r.h)),
                                   self._bright, target, f"transport {label}")
 
-    def test_play_glyph_centers_on_its_circle(self, app_ctx):
+    def test_play_icon_centers_on_its_circle(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
-        img = self._render_idle_dock(app, ctx, scene_buffer)
+        img, _ = self._render_idle_dock(app, ctx, scene_buffer)
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         play_cx, cy = px + pw - 72, py + ph / 2
 
@@ -2399,16 +2454,46 @@ class TestDockGlyphCentering:
                     and (x - play_cx) ** 2 + (y - cy) ** 2 <= 13 ** 2)
 
         self._assert_centered(img, (int(play_cx) - 14, int(cy) - 14, int(play_cx) + 14,
-                                    int(cy) + 14), dark_ink_in_disc, (play_cx, cy), 'play ">"')
+                                    int(cy) + 14), dark_ink_in_disc, (play_cx, cy), "play")
 
-    def test_idle_note_glyph_centers_on_its_tile(self, app_ctx):
+    def test_idle_note_icon_centers_on_its_tile(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
-        img = self._render_idle_dock(app, ctx, scene_buffer)
+        img, _ = self._render_idle_dock(app, ctx, scene_buffer)
         px, py, _, _ = sl_views.pill_rect(1280, 800)
         tile_c = (px + 10 + 22, py + 10 + 22)
         self._assert_centered(img, (int(tile_c[0]) - 14, int(tile_c[1]) - 14,
                                     int(tile_c[0]) + 14, int(tile_c[1]) + 14),
-                              self._bright, tile_c, "idle ♪")
+                              self._bright, tile_c, "idle note")
+
+    def test_card_play_fab_uses_the_fill_icon(self, app_ctx):
+        """Hovering a card shows the play FAB as the Phosphor-Fill play icon
+        on the art's bottom-right corner (it was the text ">" glyph)."""
+        app, ctx, scene_buffer = app_ctx
+        artist = _artist("Nirvana")
+        album = _album("Nevermind", artist)
+        app.authenticated = True
+        app.home_sections = sl_ui.build_home_sections(
+            top_tracks=[], new_releases=[album], playlists=[], top_artists=[])
+        _tick(app, ctx, 1)
+        arts = [n for n in _nodes(scene_buffer, CpuLayerNode)
+                if abs(n.width - (sl_views.CARD_ART - 24)) < 1.0]
+        assert arts, "card art rendered"
+        card_x, card_y = arts[0].x - 12.0, arts[0].y - 12.0
+        app.input.state.mouse_x = card_x + 20.0
+        app.input.state.mouse_y = card_y + 20.0
+        app.invalidate()  # a real mousemove event would invalidate on its own
+        _tick(app, ctx, 1)
+        frame = scene_buffer.latest_frame()
+        fabs = [n for n in frame.nodes
+                if isinstance(n, TextNode) and n.text == sl_icons.PLAY
+                and n.font_size_px == 18]
+        assert fabs, "hovering a card shows the play FAB"
+        assert fabs[0].font_family == sl_icons.ICON_FONT_FILL, \
+            f"FAB renders in {fabs[0].font_family!r}"
+        fx = card_x + sl_views.CARD_W - 28
+        fy = card_y + sl_views.CARD_ART - 28
+        assert abs(fabs[0].x - fx) < 16 and abs(fabs[0].y - fy) < 16, \
+            f"FAB should sit at ({fx}, {fy}), got ({fabs[0].x}, {fabs[0].y})"
 
 
 # ---------------------------------------------------------------------------
