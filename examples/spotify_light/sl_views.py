@@ -755,6 +755,11 @@ def _draw_playback_popup(frame, app, out: FrameOut, *, width: float, pill_top: f
     # fill for readability over content, same hairline/shadow language.
     _glass_plate(frame, popup_x, popup_y, popup_w, popup_h, radius=14.0, z=20,
                  fill=(18, 18, 18, 234), border=(255, 255, 255, 30))
+    # Swallow clicks that land on the panel but on no control: registered
+    # first so the popup's own controls (later) win the reversed hit walk,
+    # while dead space no longer falls through to dismiss the popup (or bleed
+    # into content hits underneath the panel).
+    out.hit(popup_x, popup_y, popup_w, popup_h, "popup_plate")
 
     player = app.player
     y0 = popup_y + 14

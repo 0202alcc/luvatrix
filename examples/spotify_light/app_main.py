@@ -762,6 +762,8 @@ class SpotifyLightApp(App):
             self.invalidate()
         elif action == "logout":
             self._end_session()
+        elif action == "popup_plate":
+            pass  # swallowed: clicking the panel must not dismiss it
         elif action == "scrollbar":
             pass  # handled by ScrollbarController.update above
 

@@ -2466,3 +2466,65 @@ class TestGlassPlateSheen:
             assert lum <= 20, f"r=32 sheen leaks at {(x, y)}: lum {lum}"
         top = int(img[103, 200, :3].sum()) / 3
         assert top >= 64, f"r=32 sheen missing at the top edge: lum {top}"
+
+
+# ---------------------------------------------------------------------------
+# Round 25 (Alec's eyeball pass on 1b71bac): the playback popup "doesn't work
+# properly" — clicking its padding, gaps, or labels dismisses it. Root cause:
+# the popup's glass plate registers no hit region, so clicks on dead space
+# fall through _dispatch_click to the empty-space branch that closes the
+# popup (and can bleed into content hits underneath the panel). The contract:
+# clicks inside the plate are swallowed; only a click truly outside closes.
+class TestPopupPlateSwallow:
+
+    def _with_track(self, app, ctx, *, show_devices=False):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.devices = [
+            sl_models.Device(id="d1", name="MacBook Pro", kind="Computer", is_active=True,
+                             is_restricted=False, volume_percent=40),
+        ]
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500, track=track,
+                                           device=app.devices[0], shuffle=True, repeat="context")
+        app._player_synced_at = app.now_monotonic
+        app.show_devices = show_devices
+        _tick(app, ctx, 2)
+
+    def test_clicks_on_popup_dead_space_do_not_dismiss_it(self, app_ctx):
+        app, ctx, _buffer = app_ctx
+        self._with_track(app, ctx, show_devices=True)
+
+        popup_w, row_h, head_h = 300.0, 40.0, 148.0
+        popup_h = head_h + row_h * 1 + 12  # one device
+        popup_x = 1280 - popup_w - 16
+        _, pill_top, _, _ = sl_views.pill_rect(1280, 800)
+        popup_y = pill_top - 12 - popup_h
+
+        # Bottom padding below the last device row: inside the plate, on no control.
+        app._dispatch_click(popup_x + popup_w / 2, popup_y + popup_h - 4)
+        assert app.show_devices is True, "clicking the popup's padding must not dismiss it"
+        # The "Connect to a device" section title: a label, not a control.
+        app._dispatch_click(popup_x + popup_w / 2, popup_y + 132)
+        assert app.show_devices is True, "clicking a popup label must not dismiss it"
+        # The gap between the volume bar and the Shuffle row.
+        app._dispatch_click(popup_x + popup_w / 2, popup_y + 48)
+        assert app.show_devices is True, "clicking a popup gap must not dismiss it"
+
+        # A click truly outside the popup still dismisses it.
+        app._dispatch_click(400, 300)
+        assert app.show_devices is False
+
+    def test_popup_controls_still_win_over_the_plate(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        self._with_track(app, ctx, show_devices=True)
+        actions: list[str] = []
+        monkeypatch.setattr(app, "_player_action", lambda fn: actions.append("player"))
+
+        # Shuffle row hit: (popup_x+8, y1-5, popup_w-16, 30), y1 = popup_y + 48.
+        popup_x = 1280 - 300.0 - 16
+        _, pill_top, _, _ = sl_views.pill_rect(1280, 800)
+        popup_y = pill_top - 12 - (148.0 + 40.0 * 1 + 12)
+        app._dispatch_click(popup_x + 40, popup_y + 48 + 10)
+        assert actions == ["player"], "toggling Shuffle must still reach its control"
+        assert app.show_devices is True, "toggles never dismiss the popup"
