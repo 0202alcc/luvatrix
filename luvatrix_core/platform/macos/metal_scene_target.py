@@ -29,7 +29,6 @@ from luvatrix_core.core.scene_graph import (
 )
 from luvatrix_core.core.scene_rasterizer import _Offsets, _draw_layer, _draw_text, _numpy, rasterize_scene_frame
 from luvatrix_core.platform.macos.metal_backend import (
-    _CGSize,
     _MTL_LOAD_ACTION_CLEAR,
     _MTL_PIXEL_FORMAT_BGRA8_UNORM,
     _MTL_PIXEL_FORMAT_RGBA8_UNORM,
@@ -38,7 +37,6 @@ from luvatrix_core.platform.macos.metal_backend import (
     _MTL_STORE_ACTION_STORE,
     _MTL_TEXTURE_USAGE_SHADER_READ,
     _MTLClearColor,
-    _coerce_struct,
     _create_sampler,
     _create_texture,
 )
@@ -1020,21 +1018,15 @@ def _compile_pipeline(device, layer, vertex_name: str, fragment_name: str) -> ob
 
 
 def _set_layer_drawable_size(layer, width_px: float, height_px: float) -> None:
-    """Size the layer drawable, coercing the struct for real PyObjC setters.
+    """Size the layer drawable as a plain ``(width, height)`` sequence.
 
-    PyObjC does not marshal a hand-rolled ``ctypes.Structure`` into a
-    ``{CGSize=dd}`` argument (it raises TypeError); the iOS targets already
-    route through ``_coerce_struct`` for the same selector. Plain-Python fake
-    layers in tests accept the raw struct, so only coerce when the setter
-    carries PyObjC method metadata.
+    macOS layers are always PyObjC objects, and PyObjC depythonifies a
+    ``{CGSize=dd}`` argument from a two-element sequence; a hand-rolled
+    ``ctypes.Structure`` raises ``TypeError: depythonifying struct, got no
+    sequence``. The rubicon-objc ``_coerce_struct`` path the iOS targets use
+    for the same selector does not apply to PyObjC selectors.
     """
-    setter = layer.setDrawableSize_
-    size = _CGSize(float(width_px), float(height_px))
-    method = getattr(setter, "method", None)
-    if method is not None and hasattr(method, "method_argtypes"):
-        setter(_coerce_struct(setter, 0, size))
-    else:
-        setter(size)
+    layer.setDrawableSize_((float(width_px), float(height_px)))
 
 
 def _resize_layer_for_window(layer, window_handle, width: int, height: int, _log_state: dict | None = None) -> float | None:

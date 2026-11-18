@@ -259,7 +259,7 @@ class LayerScaleLogTests(unittest.TestCase):
             mst._resize_layer_for_window(layer, handle, 1280, 800, _log_state=log_state)
 
         self.assertEqual(layer.contents_scale, 2.0)
-        self.assertEqual((layer.drawable_size.width, layer.drawable_size.height), (2560.0, 1600.0))
+        self.assertEqual((layer.drawable_size[0], layer.drawable_size[1]), (2560.0, 1600.0))
         self.assertIn("contentsScale=2.0", buf.getvalue())
         self.assertIn("drawable=2560x1600", buf.getvalue())
         self.assertEqual(buf.getvalue().count("contentsScale="), 1,
@@ -470,7 +470,7 @@ class MacOSMetalBackingScaleTests(unittest.TestCase):
             self.calls["contents"] = value
 
         def setDrawableSize_(self, size) -> None:
-            self.calls["drawable"] = (float(size.width), float(size.height))
+            self.calls["drawable"] = (float(size[0]), float(size[1]))
 
     class _Window:
         def __init__(self, scale: float) -> None:
@@ -489,6 +489,29 @@ class MacOSMetalBackingScaleTests(unittest.TestCase):
         self.assertEqual(scale, 2.0)
         self.assertEqual(layer.calls["contents"], 2.0)
         self.assertEqual(layer.calls["drawable"], (2560.0, 1600.0))
+
+    def test_resize_layer_passes_size_as_a_sequence_for_pyobjc(self) -> None:
+        """PyObjC depythonifies a CGSize argument from a two-element sequence;
+        a hand-rolled ctypes struct raises 'depythonifying struct, got no
+        sequence' (observed on the Mac, build 670b15c, Retina XDR panel —
+        drawable stayed 1:1 and art rendered soft)."""
+
+        class _PyObjCLayer:
+            def __init__(self) -> None:
+                self.drawable = None
+
+            def setContentsScale_(self, value) -> None:
+                pass
+
+            def setDrawableSize_(self, size) -> None:
+                if not isinstance(size, (tuple, list)):
+                    raise TypeError("depythonifying struct, got no sequence")
+                self.drawable = tuple(float(v) for v in size)
+
+        layer = _PyObjCLayer()
+        scale = mst._resize_layer_for_window(layer, self._Handle(2.0), 1280, 800)
+        self.assertEqual(scale, 2.0)
+        self.assertEqual(layer.drawable, (2560.0, 1600.0))
 
     def test_resize_layer_returns_none_on_failure(self) -> None:
         class _Broken:
@@ -526,39 +549,6 @@ class MacOSMetalBackingScaleTests(unittest.TestCase):
         self.assertIn("layer resize failed", out)
         self.assertIn("window gone", out)
         self.assertEqual(out.count("layer resize failed"), 1)
-
-    def test_resize_layer_coerces_struct_for_pyobjc_setter(self) -> None:
-        class _ExpectedCGSize(ctypes.Structure):
-            _fields_ = [("width", ctypes.c_double), ("height", ctypes.c_double)]
-
-        class _PyObjCLikeSetter:
-            """Mimics a PyObjC bound method: exposes .method.method_argtypes and
-            rejects any struct that is not the declared argtype (PyObjC does not
-            marshal a foreign hand-rolled ctypes.Structure)."""
-
-            def __init__(self, layer) -> None:
-                self._layer = layer
-                self.method = types.SimpleNamespace(method_argtypes=[_ExpectedCGSize])
-
-            def __call__(self, arg) -> None:
-                if not isinstance(arg, _ExpectedCGSize):
-                    raise TypeError("NSInvalidArgumentException - expected struct of type {CGSize=dd}")
-                self._layer.calls["drawable"] = (float(arg.width), float(arg.height))
-
-        class _StrictLayer:
-            def __init__(self) -> None:
-                self.calls: dict[str, object] = {}
-                self.setDrawableSize_ = _PyObjCLikeSetter(self)
-
-            def setContentsScale_(self, value) -> None:
-                self.calls["contents"] = value
-
-        layer = _StrictLayer()
-        scale = mst._resize_layer_for_window(layer, self._Handle(2.0), 1280, 800)
-        self.assertEqual(scale, 2.0)
-        self.assertEqual(layer.calls["contents"], 2.0)
-        self.assertEqual(layer.calls["drawable"], (2560.0, 1600.0))
-
 
 if __name__ == "__main__":
     unittest.main()
