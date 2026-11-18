@@ -34,7 +34,7 @@ from luvatrix_core import accel
 from luvatrix_core.core.app_runtime import AppRuntime
 from luvatrix_core.core.coordinates import CoordinateFrameRegistry
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
-from luvatrix_core.core.scene_graph import RectNode, SceneGraphBuffer
+from luvatrix_core.core.scene_graph import RectNode, SceneGraphBuffer, TextNode
 from luvatrix_core.core.sensor_manager import SensorManagerThread
 from luvatrix_core.core.window_matrix import WindowMatrix
 
@@ -717,6 +717,84 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         assert latest is not None
         rect = next(node for node in latest.nodes if isinstance(node, RectNode))
         self.assertEqual((rect.x, rect.y, rect.width, rect.height), (50.0, 40.0, 10.0, 10.0))
+
+    def test_scene_frame_text_font_family_reaches_text_node(self) -> None:
+        """Apps could not pick a typeface through the public frame API: every
+        label fell back to the Comic Mono default, which is why Spotify Light
+        rendered entirely in a monospace face. `frame.text` must accept a
+        family and carry it onto the emitted TextNode; omitting it keeps the
+        historical default."""
+        scene_buffer = SceneGraphBuffer()
+        ctx = AppRuntime(
+            matrix=WindowMatrix(101, 101),
+            hdi=HDIThread(source=_NoopHDISource()),
+            sensor_manager=SensorManagerThread(providers={}),
+        ).build_context({"window.write"})
+        ctx.scene_buffer = scene_buffer
+        app = App()
+        app.init(ctx)
+
+        with app.scene_frame(clear=(0, 0, 0, 255)) as frame:
+            frame.text("styled", x=0, y=0, font_family="Helvetica Neue")
+            frame.text("plain", x=0, y=20)
+
+        latest = scene_buffer.latest_frame()
+        assert latest is not None
+        texts = {node.text: node for node in latest.nodes if isinstance(node, TextNode)}
+        self.assertEqual(texts["styled"].font_family, "Helvetica Neue")
+        self.assertEqual(texts["plain"].font_family, "Comic Mono")
+
+    def test_display_backing_scale_defaults_to_one_and_tracks_provider(self) -> None:
+        ctx = AppRuntime(
+            matrix=WindowMatrix(101, 101),
+            hdi=HDIThread(source=_NoopHDISource()),
+            sensor_manager=SensorManagerThread(providers={}),
+        ).build_context({"window.write"})
+        app = App()
+        app.init(ctx)
+
+        self.assertEqual(app.display.backing_scale, 1.0)
+        ctx.set_backing_scale_provider(lambda: 2.0)
+        self.assertEqual(app.display.backing_scale, 2.0)
+
+        def _broken() -> float:
+            raise RuntimeError("window gone")
+
+        ctx.set_backing_scale_provider(_broken)
+        self.assertEqual(app.display.backing_scale, 1.0)
+        ctx.set_backing_scale_provider(None)
+        self.assertEqual(app.display.backing_scale, 1.0)
+
+    def test_measure_text_is_proportional_and_provider_backed(self) -> None:
+        """Round 15 (live search-view pass on `670b15c`): the search caret used
+        a mono-width estimate (len * size * 0.52), so under a proportional
+        family like Helvetica Neue it drifted off the end of the query — far
+        right for narrow glyphs (iiii), far left for wide ones (WWWW). Apps
+        need a renderer-consistent text measure."""
+        ctx = AppRuntime(
+            matrix=WindowMatrix(101, 101),
+            hdi=HDIThread(source=_NoopHDISource()),
+            sensor_manager=SensorManagerThread(providers={}),
+        ).build_context({"window.write"})
+
+        wide = ctx.measure_text("WWWW", font_size_px=14.0, font_family="Helvetica Neue")
+        narrow = ctx.measure_text("iiii", font_size_px=14.0, font_family="Helvetica Neue")
+        self.assertGreater(wide, narrow * 2.0,
+                           "proportional measure: WWWW runs much wider than iiii")
+        self.assertEqual(
+            ctx.measure_text("", font_size_px=14.0, font_family="Helvetica Neue"), 0.0)
+
+        ctx.set_text_measure_provider(lambda text, size_px, family: float(len(text)))
+        self.assertEqual(ctx.measure_text("abcdef", font_size_px=14.0), 6.0)
+
+        def _broken(text, size_px, family) -> float:
+            raise RuntimeError("no fonts")
+
+        ctx.set_text_measure_provider(_broken)
+        self.assertGreater(ctx.measure_text("WWWW", font_size_px=10.0), 0.0,
+                           "a broken provider falls back to a heuristic, not a crash")
+        ctx.set_text_measure_provider(None)
+        self.assertGreater(ctx.measure_text("WWWW", font_size_px=10.0), 0.0)
 
     def test_input_state_reduces_hdi_events(self) -> None:
         class _Event:

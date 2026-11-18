@@ -37,6 +37,7 @@ macos = [
   "pyobjc-framework-cocoa>=12.1",
   "pyobjc-framework-quartz>=12.1",
   "pyobjc-framework-Metal>=12.1",
+  "pyobjc-framework-WebKit>=12.1",
 ]
 # iOS ABI-specific packages are installed into native PyPackages by setup_ios.sh.
 # Do not put macOS PyObjC bindings here.

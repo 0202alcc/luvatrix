@@ -224,7 +224,7 @@ def _encode_node_for_rs(node: SceneNode, sx: float, sy: float, frame: SceneFrame
         view = _layer_payload_for_rs(layer)
         if view is None:
             return None
-        layer_h, layer_w = int(view.shape[0]), int(view.shape[1])
+        view, layer_w, layer_h = _layer_view_for_geometry(view, node, sx, sy, np)
         return [(
             5,
             int(round((node.x - offsets.x) * sx)),
@@ -790,8 +790,8 @@ def _text_mask_for_node(node: TextNode, sx: float, sy: float, offset_x: float = 
     the truncated position), and ``"none"`` is a no-op.
     """
     try:
-        from PIL import Image, ImageDraw
-        from luvatrix_core.core.ui_frame_renderer import _load_font, _resolve_system_font_path
+        from PIL import Image
+        from luvatrix_core.core import font_fallback as ff
     except Exception:
         return ("debug", None, 0, 0)
 
@@ -802,14 +802,14 @@ def _text_mask_for_node(node: TextNode, sx: float, sy: float, offset_x: float = 
 
     if mask is None:
         try:
-            font = _load_font(_resolve_system_font_path(node.font_family), font_size)
-            bbox = font.getbbox(node.text)
-            left, top, right, bottom = bbox
-            width = max(1, int(math.ceil(right - left)))
-            height = max(1, int(math.ceil(bottom - top)))
-            image = Image.new("L", (width, height), 0)
-            draw = ImageDraw.Draw(image)
-            draw.text((-left, -top), node.text, fill=255, font=font)
+            chain = ff.get_font_chain(node.font_family, font_size)
+            runs = ff.split_runs(chain, node.text)
+            width_f, ascent, descent = ff.measure_runs(runs)
+            image = Image.new("L", (max(1, int(math.ceil(width_f))), max(1, int(math.ceil(ascent + descent)))), 0)
+            ff.draw_runs(image, 0, 0, runs, fill=255)
+            ink = image.getbbox()
+            if ink is not None:
+                image = image.crop(ink)
             if rotation_deg:
                 image = image.rotate(rotation_deg, resample=Image.Resampling.BICUBIC, expand=True)
             np = _numpy()
@@ -835,14 +835,38 @@ def _draw_text(out, node: TextNode, *, sx: float, sy: float, offsets: _Offsets) 
         _draw_debug_text(out, node.text, x=int((node.x - offsets.x) * sx), y=int((node.y - offsets.y) * sy), scale=max(1, int(node.font_size_px * sy // 7)), color=node.color_rgba)
 
 
+def _layer_view_for_geometry(view, node: CpuLayerNode, sx: float, sy: float, np) -> tuple[object, int, int]:
+    """Payload resized onto the node rect in display pixels (no-op on match).
+
+    The node geometry is authoritative: Retina payloads intentionally carry
+    more pixels than the node's logical size, and the GPU targets stretch the
+    texture over the node quad. The CPU raster must do the same or oversized
+    payloads would paint past the node's rect.
+    """
+    layer_h, layer_w = int(view.shape[0]), int(view.shape[1])
+    target_w = max(1, int(round(float(node.width) * sx)))
+    target_h = max(1, int(round(float(node.height) * sy)))
+    if (layer_w, layer_h) == (target_w, target_h):
+        return view, layer_w, layer_h
+    from PIL import Image  # local import: cold path; Pillow is a base dependency
+
+    image = Image.fromarray(np.asarray(view))
+    resized = image.resize((target_w, target_h), Image.LANCZOS)
+    out = np.ascontiguousarray(np.asarray(resized, dtype=np.uint8))
+    return out, target_w, target_h
+
+
 def _draw_layer(out, node: CpuLayerNode, *, sx: float, sy: float, offsets: _Offsets) -> None:
     layer = node.rgba
     if not hasattr(layer, "shape"):
         return
+    np = _numpy()
+    if np is None:
+        return
     x = int(round((node.x - offsets.x) * sx))
     y = int(round((node.y - offsets.y) * sy))
-    h, w, _ = layer.shape
-    _paste_rgba(out, layer, x=x, y=y, width=w, height=h)
+    view, w, h = _layer_view_for_geometry(layer, node, sx, sy, np)
+    _paste_rgba(out, view, x=x, y=y, width=w, height=h)
 
 
 def _blend_alpha_mask(out, mask, *, x: int, y: int, color: tuple[int, int, int, int]) -> None:

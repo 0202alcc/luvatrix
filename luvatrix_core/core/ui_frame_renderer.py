@@ -1399,17 +1399,44 @@ def _from_uint8_array(value: object) -> object:
     return np.asarray(value, dtype=np.uint8)
 
 
+_MONO_FAMILY_HINTS = ("mono", "menlo", "monaco", "courier", "console", "typewriter")
+_MONO_FALLBACK_PATTERNS = (
+    "comicmono",
+    "menlo",
+    "monaco",
+    "couriernew",
+    "courier",
+    "dejavusansmono",
+)
+_SANS_FALLBACK_PATTERNS = (
+    "helveticaneue",
+    "helvetica",
+    "arial",
+    "liberationsans",
+    "freesans",
+    "dejavusans",
+    "notosans",
+)
+_DISPLAY_FACE_MARKERS = ("bold", "italic", "oblique", "thin", "light", "black", "narrow", "condensed")
+
+
+def _pick_regular_face(matches: list[Path]) -> Path:
+    """Prefer the regular upright face over Bold/Italic/Oblique/display cuts."""
+    for path in matches:
+        stem = path.stem.lower().replace(" ", "").replace("-", "")
+        if not any(marker in stem for marker in _DISPLAY_FACE_MARKERS):
+            return path
+    return matches[0]
+
+
 def _resolve_system_font_path(family: str) -> str:
     wanted = (family.strip() or "Comic Mono").lower().replace(" ", "")
-    patterns = (
-        wanted,
-        "comicmono",
-        "menlo",
-        "monaco",
-        "couriernew",
-        "courier",
-        "dejavusansmono",
+    is_mono_request = any(hint in wanted for hint in _MONO_FAMILY_HINTS)
+    family_fallbacks = (
+        _MONO_FALLBACK_PATTERNS if is_mono_request
+        else (*_SANS_FALLBACK_PATTERNS, *_MONO_FALLBACK_PATTERNS)
     )
+    patterns = (wanted, *family_fallbacks)
     py_packages_dir = Path(__file__).resolve().parents[2]
     bundled_font_dirs = [
         py_packages_dir / "luvatrix_assets" / "fonts",
@@ -1440,11 +1467,17 @@ def _resolve_system_font_path(family: str) -> str:
         for ext in ("*.ttf", "*.otf", "*.ttc"):
             candidates.extend(base.rglob(ext))
     for pattern in patterns:
+        matches: list[Path] = []
         for path in candidates:
             name = path.name.lower().replace(" ", "")
             stem = path.stem.lower().replace(" ", "")
-            if pattern in name or pattern in stem:
-                return str(path)
+            if pattern not in name and pattern not in stem:
+                continue
+            if "mono" not in pattern and "mono" in stem:
+                continue  # a sans pattern must not land on a mono cut (dejavusans⊂dejavusansmono)
+            matches.append(path)
+        if matches:
+            return str(_pick_regular_face(matches))
     if candidates:
         return str(candidates[0])
     return ""

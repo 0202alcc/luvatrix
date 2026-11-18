@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+from collections import OrderedDict
 from datetime import UTC, datetime
 import hashlib
 import json
@@ -28,7 +29,6 @@ from luvatrix_core.core.scene_graph import (
 )
 from luvatrix_core.core.scene_rasterizer import _Offsets, _draw_layer, _draw_text, _numpy, rasterize_scene_frame
 from luvatrix_core.platform.macos.metal_backend import (
-    _CGSize,
     _MTL_LOAD_ACTION_CLEAR,
     _MTL_PIXEL_FORMAT_BGRA8_UNORM,
     _MTL_PIXEL_FORMAT_RGBA8_UNORM,
@@ -37,7 +37,6 @@ from luvatrix_core.platform.macos.metal_backend import (
     _MTL_STORE_ACTION_STORE,
     _MTL_TEXTURE_USAGE_SHADER_READ,
     _MTLClearColor,
-    _coerce_struct,
     _create_sampler,
     _create_texture,
 )
@@ -141,6 +140,49 @@ fragment float4 circle_fragment(CircleOut in [[stage_in]]) {
     float4 fill = float4(in.fill_color.rgb, in.fill_color.a * fill_alpha);
     float4 stroke = float4(in.stroke_color.rgb, in.stroke_color.a * stroke_alpha);
     return mix(fill, stroke, stroke_alpha);
+}
+
+struct RoundedRectOut {
+    float4 position [[position]];
+    float2 uv;
+    float4 fill_color;
+    float2 size;
+    float corner_radius;
+};
+
+vertex RoundedRectOut rounded_rect_vertex(uint vid [[vertex_id]],
+                                          uint iid [[instance_id]],
+                                          const device CircleInstance* instances [[buffer(0)]],
+                                          constant float4& scene_view [[buffer(1)]]) {
+    // Same instance packing as circles; params.x carries the radius in points.
+    constexpr float2 local[6] = {
+        float2(0.0, 0.0), float2(1.0, 0.0), float2(0.0, 1.0),
+        float2(1.0, 0.0), float2(1.0, 1.0), float2(0.0, 1.0),
+    };
+    CircleInstance inst = instances[iid];
+    float2 uv = local[vid];
+    float2 logical_size = scene_view.xy;
+    float2 px = inst.rect.xy - scene_view.zw + uv * inst.rect.zw;
+    RoundedRectOut out;
+    out.position = float4((px.x / logical_size.x) * 2.0 - 1.0,
+                          1.0 - (px.y / logical_size.y) * 2.0,
+                          0.0,
+                          1.0);
+    out.uv = uv;
+    out.fill_color = inst.fill_color;
+    out.size = inst.rect.zw;
+    out.corner_radius = inst.params.x;
+    return out;
+}
+
+fragment float4 rounded_rect_fragment(RoundedRectOut in [[stage_in]]) {
+    // SDF in point space so corners stay circular on non-square rects.
+    float2 p = (in.uv - 0.5) * in.size;
+    float2 q = abs(p) - (0.5 * in.size - float2(in.corner_radius));
+    float dist = length(max(q, float2(0.0))) + min(max(q.x, q.y), 0.0) - in.corner_radius;
+    float aa = max(fwidth(dist), 0.001);
+    float alpha = 1.0 - smoothstep(-aa, aa, dist);
+    return float4(in.fill_color.rgb, in.fill_color.a * alpha);
 }
 
 struct QuadUniforms {
@@ -264,26 +306,35 @@ class _MacOSMetalSceneState:
     command_queue: object
     rect_pipeline_state: object
     circle_pipeline_state: object
+    rounded_rect_pipeline_state: object
     textured_pipeline_state: object
     atlas_pipeline_state: object
     sampler_state: object
     window_handle: object
     window_system: object
+    layer_log_state: dict = field(default_factory=dict)
     text_node_textures: dict[tuple[object, ...], _CachedTextTexture] = field(default_factory=dict)
     glyph_atlases: dict[tuple[str, float, float], _GlyphAtlas] = field(default_factory=dict)
     atlas_vertex_buffers: dict[tuple[object, ...], tuple[object, int]] = field(default_factory=dict)
     rect_vertex_buffers: dict[tuple[object, ...], tuple[object, int]] = field(default_factory=dict)
     circle_vertex_buffers: dict[tuple[object, ...], tuple[object, int]] = field(default_factory=dict)
+    rounded_rect_vertex_buffers: dict[tuple[object, ...], tuple[object, int]] = field(default_factory=dict)
     rect_stream_buffers: list[_ReusableMetalBuffer] = field(
         default_factory=lambda: [_ReusableMetalBuffer() for _ in range(3)]
     )
     circle_stream_buffers: list[_ReusableMetalBuffer] = field(
         default_factory=lambda: [_ReusableMetalBuffer() for _ in range(3)]
     )
+    rounded_rect_stream_buffers: list[_ReusableMetalBuffer] = field(
+        default_factory=lambda: [_ReusableMetalBuffer() for _ in range(3)]
+    )
     stream_buffer_index: int = 0
-    dynamic_texture: object = None
-    dynamic_texture_width: int = 0
-    dynamic_texture_height: int = 0
+    # CpuLayer/Image textures keyed by pixel content: Metal samples at
+    # execution time, so one shared re-uploaded texture drew the LAST upload
+    # in every quad (all album art rendered as one photo, live Mac bug).
+    dynamic_layer_textures: OrderedDict[tuple[int, int, str], object] = field(
+        default_factory=OrderedDict
+    )
 
 
 @dataclass
@@ -352,18 +403,25 @@ class MacOSMetalSceneBackend:
             layer.setAllowsNextDrawableTimeout_(False)
         except Exception:
             pass
-        _resize_layer_for_window(layer, window_handle, width, height)
+        layer_log_state: dict = {}
+        scale = _resize_layer_for_window(
+            layer, window_handle, width, height, _log_state=layer_log_state)
+        if scale is not None:
+            self._last_backing_scale = scale
 
         self._state = _MacOSMetalSceneState(
             device=device,
             command_queue=command_queue,
             rect_pipeline_state=_compile_pipeline(device, layer, "rect_vertex", "rect_fragment"),
             circle_pipeline_state=_compile_pipeline(device, layer, "circle_vertex", "circle_fragment"),
+            rounded_rect_pipeline_state=_compile_pipeline(
+                device, layer, "rounded_rect_vertex", "rounded_rect_fragment"),
             textured_pipeline_state=_compile_pipeline(device, layer, "textured_vertex", "textured_fragment"),
             atlas_pipeline_state=_compile_pipeline(device, layer, "glyph_vertex", "glyph_fragment"),
             sampler_state=_create_sampler(device),
             window_handle=window_handle,
             window_system=self.window_system,
+            layer_log_state=layer_log_state,
         )
         print(f"[macos-metal-scene] initialized native scene target {width}x{height}", file=sys.stderr, flush=True)
         return MetalContext(width=width, height=height, title=title)
@@ -372,6 +430,15 @@ class MacOSMetalSceneBackend:
     def _window_handle(self):
         state = self._state
         return state.window_handle if state is not None else None
+
+    @property
+    def last_backing_scale(self) -> float:
+        """Most recent window backingScaleFactor seen while sizing the layer.
+
+        Read by the app loop (via the scene target) on its own thread, so this
+        is a cached float rather than a live AppKit query.
+        """
+        return float(getattr(self, "_last_backing_scale", 1.0))
 
     def present_scene(self, context: MetalContext, frame: SceneFrame, *, target_present_time: float | None = None) -> None:
         import Metal
@@ -382,7 +449,12 @@ class MacOSMetalSceneBackend:
 
         self._latest_frame = frame
         started = time.perf_counter()
-        _resize_layer_for_window(state.window_handle.layer, state.window_handle, context.width, context.height)
+        scale = _resize_layer_for_window(
+            state.window_handle.layer, state.window_handle, context.width, context.height,
+            _log_state=state.layer_log_state,
+        )
+        if scale is not None:
+            self._last_backing_scale = scale
         drawable = state.window_handle.layer.nextDrawable()
         after_drawable = time.perf_counter()
         if drawable is None:
@@ -414,114 +486,18 @@ class MacOSMetalSceneBackend:
             vp_x, vp_y, vp_w, vp_h = _viewport(drawable_w, drawable_h, frame)
             enc.setViewport_((vp_x, vp_y, vp_w, vp_h, 0.0, 1.0))
 
-            rects = _collect_rect_instances(frame)
-            self._last_rect_count = len(rects)
-            if rects:
-                cached_rect_buffer = None
-                rect_array = None
-                retain_geometry = bool(frame.retained)
-                if len(rects) <= 512 or retain_geometry:
-                    rect_key = _rect_vertex_buffer_key(rects, frame)
-                    cached_rect_buffer = state.rect_vertex_buffers.get(rect_key)
-                    if cached_rect_buffer is not None:
-                        self._geometry_cache_hits += 1
-                if cached_rect_buffer is None:
-                    rect_array = _float_array(rects, width=8)
-                    if len(rects) > 512 and not retain_geometry:
-                        stream_slot = state.rect_stream_buffers[state.stream_buffer_index]
-                        buffer = _write_reusable_float_buffer(state.device, stream_slot, rect_array)
-                        self._stream_buffer_writes += 1
-                    else:
-                        buffer = _new_float_buffer(state.device, rect_array)
-                    if buffer is None:
-                        cached_rect_buffer = None
-                    else:
-                        cached_rect_buffer = (buffer, len(rects))
-                        if len(rects) <= 512 or retain_geometry:
-                            state.rect_vertex_buffers[rect_key] = cached_rect_buffer
-                            cache_limit = 32 if retain_geometry else 128
-                            if len(state.rect_vertex_buffers) > cache_limit:
-                                first_key = next(iter(state.rect_vertex_buffers))
-                                state.rect_vertex_buffers.pop(first_key, None)
-                scene_view = _scene_view_uniform(frame)
-                enc.setRenderPipelineState_(state.rect_pipeline_state)
-                if cached_rect_buffer is not None:
-                    rect_buffer, rect_count = cached_rect_buffer
-                    enc.setVertexBuffer_offset_atIndex_(rect_buffer, 0, 0)
-                    _set_vertex_bytes(enc, scene_view, 1)
-                    enc.drawPrimitives_vertexStart_vertexCount_instanceCount_(
-                        _MTL_PRIMITIVE_TYPE_TRIANGLE,
-                        0,
-                        6,
-                        rect_count,
-                    )
-            after_rects = time.perf_counter()
-
-            circles = _collect_circle_instances(frame)
-            if circles:
-                cached_circle_buffer = None
-                circle_key = None
-                retain_geometry = bool(frame.retained)
-                if len(circles) <= 512 or retain_geometry:
-                    circle_key = _circle_vertex_buffer_key(circles, frame)
-                    cached_circle_buffer = state.circle_vertex_buffers.get(circle_key)
-                    if cached_circle_buffer is not None:
-                        self._geometry_cache_hits += 1
-                if cached_circle_buffer is None:
-                    circle_array = (ctypes.c_float * (len(circles) * 16))()
-                    i = 0
-                    for circle in circles:
-                        for value in circle:
-                            circle_array[i] = value
-                            i += 1
-                    if len(circles) > 512 and not retain_geometry:
-                        stream_slot = state.circle_stream_buffers[state.stream_buffer_index]
-                        buffer = _write_reusable_float_buffer(state.device, stream_slot, circle_array)
-                        self._stream_buffer_writes += 1
-                    else:
-                        buffer = _new_float_buffer(state.device, circle_array)
-                    if buffer is not None:
-                        cached_circle_buffer = (buffer, len(circles))
-                        if circle_key is not None:
-                            state.circle_vertex_buffers[circle_key] = cached_circle_buffer
-                            cache_limit = 32 if retain_geometry else 128
-                            if len(state.circle_vertex_buffers) > cache_limit:
-                                first_key = next(iter(state.circle_vertex_buffers))
-                                state.circle_vertex_buffers.pop(first_key, None)
-                if cached_circle_buffer is not None:
-                    scene_view = _scene_view_uniform(frame)
-                    circle_buffer, circle_count = cached_circle_buffer
-                    enc.setRenderPipelineState_(state.circle_pipeline_state)
-                    enc.setVertexBuffer_offset_atIndex_(circle_buffer, 0, 0)
-                    _set_vertex_bytes(enc, scene_view, 1)
-                    enc.drawPrimitives_vertexStart_vertexCount_instanceCount_(
-                        _MTL_PRIMITIVE_TYPE_TRIANGLE,
-                        0,
-                        6,
-                        circle_count,
-                    )
-            after_circles = time.perf_counter()
-
-            text_scale = _frame_scale(frame)
-            text_count = _draw_atlas_text_nodes(enc, state, frame, scale=text_scale)
-            enc.setRenderPipelineState_(state.textured_pipeline_state)
-            enc.setFragmentSamplerState_atIndex_(state.sampler_state, 0)
-            for node in frame.nodes:
-                if isinstance(node, TextNode):
-                    if abs(float(node.rotation_deg)) >= 0.001:
-                        continue
-                    texture = _cached_text_texture(state, node, scale=text_scale)
-                    if texture is None:
-                        continue
-                    _draw_texture_quad(enc, state, texture.texture, node.x, node.y, texture.width / text_scale, texture.height / text_scale, frame)
-                    text_count += 1
-                elif isinstance(node, (CpuLayerNode, ImageNode)):
-                    texture = _cached_dynamic_layer_texture(state, node)
-                    if texture is None:
-                        continue
-                    _draw_texture_quad(enc, state, texture, node.x, node.y, node.width, node.height, frame)
-            self._last_text_count = text_count
-            after_text = time.perf_counter()
+            if _needs_z_ordered_batches(frame):
+                walked_at = self._present_z_ordered(
+                    enc, state, frame, drawable_w=drawable_w, drawable_h=drawable_h
+                )
+                after_rects = walked_at
+                after_circles = walked_at
+                after_rounded_rects = walked_at
+                after_text = walked_at
+            else:
+                after_rects, after_circles, after_rounded_rects, after_text = self._present_kind_grouped(
+                    enc, state, frame, drawable_w=drawable_w, drawable_h=drawable_h
+                )
         finally:
             enc.endEncoding()
         if target_present_time is not None and target_present_time > 0.0:
@@ -545,11 +521,249 @@ class MacOSMetalSceneBackend:
                     f"setup={(after_encoder - after_drawable) * 1000.0:.1f} "
                     f"rect={(after_rects - after_encoder) * 1000.0:.1f} "
                     f"circle={(after_circles - after_rects) * 1000.0:.1f} "
-                    f"text={(after_text - after_circles) * 1000.0:.1f} "
+                    f"rounded={(after_rounded_rects - after_circles) * 1000.0:.1f} "
+                    f"text={(after_text - after_rounded_rects) * 1000.0:.1f} "
                     f"rects={self._last_rect_count} text={self._last_text_count}",
                     file=sys.stderr,
                     flush=True,
                 )
+
+    def _present_kind_grouped(
+        self,
+        enc,
+        state: _MacOSMetalSceneState,
+        frame: SceneFrame,
+        *,
+        drawable_w: float,
+        drawable_h: float,
+    ) -> tuple[float, float, float, float]:
+        """Fast path: one instanced pass per primitive kind. Only valid when
+        the z-sorted node list already groups kinds in pass order (see
+        _needs_z_ordered_batches); otherwise kinds would composite wrong."""
+        rects = _collect_rect_instances(frame)
+        self._last_rect_count = len(rects)
+        if rects:
+            cached_rect_buffer = None
+            rect_array = None
+            retain_geometry = bool(frame.retained)
+            if len(rects) <= 512 or retain_geometry:
+                rect_key = _rect_vertex_buffer_key(rects, frame)
+                cached_rect_buffer = state.rect_vertex_buffers.get(rect_key)
+                if cached_rect_buffer is not None:
+                    self._geometry_cache_hits += 1
+            if cached_rect_buffer is None:
+                rect_array = _float_array(rects, width=8)
+                if len(rects) > 512 and not retain_geometry:
+                    stream_slot = state.rect_stream_buffers[state.stream_buffer_index]
+                    buffer = _write_reusable_float_buffer(state.device, stream_slot, rect_array)
+                    self._stream_buffer_writes += 1
+                else:
+                    buffer = _new_float_buffer(state.device, rect_array)
+                if buffer is None:
+                    cached_rect_buffer = None
+                else:
+                    cached_rect_buffer = (buffer, len(rects))
+                    if len(rects) <= 512 or retain_geometry:
+                        state.rect_vertex_buffers[rect_key] = cached_rect_buffer
+                        cache_limit = 32 if retain_geometry else 128
+                        if len(state.rect_vertex_buffers) > cache_limit:
+                            first_key = next(iter(state.rect_vertex_buffers))
+                            state.rect_vertex_buffers.pop(first_key, None)
+            scene_view = _scene_view_uniform(frame)
+            enc.setRenderPipelineState_(state.rect_pipeline_state)
+            if cached_rect_buffer is not None:
+                rect_buffer, rect_count = cached_rect_buffer
+                enc.setVertexBuffer_offset_atIndex_(rect_buffer, 0, 0)
+                _set_vertex_bytes(enc, scene_view, 1)
+                enc.drawPrimitives_vertexStart_vertexCount_instanceCount_(
+                    _MTL_PRIMITIVE_TYPE_TRIANGLE,
+                    0,
+                    6,
+                    rect_count,
+                )
+        after_rects = time.perf_counter()
+
+        circles = _collect_circle_instances(frame)
+        if circles:
+            cached_circle_buffer = None
+            circle_key = None
+            retain_geometry = bool(frame.retained)
+            if len(circles) <= 512 or retain_geometry:
+                circle_key = _circle_vertex_buffer_key(circles, frame)
+                cached_circle_buffer = state.circle_vertex_buffers.get(circle_key)
+                if cached_circle_buffer is not None:
+                    self._geometry_cache_hits += 1
+            if cached_circle_buffer is None:
+                circle_array = (ctypes.c_float * (len(circles) * 16))()
+                i = 0
+                for circle in circles:
+                    for value in circle:
+                        circle_array[i] = value
+                        i += 1
+                if len(circles) > 512 and not retain_geometry:
+                    stream_slot = state.circle_stream_buffers[state.stream_buffer_index]
+                    buffer = _write_reusable_float_buffer(state.device, stream_slot, circle_array)
+                    self._stream_buffer_writes += 1
+                else:
+                    buffer = _new_float_buffer(state.device, circle_array)
+                if buffer is not None:
+                    cached_circle_buffer = (buffer, len(circles))
+                    if circle_key is not None:
+                        state.circle_vertex_buffers[circle_key] = cached_circle_buffer
+                        cache_limit = 32 if retain_geometry else 128
+                        if len(state.circle_vertex_buffers) > cache_limit:
+                            first_key = next(iter(state.circle_vertex_buffers))
+                            state.circle_vertex_buffers.pop(first_key, None)
+            if cached_circle_buffer is not None:
+                scene_view = _scene_view_uniform(frame)
+                circle_buffer, circle_count = cached_circle_buffer
+                enc.setRenderPipelineState_(state.circle_pipeline_state)
+                enc.setVertexBuffer_offset_atIndex_(circle_buffer, 0, 0)
+                _set_vertex_bytes(enc, scene_view, 1)
+                enc.drawPrimitives_vertexStart_vertexCount_instanceCount_(
+                    _MTL_PRIMITIVE_TYPE_TRIANGLE,
+                    0,
+                    6,
+                    circle_count,
+                )
+        after_circles = time.perf_counter()
+
+        rounded_rects = _collect_rounded_rect_instances(frame)
+        if rounded_rects:
+            cached_rr_buffer = None
+            rr_key = None
+            retain_geometry = bool(frame.retained)
+            if len(rounded_rects) <= 512 or retain_geometry:
+                rr_key = _circle_vertex_buffer_key(rounded_rects, frame)
+                cached_rr_buffer = state.rounded_rect_vertex_buffers.get(rr_key)
+                if cached_rr_buffer is not None:
+                    self._geometry_cache_hits += 1
+            if cached_rr_buffer is None:
+                rr_array = (ctypes.c_float * (len(rounded_rects) * 16))()
+                i = 0
+                for inst in rounded_rects:
+                    for value in inst:
+                        rr_array[i] = value
+                        i += 1
+                if len(rounded_rects) > 512 and not retain_geometry:
+                    stream_slot = state.rounded_rect_stream_buffers[state.stream_buffer_index]
+                    buffer = _write_reusable_float_buffer(state.device, stream_slot, rr_array)
+                    self._stream_buffer_writes += 1
+                else:
+                    buffer = _new_float_buffer(state.device, rr_array)
+                if buffer is not None:
+                    cached_rr_buffer = (buffer, len(rounded_rects))
+                    if rr_key is not None:
+                        state.rounded_rect_vertex_buffers[rr_key] = cached_rr_buffer
+                        cache_limit = 32 if retain_geometry else 128
+                        if len(state.rounded_rect_vertex_buffers) > cache_limit:
+                            first_key = next(iter(state.rounded_rect_vertex_buffers))
+                            state.rounded_rect_vertex_buffers.pop(first_key, None)
+            if cached_rr_buffer is not None:
+                scene_view = _scene_view_uniform(frame)
+                rr_buffer, rr_count = cached_rr_buffer
+                enc.setRenderPipelineState_(state.rounded_rect_pipeline_state)
+                enc.setVertexBuffer_offset_atIndex_(rr_buffer, 0, 0)
+                _set_vertex_bytes(enc, scene_view, 1)
+                enc.drawPrimitives_vertexStart_vertexCount_instanceCount_(
+                    _MTL_PRIMITIVE_TYPE_TRIANGLE,
+                    0,
+                    6,
+                    rr_count,
+                )
+        after_rounded_rects = time.perf_counter()
+
+        text_scale = _text_raster_scale(frame, drawable_w, drawable_h)
+        text_count = _draw_atlas_text_nodes(enc, state, frame, scale=text_scale)
+        enc.setRenderPipelineState_(state.textured_pipeline_state)
+        enc.setFragmentSamplerState_atIndex_(state.sampler_state, 0)
+        for node in frame.nodes:
+            if isinstance(node, TextNode):
+                if abs(float(node.rotation_deg)) >= 0.001:
+                    continue
+                texture = _cached_text_texture(state, node, scale=text_scale)
+                if texture is None:
+                    continue
+                _draw_texture_quad(enc, state, texture.texture, node.x, node.y, texture.width / text_scale, texture.height / text_scale, frame)
+                text_count += 1
+            elif isinstance(node, (CpuLayerNode, ImageNode)):
+                texture = _cached_dynamic_layer_texture(state, node)
+                if texture is None:
+                    continue
+                _draw_texture_quad(enc, state, texture, node.x, node.y, node.width, node.height, frame)
+        self._last_text_count = text_count
+        after_text = time.perf_counter()
+        return after_rects, after_circles, after_rounded_rects, after_text
+
+    def _present_z_ordered(
+        self,
+        enc,
+        state: _MacOSMetalSceneState,
+        frame: SceneFrame,
+        *,
+        drawable_w: float,
+        drawable_h: float,
+    ) -> float:
+        """Correct-compositing path: draw maximal same-kind runs in the
+        z-sorted node order, matching the CPU raster. Used whenever kinds
+        interleave in z (a circle between plates, a scrim rect over an
+        image). Trades the instanced mega-passes and geometry caching for a
+        few small per-run buffers and draw calls. Rotated text still defers
+        to the atlas pass at the end (same compromise as the fast path)."""
+        scene_view = _scene_view_uniform(frame)
+        text_scale = _text_raster_scale(frame, drawable_w, drawable_h)
+        geometry_count = 0
+        text_count = 0
+        batches, deferred = _plan_z_ordered_batches(frame.nodes)
+        collectors = {
+            "rect": _collect_rect_instances,
+            "circle": _collect_circle_instances,
+            "rounded": _collect_rounded_rect_instances,
+        }
+        for kind, run in batches:
+            if kind == "texture":
+                enc.setRenderPipelineState_(state.textured_pipeline_state)
+                enc.setFragmentSamplerState_atIndex_(state.sampler_state, 0)
+                for node in run:
+                    if isinstance(node, TextNode):
+                        texture = _cached_text_texture(state, node, scale=text_scale)
+                        if texture is None:
+                            continue
+                        _draw_texture_quad(enc, state, texture.texture, node.x, node.y, texture.width / text_scale, texture.height / text_scale, frame)
+                    else:
+                        texture = _cached_dynamic_layer_texture(state, node)
+                        if texture is None:
+                            continue
+                        _draw_texture_quad(enc, state, texture, node.x, node.y, node.width, node.height, frame)
+                    text_count += 1
+                continue
+            instances = collectors[kind](frame, nodes=run)
+            if not instances:
+                continue
+            buffer = _new_float_buffer(state.device, _float_array(instances, width=8 if kind == "rect" else 16))
+            if buffer is None:
+                continue
+            if kind == "rect":
+                pipeline = state.rect_pipeline_state
+            elif kind == "circle":
+                pipeline = state.circle_pipeline_state
+            else:
+                pipeline = state.rounded_rect_pipeline_state
+            enc.setRenderPipelineState_(pipeline)
+            enc.setVertexBuffer_offset_atIndex_(buffer, 0, 0)
+            _set_vertex_bytes(enc, scene_view, 1)
+            enc.drawPrimitives_vertexStart_vertexCount_instanceCount_(
+                _MTL_PRIMITIVE_TYPE_TRIANGLE,
+                0,
+                6,
+                len(instances),
+            )
+            geometry_count += len(instances)
+        if deferred:
+            text_count += _draw_atlas_text_nodes(enc, state, frame, scale=text_scale)
+        self._last_rect_count = geometry_count
+        self._last_text_count = text_count
+        return time.perf_counter()
 
     def shutdown(self, context: MetalContext) -> None:
         state = self._state
@@ -735,6 +949,10 @@ class MacOSMetalSceneTarget(SceneRenderTarget):
             raise RuntimeError("MacOSMetalSceneTarget must be started before presenting scenes")
         self.backend.present_scene(self._context, frame, target_present_time=target_present_time)
 
+    def backing_scale(self) -> float:
+        """Display backing scale for the app loop's raster payload sizing."""
+        return float(getattr(self.backend, "last_backing_scale", 1.0))
+
     def stop(self) -> None:
         if not self._started or self._context is None:
             return
@@ -799,15 +1017,48 @@ def _compile_pipeline(device, layer, vertex_name: str, fragment_name: str) -> ob
     return pipeline
 
 
-def _resize_layer_for_window(layer, window_handle, width: int, height: int) -> None:
+def _set_layer_drawable_size(layer, width_px: float, height_px: float) -> None:
+    """Size the layer drawable as a plain ``(width, height)`` sequence.
+
+    macOS layers are always PyObjC objects, and PyObjC depythonifies a
+    ``{CGSize=dd}`` argument from a two-element sequence; a hand-rolled
+    ``ctypes.Structure`` raises ``TypeError: depythonifying struct, got no
+    sequence``. The rubicon-objc ``_coerce_struct`` path the iOS targets use
+    for the same selector does not apply to PyObjC selectors.
+    """
+    layer.setDrawableSize_((float(width_px), float(height_px)))
+
+
+def _resize_layer_for_window(layer, window_handle, width: int, height: int, _log_state: dict | None = None) -> float | None:
+    """Size the CAMetalLayer for the window; return the live backing scale."""
     try:
         scale = float(window_handle.window.backingScaleFactor())
         if hasattr(layer, "setContentsScale_"):
             layer.setContentsScale_(scale)
         if hasattr(layer, "setDrawableSize_"):
-            layer.setDrawableSize_(_CGSize(float(width) * scale, float(height) * scale))
-    except Exception:
-        pass
+            _set_layer_drawable_size(layer, float(width) * scale, float(height) * scale)
+        if _log_state is not None:
+            key = (scale, int(width * scale), int(height * scale))
+            if _log_state.get("layer_scale") != key:
+                _log_state["layer_scale"] = key
+                print(
+                    f"[macos-metal-scene] layer contentsScale={scale} "
+                    f"drawable={key[1]}x{key[2]}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+        return scale
+    except Exception as exc:
+        if _log_state is not None:
+            err = f"{type(exc).__name__}: {exc}"
+            if _log_state.get("layer_resize_error") != err:
+                _log_state["layer_resize_error"] = err
+                print(
+                    f"[macos-metal-scene] layer resize failed: {err}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+        return None
 
 
 def _drawable_size(drawable, context: MetalContext) -> tuple[float, float]:
@@ -835,6 +1086,19 @@ def _frame_scale(frame: SceneFrame) -> float:
     )
 
 
+def _text_raster_scale(frame: SceneFrame, drawable_w: float, drawable_h: float) -> float:
+    """Text textures must raster at the DRAWABLE scale, not the frame's
+    display/logical ratio: the window is sized in points, so display ==
+    logical (1.0) even on a 2x Retina drawable, which produced chunky text.
+    Mirrors `_viewport`'s presentation-mode policy so glyphs match geometry."""
+    if getattr(frame, "presentation_mode", None) == "crop_fit":
+        return max(drawable_w / frame.logical_width, drawable_h / frame.logical_height)
+    return min(
+        drawable_w / max(1.0, float(frame.logical_width)),
+        drawable_h / max(1.0, float(frame.logical_height)),
+    )
+
+
 def _clear_color(frame: SceneFrame, fallback: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
     for node in frame.nodes:
         if isinstance(node, ClearNode):
@@ -842,21 +1106,134 @@ def _clear_color(frame: SceneFrame, fallback: tuple[int, int, int, int]) -> tupl
     return fallback
 
 
-def _collect_rect_instances(frame: SceneFrame) -> list[tuple[float, float, float, float, float, float, float, float]]:
-    out: list[tuple[float, float, float, float, float, float, float, float]] = []
+_PASS_INDEX = {"rect": 0, "circle": 1, "rounded": 2, "texture": 3}
+
+
+def _pass_kind_for_node(node: object) -> str | None:
+    """Which fixed encoder pass a node belongs to, or None when Metal skips it.
+
+    Must mirror the collectors and the textured pass exactly: degenerate
+    rounded rects and solid shader rects ride the plain-rect pipeline, and
+    text (rotated or not), images, and CPU layers all draw in the textured
+    pass."""
+    if isinstance(node, RectNode):
+        return "rect"
+    if isinstance(node, RoundedRectNode):
+        return "rounded" if float(node.radius) > 0.0 else "rect"
+    if isinstance(node, ShaderRectNode) and node.shader == "solid":
+        return "rect"
+    if isinstance(node, CircleNode):
+        return "circle"
+    if isinstance(node, (TextNode, ImageNode, CpuLayerNode)):
+        return "texture"
+    return None
+
+
+def _needs_z_ordered_batches(frame: SceneFrame) -> bool:
+    """True when drawing every kind in one fixed pass would violate z order.
+
+    SceneFrame.nodes arrive z-sorted; if any earlier node belongs to a LATER
+    pass than a following node, the kind-grouped fast path would paint them
+    back-to-front (the Mac round-11 dark pause circle: a z=12 CircleNode was
+    covered by z=10 RoundedRectNode plates)."""
+    highest_pass_seen = -1
     for node in frame.nodes:
+        kind = _pass_kind_for_node(node)
+        if kind is None:
+            continue
+        pass_index = _PASS_INDEX[kind]
+        if pass_index < highest_pass_seen:
+            return True
+        highest_pass_seen = max(highest_pass_seen, pass_index)
+    return False
+
+
+def _plan_z_ordered_batches(
+    nodes: tuple[object, ...],
+) -> tuple[list[tuple[str, tuple[object, ...]]], list[TextNode]]:
+    """Group z-sorted nodes into maximal consecutive runs of one pass kind.
+
+    Rotated text is deferred instead: it only renders through the grouped
+    atlas pass, which runs after the walk (a documented z compromise; the
+    kind-grouped fast path has the same property)."""
+    batches: list[tuple[str, tuple[object, ...]]] = []
+    deferred: list[TextNode] = []
+    current_kind: str | None = None
+    current_nodes: list[object] = []
+    for node in nodes:
+        if isinstance(node, TextNode) and abs(float(node.rotation_deg)) >= 0.001:
+            deferred.append(node)
+            kind = None
+        else:
+            kind = _pass_kind_for_node(node)
+        if kind is None:
+            if current_kind is not None and current_nodes:
+                batches.append((current_kind, tuple(current_nodes)))
+            current_kind = None
+            current_nodes = []
+            continue
+        if kind != current_kind:
+            if current_kind is not None and current_nodes:
+                batches.append((current_kind, tuple(current_nodes)))
+            current_kind = kind
+            current_nodes = []
+        current_nodes.append(node)
+    if current_kind is not None and current_nodes:
+        batches.append((current_kind, tuple(current_nodes)))
+    return batches, deferred
+
+
+def _collect_rect_instances(frame: SceneFrame, *, nodes: tuple[object, ...] | None = None) -> list[tuple[float, float, float, float, float, float, float, float]]:
+    out: list[tuple[float, float, float, float, float, float, float, float]] = []
+    for node in (frame.nodes if nodes is None else nodes):
         if isinstance(node, RectNode):
             out.append(_rect_instance(node.x, node.y, node.width, node.height, node.color_rgba))
-        elif isinstance(node, RoundedRectNode):
+        elif isinstance(node, RoundedRectNode) and float(node.radius) <= 0.0:
+            # Degenerate radius: the plain-rect path is exact and cheaper.
             out.append(_rect_instance(node.x, node.y, node.width, node.height, node.color_rgba))
         elif isinstance(node, ShaderRectNode) and node.shader == "solid":
             out.append(_rect_instance(node.x, node.y, node.width, node.height, node.color_rgba))
     return out
 
 
-def _collect_circle_instances(frame: SceneFrame) -> list[tuple[float, ...]]:
+def _collect_rounded_rect_instances(frame: SceneFrame, *, nodes: tuple[object, ...] | None = None) -> list[tuple[float, ...]]:
+    """Rounded-rect batch for the SDF pipeline: same 16-float packing as
+    circle instances, with params.x carrying the corner radius in points.
+
+    Dropping the radius here is what made the login wall's glass-tint
+    underlay rasterize square behind the (correctly rounded) native glass.
+    """
     out: list[tuple[float, ...]] = []
-    for node in frame.nodes:
+    for node in (frame.nodes if nodes is None else nodes):
+        if not isinstance(node, RoundedRectNode) or float(node.radius) <= 0.0:
+            continue
+        radius = min(float(node.radius), float(node.width) / 2.0, float(node.height) / 2.0)
+        out.append(
+            (
+                float(node.x),
+                float(node.y),
+                float(node.width),
+                float(node.height),
+                node.color_rgba[0] / 255.0,
+                node.color_rgba[1] / 255.0,
+                node.color_rgba[2] / 255.0,
+                node.color_rgba[3] / 255.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                radius,
+                0.0,
+                0.0,
+                0.0,
+            )
+        )
+    return out
+
+
+def _collect_circle_instances(frame: SceneFrame, *, nodes: tuple[object, ...] | None = None) -> list[tuple[float, ...]]:
+    out: list[tuple[float, ...]] = []
+    for node in (frame.nodes if nodes is None else nodes):
         if not isinstance(node, CircleNode):
             continue
         radius = float(node.radius)
@@ -1037,7 +1414,12 @@ def _draw_atlas_text_nodes(enc, state: _MacOSMetalSceneState, frame: SceneFrame,
     )
     _set_vertex_bytes(enc, clip_translation, 1)
     for (font_family, font_size_px), group in groups.items():
-        atlas = _glyph_atlas(state, font_family, font_size_px, scale)
+        from luvatrix_core.core.font_fallback import _is_default_ignorable
+        extra_chars = sorted({
+            ch for node in group for ch in node.text
+            if ord(ch) > 126 and not _is_default_ignorable(ch)
+        })
+        atlas = _glyph_atlas(state, font_family, font_size_px, scale, extra_chars=extra_chars)
         if atlas is None:
             continue
         buffer_key = _atlas_vertex_buffer_key(group, frame, scale)
@@ -1067,25 +1449,36 @@ def _draw_atlas_text_nodes(enc, state: _MacOSMetalSceneState, frame: SceneFrame,
     return total_nodes
 
 
-def _glyph_atlas(state: _MacOSMetalSceneState, font_family: str, font_size_px: float, scale: float) -> _GlyphAtlas | None:
-    key = (font_family, round(float(font_size_px), 3), round(float(scale), 3))
+def _glyph_atlas(
+    state: _MacOSMetalSceneState,
+    font_family: str,
+    font_size_px: float,
+    scale: float,
+    *,
+    extra_chars: list[str] | None = None,
+) -> _GlyphAtlas | None:
+    extras = tuple(sorted(set(extra_chars or ())))
+    key = (font_family, round(float(font_size_px), 3), round(float(scale), 3), extras)
     cached = state.glyph_atlases.get(key)
     if cached is not None:
         return cached
     try:
-        from PIL import Image, ImageDraw
-        from luvatrix_core.core.ui_frame_renderer import _load_font, _resolve_system_font_path
+        from PIL import Image
+        from luvatrix_core.core import font_fallback as ff
 
-        font = _load_font(_resolve_system_font_path(font_family), max(1.0, font_size_px * scale))
-        charset = "".join(chr(code) for code in range(32, 127))
+        chain = ff.get_font_chain(font_family, max(1.0, font_size_px * scale))
+        charset = "".join(chr(code) for code in range(32, 127)) + "".join(extras)
         entries_raw: list[tuple[str, int, int, int, int, float]] = []
+        char_fonts: dict[str, object] = {}
         row_height = 1
         for ch in charset:
-            left, top, right, bottom = font.getbbox(ch)
+            cfont = chain.font_for(ch)
+            char_fonts[ch] = cfont
+            left, top, right, bottom = cfont.getbbox(ch)
             width = max(1, int(math.ceil(right - left)))
             height = max(1, int(math.ceil(bottom - top)))
             row_height = max(row_height, height + 2)
-            entries_raw.append((ch, width, height, left, top, float(font.getlength(ch))))
+            entries_raw.append((ch, width, height, left, top, float(cfont.getlength(ch))))
 
         atlas_w = 1024
         pad = 2
@@ -1100,9 +1493,8 @@ def _glyph_atlas(state: _MacOSMetalSceneState, font_family: str, font_size_px: f
             x += width + pad
         atlas_h = max(1, y + row_height)
         image = Image.new("L", (atlas_w, atlas_h), 0)
-        draw = ImageDraw.Draw(image)
         for ch, px, py, width, height, bearing_x, bearing_y, advance in packed:
-            draw.text((px - bearing_x, py - bearing_y), ch, fill=255, font=font)
+            char_fonts[ch].draw_char(image, px - bearing_x, py - bearing_y, ch, fill=255)
         rgba = Image.merge("RGBA", (image, image, image, image))
         texture = _create_texture(state.device, atlas_w, atlas_h)
         data = rgba.tobytes()
@@ -1234,17 +1626,17 @@ def _rasterize_text_node(node: TextNode, *, scale: float):
     if np is None or not node.text or node.color_rgba[3] <= 0:
         return None
     try:
-        from PIL import Image, ImageDraw
-        from luvatrix_core.core.ui_frame_renderer import _load_font, _resolve_system_font_path
+        from PIL import Image
+        from luvatrix_core.core import font_fallback as ff
 
-        font = _load_font(_resolve_system_font_path(node.font_family), max(1.0, node.font_size_px * scale))
-        bbox = font.getbbox(node.text)
-        left, top, right, bottom = bbox
-        width = max(1, int(math.ceil(right - left)))
-        height = max(1, int(math.ceil(bottom - top)))
-        image = Image.new("L", (width, height), 0)
-        draw = ImageDraw.Draw(image)
-        draw.text((-left, -top), node.text, fill=255, font=font)
+        chain = ff.get_font_chain(node.font_family, max(1.0, node.font_size_px * scale))
+        runs = ff.split_runs(chain, node.text)
+        width_f, ascent, descent = ff.measure_runs(runs)
+        image = Image.new("L", (max(1, int(math.ceil(width_f))), max(1, int(math.ceil(ascent + descent)))), 0)
+        ff.draw_runs(image, 0, 0, runs, fill=255)
+        ink = image.getbbox()
+        if ink is not None:
+            image = image.crop(ink)
         if node.rotation_deg:
             image = image.rotate(float(node.rotation_deg), resample=Image.Resampling.BICUBIC, expand=True)
         mask = np.asarray(image, dtype=np.uint8)
@@ -1292,6 +1684,9 @@ def _text_node_texture_key(node: TextNode, scale: float) -> tuple[object, ...]:
     )
 
 
+_DYNAMIC_LAYER_TEXTURE_LIMIT = 64
+
+
 def _cached_dynamic_layer_texture(state: _MacOSMetalSceneState, node: CpuLayerNode | ImageNode):
     rgba = node.rgba
     if rgba is None:
@@ -1304,18 +1699,23 @@ def _cached_dynamic_layer_texture(state: _MacOSMetalSceneState, node: CpuLayerNo
         _draw_layer(overlay, CpuLayerNode(0, 0, node.width, node.height, rgba, node.z_index), sx=1.0, sy=1.0, offsets=_Offsets(0.0, 0.0, 1.0, 1.0))
         rgba = overlay
     h, w, _ = rgba.shape
-    if state.dynamic_texture is None or state.dynamic_texture_width != w or state.dynamic_texture_height != h:
-        state.dynamic_texture = _create_texture(state.device, w, h)
-        state.dynamic_texture_width = w
-        state.dynamic_texture_height = h
-    payload = _rgba_payload_bytes(rgba)
-    state.dynamic_texture.replaceRegion_mipmapLevel_withBytes_bytesPerRow_(
+    key = (w, h, _frame_digest(rgba))
+    cache = state.dynamic_layer_textures
+    texture = cache.get(key)
+    if texture is not None:
+        cache.move_to_end(key)
+        return texture
+    texture = _create_texture(state.device, w, h)
+    texture.replaceRegion_mipmapLevel_withBytes_bytesPerRow_(
         _texture_region(w, h),
         0,
-        payload,
+        _rgba_payload_bytes(rgba),
         w * 4,
     )
-    return state.dynamic_texture
+    cache[key] = texture
+    while len(cache) > _DYNAMIC_LAYER_TEXTURE_LIMIT:
+        cache.popitem(last=False)
+    return texture
 
 
 def _texture_region(width: int, height: int):

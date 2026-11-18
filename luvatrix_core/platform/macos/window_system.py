@@ -27,6 +27,19 @@ class MacOSMenuConfig:
     on_debug_action: Callable[[str], None]
 
 
+# Standard Edit-menu entries: (title, action selector, key equivalent). Items
+# keep a nil target so AppKit dispatches the action down the responder chain —
+# a focused NSTextField then receives cut:/copy:/paste:/selectAll:. Without
+# real key equivalents here, menu traversal swallows ⌘V/⌘X/⌘C/⌘A before the
+# first responder ever sees them.
+_STANDARD_EDIT_MENU_ITEMS: tuple[tuple[str, str, str], ...] = (
+    ("Cut", "cut:", "x"),
+    ("Copy", "copy:", "c"),
+    ("Paste", "paste:", "v"),
+    ("Select All", "selectAll:", "a"),
+)
+
+
 class MacOSWindowSystem(Protocol):
     def create_window(
         self,
@@ -258,6 +271,12 @@ class AppKitWindowSystem:
             section_menu = NSMenu.alloc().initWithTitle_(section)
             if section == "Debug":
                 self._populate_debug_section(section_menu=section_menu, menu_config=menu_config)
+            elif section == "Edit":
+                for title, action, key_equivalent in _STANDARD_EDIT_MENU_ITEMS:
+                    item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                        title, action, key_equivalent
+                    )
+                    section_menu.addItem_(item)
             else:
                 placeholder = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("No Action", None, "")
                 placeholder.setEnabled_(False)
