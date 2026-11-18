@@ -47,6 +47,33 @@ def _placeholder_color(seed: str) -> tuple[int, int, int]:
     return (40 + digest[0] % 90, 40 + digest[1] % 90, 40 + digest[2] % 90)
 
 
+def rounded_rgba(rgba: np.ndarray, radius_px: float) -> np.ndarray:
+    """Copy of square RGBA art alpha-clipped to a rounded-rect silhouette.
+
+    4x supersampled coverage keeps the arc smooth (a hard 1px step reads as
+    jaggies on Retina). The source — usually an ArtCache entry shared with
+    other consumers — is never mutated; ``radius_px`` is in BUFFER pixels,
+    so Retina-sized buffers take a proportionally larger radius.
+    """
+    size = int(rgba.shape[0])
+    radius = max(0.0, min(float(radius_px), size / 2.0))
+    if radius <= 0.0:
+        return rgba.copy()
+    ss = 4
+    grid = (np.arange(size * ss, dtype=np.float32) + 0.5) / ss
+    xs, ys = np.meshgrid(grid, grid)
+    half = size / 2.0
+    qx = np.abs(xs - half) - (half - radius)
+    qy = np.abs(ys - half) - (half - radius)
+    dist = np.hypot(np.maximum(qx, 0.0), np.maximum(qy, 0.0)) + np.minimum(
+        np.maximum(qx, qy), 0.0)
+    inside = dist <= radius
+    coverage = inside.reshape(size, ss, size, ss).mean(axis=(1, 3))
+    out = rgba.copy()
+    out[:, :, 3] = np.round(out[:, :, 3].astype(np.float32) * coverage).astype(np.uint8)
+    return out
+
+
 class ArtCache:
     def __init__(self, cache_dir: Path, *, max_items: int = 256) -> None:
         self._dir = Path(cache_dir)
@@ -85,6 +112,16 @@ class ArtCache:
         r, g, b = _placeholder_color(seed)
         rgba = np.full((size, size, 4), (r, g, b, 255), dtype=np.uint8)
         return self._mem_put(key, rgba)
+
+    def masked(self, rgba: np.ndarray, radius_px: float, *, key: str) -> np.ndarray:
+        """Rounded variant of an already-cached image, memoized under its own
+        key so the square original stays intact for other consumers and the
+        mask is computed once per (image, radius, buffer size)."""
+        mask_key = _cache_key(f"mask:{key}|{float(radius_px):.2f}", int(rgba.shape[0]))
+        cached = self._mem_get(mask_key)
+        if cached is not None:
+            return cached
+        return self._mem_put(mask_key, rounded_rgba(rgba, radius_px))
 
     def _mem_get(self, key: str) -> np.ndarray | None:
         value = self._mem.get(key)

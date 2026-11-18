@@ -901,7 +901,22 @@ def _paste_rgba(out, src, *, x: int, y: int, width: int, height: int) -> None:
     y1 = min(dst_h, y + height)
     if x1 <= x0 or y1 <= y0:
         return
-    out[y0:y1, x0:x1, :] = src[y0 - y : y1 - y, x0 - x : x1 - x, :]
+    region = src[y0 - y : y1 - y, x0 - x : x1 - x, :]
+    np = _numpy()
+    # Source-alpha compositing, matching the GPU targets' blend state: art
+    # buffers alpha-clipped to a rounded silhouette must show the backdrop
+    # at the transparent pixels, not stale corner RGB.
+    alpha = region[:, :, 3].astype(np.float32) / 255.0
+    dst = out[y0:y1, x0:x1, :]
+    dst[:, :, :3] = np.clip(
+        region[:, :, :3].astype(np.float32) * alpha[:, :, None]
+        + dst[:, :, :3].astype(np.float32) * (1.0 - alpha[:, :, None]),
+        0, 255,
+    ).astype(np.uint8)
+    dst[:, :, 3] = np.clip(
+        region[:, :, 3].astype(np.float32) + dst[:, :, 3].astype(np.float32) * (1.0 - alpha),
+        0, 255,
+    ).astype(np.uint8)
 
 
 _DEBUG = {

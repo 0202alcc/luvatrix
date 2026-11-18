@@ -2466,9 +2466,14 @@ class TestDockIconCentering:
         img, _ = self._render_idle_dock(app, ctx, scene_buffer)
         px, py, _, _ = sl_views.pill_rect(1280, 800)
         tile_c = (px + 10 + 22, py + 10 + 22)
+        # The note carries an intentional upward optical bias (round 28: it
+        # read ~2px low): its centroid pin targets the biased placement,
+        # not the geometric tile centre.
+        _bias_x, bias_y = sl_views._ICON_OPTICAL_BIAS_EM[sl_icons.NOTE]
+        target = (tile_c[0], tile_c[1] + bias_y * 20)
         self._assert_centered(img, (int(tile_c[0]) - 14, int(tile_c[1]) - 14,
                                     int(tile_c[0]) + 14, int(tile_c[1]) + 14),
-                              self._bright, tile_c, "idle note")
+                              self._bright, target, "idle note")
 
     def test_card_play_fab_uses_the_fill_icon(self, app_ctx):
         """Hovering a card shows the play FAB as the Phosphor-Fill play icon
@@ -2581,9 +2586,14 @@ class TestGlassSheenSilhouette:
             self.rects.append(kw)
 
     def _sheen_rows(self, cap):
+        # Round 28: the specular top highlight is now a segmented falloff
+        # whose faded end segments share this alpha range; it occupies the
+        # y+1 row (plates here are constructed at y=100), the sheen starts
+        # at y+2 — keep the two elements separate.
         return [n for n in cap.rects
                 if n["color"][:3] == (255, 255, 255)
-                and 0 < n["color"][3] <= sl_views.GLASS_SHEEN[3]]
+                and 0 < n["color"][3] <= sl_views.GLASS_SHEEN[3]
+                and n["y"] != 101.0]
 
     def test_sheen_is_thin_rows_fading_to_zero(self):
         cap = self._Capture()
@@ -2716,3 +2726,373 @@ class TestPopupPlateSwallow:
         app._dispatch_click(popup_x + 40, popup_y + 48 + 10)
         assert actions == ["player"], "toggling Shuffle must still reach its control"
         assert app.show_devices is True, "toggles never dismiss the popup"
+
+
+# ---------------------------------------------------------------------------
+# Round 28, finding 1 (Alec on the #362 build): the overflow (⋯) button
+# "needs several clicks" before the playback popup opens. These tests drive
+# the exact click sequence through the real update path — synthetic HDI
+# events → apply_hdi_events → _handle_input → _dispatch_click — to
+# reproduce it. They pin the contract end-to-end: every click inside the
+# circle toggles the popup, poll results that regrow the popup never close
+# it, and the popup's hit regions can never cover the circle (so the r25
+# dead-space swallow cannot eat the toggle) at any device count.
+# ---------------------------------------------------------------------------
+
+class TestOverflowClickSequence:
+    CIRCLE = (1242.0, 752.0)  # overflow circle centre at 1280x800
+
+    def _with_track(self, app, ctx, monkeypatch, *, devices=1, show_devices=False):
+        app.authenticated = True
+        artist = _artist("ANOTR")
+        track = _track("Relax My Eyes", artist, _album("The Reset", artist), ms=243_000)
+        app.devices = [
+            sl_models.Device(id=f"d{i}", name=f"Device {i}", kind="Computer",
+                             is_active=(i == 0), is_restricted=False, volume_percent=40)
+            for i in range(devices)
+        ]
+        app.player = sl_models.PlayerState(
+            is_playing=True, progress_ms=30_500, track=track,
+            device=app.devices[0] if app.devices else None, shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        app.show_devices = show_devices
+        # Keep the worker out of the way: open_devices submits a poll, which
+        # is irrelevant to the toggle contract.
+        monkeypatch.setattr(app.worker, "submit", lambda label, job: None)
+        _tick(app, ctx, 2)
+
+    @staticmethod
+    def _click(app, ctx, x, y):
+        events = [
+            HDIEvent(event_id=1, ts_ns=1, window_id="w", device="mouse",
+                     event_type="pointer_move", status="OK",
+                     payload={"x": x, "y": y, "buttons_mask": 0}),
+            HDIEvent(event_id=2, ts_ns=2, window_id="w", device="mouse",
+                     event_type="click", status="OK",
+                     payload={"x": x, "y": y, "button": 0, "phase": "down", "click_count": 1}),
+            HDIEvent(event_id=3, ts_ns=3, window_id="w", device="mouse",
+                     event_type="click", status="OK",
+                     payload={"x": x, "y": y, "button": 0, "phase": "up", "click_count": 1}),
+        ]
+        app.input.raw_events = lambda *args, **kwargs: list(events)
+        try:
+            _tick(app, ctx, 1)
+        finally:
+            del app.input.raw_events  # back to the class-level method
+
+    def test_circle_click_toggles_popup_each_time(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        self._with_track(app, ctx, monkeypatch)
+        assert app.show_devices is False
+        self._click(app, ctx, *self.CIRCLE)
+        assert app.show_devices is True, "first click opens"
+        _tick(app, ctx, 2)  # popup renders; hit list now includes its regions
+        self._click(app, ctx, *self.CIRCLE)
+        assert app.show_devices is False, "second click closes"
+        _tick(app, ctx, 2)
+        self._click(app, ctx, *self.CIRCLE)
+        assert app.show_devices is True, "third click reopens"
+
+    def test_every_point_inside_the_circle_registers(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        self._with_track(app, ctx, monkeypatch)
+        cx, cy = self.CIRCLE
+        expected = True
+        for point in ((cx, cy), (cx, cy - 16), (cx, cy + 16), (cx - 16, cy), (cx + 16, cy)):
+            self._click(app, ctx, *point)
+            assert app.show_devices is expected, f"click at {point} did not toggle"
+            _tick(app, ctx, 1)
+            expected = not expected
+
+    def test_poll_result_regrowing_popup_keeps_it_open(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        self._with_track(app, ctx, monkeypatch, devices=1)
+        self._click(app, ctx, *self.CIRCLE)
+        assert app.show_devices is True
+        # The open's poll lands with MORE devices than the last render: the
+        # popup grows taller, must stay open, and the circle must still
+        # toggle it closed.
+        more_devices = [
+            sl_models.Device(id=f"e{i}", name=f"Extra {i}", kind="Speaker",
+                             is_active=False, is_restricted=False, volume_percent=None)
+            for i in range(5)
+        ]
+        app._apply_result("poll-player", (app.player, more_devices))
+        _tick(app, ctx, 2)
+        assert app.show_devices is True, "a poll result must not dismiss the popup"
+        self._click(app, ctx, *self.CIRCLE)
+        assert app.show_devices is False
+
+    def test_popup_hit_never_covers_the_circle(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        for device_count in (0, 1, 5):
+            self._with_track(app, ctx, monkeypatch, devices=device_count, show_devices=True)
+            hits = {r.action: r for r in app._hits}
+            plate = hits["popup_plate"]
+            circle = hits["open_devices"]
+            overlap = not (plate.x + plate.w <= circle.x or circle.x + circle.w <= plate.x
+                           or plate.y + plate.h <= circle.y or circle.y + circle.h <= plate.y)
+            assert not overlap, (
+                f"{device_count} devices: popup plate {plate.x, plate.y, plate.w, plate.h} "
+                f"covers the overflow circle {circle.x, circle.y, circle.w, circle.h}")
+            # The reversed hit walk must pick open_devices at the circle
+            # centre — the same selection _dispatch_click makes.
+            cx, cy = self.CIRCLE
+            winner = next(r for r in reversed(app._hits) if r.contains(cx, cy))
+            assert winner.action == "open_devices", \
+                f"{device_count} devices: circle centre dispatches {winner.action}"
+
+
+# ---------------------------------------------------------------------------
+# Round 28, findings 2+3 (Alec on the #362 build): the app toasted "No active
+# device — pick one under Devices", and pressing play errored 403. The real
+# Spotify app never prompts when the target is obvious: it plays on the
+# active device, or the only device there is. The contract: a
+# no-active-device failure on a player action transfers to the obvious
+# device and re-issues the action silently; the picker only opens when the
+# choice is genuinely ambiguous (multiple devices, none active). The 403
+# body is classified by its reason token, and any other 403 reaches the
+# toast verbatim so the true cause is reportable.
+# ---------------------------------------------------------------------------
+
+class TestDeviceAutoPick:
+
+    @staticmethod
+    def _device(name, *, active=False):
+        return sl_models.Device(id=name, name=name, kind="Computer", is_active=active,
+                                is_restricted=False, volume_percent=50)
+
+    @staticmethod
+    def _no_active_error():
+        return sl_api.classify_error(403, {"error": {"status": 403,
+                                           "message": "Player command failed: No active device found",
+                                           "reason": "NO_ACTIVE_DEVICE"}})
+
+    def _base(self, app, ctx, monkeypatch, devices):
+        app.authenticated = True
+        app.view = "home"
+        app.devices = list(devices)
+        app.player = None
+        submits: list = []
+        monkeypatch.setattr(app.worker, "submit", lambda label, job: submits.append((label, job)))
+        calls: list = []
+
+        class _Client:
+            def transfer(self, device_id, *, play=True):
+                calls.append(("transfer", device_id, play))
+
+            def play(self, **kwargs):
+                calls.append(("play", kwargs))
+
+        app._client = _Client()
+        _tick(app, ctx, 1)
+
+        class _PlayerSubmits:
+            """Live view of the player-action jobs (the poll timer keeps
+            appending its own submits to the underlying list)."""
+
+            def _jobs(self):
+                return [job for label, job in submits if label == "player-action"]
+
+            def __len__(self):
+                return len(self._jobs())
+
+            def __getitem__(self, index):
+                return self._jobs()[index]
+
+        return _PlayerSubmits(), calls
+
+    def test_single_device_transfers_and_reissues_without_prompting(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        submits, calls = self._base(app, ctx, monkeypatch, [self._device("d1")])
+        app._dispatch_action("toggle_play", None, 0.0)
+        assert len(submits) == 1, "the user's play action is queued"
+
+        app._apply_api_error("player-action", self._no_active_error())
+        assert len(submits) == 2, "an obvious device means transfer + retry, not a prompt"
+        submits[1]()  # run the queued retry job against the fake client
+        assert calls == [("transfer", "d1", False), ("play", {})]
+        assert app.show_devices is False, "no picker when the choice is obvious"
+        assert "d1" in app.status_message, "the switch is announced, not silent"
+
+    def test_active_device_wins_among_many(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        submits, calls = self._base(app, ctx, monkeypatch,
+                                    [self._device("d1"), self._device("d2", active=True)])
+        app._dispatch_action("toggle_play", None, 0.0)
+        app._apply_api_error("player-action", self._no_active_error())
+        assert len(submits) == 2
+        submits[1]()
+        assert calls[0] == ("transfer", "d2", False), "the active device is the target"
+        assert app.show_devices is False
+
+    def test_multiple_inactive_devices_is_the_only_prompt(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        submits, _calls = self._base(app, ctx, monkeypatch,
+                                     [self._device("d1"), self._device("d2")])
+        app._dispatch_action("toggle_play", None, 0.0)
+        app._apply_api_error("player-action", self._no_active_error())
+        assert len(submits) == 1, "ambiguous means no silent transfer"
+        assert app.show_devices is True, "the picker opens — this is the only prompt"
+        assert app.status_message == "Pick a device"
+
+    def test_zero_devices_explains_without_prompting(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        submits, _calls = self._base(app, ctx, monkeypatch, [])
+        app._dispatch_action("toggle_play", None, 0.0)
+        app._apply_api_error("player-action", self._no_active_error())
+        assert len(submits) == 1
+        assert app.show_devices is False
+        assert "No devices found" in app.status_message
+
+    def test_retry_failure_does_not_loop(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        submits, _calls = self._base(app, ctx, monkeypatch, [self._device("d1")])
+        app._dispatch_action("toggle_play", None, 0.0)
+        app._apply_api_error("player-action", self._no_active_error())
+        assert len(submits) == 2
+        # The transfer+retry fails the same way (device vanished): stop
+        # retrying and say so — never loop transfers across worker trips.
+        app._apply_api_error("player-action", self._no_active_error())
+        assert len(submits) == 2, "a failed auto-retry must not chain another"
+        assert "pick one under Devices" in app.status_message
+
+    def test_pick_device_transfer_does_not_chain(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        submits, _calls = self._base(app, ctx, monkeypatch, [self._device("d1")])
+        app._dispatch_action("pick_device", "d1", 0.0)
+        assert len(submits) == 1
+        app._apply_api_error("player-action", self._no_active_error())
+        assert len(submits) == 1, "a failed explicit transfer must not auto-transfer again"
+
+    def test_other_403s_reach_the_toast_verbatim(self, app_ctx, monkeypatch):
+        """If the 403 is Spotify's development-mode restriction (not a device
+        problem), the body must surface as-is — that string is Alec's report,
+        not something to code around."""
+        app, ctx, _buffer = app_ctx
+        self._base(app, ctx, monkeypatch, [self._device("d1")])
+        error = sl_api.classify_error(403, {"error": {"status": 403,
+                                            "message": "Player command failed: app is in development mode",
+                                            "reason": "DEVELOPMENT_MODE"}})
+        app._apply_api_error("player-action", error)
+        assert "app is in development mode" in app.status_message
+        assert "DEVELOPMENT_MODE" in app.status_message
+        assert app.show_devices is False
+
+
+# ---------------------------------------------------------------------------
+# Round 28, finding 4 (Alec on the #362 build): the thin specular top-edge
+# line on the glass plates reads as a hard artifact. The contract: the
+# highlight is a segmented falloff — lower peak, ends fading to nothing —
+# never one uniform full-span 1px line.
+# ---------------------------------------------------------------------------
+
+class TestSpecularHighlightSoftened:
+
+    class _Capture:
+        def __init__(self):
+            self.rrects = []
+            self.rects = []
+
+        def rounded_rect(self, **kw):
+            self.rrects.append(kw)
+
+        def rect(self, **kw):
+            self.rects.append(kw)
+
+    @staticmethod
+    def _specular_segments(cap, plate_y=100.0):
+        return [n for n in cap.rects
+                if n["color"][:3] == (255, 255, 255)
+                and n["height"] == 1 and n["y"] == plate_y + 1]
+
+    def _rasterize_plate(self, w, h, radius):
+        cap = self._Capture()
+        sl_views._glass_plate(cap, 100.0, 100.0, w, h, radius=radius, z=2)
+        nodes = [RectNode(x=0, y=0, width=400, height=400,
+                          color_rgba=(16, 16, 16, 255), z_index=0)]
+        nodes += [RoundedRectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                                  radius=n["radius"], color_rgba=n["color"],
+                                  z_index=n["z_index"]) for n in cap.rrects]
+        nodes += [RectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                           color_rgba=n["color"], z_index=n["z_index"]) for n in cap.rects]
+        frame = SceneFrame(revision=1, logical_width=400, logical_height=400,
+                           display_width=400, display_height=400, ts_ns=0,
+                           nodes=tuple(nodes))
+        return rasterize_scene_frame(frame)
+
+    def test_highlight_is_segments_fading_out_at_the_ends(self):
+        cap = self._Capture()
+        sl_views._glass_plate(cap, 100.0, 100.0, 200.0, 100.0, radius=22.0, z=2)
+        segs = self._specular_segments(cap)
+        assert len(segs) >= 8, \
+            "one uniform full-span 1px line is the hard artifact Alec sees; draw fading segments"
+        segs.sort(key=lambda n: n["x"])
+        alphas = [n["color"][3] for n in segs]
+        mid = len(alphas) // 2
+        assert alphas[0] <= 4 and alphas[-1] <= 4, \
+            f"the ends must fade to nothing, got {alphas[0]}/{alphas[-1]}"
+        left, right = alphas[:mid], alphas[mid:]
+        assert left == sorted(left), f"alpha must rise toward the centre: {alphas}"
+        assert right == sorted(right, reverse=True), f"alpha must fall toward the end: {alphas}"
+
+    def test_highlight_peak_is_softened(self):
+        assert sl_views.GLASS_HIGHLIGHT[3] <= 48, \
+            f"a 1px white line at alpha {sl_views.GLASS_HIGHLIGHT[3]} reads hard; keep the peak <= 48"
+
+    def test_top_edge_raster_has_no_uniform_line(self):
+        img = self._rasterize_plate(200.0, 100.0, 22.0)
+        row = 101  # the specular row (plate y+1)
+        center_lum = int(img[row, 200, :3].sum()) / 3
+        end_lum = int(img[row, 120, :3].sum()) / 3
+        assert end_lum + 12 <= center_lum, (
+            f"the top-edge line must fade toward the ends: end {end_lum:.0f} vs "
+            f"centre {center_lum:.0f} — a uniform line is the hard artifact")
+
+
+# ---------------------------------------------------------------------------
+# Round 28, finding 5 (Alec on the #362 build): the pill's square album art
+# sits flush at the pill's left cap, so its corners cross the rounded
+# silhouette. The thumb is alpha-clipped to a rounded tile — the same
+# construction as the idle note tile (r8).
+# ---------------------------------------------------------------------------
+
+class TestPillArtRounded:
+
+    def test_pill_thumb_is_clipped_to_its_rounded_tile(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        artist = _artist("ANOTR")
+        track = _track("Relax My Eyes", artist, _album("The Reset", artist), ms=243_000)
+        device = sl_models.Device(id="d1", name="MacBook Pro", kind="Computer",
+                                  is_active=True, is_restricted=False, volume_percent=40)
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500, track=track,
+                                           device=device, shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        _tick(app, ctx, 2)
+
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        thumbs = [n for n in _nodes(scene_buffer, CpuLayerNode)
+                  if abs(n.x - (px + 10)) < 0.5 and abs(n.y - (py + 10)) < 0.5]
+        assert thumbs, "pill art thumb missing"
+        rgba = thumbs[0].rgba
+        h, w = rgba.shape[0], rgba.shape[1]
+        assert int(rgba[0, 0, 3]) == 0, \
+            "square corner pixels cross the pill's rounded cap — clip the thumb"
+        assert int(rgba[0, w - 1, 3]) == 0
+        assert int(rgba[h - 1, 0, 3]) == 0
+        assert int(rgba[h - 1, w - 1, 3]) == 0
+        assert int(rgba[h // 2, w // 2, 3]) == 255, "the art itself stays opaque"
+
+
+# ---------------------------------------------------------------------------
+# Round 28, finding 6 (queued micro-fix): the idle note icon sits ~2px low.
+# The note's ink mass is bottom-heavy (two heads under a beam), so its
+# geometric centroid reads below its optical centre; the placement bias
+# lifts it ~2px at the 20px tile.
+# ---------------------------------------------------------------------------
+
+def test_note_optical_bias_lifts_the_idle_glyph():
+    _bias_x, bias_y = sl_views._ICON_OPTICAL_BIAS_EM[sl_icons.NOTE]
+    assert bias_y <= -0.07, \
+        f"the idle note needs a ~0.1em upward optical bias (2px at the 20px tile), got {bias_y}"
