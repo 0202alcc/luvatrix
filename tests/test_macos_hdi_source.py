@@ -15,6 +15,21 @@ class MacOSHDISourceTests(unittest.TestCase):
         self.assertEqual(_to_top_left_y(-10.0, 100.0), 99.0)
         self.assertEqual(_to_top_left_y(1000.0, 100.0), 0.0)
 
+    def test_scroll_deltas_preserve_user_direction_preference(self) -> None:
+        """NSEvent scrollingDelta already carries the user's natural-scroll
+        orientation (the system flips the value per the
+        com.apple.swipescrolldirection pref; isDirectionInvertedFromDevice
+        reports that). A fixed sign flip on top inverts exactly one
+        preference group — traditional users (pref=0) scrolled against
+        every other app on their machine. Deltas must pass through with
+        their sign preserved; only the line/pixel scale applies."""
+        from luvatrix_core.platform.macos.hdi_source import _scroll_content_deltas
+
+        dx, dy = _scroll_content_deltas(2.0, 3.0, precise=False)
+        self.assertEqual((dx, dy), (2.0 * 120.0, 3.0 * 120.0))
+        dx, dy = _scroll_content_deltas(-2.0, -3.0, precise=True)
+        self.assertEqual((dx, dy), (-2.0 * 48.0, -3.0 * 48.0))
+
     def test_poll_prefers_window_local_mouse_location(self) -> None:
         class _Size:
             width = 200.0

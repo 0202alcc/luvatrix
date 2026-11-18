@@ -96,61 +96,61 @@ def _artist_names(artists) -> str:
     return ", ".join(names) if names else "Unknown artist"
 
 
-def track_card(track: sl_models.Track) -> CardView:
+def track_card(track: sl_models.Track, *, image_target_px: int = 300) -> CardView:
     return CardView(
         id=track.id,
         title=track.name,
         subtitle=_artist_names(track.artists),
-        image_url=sl_models.pick_image_url(track.album.images if track.album else (), 300),
+        image_url=sl_models.pick_image_url(track.album.images if track.album else (), image_target_px),
         context_uri=track.uri,
         kind="track",
     )
 
 
-def album_card(album: sl_models.Album) -> CardView:
+def album_card(album: sl_models.Album, *, image_target_px: int = 300) -> CardView:
     return CardView(
         id=album.id,
         title=album.name,
         subtitle=_artist_names(album.artists),
-        image_url=sl_models.pick_image_url(album.images, 300),
+        image_url=sl_models.pick_image_url(album.images, image_target_px),
         context_uri=album.uri,
         kind="album",
     )
 
 
-def playlist_card(playlist: sl_models.Playlist) -> CardView:
+def playlist_card(playlist: sl_models.Playlist, *, image_target_px: int = 300) -> CardView:
     subtitle = f"{playlist.track_count} tracks" if playlist.track_count is not None else "Playlist"
     return CardView(
         id=playlist.id,
         title=playlist.name,
         subtitle=subtitle,
-        image_url=sl_models.pick_image_url(playlist.images, 300),
+        image_url=sl_models.pick_image_url(playlist.images, image_target_px),
         context_uri=playlist.uri,
         kind="playlist",
     )
 
 
-def artist_card(artist: sl_models.Artist) -> CardView:
+def artist_card(artist: sl_models.Artist, *, image_target_px: int = 300) -> CardView:
     return CardView(
         id=artist.id,
         title=artist.name,
         subtitle="Artist",
-        image_url=sl_models.pick_image_url(artist.images, 300),
+        image_url=sl_models.pick_image_url(artist.images, image_target_px),
         context_uri=None,  # artist playback needs an artist-radio context; not wired in v1
         kind="artist",
     )
 
 
-def build_home_sections(*, top_tracks, new_releases, playlists, top_artists) -> list[SectionView]:
+def build_home_sections(*, top_tracks, new_releases, playlists, top_artists, image_target_px: int = 300) -> list[SectionView]:
     sections: list[SectionView] = []
     if top_tracks:
-        sections.append(SectionView("Top tracks", tuple(track_card(t) for t in top_tracks)))
+        sections.append(SectionView("Top tracks", tuple(track_card(t, image_target_px=image_target_px) for t in top_tracks)))
     if new_releases:
-        sections.append(SectionView("New releases", tuple(album_card(a) for a in new_releases)))
+        sections.append(SectionView("New releases", tuple(album_card(a, image_target_px=image_target_px) for a in new_releases)))
     if playlists:
-        sections.append(SectionView("Your playlists", tuple(playlist_card(p) for p in playlists)))
+        sections.append(SectionView("Your playlists", tuple(playlist_card(p, image_target_px=image_target_px) for p in playlists)))
     if top_artists:
-        sections.append(SectionView("Top artists", tuple(artist_card(a) for a in top_artists)))
+        sections.append(SectionView("Top artists", tuple(artist_card(a, image_target_px=image_target_px) for a in top_artists)))
     return sections
 
 

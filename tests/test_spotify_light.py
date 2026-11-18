@@ -104,6 +104,16 @@ class TestCallbackParsing:
             == "code=abc&state=xyz"
         )
 
+    def test_parse_callback_url_full_url(self):
+        # Embedded web-view intercept hands us the whole URL, not a request line.
+        url = "http://127.0.0.1:8888/callback?code=AQD-xyz123&state=expected"
+        assert sl_oauth.parse_callback_url(url, "expected") == "AQD-xyz123"
+
+    def test_parse_callback_url_rejects_state_mismatch(self):
+        url = "http://127.0.0.1:8888/callback?code=abc&state=forged"
+        with pytest.raises(sl_oauth.OAuthError, match="state"):
+            sl_oauth.parse_callback_url(url, "expected")
+
     def test_extract_callback_query_ignores_other_requests(self):
         assert sl_oauth.extract_callback_query("GET /favicon.ico HTTP/1.1") is None
         assert sl_oauth.extract_callback_query("garbage") is None
@@ -407,6 +417,35 @@ class TestModelParsing:
         assert sl_models.pick_image_url(images, 1000) == "https://i.scdn.co/image/abc"
         assert sl_models.pick_image_url(images, 32) == "https://i.scdn.co/image/small"
         assert sl_models.pick_image_url((), 100) is None
+
+
+def _sized_images() -> tuple[sl_models.Image, ...]:
+    return (
+        sl_models.Image("https://i/64", 64, 64),
+        sl_models.Image("https://i/300", 300, 300),
+        sl_models.Image("https://i/640", 640, 640),
+    )
+
+
+class TestCardImageTarget:
+    """Cards pick art URLs for the display's device pixels: a 180pt card on a
+    2x Retina display needs ~360px of source, so the 640px image wins."""
+
+    def test_card_defaults_to_point_target(self):
+        album = sl_models.Album(id="a1", name="Al", uri="u", artists=(), images=_sized_images())
+        assert sl_ui.album_card(album).image_url == "https://i/300"
+
+    def test_card_honors_device_pixel_target(self):
+        album = sl_models.Album(id="a1", name="Al", uri="u", artists=(), images=_sized_images())
+        assert sl_ui.album_card(album, image_target_px=360).image_url == "https://i/640"
+
+    def test_home_sections_thread_the_target(self):
+        album = sl_models.Album(id="a1", name="Al", uri="u", artists=(), images=_sized_images())
+        sections = sl_ui.build_home_sections(
+            top_tracks=(), new_releases=(album,), playlists=(), top_artists=(),
+            image_target_px=360,
+        )
+        assert sections[0].cards[0].image_url == "https://i/640"
 
     def test_parse_search_results(self):
         payload = {

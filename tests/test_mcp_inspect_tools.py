@@ -21,7 +21,9 @@ from luvatrix_core.core.mcp_runtime import (
     read_discovery_file,
     scene_node_to_dict,
 )
-from luvatrix_core.core.scene_graph import ClearNode, RectNode, SceneFrame
+import numpy as np
+
+from luvatrix_core.core.scene_graph import ClearNode, CpuLayerNode, RectNode, SceneFrame
 from luvatrix_core.core.sensor_manager import SensorManagerThread
 from luvatrix_core.core.unified_runtime import UnifiedRuntime
 from luvatrix_core.core.window_matrix import FullRewrite, WindowMatrix, WriteBatch
@@ -189,6 +191,21 @@ class SceneNodeSerializationTests(unittest.TestCase):
         self.assertEqual(payload["x"], 1)
         self.assertEqual(payload["width"], 3)
         self.assertEqual(list(payload["color_rgba"]), [9, 8, 7, 255])
+
+
+class SceneNodeLayerSerializationTests(unittest.TestCase):
+    def test_cpu_layer_serializes_payload_dimensions_not_pixels(self) -> None:
+        node = CpuLayerNode(x=1, y=2, width=10, height=6, rgba=np.zeros((12, 20, 4), dtype=np.uint8))
+        payload = scene_node_to_dict(node)
+        self.assertEqual(payload["type"], "CpuLayerNode")
+        self.assertEqual(payload["payload_px"], [20, 12])
+        self.assertNotIn("rgba", payload)
+
+    def test_cpu_layer_without_payload_serializes_no_rgba(self) -> None:
+        node = CpuLayerNode(x=0, y=0, width=4, height=4, rgba=None)
+        payload = scene_node_to_dict(node)
+        self.assertNotIn("rgba", payload)
+        self.assertNotIn("payload_px", payload)
 
 
 class RuntimeProviderTests(unittest.TestCase):

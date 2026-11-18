@@ -18,7 +18,8 @@ import sl_ui
 
 # -- layout ------------------------------------------------------------------
 SIDEBAR_W = 240.0
-PLAYER_H = 96.0
+SIDEBAR_LIST_TOP = 142.0  # title + one nav row (Library) + section header
+DOCK_H = 92.0             # bottom reservation for the floating pill zone
 CONTENT_PAD = 28.0
 CARD_W = 180.0
 CARD_H = 236.0
@@ -34,9 +35,80 @@ CARD_BG = (26, 26, 26, 255)
 CARD_HOVER_BG = (42, 42, 42, 255)
 ROW_HOVER_BG = (30, 30, 30, 255)
 BAR_BG = (24, 24, 24, 255)
+# Low-alpha light tint drawn under glass capsules so the material reads on
+# near-black backdrops (the blur alone is barely visible against #121212).
+GLASS_TINT = (255, 255, 255, 24)
+
+# -- simulated liquid glass ----------------------------------------------------
+# Native NSGlassEffectView composites ABOVE the Metal scene and blurs every
+# scene glyph beneath it (live bug, round 6), so glass over scene content is
+# composed in-scene: soft shadow, hairline border ring, translucent fill,
+# sheen band, specular top highlight. Native glass stays behind native
+# controls only (login wall, sheet buttons).
+CARD_RADIUS = 14.0
+GLASS_FILL = (255, 255, 255, 18)
+GLASS_FILL_HOVER = (255, 255, 255, 34)
+GLASS_BORDER = (255, 255, 255, 36)
+GLASS_BORDER_HOVER = (255, 255, 255, 56)
+GLASS_HIGHLIGHT = (255, 255, 255, 68)
+GLASS_SHEEN = (255, 255, 255, 12)
+GLASS_SHADOW_NEAR = (0, 0, 0, 64)
+GLASS_SHADOW_FAR = (0, 0, 0, 34)
+# Chrome plates (sidebar): dark translucent material so scene text stays
+# readable, with specular edges for depth.
+SIDEBAR_PLATE = (9, 9, 9, 120)
+SIDEBAR_EDGE = (255, 255, 255, 28)
+# Floating player pill: a centered capsule (liquid-glass music-pill
+# reference), dark-frosted so scene text stays readable over content,
+# flanked by circular nav buttons; playback extras live in a popup.
+PILL_W = 460.0
+PILL_MIN_W = 320.0
+PILL_H = 64.0
+PILL_FLOAT = 16.0
+PILL_FILL = (16, 16, 16, 208)
+PILL_BORDER = (255, 255, 255, 40)
+PILL_THUMB_EMPTY = (255, 255, 255, 16)
+PILL_META_RIGHT_PAD = 150.0
+NAV_CIRCLE_R = 22.0
+NAV_CIRCLE_GAP = 18.0
+OVERFLOW_R = NAV_CIRCLE_R
+# Bottom scrim (round 8b): content scrolled under the translucent pill read
+# as text-on-text clashes (reported as a z-index bug; the pill was already
+# topmost). Apple Music idiom: a gradient scrim behind the dock zone
+# dissolves content before it reaches the pill; the pill keeps its material.
+# Round 10: the fade completes SCRIM_GAP above the pill top, leaving a calm
+# near-opaque band between dissolved content and the chrome.
+SCRIM_FADE = 56.0
+SCRIM_GAP = 12.0
+SCRIM_H = PILL_FLOAT + PILL_H + SCRIM_GAP + SCRIM_FADE
+SCRIM_MAX_ALPHA = 240
+# Round 14: the fade renders as ~1px strips (coarse strips read as scanlines
+# over album art), and the calm band below the fade is one solid rect.
+SCRIM_STRIP_PX = 1.0
+
+
+def pill_rect(width: float, height: float) -> tuple[float, float, float, float]:
+    """Floating capsule geometry, anchored to the CONTENT REGION (round 10):
+    the cluster (circles + pill) centers between SIDEBAR_W and the window's
+    right edge — never the full window, so it can never cross the sidebar
+    (the scrim anchors the same way). When the cluster at design width can't
+    fit, the left circle pins to SIDEBAR_W + PILL_FLOAT and the right edge
+    floats; only then does the pill shrink below PILL_W (floor PILL_MIN_W).
+    Below ~716pt the search circle may clip the window edge — pathological."""
+    cluster_pad = NAV_CIRCLE_GAP + 2 * NAV_CIRCLE_R
+    min_x = SIDEBAR_W + PILL_FLOAT + cluster_pad
+    fit_w = width - PILL_FLOAT - cluster_pad - min_x
+    pill_w = min(PILL_W, max(PILL_MIN_W, fit_w))
+    ideal_x = (SIDEBAR_W + width) / 2.0 - pill_w / 2.0
+    max_x = width - PILL_FLOAT - cluster_pad - pill_w
+    pill_x = min(max(ideal_x, min_x), max(max_x, min_x))
+    return (pill_x, height - PILL_FLOAT - PILL_H, pill_w, PILL_H)
+
 TEXT = (255, 255, 255, 255)
 SUBTEXT = (179, 179, 179, 255)
 FAINT = (120, 120, 120, 255)
+FONT_FAMILY = "Helvetica Neue"
+
 ACCENT = (29, 185, 84, 255)
 ACCENT_DARK = (20, 140, 64, 255)
 DANGER = (226, 90, 74, 255)
@@ -73,6 +145,58 @@ def _ck(*parts: object) -> str:
     return "|".join(str(p) for p in parts)
 
 
+def _fit_width(measure, text: str, *, max_w: float, size: float) -> str:
+    """Truncate to a measured pixel budget — proportional fonts make char
+    counts width-blind (a 40-char cap both over-truncates narrow strings and
+    lets wide ones paint into neighboring chrome). An ellipsis marks the cut."""
+    if measure(text, font_size_px=float(size), font_family=FONT_FAMILY) <= max_w:
+        return text
+    cut = text
+    while cut and measure(cut + "…", font_size_px=float(size),
+                          font_family=FONT_FAMILY) > max_w:
+        cut = cut[:-1]
+    return (cut.rstrip() + "…") if cut else "…"
+
+
+def _clip_head(measure, text: str, *, max_w: float, size: float) -> str:
+    """Text-field overflow clips the HEAD with a leading ellipsis so the tail
+    being typed stays visible (the macOS field idiom); the caret then hugs
+    the end of the shown tail inside the field."""
+    if measure(text, font_size_px=float(size), font_family=FONT_FAMILY) <= max_w:
+        return text
+    tail = text
+    while tail and measure("…" + tail, font_size_px=float(size),
+                           font_family=FONT_FAMILY) > max_w:
+        tail = tail[1:]
+    return ("…" + tail.lstrip()) if tail else "…"
+
+
+# Ink-height / font-size ratios for the icon glyphs, measured on the
+# rasterizer's font (text node y is the INK TOP, not the baseline). Used to
+# vertically center a glyph's ink box on a target point.
+_GLYPH_INK_RATIO = {"<<": 0.44, ">>": 0.44, ">": 0.52, "⌂": 0.59, "⚲": 0.71,
+                    "…": 0.13, "♪": 0.55}
+
+# Optical-centering corrections in EM units (fraction of font size), measured
+# from rendered ink: glyphs whose visual mass skews off their advance/ink-box
+# center (roof and doorway holes in ⌂, dot spacing in …, asymmetric bearings)
+# get a per-glyph bias. ">" reads left-of-center, so it nudges right.
+_GLYPH_OPTICAL_BIAS_EM = {
+    ">": (0.07, 0.0),
+    "⌂": (0.093, -0.108),
+    "⚲": (0.0, 0.115),
+    "…": (0.156, 0.031),
+}
+
+
+def _centered_glyph(frame, text, *, cx, cy, size, color, z) -> None:
+    w = frame._ctx.measure_text(text, font_size_px=float(size), font_family=FONT_FAMILY)
+    ratio = _GLYPH_INK_RATIO.get(text, 0.72)
+    bias_x, bias_y = _GLYPH_OPTICAL_BIAS_EM.get(text, (0.0, 0.0))
+    _text(frame, text, x=round(cx - w / 2 + bias_x * size),
+          y=round(cy - ratio * size / 2 + bias_y * size), size=size, color=color, z=z)
+
+
 def _text(frame, text, *, x, y, size=14.0, color=TEXT, z=2, max_chars=0) -> None:
     shown = sl_ui.truncate(text, max_chars) if max_chars else text
     if not shown:
@@ -85,6 +209,7 @@ def _text(frame, text, *, x, y, size=14.0, color=TEXT, z=2, max_chars=0) -> None
         color=color,
         z_index=z,
         cache_key=_ck("t", shown, size, color),
+        font_family=FONT_FAMILY,
     )
 
 
@@ -104,6 +229,34 @@ def _hover(mouse, x, y, w, h) -> bool:
     return x <= mx <= x + w and y <= my <= y + h
 
 
+def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
+                 fill=None, border=None) -> None:
+    """One canonical simulated-glass plate. Composed back-to-front: soft
+    shadow (two stacked dark plates), hairline border ring, translucent fill
+    inset 1px so the ring reads as the edge, a sheen band, and the specular
+    top highlight that catches the light."""
+    if shadow:
+        frame.rounded_rect(x=x - 1, y=y + 5, width=w + 2, height=h, radius=radius,
+                           color=GLASS_SHADOW_FAR, z_index=z)
+        frame.rounded_rect(x=x, y=y + 2, width=w, height=h, radius=radius,
+                           color=GLASS_SHADOW_NEAR, z_index=z)
+    frame.rounded_rect(x=x, y=y, width=w, height=h, radius=radius,
+                       color=border or (GLASS_BORDER_HOVER if hovering else GLASS_BORDER),
+                       z_index=z)
+    frame.rounded_rect(x=x + 1, y=y + 1, width=w - 2, height=h - 2,
+                       radius=max(0.0, radius - 1),
+                       color=fill or (GLASS_FILL_HOVER if hovering else GLASS_FILL), z_index=z)
+    # The sheen is a square band, so its ends must clear the corner arc or it
+    # pokes past the rounded silhouette (Alec's "ghost corners"). Inset by the
+    # arc's horizontal intrusion at the band's top edge (y + 2).
+    sheen_inset = math.ceil(radius - math.sqrt(max(0.0, radius * radius - (radius - 2) ** 2)))
+    frame.rect(x=x + 2 + sheen_inset, y=y + 2, width=max(0.0, w - 4 - sheen_inset * 2),
+               height=h * 0.42, color=GLASS_SHEEN, z_index=z)
+    inset = radius * 0.7
+    frame.rect(x=x + inset, y=y + 1, width=max(0.0, w - inset * 2), height=1,
+               color=GLASS_HIGHLIGHT, z_index=z)
+
+
 def _daypart() -> str:
     import datetime
 
@@ -118,18 +271,33 @@ def _daypart() -> str:
 # -- sidebar -------------------------------------------------------------------
 
 
+def _cull_bottom(app, height: float) -> float:
+    """Bottom cull edge for content views.
+
+    The player bar is simulated glass on every host, so content flows under
+    it everywhere — cull at the window bottom.
+    """
+    return height
+
+
 def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
-    frame.rect(x=0, y=0, width=SIDEBAR_W, height=height, color=SIDEBAR_BG, z_index=1)
+    # Simulated-glass chrome plate (native glass here blurred the nav text —
+    # live bug): dark translucent fill + hairline right edge. Scene-drawn, so
+    # bridgeless hosts get the same material.
+    frame.rect(x=0, y=0, width=SIDEBAR_W, height=height, color=SIDEBAR_PLATE, z_index=1)
+    frame.rect(x=SIDEBAR_W - 1, y=0, width=1, height=height, color=SIDEBAR_EDGE, z_index=2)
     _text(frame, "Spotify Light", x=22, y=20, size=20, color=ACCENT, z=3)
 
-    nav = [("home", "Home"), ("search", "Search"), ("library", "Your Library")]
+    # Home/Search live on the glass circles flanking the player pill (round
+    # 8); the sidebar keeps Library, playlists, and account.
+    nav = [("library", "Your Library")]
     y = 64.0
     for view, label in nav:
         active = app.view == view
         hovering = _hover(mouse, 10, y - 6, SIDEBAR_W - 20, NAV_H - 8)
         if active:
-            frame.rounded_rect(x=10, y=y - 6, width=SIDEBAR_W - 20, height=NAV_H - 8, radius=6.0,
-                               color=CARD_BG, z_index=2)
+            _glass_plate(frame, 10, y - 6, SIDEBAR_W - 20, NAV_H - 8, radius=8.0, z=2,
+                         shadow=False)
         color = TEXT if (active or hovering) else SUBTEXT
         _text(frame, label, x=22, y=y + 2, size=15, color=color, z=3)
         out.hit(10, y - 6, SIDEBAR_W - 20, NAV_H - 8, "nav", view)
@@ -140,7 +308,7 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
     y += 24
 
     list_top = y
-    list_bottom = height - PLAYER_H - 64
+    list_bottom = height - 64
     row_h = 30.0
     offset = app.sidebar_scroll
     for idx, playlist in enumerate(app.playlists):
@@ -158,7 +326,7 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
                     bottom=list_bottom, content=row_h * len(app.playlists), offset=offset,
                     tag="sidebar")
 
-    chip_y = height - PLAYER_H - 52
+    chip_y = height - 52
     frame.rect(x=0, y=chip_y - 8, width=SIDEBAR_W, height=1, color=(40, 40, 40, 255), z_index=2)
     name = app.profile.display_name if app.profile and app.profile.display_name else "Account"
     _text(frame, name, x=22, y=chip_y + 4, size=13, color=SUBTEXT, z=3, max_chars=16)
@@ -186,8 +354,7 @@ def _draw_scrollbar(frame, controller, out: FrameOut, *, x, top, bottom, content
 
 def _draw_card(frame, app, out: FrameOut, card: sl_ui.CardView, *, x, y, mouse) -> None:
     hovering = _hover(mouse, x, y, CARD_W, CARD_H)
-    frame.rounded_rect(x=x, y=y, width=CARD_W, height=CARD_H, radius=10.0,
-                       color=CARD_HOVER_BG if hovering else CARD_BG, z_index=2)
+    _glass_plate(frame, x, y, CARD_W, CARD_H, radius=CARD_RADIUS, z=2, hovering=hovering)
     _art(frame, app, card.image_url, x=x + 12, y=y + 12, size=CARD_ART - 24, seed=card.title)
     _text(frame, card.title, x=x + 12, y=y + CARD_ART + 8, size=14, z=3, max_chars=22)
     _text(frame, card.subtitle, x=x + 12, y=y + CARD_ART + 28, size=12, color=SUBTEXT, z=3,
@@ -197,15 +364,18 @@ def _draw_card(frame, app, out: FrameOut, card: sl_ui.CardView, *, x, y, mouse) 
     elif card.kind == "track":
         out.hit(x, y, CARD_W, CARD_H, "play_card", card)
     if hovering and card.context_uri:
-        frame.circle(cx=x + CARD_W - 28, cy=y + CARD_ART - 16, radius=20, fill=ACCENT, z_index=3)
-        _text(frame, ">", x=x + CARD_W - 35, y=y + CARD_ART - 27, size=18, color=(0, 0, 0, 255), z=4)
+        frame.circle(cx=x + CARD_W - 28, cy=y + CARD_ART - 26, radius=20,
+                     fill=(0, 0, 0, 90), z_index=3)
+        frame.circle(cx=x + CARD_W - 28, cy=y + CARD_ART - 28, radius=20, fill=ACCENT, z_index=3)
+        _centered_glyph(frame, ">", cx=x + CARD_W - 28, cy=y + CARD_ART - 28, size=18,
+                        color=(0, 0, 0, 255), z=4)
 
 
 def _draw_track_table(frame, app, out: FrameOut, rows, *, x0, y0, width, height, context_uri, mouse) -> float:
     table_w = width - SIDEBAR_W - CONTENT_PAD * 2
     for row in rows:
         row_y = y0 + (row.index - 1) * ROW_H
-        if row_y + ROW_H < 0 or row_y > height - PLAYER_H:
+        if row_y + ROW_H < 0 or row_y > _cull_bottom(app, height):
             continue
         hovering = _hover(mouse, x0 - 8, row_y, table_w + 8, ROW_H)
         if hovering:
@@ -238,9 +408,24 @@ def draw_home(frame, app, out: FrameOut, *, width: float, height: float, mouse) 
     _text(frame, "Good " + _daypart(), x=x0, y=y, size=26, z=3)
     y += 46
 
-    if not app.home_sections:
+    if not getattr(app, "_bootstrap_done", False):
         _text(frame, "Loading your music…", x=x0, y=y, size=15, color=SUBTEXT, z=3)
         y += 30
+    elif app.bootstrap_error:
+        # Persistent error line (auth_error pattern): a failed bootstrap must
+        # never read as eternal loading.
+        _text(frame, app.bootstrap_error, x=x0, y=y, size=14, color=DANGER, z=3)
+        y += 30
+    elif not app.home_sections and not getattr(app, "bootstrap_notices", ()):
+        _text(frame, "Nothing here yet — your playlists and listens will show up here",
+              x=x0, y=y, size=15, color=SUBTEXT, z=3)
+        y += 30
+
+    # Per-section degradations (e.g. Spotify dev-mode 403s): each note names
+    # the call that failed; surviving sections render below.
+    for note in getattr(app, "bootstrap_notices", ()):
+        _text(frame, note, x=x0, y=y, size=13, color=FAINT, z=3)
+        y += 24
 
     cols = sl_ui.grid_columns(view_w, card_width=CARD_W, gap=CARD_GAP)
     for section in app.home_sections:
@@ -251,7 +436,7 @@ def draw_home(frame, app, out: FrameOut, *, width: float, height: float, mouse) 
             row, col = divmod(idx, cols)
             cx = x0 + col * (CARD_W + CARD_GAP)
             cy = y + row * (CARD_H + CARD_GAP)
-            if cy + CARD_H > 0 and cy < height - PLAYER_H:
+            if cy + CARD_H > 0 and cy < _cull_bottom(app, height):
                 _draw_card(frame, app, out, card, x=cx, y=cy, mouse=mouse)
         y += rows * (CARD_H + CARD_GAP) + 12
 
@@ -266,11 +451,26 @@ def draw_playlist(frame, app, out: FrameOut, *, width: float, height: float, mou
     y = 24.0 - app.content_scroll
     detail = app.playlist_detail
     if detail is None:
+        if app.playlist_error:
+            _text(frame, "Couldn't load this playlist", x=x0, y=y, size=16, z=3)
+            _text(frame, f"Spotify said {app.playlist_error}", x=x0, y=y + 26, size=13,
+                  color=SUBTEXT, z=3, max_chars=64)
+            retry_x, retry_y, retry_w, retry_h = x0, y + 58, 96.0, 36.0
+            hovering = _hover(mouse, retry_x, retry_y, retry_w, retry_h)
+            frame.rounded_rect(x=retry_x, y=retry_y + 2, width=retry_w, height=retry_h,
+                               radius=18, color=(0, 0, 0, 90), z_index=2)
+            frame.rounded_rect(x=retry_x, y=retry_y, width=retry_w, height=retry_h,
+                               radius=18, color=ACCENT if hovering else ACCENT_DARK, z_index=2)
+            _text(frame, "Retry", x=retry_x + 29, y=retry_y + 10, size=14,
+                  color=(0, 0, 0, 255), z=3)
+            playlist_id = app.view.split(":", 1)[1] if ":" in app.view else ""
+            out.hit(retry_x, retry_y, retry_w, retry_h, "retry_playlist", playlist_id)
+            return
         _text(frame, "Loading playlist…", x=x0, y=y, size=16, color=SUBTEXT, z=3)
         return
 
     playlist, tracks = detail
-    _art(frame, app, sl_models.pick_image_url(playlist.images, 300), x=x0, y=y, size=160,
+    _art(frame, app, sl_models.pick_image_url(playlist.images, app._art_pick_target(160)), x=x0, y=y, size=160,
          seed=playlist.name)
     _text(frame, "PLAYLIST", x=x0 + 190, y=y + 6, size=11, color=FAINT, z=3)
     _text(frame, playlist.name, x=x0 + 190, y=y + 26, size=30, z=3, max_chars=34)
@@ -281,8 +481,12 @@ def draw_playlist(frame, app, out: FrameOut, *, width: float, height: float, mou
     play_x = x0 + 190
     play_y = y + 108
     hovering = _hover(mouse, play_x, play_y, 120, 40)
+    frame.rounded_rect(x=play_x, y=play_y + 2, width=120, height=40, radius=20,
+                       color=(0, 0, 0, 90), z_index=2)
     frame.rounded_rect(x=play_x, y=play_y, width=120, height=40, radius=20,
                        color=ACCENT if hovering else ACCENT_DARK, z_index=2)
+    frame.rect(x=play_x + 14, y=play_y + 1, width=92, height=1,
+               color=(255, 255, 255, 70), z_index=3)
     _text(frame, "Play", x=play_x + 42, y=play_y + 11, size=15, color=(0, 0, 0, 255), z=3)
     out.hit(play_x, play_y, 120, 40, "play_context", playlist.uri)
     y += 190
@@ -310,15 +514,20 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
     view_w = width - SIDEBAR_W - CONTENT_PAD * 2
 
     field_w = min(460.0, view_w)
-    border = ACCENT if app.search_focused else FIELD_BORDER
-    frame.rounded_rect(x=x0, y=y, width=field_w, height=40, radius=20, color=FIELD_BG, z_index=2)
-    frame.rect(x=x0, y=y, width=field_w, height=1.5, color=border, z_index=3)
-    frame.rect(x=x0, y=y + 39, width=field_w, height=1.5, color=border, z_index=3)
+    _glass_plate(frame, x0, y, field_w, 40, radius=20.0, z=2, shadow=False,
+                 border=(ACCENT[0], ACCENT[1], ACCENT[2], 200) if app.search_focused else None)
     shown = app.search_query or ("What do you want to listen to?" if not app.search_focused else "")
-    _text(frame, shown, x=x0 + 18, y=y + 12, size=14,
-          color=TEXT if app.search_query else FAINT, z=4, max_chars=52)
+    if app.search_query:
+        # Overflow clips the head (text-field idiom): the tail being typed
+        # stays visible and the caret hugs its end inside the field.
+        shown = _clip_head(app.ctx.measure_text, app.search_query,
+                           max_w=field_w - 18 - 14, size=14)
+        _text(frame, shown, x=x0 + 18, y=y + 12, size=14, color=TEXT, z=4)
+    else:
+        _text(frame, shown, x=x0 + 18, y=y + 12, size=14, color=FAINT, z=4, max_chars=52)
     if app.search_focused and int(app.now_monotonic * 2) % 2 == 0:
-        caret_x = x0 + 18 + len(app.search_query) * 14 * 0.52
+        caret_x = x0 + 18 + app.ctx.measure_text(
+            shown if app.search_query else "", font_size_px=14.0, font_family=FONT_FAMILY)
         frame.rect(x=caret_x + 2, y=y + 10, width=1.5, height=20, color=TEXT, z_index=4)
     out.hit(x0, y, field_w, 40, "focus_search")
     y += 60
@@ -341,9 +550,9 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
 
     cols = sl_ui.grid_columns(view_w, card_width=CARD_W, gap=CARD_GAP)
     for title, cards in (
-        ("Albums", [sl_ui.album_card(a) for a in results.albums]),
-        ("Artists", [sl_ui.artist_card(a) for a in results.artists]),
-        ("Playlists", [sl_ui.playlist_card(p) for p in results.playlists]),
+        ("Albums", [sl_ui.album_card(a, image_target_px=app._art_pick_target(CARD_ART)) for a in results.albums]),
+        ("Artists", [sl_ui.artist_card(a, image_target_px=app._art_pick_target(CARD_ART)) for a in results.artists]),
+        ("Playlists", [sl_ui.playlist_card(p, image_target_px=app._art_pick_target(CARD_ART)) for p in results.playlists]),
     ):
         if not cards:
             continue
@@ -354,7 +563,7 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
             row, col = divmod(idx, cols)
             cx = x0 + col * (CARD_W + CARD_GAP)
             cy = y + row * (CARD_H + CARD_GAP)
-            if cy + CARD_H > 0 and cy < height - PLAYER_H:
+            if cy + CARD_H > 0 and cy < _cull_bottom(app, height):
                 _draw_card(frame, app, out, card, x=cx, y=cy, mouse=mouse)
         y += rows_n * (CARD_H + CARD_GAP) + 12
     out.content_height = y + app.content_scroll
@@ -370,7 +579,7 @@ def draw_library(frame, app, out: FrameOut, *, width: float, height: float, mous
     y += 46
     view_w = width - SIDEBAR_W - CONTENT_PAD * 2
     cols = sl_ui.grid_columns(view_w, card_width=CARD_W, gap=CARD_GAP)
-    cards = [sl_ui.playlist_card(p) for p in app.playlists]
+    cards = [sl_ui.playlist_card(p, image_target_px=app._art_pick_target(CARD_ART)) for p in app.playlists]
     if not cards:
         _text(frame, "Playlists you create or follow will show up here.", x=x0, y=y, size=14,
               color=SUBTEXT, z=3)
@@ -380,7 +589,7 @@ def draw_library(frame, app, out: FrameOut, *, width: float, height: float, mous
         row, col = divmod(idx, cols)
         cx = x0 + col * (CARD_W + CARD_GAP)
         cy = y + row * (CARD_H + CARD_GAP)
-        if cy + CARD_H > 0 and cy < height - PLAYER_H:
+        if cy + CARD_H > 0 and cy < _cull_bottom(app, height):
             _draw_card(frame, app, out, card, x=cx, y=cy, mouse=mouse)
     out.content_height = y + rows * (CARD_H + CARD_GAP) + app.content_scroll
 
@@ -388,107 +597,206 @@ def draw_library(frame, app, out: FrameOut, *, width: float, height: float, mous
 # -- now playing bar ---------------------------------------------------------------
 
 
+def draw_dock_scrim(frame, *, width: float, height: float) -> None:
+    """Vertical gradient (transparent -> near-opaque backdrop) behind the
+    floating pill, flanking nav circles, and overflow circle. The fade
+    completes SCRIM_GAP above the pill top (round 10), so content has fully
+    dissolved before reaching the chrome and a calm near-opaque band sits
+    between content and pill; below that the scrim holds to the window edge.
+    z=6 sits above content (z<=4) and the content scrollbar (z=5), below
+    player chrome (z=10+) and the playback popup (z=20+). Starts at
+    SIDEBAR_W so the sidebar's own plate and rows stay untouched."""
+    top = height - SCRIM_H
+    fade_span = SCRIM_FADE  # fade completes at the pill top
+    fade_rows = max(1, int(round(SCRIM_FADE / SCRIM_STRIP_PX)))
+    strip_h = SCRIM_FADE / fade_rows
+    for i in range(fade_rows):
+        strip_bottom = top + (i + 1) * strip_h
+        t = min(1.0, max(0.0, (strip_bottom - top) / fade_span))
+        alpha = round(SCRIM_MAX_ALPHA * t * t * (3.0 - 2.0 * t))  # smoothstep
+        # Exact 1px heights, no overlap: at this pitch a fractional tail
+        # double-composites a row and reads as a darker scanline.
+        frame.rect(x=SIDEBAR_W, y=top + i * strip_h, width=width - SIDEBAR_W,
+                   height=strip_h, color=(BG[0], BG[1], BG[2], alpha), z_index=6)
+    frame.rect(x=SIDEBAR_W, y=top + SCRIM_FADE, width=width - SIDEBAR_W,
+               height=SCRIM_H - SCRIM_FADE,
+               color=(BG[0], BG[1], BG[2], SCRIM_MAX_ALPHA), z_index=6)
+
+
 def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
-    bar_y = height - PLAYER_H
-    frame.rect(x=0, y=bar_y, width=width, height=PLAYER_H, color=BAR_BG, z_index=10)
-    frame.rect(x=0, y=bar_y, width=width, height=1, color=(45, 45, 45, 255), z_index=10)
+    # Round 8: centered floating glass capsule (liquid-glass music-pill
+    # reference, dark-adapted), flanked by circular Home/Search nav buttons;
+    # an overflow circle at the bottom-right opens the playback popup
+    # (volume, shuffle, repeat, devices). Scene-drawn → same on every host.
+    px, py, pw, ph = pill_rect(width, height)
+    cy = py + ph / 2
+    _glass_plate(frame, px, py, pw, ph, radius=ph / 2, z=10,
+                 fill=PILL_FILL, border=PILL_BORDER)
 
     player = app.player
     track = player.track if player else None
 
+    # Album art thumb with a hairline ring (image pixels stay square —
+    # renderer clip is a known follow-up; the ring suggests the rounding).
+    frame.rounded_rect(x=px + 9, y=py + 9, width=46, height=46, radius=9,
+                       color=(255, 255, 255, 24), z_index=11)
+    meta_w = pw - 64 - PILL_META_RIGHT_PAD
     if track is not None:
-        image_url = sl_models.pick_image_url(track.album.images if track.album else (), 128)
-        _art(frame, app, image_url, x=16, y=bar_y + 16, size=64, seed=track.name, z=11)
-        _text(frame, track.name, x=92, y=bar_y + 22, size=14, z=12, max_chars=30)
+        image_url = sl_models.pick_image_url(track.album.images if track.album else (), app._art_pick_target(44))
+        _art(frame, app, image_url, x=px + 10, y=py + 10, size=44, seed=track.name, z=12)
+        _text(frame, _fit_width(frame._ctx.measure_text, track.name, max_w=meta_w, size=13),
+              x=px + 64, y=py + 11, size=13, z=12)
         artists = ", ".join(a.name for a in track.artists if a.name)
-        _text(frame, artists, x=92, y=bar_y + 44, size=12, color=SUBTEXT, z=12, max_chars=36)
+        _text(frame, _fit_width(frame._ctx.measure_text, artists, max_w=meta_w, size=11),
+              x=px + 64, y=py + 29, size=11, color=SUBTEXT, z=12)
     else:
-        _text(frame, "Nothing playing", x=92, y=bar_y + 34, size=13, color=FAINT, z=12)
+        # Idle thumb: a quiet neutral tile with a centered note glyph (Spotify's
+        # idle idiom), not a saturated hash-colored placeholder square.
+        frame.rounded_rect(x=px + 10, y=py + 10, width=44, height=44, radius=8,
+                           color=PILL_THUMB_EMPTY, z_index=12)
+        _centered_glyph(frame, "♪", cx=px + 10 + 22, cy=py + 10 + 22, size=20,
+                        color=SUBTEXT, z=12)
+        _text(frame, "Nothing playing", x=px + 64, y=py + 15, size=13, color=FAINT, z=12)
         if app.authenticated:
-            _text(frame, "Pick a device, or start something from a playlist", x=92, y=bar_y + 54,
-                  size=11, color=FAINT, z=12)
+            _text(frame, _fit_width(frame._ctx.measure_text, "Pick a device, or start something from a playlist",
+                                    max_w=meta_w, size=11),
+                  x=px + 64, y=py + 34, size=11, color=FAINT, z=12)
 
-    cx = width / 2
-    btn_y = bar_y + 14
+    # Transport: prev / play / next on the pill's right.
     playing = bool(player and player.is_playing)
-    shuffle_on = bool(player and player.shuffle)
-    repeat = player.repeat if player else "off"
-
-    _transport_button(frame, out, mouse, "S", cx - 120, btn_y, "toggle_shuffle",
-                      ACCENT if shuffle_on else SUBTEXT)
-    _transport_button(frame, out, mouse, "<<", cx - 76, btn_y, "prev", SUBTEXT)
-    play_hover = _hover(mouse, cx - 33, btn_y - 3, 34, 34)
-    frame.circle(cx=cx - 16, cy=btn_y + 14, radius=17,
+    play_cx = px + pw - 72
+    _transport_button(frame, out, mouse, "<<", play_cx - 48, py + 18, "prev", SUBTEXT)
+    play_hover = _hover(mouse, play_cx - 17, py + 15, 34, 34)
+    frame.circle(cx=play_cx, cy=cy, radius=15,
                  fill=TEXT if play_hover else (225, 225, 225, 255), z_index=12)
-    _text(frame, "||" if playing else ">", x=cx - 25, y=btn_y + 5, size=15, color=(0, 0, 0, 255), z=13)
-    out.hit(cx - 33, btn_y - 3, 34, 34, "toggle_play")
-    _transport_button(frame, out, mouse, ">>", cx + 24, btn_y, "next", SUBTEXT)
-    _transport_button(frame, out, mouse, "R1" if repeat == "track" else "R", cx + 68, btn_y,
-                      "cycle_repeat", ACCENT if repeat != "off" else SUBTEXT)
+    if playing:
+        # Drawn bars: text pipes ("||") space differently per font and read broken.
+        bar_w, bar_h, bar_gap = 4.0, 13.0, 5.0
+        bar_y = cy - bar_h / 2
+        frame.rect(x=play_cx - bar_gap / 2 - bar_w, y=bar_y, width=bar_w, height=bar_h,
+                   color=(0, 0, 0, 255), z_index=13)
+        frame.rect(x=play_cx + bar_gap / 2, y=bar_y, width=bar_w, height=bar_h,
+                   color=(0, 0, 0, 255), z_index=13)
+    else:
+        _centered_glyph(frame, ">", cx=play_cx, cy=cy, size=13, color=(0, 0, 0, 255), z=13)
+    out.hit(play_cx - 17, py + 15, 34, 34, "toggle_play")
+    _transport_button(frame, out, mouse, ">>", play_cx + 48, py + 18, "next", SUBTEXT)
 
+    # Progress strip along the pill's lower interior, with tiny time labels.
     duration = track.duration_ms if track else 0
     progress = app.progress_ms()
-    seek_w = min(420.0, width * 0.36)
-    seek_x = cx - seek_w / 2 - 16
-    seek_y = bar_y + 62
-    _text(frame, sl_ui.format_duration_ms(progress), x=seek_x - 46, y=seek_y - 5, size=11,
-          color=FAINT, z=12)
-    frame.rounded_rect(x=seek_x, y=seek_y, width=seek_w, height=4, radius=2, color=(70, 70, 70, 255),
-                       z_index=11)
+    strip_x = px + 92
+    strip_w = min(200.0, max(80.0, pw - 240.0))  # narrows with a shrunk pill
+    strip_y = py + ph - 13
+    if track is not None:
+        _text(frame, sl_ui.format_duration_ms(progress), x=px + 64, y=py + ph - 18, size=9,
+              color=FAINT, z=12)
+        _text(frame, sl_ui.format_duration_ms(duration), x=strip_x + strip_w + 6,
+              y=py + ph - 18, size=9, color=FAINT, z=12)
+    frame.rounded_rect(x=strip_x, y=strip_y, width=strip_w, height=3, radius=1.5,
+                       color=(70, 70, 70, 255), z_index=11)
     frac = sl_ui.seek_fraction(progress, duration)
     if frac > 0:
-        frame.rounded_rect(x=seek_x, y=seek_y, width=max(4.0, seek_w * frac), height=4, radius=2,
-                           color=(220, 220, 220, 255), z_index=12)
-    _text(frame, sl_ui.format_duration_ms(duration), x=seek_x + seek_w + 10, y=seek_y - 5, size=11,
-          color=FAINT, z=12)
-    out.hit(seek_x, seek_y - 7, seek_w, 18, "seek_bar", (seek_x, seek_w, duration))
+        frame.rounded_rect(x=strip_x, y=strip_y, width=max(3.0, strip_w * frac), height=3,
+                           radius=1.5, color=(220, 220, 220, 255), z_index=12)
+    out.hit(strip_x, strip_y - 6, strip_w, 15, "seek_bar", (strip_x, strip_w, duration))
 
-    vol_w = 100.0
-    vol_x = width - vol_w - 24
-    vol_y = bar_y + 46
-    device_label = player.device.name if player and player.device else "Devices"
-    hovering = _hover(mouse, vol_x - 130, bar_y + 30, 120, 32)
-    _text(frame, device_label, x=vol_x - 130, y=bar_y + 40, size=12,
-          color=TEXT if hovering else SUBTEXT, z=12, max_chars=16)
-    out.hit(vol_x - 130, bar_y + 30, 120, 32, "open_devices")
+    # Circular Home/Search nav buttons flanking the pill (reference layout).
+    _nav_circle(frame, app, out, mouse, cx=px - NAV_CIRCLE_GAP - NAV_CIRCLE_R, cy=cy,
+                view="home", glyph="⌂")
+    _nav_circle(frame, app, out, mouse, cx=px + pw + NAV_CIRCLE_GAP + NAV_CIRCLE_R, cy=cy,
+                view="search", glyph="⚲")
+
+    # Overflow circle (bottom-right): volume / shuffle / repeat / devices.
+    ocx = width - PILL_FLOAT - OVERFLOW_R
+    open_hover = _hover(mouse, ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2)
+    _glass_plate(frame, ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2,
+                 radius=OVERFLOW_R, z=10, hovering=open_hover or app.show_devices)
+    _centered_glyph(frame, "…", cx=ocx, cy=cy, size=16,
+                    color=ACCENT if app.show_devices else (TEXT if open_hover else SUBTEXT),
+                    z=12)
+    out.hit(ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2, "open_devices")
+
+    if app.show_devices:
+        _draw_playback_popup(frame, app, out, width=width, pill_top=py, mouse=mouse)
+
+
+def _nav_circle(frame, app, out: FrameOut, mouse, *, cx: float, cy: float,
+                view: str, glyph: str) -> None:
+    hovering = _hover(mouse, cx - NAV_CIRCLE_R, cy - NAV_CIRCLE_R,
+                      NAV_CIRCLE_R * 2, NAV_CIRCLE_R * 2)
+    active = app.view == view
+    _glass_plate(frame, cx - NAV_CIRCLE_R, cy - NAV_CIRCLE_R,
+                 NAV_CIRCLE_R * 2, NAV_CIRCLE_R * 2, radius=NAV_CIRCLE_R, z=10,
+                 hovering=hovering or active)
+    color = ACCENT if active else (TEXT if hovering else SUBTEXT)
+    _centered_glyph(frame, glyph, cx=cx, cy=cy, size=17, color=color, z=12)
+    out.hit(cx - NAV_CIRCLE_R, cy - NAV_CIRCLE_R, NAV_CIRCLE_R * 2, NAV_CIRCLE_R * 2,
+            "nav", view)
+
+
+def _transport_button(frame, out: FrameOut, mouse, glyph, cx, y, action, color) -> None:
+    hovering = _hover(mouse, cx - 12, y - 4, 34, 34)
+    _centered_glyph(frame, glyph, cx=cx + 5, cy=y + 13, size=16,
+                    color=TEXT if hovering else color, z=12)
+    out.hit(cx - 12, y - 4, 34, 34, action)
+
+
+def _draw_playback_popup(frame, app, out: FrameOut, *, width: float, pill_top: float,
+                         mouse) -> None:
+    popup_w = 300.0
+    row_h = 40.0
+    rows = max(1, len(app.devices))
+    head_h = 148.0  # pad + volume/shuffle/repeat rows + divider + section title
+    popup_h = head_h + row_h * rows + 12
+    popup_x = width - popup_w - 16
+    popup_y = pill_top - 12 - popup_h
+    # Floating panels get the dark variant of the glass plate: mostly-opaque
+    # fill for readability over content, same hairline/shadow language.
+    _glass_plate(frame, popup_x, popup_y, popup_w, popup_h, radius=14.0, z=20,
+                 fill=(18, 18, 18, 234), border=(255, 255, 255, 30))
+    # Swallow clicks that land on the panel but on no control: registered
+    # first so the popup's own controls (later) win the reversed hit walk,
+    # while dead space no longer falls through to dismiss the popup (or bleed
+    # into content hits underneath the panel).
+    out.hit(popup_x, popup_y, popup_w, popup_h, "popup_plate")
+
+    player = app.player
+    y0 = popup_y + 14
     volume = (
         player.device.volume_percent
         if player and player.device and player.device.volume_percent is not None
         else app.last_volume
     )
-    frame.rounded_rect(x=vol_x, y=vol_y, width=vol_w, height=4, radius=2, color=(70, 70, 70, 255),
-                       z_index=11)
+    _text(frame, "Volume", x=popup_x + 16, y=y0 + 2, size=12, color=SUBTEXT, z=21)
+    vol_x, vol_w = popup_x + 96, 180.0
+    frame.rounded_rect(x=vol_x, y=y0 + 6, width=vol_w, height=4, radius=2,
+                       color=(70, 70, 70, 255), z_index=21)
     if volume > 0:
-        frame.rounded_rect(x=vol_x, y=vol_y, width=max(4.0, vol_w * volume / 100.0), height=4,
-                           radius=2, color=(220, 220, 220, 255), z_index=12)
-    out.hit(vol_x, vol_y - 8, vol_w, 20, "volume_bar", (vol_x, vol_w))
+        frame.rounded_rect(x=vol_x, y=y0 + 6, width=max(4.0, vol_w * volume / 100.0), height=4,
+                           radius=2, color=(220, 220, 220, 255), z_index=22)
+    out.hit(vol_x, y0 - 2, vol_w, 20, "volume_bar", (vol_x, vol_w))
 
-    if app.show_devices:
-        _draw_device_popup(frame, app, out, width=width, bar_y=bar_y, mouse=mouse)
+    shuffle_on = bool(player and player.shuffle)
+    repeat = player.repeat if player else "off"
+    y1 = y0 + 34
+    _popup_toggle_row(frame, out, mouse, popup_x, y1, popup_w, "Shuffle",
+                      "On" if shuffle_on else "Off", shuffle_on, "toggle_shuffle")
+    y2 = y1 + 34
+    repeat_label = {"off": "Off", "context": "All", "track": "One"}.get(repeat, "Off")
+    _popup_toggle_row(frame, out, mouse, popup_x, y2, popup_w, "Repeat",
+                      repeat_label, repeat != "off", "cycle_repeat")
 
-
-def _transport_button(frame, out: FrameOut, mouse, glyph, cx, y, action, color) -> None:
-    hovering = _hover(mouse, cx - 12, y - 4, 34, 34)
-    _text(frame, glyph, x=cx - 8, y=y + 5, size=16, color=TEXT if hovering else color, z=12)
-    out.hit(cx - 12, y - 4, 34, 34, action)
-
-
-def _draw_device_popup(frame, app, out: FrameOut, *, width: float, bar_y: float, mouse) -> None:
-    popup_w = 300.0
-    row_h = 40.0
-    rows = max(1, len(app.devices))
-    popup_h = 52 + row_h * rows + 12
-    popup_x = width - popup_w - 16
-    popup_y = bar_y - popup_h - 12
-    frame.rounded_rect(x=popup_x, y=popup_y, width=popup_w, height=popup_h, radius=10,
-                       color=POPUP_BG, z_index=20)
-    _text(frame, "Connect to a device", x=popup_x + 16, y=popup_y + 14, size=14, z=21)
+    frame.rect(x=popup_x + 16, y=y2 + 30, width=popup_w - 32, height=1,
+               color=(255, 255, 255, 18), z_index=21)
+    _text(frame, "Connect to a device", x=popup_x + 16, y=y2 + 42, size=14, z=21)
     if not app.devices:
-        _text(frame, "No devices found.", x=popup_x + 16, y=popup_y + 44, size=12, color=SUBTEXT, z=21)
+        _text(frame, "No devices found.", x=popup_x + 16, y=popup_y + head_h + 8, size=12,
+              color=SUBTEXT, z=21)
         _text(frame, "Open Spotify on a device, then pick it here.", x=popup_x + 16,
-              y=popup_y + 62, size=12, color=SUBTEXT, z=21)
+              y=popup_y + head_h + 26, size=12, color=SUBTEXT, z=21)
     for idx, device in enumerate(app.devices):
-        row_y = popup_y + 44 + idx * row_h
+        row_y = popup_y + head_h + idx * row_h
         hovering = _hover(mouse, popup_x + 8, row_y, popup_w - 16, row_h)
         if hovering:
             frame.rounded_rect(x=popup_x + 8, y=row_y, width=popup_w - 16, height=row_h - 4,
@@ -497,6 +805,18 @@ def _draw_device_popup(frame, app, out: FrameOut, *, width: float, bar_y: float,
               color=ACCENT if device.is_active else TEXT, z=21, max_chars=26)
         _text(frame, device.kind, x=popup_x + 20, y=row_y + 22, size=11, color=FAINT, z=21)
         out.hit(popup_x + 8, row_y, popup_w - 16, row_h - 4, "pick_device", device.id)
+
+
+def _popup_toggle_row(frame, out: FrameOut, mouse, x: float, y: float, w: float,
+                      label: str, state: str, on: bool, action: str) -> None:
+    hovering = _hover(mouse, x + 8, y - 5, w - 16, 32)
+    if hovering:
+        frame.rounded_rect(x=x + 8, y=y - 5, width=w - 16, height=30, radius=6,
+                           color=ROW_HOVER_BG, z_index=20)
+    _text(frame, label, x=x + 16, y=y + 2, size=13, z=21)
+    _text(frame, state, x=x + w - 60, y=y + 2, size=12,
+          color=ACCENT if on else FAINT, z=21)
+    out.hit(x + 8, y - 5, w - 16, 30, action)
 
 
 # -- login ---------------------------------------------------------------------
@@ -511,8 +831,20 @@ def login_field_rect(width: float, height: float) -> tuple[float, float, float, 
     return (cx - 190, height * 0.42 + 84, LOGIN_FIELD_W, LOGIN_FIELD_H)
 
 
+def login_save_button_rect(width: float, height: float) -> tuple[float, float, float, float]:
+    """Save button under the Client ID field; drawn and native versions agree."""
+    _fx, fy, _fw, _fh = login_field_rect(width, height)
+    return (width / 2 - 60, fy + 56, 120.0, 40.0)
+
+
+def login_connect_button_rect(width: float, height: float) -> tuple[float, float, float, float]:
+    """Connect Spotify CTA once a Client ID is saved; drawn and native agree."""
+    return (width / 2 - 110, height * 0.42, 220.0, 48.0)
+
+
 def draw_login(frame, app, out: FrameOut, *, width: float, height: float, mouse,
-               native_field_active: bool = False) -> None:
+               native_field_active: bool = False, native_save_active: bool = False,
+               native_connect_active: bool = False, embedded_active: bool = False) -> None:
     cx = width / 2
     _text(frame, "Spotify Light", x=cx - 90, y=height * 0.24, size=32, color=ACCENT, z=3)
     _text(frame, "A lightweight Spotify desktop client, native on luvatrix.",
@@ -523,6 +855,9 @@ def draw_login(frame, app, out: FrameOut, *, width: float, height: float, mouse,
         _text(frame, app.auth_error, x=cx - 190, y=y - 32, size=13, color=DANGER, z=3,
               max_chars=64)
     if app.auth_working:
+        if embedded_active:
+            # The native web view owns the screen; a native Cancel button floats above it.
+            return
         _text(frame, "Waiting for sign-in in your browser…", x=cx - 150, y=y, size=15, z=3)
         hovering = _hover(mouse, cx - 60, y + 44, 120, 40)
         frame.rounded_rect(x=cx - 60, y=y + 44, width=120, height=40, radius=20,
@@ -540,7 +875,11 @@ def draw_login(frame, app, out: FrameOut, *, width: float, height: float, mouse,
         for i, line in enumerate(lines):
             _text(frame, line, x=cx - 190, y=y + i * 24, size=13, color=SUBTEXT, z=3)
         field_x, field_y, field_w, field_h = login_field_rect(width, height)
-        if not native_field_active:
+        if native_field_active:
+            # Lift the native glass capsule off the near-black backdrop.
+            frame.rounded_rect(x=field_x, y=field_y, width=field_w, height=field_h,
+                               radius=20, color=GLASS_TINT, z_index=2)
+        else:
             border = ACCENT if app.client_id_focused else FIELD_BORDER
             frame.rounded_rect(x=field_x, y=field_y, width=field_w, height=field_h, radius=8,
                                color=FIELD_BG, z_index=2)
@@ -551,23 +890,33 @@ def draw_login(frame, app, out: FrameOut, *, width: float, height: float, mouse,
             _text(frame, shown, x=field_x + 14, y=field_y + 12, size=13,
                   color=TEXT if app.client_id_draft else FAINT, z=4, max_chars=44)
             out.hit(field_x, field_y, field_w, field_h, "focus_client_id")
-        save_y = field_y + 56
-        enabled = bool(app.client_id_draft.strip())
-        hovering = _hover(mouse, cx - 60, save_y, 120, 40)
-        frame.rounded_rect(x=cx - 60, y=save_y, width=120, height=40, radius=20,
-                           color=(ACCENT if hovering else ACCENT_DARK) if enabled else CARD_BG,
-                           z_index=2)
-        _text(frame, "Save", x=cx - 24, y=save_y + 11, size=14,
-              color=(0, 0, 0, 255) if enabled else FAINT, z=3)
-        if enabled:
-            out.hit(cx - 60, save_y, 120, 40, "save_client_id")
+        save_x, save_y, save_w, save_h = login_save_button_rect(width, height)
+        if native_save_active:
+            frame.rounded_rect(x=save_x, y=save_y, width=save_w, height=save_h,
+                               radius=20, color=GLASS_TINT, z_index=2)
+        else:
+            enabled = bool(app.client_id_draft.strip())
+            hovering = _hover(mouse, save_x, save_y, save_w, save_h)
+            frame.rounded_rect(x=save_x, y=save_y, width=save_w, height=save_h, radius=20,
+                               color=(ACCENT if hovering else ACCENT_DARK) if enabled else CARD_BG,
+                               z_index=2)
+            _text(frame, "Save", x=cx - 24, y=save_y + 11, size=14,
+                  color=(0, 0, 0, 255) if enabled else FAINT, z=3)
+            if enabled:
+                out.hit(save_x, save_y, save_w, save_h, "save_client_id")
         return
 
-    hovering = _hover(mouse, cx - 110, y, 220, 48)
-    frame.rounded_rect(x=cx - 110, y=y, width=220, height=48, radius=24,
-                       color=ACCENT if hovering else ACCENT_DARK, z_index=2)
-    _text(frame, "Connect Spotify", x=cx - 68, y=y + 15, size=15, color=(0, 0, 0, 255), z=3)
-    out.hit(cx - 110, y, 220, 48, "start_login")
+    con_x, con_y, con_w, con_h = login_connect_button_rect(width, height)
+    if native_connect_active:
+        frame.rounded_rect(x=con_x, y=con_y, width=con_w, height=con_h,
+                           radius=24, color=GLASS_TINT, z_index=2)
+    else:
+        hovering = _hover(mouse, con_x, con_y, con_w, con_h)
+        frame.rounded_rect(x=con_x, y=con_y, width=con_w, height=con_h, radius=24,
+                           color=ACCENT if hovering else ACCENT_DARK, z_index=2)
+        _text(frame, "Connect Spotify", x=cx - 68, y=con_y + 15, size=15,
+              color=(0, 0, 0, 255), z=3)
+        out.hit(con_x, con_y, con_w, con_h, "start_login")
     _text(frame, "Playback uses Spotify Connect: audio plays on a device you pick.",
           x=cx - 220, y=y + 72, size=12, color=FAINT, z=3)
     _text(frame, "Playback control requires Spotify Premium.",

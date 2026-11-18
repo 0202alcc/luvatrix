@@ -840,5 +840,47 @@ class UnifiedRuntimeTests(unittest.TestCase):
             self.assertEqual(sensors.stopped, 1)
 
 
+class SceneBackingScaleWiringTests(unittest.TestCase):
+    class _Ctx:
+        def __init__(self) -> None:
+            self.provider = None
+
+        def set_backing_scale_provider(self, provider) -> None:
+            self.provider = provider
+
+    def test_wire_connects_target_backing_scale(self) -> None:
+        from luvatrix_core.core.unified_runtime import _wire_scene_backing_scale
+
+        class _Target:
+            def backing_scale(self) -> float:
+                return 2.0
+
+        ctx = self._Ctx()
+        _wire_scene_backing_scale(ctx, _Target())
+        self.assertIsNotNone(ctx.provider)
+        self.assertEqual(ctx.provider(), 2.0)
+
+    def test_wire_ignores_targets_without_scale(self) -> None:
+        from luvatrix_core.core.unified_runtime import _wire_scene_backing_scale
+
+        ctx = self._Ctx()
+        _wire_scene_backing_scale(ctx, object())
+        _wire_scene_backing_scale(ctx, None)
+        self.assertIsNone(ctx.provider)
+
+    def test_cpu_scene_target_reports_frame_display_ratio(self) -> None:
+        from luvatrix_core.core.scene_graph import ClearNode, SceneFrame
+        from luvatrix_core.targets.cpu_scene_target import CpuSceneTarget
+
+        target = CpuSceneTarget(_RecordingTarget())
+        target.start()
+        try:
+            self.assertEqual(target.backing_scale(), 1.0)
+            target.present_scene(SceneFrame(0, 100, 100, 200, 200, 1, (ClearNode((0, 0, 0, 255)),)))
+            self.assertEqual(target.backing_scale(), 2.0)
+        finally:
+            target.stop()
+
+
 if __name__ == "__main__":
     unittest.main()

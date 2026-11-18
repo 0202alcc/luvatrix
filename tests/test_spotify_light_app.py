@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import sys
 import threading
+import time
+import urllib.parse
 from pathlib import Path
 
 import pytest
@@ -23,16 +25,24 @@ from luvatrix_core.core.app_runtime import AppRuntime  # noqa: E402
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread  # noqa: E402
 from luvatrix_core.core.mcp_runtime import MCP_CAPABILITIES, McpRuntimeBridge  # noqa: E402
 from luvatrix_core.core.scene_graph import (  # noqa: E402
+    CircleNode,
     ClearNode,
     CpuLayerNode,
+    RectNode,
+    RoundedRectNode,
+    SceneFrame,
     SceneGraphBuffer,
     TextNode,
 )
+from luvatrix_core.core.scene_rasterizer import rasterize_scene_frame  # noqa: E402
 from luvatrix_core.core.sensor_manager import SensorManagerThread  # noqa: E402
 from luvatrix_core.core.window_matrix import WindowMatrix  # noqa: E402
 
 import app_main  # noqa: E402
+import sl_api  # noqa: E402
+import sl_art  # noqa: E402
 import sl_models  # noqa: E402
+import sl_oauth  # noqa: E402
 import sl_store  # noqa: E402
 import sl_ui  # noqa: E402
 import sl_views  # noqa: E402
@@ -167,18 +177,187 @@ class TestHomeView:
 
         texts = _texts(scene_buffer)
         for expected in (
-            "Home", "Search", "Your Library", "PLAYLISTS", "Roadtrip", "Focus",
+            "Your Library", "PLAYLISTS", "Roadtrip", "Focus",
             "Top tracks", "New releases", "Your playlists", "Top artists",
             "Come As You Are", "Nevermind", "Nirvana", "Alec", "Log out",
-            "Nothing playing",
+            "Nothing playing", "⌂", "⚲",
         ):
             assert expected in texts, f"missing text: {expected!r}"
         assert any(t.startswith("Good ") for t in texts)
         # Album art placeholders land as CpuLayerNode textures.
         assert _nodes(scene_buffer, CpuLayerNode)
         actions = {region.action for region in app._hits}
-        assert {"nav", "open_playlist", "open_card", "logout", "seek_bar", "volume_bar",
+        assert {"nav", "open_playlist", "open_card", "logout", "seek_bar",
                 "toggle_play", "open_devices"} <= actions
+        # Volume lives in the playback popup now (round 8) — hidden until the
+        # overflow circle opens it.
+        assert "volume_bar" not in actions
+
+    def test_loading_line_until_bootstrap_completes(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+
+        _tick(app, ctx, 2)
+
+        texts = _texts(scene_buffer)
+        assert any("Loading your music" in t for t in texts)
+        assert app._bootstrap_done is False
+
+    def test_bootstrap_api_error_surfaces_persistent_error(self, app_ctx):
+        """Alec's live session: a non-401 bootstrap ApiError landed in a 6s
+        toast and vanished, leaving 'Loading your music…' forever. Failures
+        must persist as bootstrap_error, not a transient toast."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        error = sl_api.ApiError(sl_api.ErrorKind.API, "Insufficient client scope", status=403)
+
+        app._apply_result("bootstrap", error)
+        _tick(app, ctx, 2)
+
+        assert "Insufficient client scope" in app.bootstrap_error
+        assert app.status_message == ""  # NOT routed through the 6s toast
+        assert app._bootstrap_done is True
+        texts = _texts(scene_buffer)
+        assert any("Insufficient client scope" in t for t in texts)
+        assert not any("Loading your music" in t for t in texts)
+
+    def test_bootstrap_oauth_error_surfaces_persistent_error(self, app_ctx):
+        """A token-refresh OAuthError inside the bootstrap job must persist
+        the same way — it took the same transient-toast path as ApiError."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+
+        app._apply_result("bootstrap", sl_oauth.OAuthError("token refresh failed"))
+        _tick(app, ctx, 2)
+
+        assert "token refresh failed" in app.bootstrap_error
+        assert app.status_message == ""
+        assert app._bootstrap_done is True
+        texts = _texts(scene_buffer)
+        assert not any("Loading your music" in t for t in texts)
+
+    def test_bootstrap_unauthorized_still_ends_session(self, app_ctx):
+        """A 401 means the token is dead: keep the end-session path (back to
+        the wall) rather than surfacing an inline error on the home view."""
+        app, ctx, _ = app_ctx
+        app.authenticated = True
+        error = sl_api.ApiError(sl_api.ErrorKind.UNAUTHORIZED, "Unauthorized", status=401)
+
+        app._apply_result("bootstrap", error)
+
+        assert app.authenticated is False
+        assert app._bootstrap_done is True
+
+    def test_bootstrap_empty_library_shows_empty_state(self, app_ctx):
+        """Fresh account: bootstrap SUCCEEDS with all-empty data — that is not
+        'loading', it is an empty library and must say so."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        profile = sl_models.Profile(id="u1", display_name="Alec", email=None,
+                                    image_url=None, product="premium")
+
+        app._apply_result("bootstrap", (profile, [], [], [], [], []))
+        _tick(app, ctx, 2)
+
+        assert app._bootstrap_done is True
+        assert app.home_sections == []
+        texts = _texts(scene_buffer)
+        assert any("Nothing here yet" in t for t in texts)
+        assert not any("Loading your music" in t for t in texts)
+
+    def test_bootstrap_section_403_degrades_to_named_note(self, app_ctx):
+        """Spotify dev mode 403s whole endpoint families (Alec's live session):
+        one restricted section must not block the rest of the library. The
+        section degrades to an inline note NAMING the call; survivors load."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        profile = sl_models.Profile(id="u1", display_name="Alec", email=None,
+                                    image_url=None, product="premium")
+        album = _album("Nevermind", _artist("Nirvana"))
+
+        class _Client:
+            def me(self):
+                return profile
+
+            def my_playlists(self, *, limit=50):
+                return [_playlist("Roadtrip")]
+
+            def top_tracks(self, *, limit=20):
+                raise sl_api.ApiError(sl_api.ErrorKind.API, "403: Forbidden", status=403)
+
+            def new_releases(self, *, limit=20):
+                return [album]
+
+            def top_artists(self, *, limit=20):
+                return []
+
+        app._client = _Client()
+
+        outcome = app._job_bootstrap()  # must NOT raise
+        *_, notices = outcome
+        # Round 13: notes speak human — the raw "403: Forbidden" goes to the
+        # log, not the UI. The note still names the section that degraded.
+        assert notices == ["Couldn't load top tracks right now"]
+
+        app._apply_result("bootstrap", outcome)
+        _tick(app, ctx, 2)
+
+        assert app._bootstrap_done is True
+        assert app.bootstrap_error == ""  # partial degradation is not a library failure
+        texts = _texts(scene_buffer)
+        assert any("Couldn't load top tracks right now" in t for t in texts)
+        assert not any("403" in t or "Forbidden" in t for t in texts)
+        assert "New releases" in texts  # surviving section still renders
+        assert "Nevermind" in texts
+        assert "Top tracks" not in texts  # degraded section title absent
+        assert not any("Loading your music" in t for t in texts)
+
+    def test_bootstrap_all_sections_degraded_shows_notes_not_empty_state(self, app_ctx):
+        """If EVERY section 403s, the notes explain the empty library — the
+        generic 'Nothing here yet' line alone would misread as a fresh account."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+
+        class _Client:
+            def _denied(self, *args, **kwargs):
+                raise sl_api.ApiError(sl_api.ErrorKind.API, "403: Forbidden", status=403)
+
+            me = my_playlists = top_tracks = new_releases = top_artists = _denied
+
+        app._client = _Client()
+
+        outcome = app._job_bootstrap()
+        *_, notices = outcome
+        assert len(notices) == 4  # top_artists degrades silently by design
+
+        app._apply_result("bootstrap", outcome)
+        _tick(app, ctx, 2)
+
+        texts = _texts(scene_buffer)
+        assert any("Couldn't load profile right now" in t for t in texts)
+        assert any("Couldn't load new releases right now" in t for t in texts)
+        assert not any("403" in t or "Forbidden" in t for t in texts)
+        assert not any("Nothing here yet" in t for t in texts)
+        assert not any("Loading your music" in t for t in texts)
+
+    def test_bootstrap_401_wrap_preserves_unauthorized(self, app_ctx):
+        """A 401 from any bootstrap call must keep ErrorKind.UNAUTHORIZED so
+        the end-session path still fires — naming must not mask it."""
+        app, ctx, _ = app_ctx
+
+        class _Client:
+            def me(self):
+                raise sl_api.ApiError(sl_api.ErrorKind.UNAUTHORIZED, "401", status=401)
+
+        app._client = _Client()
+
+        with pytest.raises(sl_api.ApiError) as excinfo:
+            app._job_bootstrap()
+        assert "profile" in str(excinfo.value)
+        assert excinfo.value.kind == sl_api.ErrorKind.UNAUTHORIZED
+
+        app._apply_result("bootstrap", excinfo.value)
+        assert app.authenticated is False  # end-session path intact
 
     def test_render_on_invalidation_only(self, app_ctx):
         app, ctx, _ = app_ctx
@@ -207,6 +386,10 @@ class TestPlaylistView:
                                            track=playing_track, device=device,
                                            shuffle=False, repeat="off")
         app._player_synced_at = app.now_monotonic
+        # Round 8: the device name lives in the playback popup (overflow
+        # circle), not on the pill itself.
+        app.devices = [device]
+        app.show_devices = True
 
         _tick(app, ctx, 2)
 
@@ -224,7 +407,346 @@ class TestPlaylistView:
         assert {"play_context", "play_track_in_context"} <= actions
 
 
+class TestPlaylistErrorState:
+    """Live Mac session (round 13): every playlist open 403'd and the view sat
+    on "Loading playlist…" forever — the failure only produced a 6s toast with
+    raw "403: Forbidden". A failed playlist load must land as a persistent
+    inline error with a way to retry, the same contract bootstrap got."""
+
+    def _open(self, app):
+        app.authenticated = True
+        playlist = _playlist("breaks")
+        app.playlists = [playlist]
+        app.view = f"playlist:{playlist.id}"
+        return playlist
+
+    def test_api_error_shows_inline_state_not_eternal_loading(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        playlist = self._open(app)
+        error = sl_api.ApiError(sl_api.ErrorKind.API, "403: Forbidden", status=403)
+
+        app._apply_result(f"playlist:{playlist.id}", error)
+        _tick(app, ctx, 2)
+
+        assert app.playlist_error
+        assert app.status_message == ""  # inline state, not a vanishing toast
+        texts = _texts(scene_buffer)
+        assert any("Couldn't load this playlist" in t for t in texts)
+        assert not any("Loading playlist" in t for t in texts)
+        actions = {region.action for region in app._hits}
+        assert "retry_playlist" in actions
+
+    def test_generic_exception_also_shows_inline_state(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        playlist = self._open(app)
+
+        app._apply_result(f"playlist:{playlist.id}", RuntimeError("connection reset"))
+        _tick(app, ctx, 2)
+
+        assert app.playlist_error
+        texts = _texts(scene_buffer)
+        assert any("Couldn't load this playlist" in t for t in texts)
+        assert not any("Loading playlist" in t for t in texts)
+
+    def test_retry_clears_error_and_resubmits(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        playlist = self._open(app)
+        app._apply_result(f"playlist:{playlist.id}",
+                          sl_api.ApiError(sl_api.ErrorKind.API, "403: Forbidden", status=403))
+        _tick(app, ctx, 2)
+        submitted = []
+        monkeypatch.setattr(app.worker, "submit", lambda label, fn: submitted.append(label))
+
+        retry = next(r for r in app._hits if r.action == "retry_playlist")
+        app._dispatch_action("retry_playlist", retry.payload, 0)
+        _tick(app, ctx, 2)
+
+        assert app.playlist_error == ""
+        assert submitted == [f"playlist:{playlist.id}"]
+        texts = _texts(scene_buffer)
+        assert any("Loading playlist" in t for t in texts)  # loading again is honest now
+
+    def test_open_playlist_clears_prior_error(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        playlist = self._open(app)
+        app.playlist_error = "403: Forbidden"
+        monkeypatch.setattr(app.worker, "submit", lambda label, fn: None)
+
+        app._dispatch_action("open_playlist", playlist.id, 0)
+
+        assert app.playlist_error == ""
+
+    def test_success_clears_error(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        playlist = self._open(app)
+        app.playlist_error = "403: Forbidden"
+        tracks = [_track("Lithium", _artist("Nirvana"), _album("Nevermind", _artist("Nirvana")))]
+
+        app._apply_result(f"playlist:{playlist.id}", (playlist, tracks))
+        _tick(app, ctx, 2)
+
+        assert app.playlist_error == ""
+        assert app.playlist_detail == (playlist, tracks)
+        texts = _texts(scene_buffer)
+        assert "Lithium" in texts
+
+    def test_unauthorized_still_ends_session_not_inline(self, app_ctx):
+        app, ctx, _ = app_ctx
+        playlist = self._open(app)
+        error = sl_api.ApiError(sl_api.ErrorKind.UNAUTHORIZED, "Unauthorized", status=401)
+
+        app._apply_result(f"playlist:{playlist.id}", error)
+
+        assert app.authenticated is False
+
+
+class TestSansTypography:
+    """The whole UI rendered in the renderer's monospace default because the
+    public frame API exposed no font family. Spotify Light is a music app,
+    not a terminal: every scene text node the app emits must use its chosen
+    sans family, on every view."""
+
+    def _families(self, scene_buffer) -> set[str]:
+        return {node.font_family for node in _nodes(scene_buffer, TextNode)}
+
+    def test_home_view_text_uses_sans_family(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        app._bootstrap_done = True
+        _tick(app, ctx, 2)
+        assert self._families(scene_buffer) == {sl_views.FONT_FAMILY}
+
+    def test_library_view_text_uses_sans_family(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        app.playlists = [_playlist("breaks")]
+        app.view = "library"
+        _tick(app, ctx, 2)
+        assert self._families(scene_buffer) == {sl_views.FONT_FAMILY}
+
+    def test_search_view_text_uses_sans_family(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        app.view = "search"
+        _tick(app, ctx, 2)
+        assert self._families(scene_buffer) == {sl_views.FONT_FAMILY}
+
+    def test_playlist_view_text_uses_sans_family(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        playlist = _playlist("breaks", count=1)
+        artist = _artist("Nirvana")
+        app.authenticated = True
+        app.playlists = [playlist]
+        app.view = f"playlist:{playlist.id}"
+        app.playlist_detail = (playlist, [_track("Lithium", artist, _album("Nevermind", artist))])
+        _tick(app, ctx, 2)
+        assert self._families(scene_buffer) == {sl_views.FONT_FAMILY}
+
+    def test_login_view_text_uses_sans_family(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        assert app.authenticated is False
+        _tick(app, ctx, 2)
+        assert self._families(scene_buffer) == {sl_views.FONT_FAMILY}
+
+    def test_toast_text_uses_sans_family(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        app._bootstrap_done = True
+        app.status_message = "Saved"
+        app._status_until = app.now_monotonic + 60
+        _tick(app, ctx, 2)
+        families = self._families(scene_buffer)
+        assert families == {sl_views.FONT_FAMILY}
+        assert "Saved" in _texts(scene_buffer)
+
+    def test_family_is_a_sans_face(self):
+        # Behavior lock: the design choice is a system sans, not another mono.
+        assert sl_views.FONT_FAMILY == "Helvetica Neue"
+
+
+class TestCardPlayButtonGeometry:
+    """Hover play button hugged the art's bottom edge (4px) while sitting 16px
+    from the right — asymmetric insets read as a mis-placed control. The
+    button anchors 16px from BOTH art edges."""
+
+    def test_play_button_inset_is_symmetric(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        artist = _artist("Nirvana")
+        album = _album("Nevermind", artist)
+        track = _track("Lithium", artist, album)
+        app.authenticated = True
+        app._bootstrap_done = True
+        app.home_sections = sl_ui.build_home_sections(
+            top_tracks=[track], new_releases=[], playlists=[], top_artists=[],
+        )
+        app.view = "home"
+        _tick(app, ctx, 2)
+        art = next(n for n in _nodes(scene_buffer, CpuLayerNode) if n.width == 156)
+        # Hover the centre of the first card by driving the input state the
+        # way real HDI pointer events do (the app re-reads it every tick).
+        app.input.state.mouse_x = art.x + 78
+        app.input.state.mouse_y = art.y + 78
+        app.invalidate()
+        _tick(app, ctx, 2)
+
+        buttons = [n for n in _nodes(scene_buffer, CircleNode)
+                   if tuple(n.fill_rgba) == tuple(sl_views.ACCENT)]
+        assert len(buttons) == 1
+        button = buttons[0]
+        assert button.cx == pytest.approx(art.x + 156 - 16, abs=1.0)
+        assert button.cy == pytest.approx(art.y + 156 - 16, abs=1.0)
+
+
+class TestTransportAndOverflow:
+    def test_pause_icon_is_drawn_bars_not_text_pipes(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        artist = _artist("Nirvana")
+        track = _track("Lithium", artist, _album("Nevermind", artist))
+        device = sl_models.Device(id="d1", name="Mac", kind="Computer", is_active=True,
+                                  is_restricted=False, volume_percent=50)
+        app.authenticated = True
+        app._bootstrap_done = True
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=1000, track=track,
+                                           device=device, shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        _tick(app, ctx, 2)
+
+        assert "||" not in _texts(scene_buffer)
+        # Two narrow dark bars inside the pause circle.
+        circles = [n for n in _nodes(scene_buffer, CircleNode)
+                   if tuple(n.fill_rgba) == (225, 225, 225, 255)]
+        assert len(circles) == 1
+        circle = circles[0]
+        bars = [n for n in _nodes(scene_buffer, RectNode)
+                if tuple(n.color_rgba) == (0, 0, 0, 255)
+                and abs((n.x + n.width / 2) - circle.cx) < circle.radius
+                and 3 <= n.width <= 6 and 10 <= n.height <= 18]
+        assert len(bars) == 2
+
+    def test_paused_icon_still_shows_play_glyph(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        app._bootstrap_done = True
+        _tick(app, ctx, 2)
+        assert ">" in _texts(scene_buffer)
+
+    def test_overflow_hit_region_matches_nav_circle_size(self, app_ctx):
+        app, ctx, _ = app_ctx
+        app.authenticated = True
+        app._bootstrap_done = True
+        _tick(app, ctx, 2)
+        # Pill nav circles are the square "nav" hits (the sidebar's are wide).
+        nav = next(r for r in app._hits if r.action == "nav" and r.w == r.h)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        assert (overflow.w, overflow.h) == (nav.w, nav.h)
+
+
 class TestSearchView:
+    def test_caret_tracks_measured_proportional_width(self, app_ctx):
+        """Round 15 (live pass on `670b15c`): the caret estimated advance as
+        len * size * 0.52, which drifts badly under proportional Helvetica
+        Neue (WWWWW ≈ 66pt, not 36). The caret must sit at the measured end
+        of the query text."""
+        from luvatrix_core.core import font_fallback as ff
+
+        app, _, _ = app_ctx
+        app.authenticated = True
+        app.search_focused = True
+        app.search_query = "WWWWW"
+        app.now_monotonic = 0.25  # caret blink phase on
+
+        class _Frame:
+            def __init__(self):
+                self.rects = []
+                self.texts = []
+
+            def rect(self, **kw):
+                self.rects.append(kw)
+
+            def text(self, *args, **kw):
+                self.texts.append(kw)
+
+            def __getattr__(self, name):
+                return lambda *a, **kw: None
+
+        capture = _Frame()
+        sl_views.draw_search(capture, app, sl_views.FrameOut(),
+                             width=1280, height=800, mouse=None)
+        carets = [r for r in capture.rects if r["z_index"] == 4 and r["width"] <= 2.0]
+        assert len(carets) == 1, f"expected one caret rect, got {carets}"
+
+        chain = ff.get_font_chain(sl_views.FONT_FAMILY, 14.0)
+        expected_w = ff.measure_runs(ff.split_runs(chain, "WWWWW"))[0]
+        expected_x = sl_views.SIDEBAR_W + sl_views.CONTENT_PAD + 18 + 2 + expected_w
+        assert abs(carets[0]["x"] - expected_x) < 1.0, (
+            f"caret x {carets[0]['x']} must track the measured proportional "
+            f"width ({expected_x:.1f}), not a mono-width estimate")
+
+    class _Capture:
+        def __init__(self):
+            self.rects = []
+            self.texts = []
+
+        def rect(self, **kw):
+            self.rects.append(kw)
+
+        def text(self, *args, **kw):
+            kw = dict(kw)
+            if args:
+                kw["text"] = args[0]
+            self.texts.append(kw)
+
+        def __getattr__(self, name):
+            return lambda *a, **kw: None
+
+    def test_long_query_clips_the_head_and_keeps_the_caret_in_field(self, app_ctx):
+        """Round 19 (overnight): the field drew the query with max_chars=52 —
+        width-blind under proportional type (52 W's ≈ 670pt against a ~428pt
+        text budget, overflowing the 460pt field), and the caret measured the
+        FULL query, so it painted past the field's right edge — and the user
+        couldn't see the last characters they typed. A text field shows the
+        TAIL: clip the head with a leading ellipsis, caret inside the field."""
+        app, _, _ = app_ctx
+        app.authenticated = True
+        app.search_focused = True
+        app.search_query = "W" * 60
+        app.now_monotonic = 0.25  # caret blink phase on
+
+        capture = self._Capture()
+        sl_views.draw_search(capture, app, sl_views.FrameOut(),
+                             width=1280, height=800, mouse=None)
+
+        shown = next(t["text"] for t in capture.texts if "W" in t.get("text", ""))
+        assert shown.startswith("…"), "an overflowing query clips the head, not the tail"
+        assert shown.endswith("WWWWW"), "the tail being typed stays visible"
+        width = app.ctx.measure_text(shown, font_size_px=14.0,
+                                     font_family=sl_views.FONT_FAMILY)
+        budget = 460.0 - 18 - 14
+        assert width <= budget + 1e-6, \
+            f"shown text overflows the field: {width:.1f} > {budget:.1f}"
+
+        carets = [r for r in capture.rects if r["z_index"] == 4 and r["width"] <= 2.0]
+        assert len(carets) == 1
+        inner_right = sl_views.SIDEBAR_W + sl_views.CONTENT_PAD + 460.0 - 14.0
+        assert carets[0]["x"] <= inner_right, \
+            f"caret escapes the field: x={carets[0]['x']:.1f} > {inner_right:.1f}"
+
+    def test_short_query_displays_whole_without_ellipsis(self, app_ctx):
+        """Characterization: a query that fits is shown verbatim (no leading
+        or trailing ellipsis) — the head-clip only fires on overflow."""
+        app, _, _ = app_ctx
+        app.authenticated = True
+        app.search_focused = True
+        app.search_query = "jazz"
+        app.now_monotonic = 0.25
+
+        capture = self._Capture()
+        sl_views.draw_search(capture, app, sl_views.FrameOut(),
+                             width=1280, height=800, mouse=None)
+
+        shown = next(t["text"] for t in capture.texts if "jazz" in t.get("text", ""))
+        assert shown == "jazz"
+
     def test_results_grouped_by_kind(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
         artist = _artist("Nirvana")
@@ -256,17 +778,22 @@ class TestSearchView:
 
 
 class _FakeNativeField:
-    def __init__(self, *, x, y, width, height, placeholder, value, on_change, on_submit):
+    def __init__(self, *, x, y, width, height, placeholder, value, on_change, on_submit,
+                 within=None, bordered=True):
         self.frame = (x, y, width, height)
         self.placeholder = placeholder
         self.value = value
         self.on_change = on_change
         self.on_submit = on_submit
+        self.within = within
+        self.bordered = bordered
         self.is_visible = True
         self.destroyed = False
+        self.set_frame_calls = 0
 
     def set_frame(self, x, y, width, height):
         self.frame = (x, y, width, height)
+        self.set_frame_calls += 1
 
     def set_value(self, value):
         self.value = value
@@ -289,15 +816,122 @@ class _FakeNativeField:
         self.destroyed = True
 
 
+class _FakeGlassSurface:
+    def __init__(self, *, x, y, width, height, corner_radius=0.0, style="regular"):
+        self.frame = (x, y, width, height)
+        self.set_frame_calls = 0
+        self.corner_radius = corner_radius
+        self.style = style
+        self.is_visible = True
+        self.destroyed = False
+
+    def set_frame(self, x, y, width, height):
+        self.frame = (x, y, width, height)
+        self.set_frame_calls += 1
+
+    def show(self):
+        self.is_visible = True
+
+    def hide(self):
+        self.is_visible = False
+
+    def destroy(self):
+        self.destroyed = True
+
+
+class _FakeNativeButton:
+    def __init__(self, *, x, y, width, height, title, within=None, on_press=None):
+        self.frame = (x, y, width, height)
+        self.title = title
+        self.within = within
+        self.on_press = on_press
+        self.enabled = True
+        self.is_visible = True
+        self.destroyed = False
+        self.set_frame_calls = 0
+
+    def set_frame(self, x, y, width, height):
+        self.frame = (x, y, width, height)
+        self.set_frame_calls += 1
+
+    def show(self):
+        self.is_visible = True
+
+    def hide(self):
+        self.is_visible = False
+
+    def set_enabled(self, enabled):
+        self.enabled = bool(enabled)
+
+    def destroy(self):
+        self.destroyed = True
+
+
+class _FakeWebView:
+    def __init__(self, *, x, y, width, height, redirect_prefix="", on_redirect=None,
+                 on_navigation_state=None):
+        self.frame = (x, y, width, height)
+        self.redirect_prefix = redirect_prefix
+        self.on_redirect = on_redirect
+        self.on_navigation_state = on_navigation_state
+        self.loaded_urls: list[str] = []
+        self.can_go_back = False
+        self.went_back = 0
+        self.is_visible = True
+        self.destroyed = False
+
+    def load_url(self, url):
+        self.loaded_urls.append(url)
+
+    def go_back(self):
+        self.went_back += 1
+
+    def set_frame(self, x, y, width, height):
+        self.frame = (x, y, width, height)
+
+    def show(self):
+        self.is_visible = True
+
+    def hide(self):
+        self.is_visible = False
+
+    def destroy(self):
+        self.destroyed = True
+
+
 class _FakeNativeBridge:
     def __init__(self):
         self.available = True
         self.created: list[_FakeNativeField] = []
+        self.buttons: list[_FakeNativeButton] = []
+        self.web_views: list[_FakeWebView] = []
+        self.glass: list[_FakeGlassSurface] = []
+        self.web_view_error: Exception | None = None
+        self.button_error: Exception | None = None
 
     def create_text_field(self, **kwargs):
         field = _FakeNativeField(**kwargs)
         self.created.append(field)
         return field
+
+    def create_button(self, **kwargs):
+        if self.button_error is not None:
+            raise self.button_error
+        button = _FakeNativeButton(**kwargs)
+        self.buttons.append(button)
+        return button
+
+    def create_web_view(self, **kwargs):
+        if self.web_view_error is not None:
+            raise self.web_view_error
+        view = _FakeWebView(**kwargs)
+        self.web_views.append(view)
+        return view
+
+    def create_glass_surface(self, **kwargs):
+        surface = _FakeGlassSurface(**kwargs)
+        self.glass.append(surface)
+        return surface
 
     def suppress_keyboard(self):
         return False
@@ -319,20 +953,52 @@ class TestNativeClientIdField:
 
         assert len(bridge.created) == 1
         field = bridge.created[0]
-        # Same rect the drawn field uses: x=cx-190, y=height*0.42+84, 380x40.
-        assert field.frame == (450.0, 420.0, 380.0, 40.0)
+        # Field insets inside its 380x40 glass capsule (450,420): 14pt sides,
+        # vertically centered in a 20pt-high editor so the placeholder and
+        # text sit mid-plate instead of top-aligned.
+        assert field.frame == (464.0, 430.0, 352.0, 20.0)
         texts = _texts(scene_buffer)
         assert "Client ID" not in texts  # drawn placeholder replaced by the native field
         assert any("developer.spotify.com/dashboard" in t for t in texts)  # instructions stay
         actions = {region.action for region in app._hits}
         assert "focus_client_id" not in actions
-        assert "save_client_id" not in actions  # disabled while the draft is empty
+        assert "save_client_id" not in actions  # native Save owns the click; disabled pre-draft
+        save = bridge.buttons[0]
+        assert save.enabled is False
 
         # Typing into the native field flows into the app draft and arms Save.
         field.set_value("abc-123")
         assert app.client_id_draft == "abc-123"
         _tick(app, ctx, 1)
-        assert "save_client_id" in {region.action for region in app._hits}
+        assert save.enabled is True
+        assert "save_client_id" not in {region.action for region in app._hits}
+
+    def test_native_frames_reapply_each_render(self, app_ctx, monkeypatch):
+        """Mac evidence: the native plate drifted above its design position
+        because the syncs early-outed on an unchanged logical frame while the
+        content view had resized underneath. Frames must re-apply every render
+        so the AppKit frame always derives from the current bounds."""
+        app, ctx, _ = app_ctx
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+
+        _tick(app, ctx, 2)
+        field = bridge.created[0]
+        save = bridge.buttons[0]
+        surfaces = list(bridge.glass)
+        assert surfaces and field.set_frame_calls >= 1
+        before = (field.set_frame_calls, save.set_frame_calls,
+                  [g.set_frame_calls for g in surfaces])
+
+        # A state change (or window resize) invalidates and re-renders; every
+        # re-render must re-apply the native frames against current bounds.
+        app.invalidate()
+        _tick(app, ctx, 2)
+
+        assert field.set_frame_calls > before[0]
+        assert save.set_frame_calls > before[1]
+        for surface, prev in zip(surfaces, before[2]):
+            assert surface.set_frame_calls > prev
 
     def test_field_destroyed_once_client_id_saved(self, app_ctx, monkeypatch):
         app, ctx, _ = app_ctx
@@ -365,6 +1031,45 @@ class TestNativeClientIdField:
         assert app.client_id_draft == ""
 
 
+class TestControlKeyNames:
+    """Synthetic keyboards (the MCP tunnel, accessibility drivers) name
+    control keys instead of sending macOS keycodes: the payload carries
+    key="backspace"/"enter"/"escape" with no `code`. The HDI keyboard
+    normalizer also rebuilds key_down payloads as {phase, key, active_keys}
+    — `code` never survives the tunnel. Key names must act exactly like
+    their keycode equivalents or remote drivers cannot edit text."""
+
+    @staticmethod
+    def _event(key: str):
+        return type("E", (), {"payload": {"key": key, "phase": "down"}})()
+
+    def test_backspace_name_deletes_a_character(self, app_ctx):
+        app, _, _ = app_ctx
+        app.authenticated = True
+        app.search_focused = True
+        app.search_query = "blue"
+        app._handle_key(self._event("backspace"))
+        assert app.search_query == "blu"
+
+    def test_escape_name_unfocuses_the_field(self, app_ctx):
+        app, _, _ = app_ctx
+        app.authenticated = True
+        app.search_focused = True
+        app._handle_key(self._event("escape"))
+        assert app.search_focused is False
+
+    def test_enter_name_submits_the_search(self, app_ctx):
+        app, _, _ = app_ctx
+        app.authenticated = True
+        app.search_focused = True
+        app.search_query = "blue"
+        app._client = object()
+        submitted = []
+        app.worker.submit = lambda name, job: submitted.append(name)
+        app._handle_key(self._event("enter"))
+        assert submitted == ["search"]
+
+
 class TestPlayerBar:
     def test_transport_and_device_popup(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
@@ -386,13 +1091,1015 @@ class TestPlayerBar:
         _tick(app, ctx, 2)
 
         texts = _texts(scene_buffer)
-        for expected in ("Lithium", "Nirvana", "4:17", "||", "Connect to a device",
+        for expected in ("Lithium", "Nirvana", "4:17", "Connect to a device",
                          "MacBook Pro", "Kitchen Speaker", "Speaker"):
             assert expected in texts, f"missing text: {expected!r}"
+        # Round 13: pause is two drawn bars now, not text pipes.
+        assert "||" not in texts
         # Elapsed-time label reflects interpolated progress near 0:30/0:31.
         assert any(t in ("0:30", "0:31") for t in texts)
         actions = {region.action for region in app._hits}
         assert {"toggle_shuffle", "prev", "next", "cycle_repeat", "pick_device"} <= actions
+
+
+class TestFloatingPill:
+    """Round 8: the full-width player bar becomes a centered floating glass
+    capsule (liquid-glass music pill reference), flanked by circular
+    Home/Search nav buttons. Volume/shuffle/repeat/devices move into a
+    playback popup opened from an overflow circle at the bottom-right."""
+
+    def _with_track(self, app, ctx, *, show_devices=False):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.devices = [
+            sl_models.Device(id="d1", name="MacBook Pro", kind="Computer", is_active=True,
+                             is_restricted=False, volume_percent=40),
+        ]
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500, track=track,
+                                           device=app.devices[0], shuffle=True, repeat="context")
+        app._player_synced_at = app.now_monotonic
+        app.show_devices = show_devices
+        _tick(app, ctx, 2)
+
+    def test_player_chrome_is_a_centered_floating_capsule(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx)
+
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        # Round 10: centered on the CONTENT REGION (sidebar excluded), not
+        # the full window — 530 = (1280+240)/2 - 460/2.
+        assert (px, py, pw, ph) == (530.0, 720.0, 460.0, 64.0)
+        rrects = _nodes(scene_buffer, RoundedRectNode)
+        rings = [n for n in rrects
+                 if n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
+                 and n.width == pw and n.height == ph and n.radius == 32.0]
+        assert len(rings) == 1, "pill must be one centered capsule glass plate"
+        # The full-width bar is gone: nothing spans the window at the bottom.
+        assert [n for n in rrects if n.width == 1280] == []
+        rects = _nodes(scene_buffer, RectNode)
+        assert [n for n in rects if n.width == 1280 and n.y >= 700] == []
+
+    def test_pill_shows_art_metadata_transport_and_seek(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+
+        texts = _texts(scene_buffer)
+        for expected in ("Lithium", "Nirvana", "4:17"):
+            assert expected in texts, f"missing text: {expected!r}"
+        assert "||" not in texts, "pause is drawn bars, not text pipes"
+        assert any(t in ("0:30", "0:31") for t in texts), "elapsed time stays in the pill"
+        art = [n for n in _nodes(scene_buffer, CpuLayerNode)
+               if n.x == px + 10 and n.y == py + 10 and n.width == 44]
+        assert len(art) == 1, "album art thumb sits at the pill's left"
+        hits = {(r.action, r.payload if isinstance(r.payload, str) else None): r
+                for r in app._hits}
+        for action in ("toggle_play", "prev", "next"):
+            assert any(r.action == action for r in app._hits), f"missing hit: {action}"
+        seek = [r for r in app._hits if r.action == "seek_bar"]
+        assert len(seek) == 1 and seek[0].y > py, "seek strip lives inside the pill"
+
+    def test_nav_circles_flank_the_pill(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx)
+        app.view = "home"
+        _tick(app, ctx, 1)
+
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        cy = py + 32
+        home = [r for r in app._hits if r.action == "nav" and r.payload == "home"]
+        search = [r for r in app._hits if r.action == "nav" and r.payload == "search"]
+        assert len(home) == 1 and len(search) == 1
+        assert (home[0].x, home[0].y, home[0].w, home[0].h) == (468.0, cy - 22, 44.0, 44.0)
+        assert (search[0].x, search[0].y) == (px + 460 + 18, cy - 22)
+        assert home[0].x >= sl_views.SIDEBAR_W + sl_views.PILL_FLOAT, \
+            "the home circle never crosses the sidebar"
+        texts = _texts(scene_buffer)
+        assert "⌂" in texts and "⚲" in texts, "nav circles carry glyphs"
+        frame = scene_buffer.latest_frame()
+        home_glyph = [n for n in frame.nodes
+                      if isinstance(n, TextNode) and n.text == "⌂"]
+        assert home_glyph and home_glyph[0].color_rgba == sl_views.ACCENT, \
+            "the active view's circle glyph lights up"
+
+    def test_overflow_circle_hosts_playback_popup(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx, show_devices=True)
+
+        overflow = [r for r in app._hits if r.action == "open_devices"]
+        assert len(overflow) == 1
+        # Round 13: the overflow circle matches the nav circles (44pt).
+        assert (overflow[0].x, overflow[0].y, overflow[0].w, overflow[0].h) == \
+            (1220.0, 730.0, 44.0, 44.0)
+        texts = _texts(scene_buffer)
+        for expected in ("Volume", "Shuffle", "Repeat", "Connect to a device", "MacBook Pro"):
+            assert expected in texts, f"missing popup text: {expected!r}"
+        actions = {r.action for r in app._hits}
+        assert {"volume_bar", "toggle_shuffle", "cycle_repeat", "pick_device"} <= actions
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        plates = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                  if n.color_rgba == (18, 18, 18, 234) and n.width == 298]
+        assert plates and all(n.y + n.height == py - 13 for n in plates), \
+            "playback popup floats just above the pill"
+
+    def test_sidebar_keeps_library_and_account(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx)
+
+        sidebar_nav = [r for r in app._hits
+                       if r.action == "nav" and r.x < sl_views.SIDEBAR_W]
+        assert {r.payload for r in sidebar_nav} == {"library"}, \
+            "Home/Search moved to the pill's flanking circles"
+        texts = _texts(scene_buffer)
+        assert "Your Library" in texts and "Log out" in texts
+
+    def test_empty_pill_state(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+
+        texts = _texts(scene_buffer)
+        assert "Nothing playing" in texts
+        actions = {r.action for r in app._hits}
+        assert {"toggle_play", "seek_bar", "open_devices"} <= actions
+
+    def test_empty_thumb_is_a_calm_note_tile_not_a_hash_placeholder(self, app_ctx):
+        """Round 17 (overnight live pass on `670b15c`): the idle pill rendered
+        a saturated hash-colored placeholder tile (a bright green square in
+        the live screenshots) — the loudest element of the idle chrome.
+        Spotify's own idle state is a neutral tile with a note glyph."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        thumb_layers = [n for n in _nodes(scene_buffer, CpuLayerNode)
+                        if n.x == px + 10 and n.y == py + 10]
+        assert not thumb_layers, \
+            "the empty pill must not render a hash-colored placeholder tile"
+        notes = [n for n in _nodes(scene_buffer, TextNode) if n.text == "♪"]
+        assert notes, "the empty thumb shows a calm note glyph"
+        note = notes[0]
+        cx, cy = px + 10 + 22, py + 10 + 22
+        assert abs(note.x - cx) < 12 and abs(note.y - cy) < 14, \
+            f"note glyph should sit at the thumb's center, got ({note.x}, {note.y})"
+
+    @staticmethod
+    def _meta_budget(pw: float) -> float:
+        return pw - 64 - sl_views.PILL_META_RIGHT_PAD
+
+    def test_idle_hint_shows_the_full_sentence_at_design_width(self, app_ctx):
+        """Round 18 (overnight live pass on `670b15c`): the idle pill subtext
+        was char-truncated at 40 and rendered "Pick a device, or start
+        something from …" — cut mid-phrase on every idle screen. The full
+        sentence measures ~230pt at size 11 and the design-width metadata
+        budget is ~246pt: it fits, so show it whole."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+
+        assert "Pick a device, or start something from a playlist" in _texts(scene_buffer)
+
+    def test_idle_hint_truncates_to_measured_width_when_the_pill_shrinks(self, app_ctx):
+        """Char-count truncation is width-blind: at 700pt the pill shrinks
+        (round 10) and 40 chars (~194pt) overflows the ~134pt metadata
+        budget, colliding with the transport. Truncation must be driven by
+        the measured width, ending in an ellipsis when it cuts."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        ctx.logical_width_px = 700.0
+        _tick(app, ctx, 2)
+
+        px, _, pw, _ = sl_views.pill_rect(700.0, 800.0)
+        budget = self._meta_budget(pw)
+        hints = [n for n in _nodes(scene_buffer, TextNode)
+                 if n.text.startswith("Pick a device")]
+        assert hints, "idle hint missing"
+        hint = hints[0]
+        width = ctx.measure_text(hint.text, font_size_px=11.0,
+                                 font_family=sl_views.FONT_FAMILY)
+        assert width <= budget + 1e-6, \
+            f"hint overflows the metadata budget: {width:.1f} > {budget:.1f}"
+        assert hint.text.endswith("…"), "a cut hint should say so"
+        assert hint.x == px + 64
+
+    def test_track_metadata_truncates_to_measured_width_not_char_count(self, app_ctx):
+        """Same width-blindness in the playing state: 32 chars of a wide
+        string at size 13 far exceeds the metadata budget and paints into
+        the transport; 32 chars of a narrow string over-truncates. The cap
+        must be the measured width."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        artist = _artist("Nirvana")
+        album = _album("Nevermind", artist)
+        wide = "W" * 40
+        app.player = sl_models.PlayerState(
+            is_playing=True, progress_ms=1000,
+            track=_track(wide, artist, album), device=None, shuffle=False,
+            repeat="off", timestamp_ms=0)
+        _tick(app, ctx, 2)
+
+        px, _, pw, _ = sl_views.pill_rect(1280.0, 800.0)
+        budget = self._meta_budget(pw)
+        titles = [n for n in _nodes(scene_buffer, TextNode)
+                  if n.text.startswith("WWWW")]
+        assert titles, "track title missing"
+        title = titles[0]
+        width = ctx.measure_text(title.text, font_size_px=13.0,
+                                 font_family=sl_views.FONT_FAMILY)
+        assert width <= budget + 1e-6, \
+            f"wide title overflows the metadata budget: {width:.1f} > {budget:.1f}"
+        assert title.text.endswith("…")
+
+
+class TestDockScrim:
+    """Round 8b: playlist labels scrolling under the translucent pill clashed
+    text-on-text (Alec read it as a z-index bug; the pill IS topmost). Apple
+    Music idiom: a bottom scrim — transparent to near-opaque backdrop
+    gradient — dissolves content before it reaches the pill, and the bottom
+    scroll inset lets the last row scroll fully clear of the pill."""
+
+    def _scrim_strips(self, scene_buffer, *, width=1280.0):
+        rects = _nodes(scene_buffer, RectNode)
+        strips = [
+            n for n in rects
+            if n.x == sl_views.SIDEBAR_W and n.width == width - sl_views.SIDEBAR_W
+            and n.color_rgba[:3] == sl_views.BG[:3] and n.color_rgba[3] < 255
+        ]
+        return sorted(strips, key=lambda n: n.y)
+
+    def test_bottom_scrim_gradient_dissolves_content_under_pill(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+
+        strips = self._scrim_strips(scene_buffer)
+        assert len(strips) >= 8, "scrim is a vertical gradient of backdrop strips"
+        _, pill_top, _, _ = sl_views.pill_rect(1280, 800)
+        assert strips[0].y < pill_top, "fade starts above the pill zone"
+        assert strips[-1].y + strips[-1].height >= 800.0, "scrim reaches the window bottom"
+        alphas = [n.color_rgba[3] for n in strips]
+        assert alphas[0] <= 24, "fade starts transparent"
+        assert alphas == sorted(alphas), "alpha ramps monotonically downward"
+        at_pill_top = [n.color_rgba[3] for n in strips
+                       if n.y < pill_top <= n.y + n.height]
+        assert at_pill_top and at_pill_top[0] >= 230, \
+            "content is fully dissolved by the time it reaches the pill"
+        assert all(n.z_index > 5 for n in strips), "scrim covers content and its scrollbar"
+        assert all(n.z_index < 10 for n in strips), \
+            "scrim stays under the pill, nav circles, overflow, and popup"
+
+    def test_scrim_fade_has_no_visible_banding(self):
+        """Round 14 (live search-view pass on `670b15c`): over busy album art
+        the coarse alpha-stepped scrim strips read as horizontal scanlines.
+        Sampled row-to-row over bright content, the fade must not jump by a
+        step a viewer can see."""
+
+        class _Frame:
+            def __init__(self):
+                self.rects = []
+
+            def rect(self, **kw):
+                self.rects.append(kw)
+
+        capture = _Frame()
+        sl_views.draw_dock_scrim(capture, width=1280, height=800)
+        top = 800 - sl_views.SCRIM_H
+        nodes = [
+            RectNode(
+                x=sl_views.SIDEBAR_W, y=top, width=1280 - sl_views.SIDEBAR_W,
+                height=sl_views.SCRIM_H, color_rgba=(190, 190, 190, 255), z_index=3),
+        ]
+        nodes += [
+            RectNode(
+                x=r["x"], y=r["y"], width=r["width"], height=r["height"],
+                color_rgba=r["color"], z_index=r["z_index"])
+            for r in capture.rects
+        ]
+        frame = SceneFrame(
+            revision=1, logical_width=1280, logical_height=800,
+            display_width=1280, display_height=800, ts_ns=0, nodes=tuple(nodes))
+        img = rasterize_scene_frame(frame)
+        fade = img[int(top):int(top + sl_views.SCRIM_FADE), 700, :3].astype(int)
+        steps = int((fade[:-1] - fade[1:]).max())  # darkens downward → positive jumps
+        assert steps <= 12, f"scrim fade banding: max row-to-row step {steps}"
+
+    def test_scroll_inset_lets_last_row_clear_the_pill(self, app_ctx):
+        app, ctx, _ = app_ctx
+        _, pill_top, _, _ = sl_views.pill_rect(1280, 800)
+        viewport = 800.0 - sl_views.DOCK_H
+        assert viewport <= pill_top - 8.0, \
+            "content viewport bottom must clear the pill with margin"
+        max_offset = app._clamp_scroll(1e9, 3000.0, viewport)
+        assert 3000.0 - max_offset <= pill_top - 8.0, \
+            "at max scroll the last content row sits fully above the pill"
+
+    def test_scrim_fade_completes_into_a_calm_band_above_the_pill(self):
+        """Alec's round-10 pass: content must be fully dissolved BEFORE the
+        pill top, leaving a calm near-opaque band between content and chrome —
+        at any window height (the scrim is bottom-anchored, so the geometry
+        is height-independent; pin it)."""
+
+        class _Frame:
+            def __init__(self):
+                self.rects = []
+
+            def rect(self, **kw):
+                self.rects.append(kw)
+
+        for h in (800.0, 700.0, 600.0, 520.0):
+            frame = _Frame()
+            sl_views.draw_dock_scrim(frame, width=1280, height=h)
+            _, pill_top, _, _ = sl_views.pill_rect(1280, h)
+            strips = sorted(frame.rects, key=lambda r: r["y"])
+            assert strips[0]["color"][3] <= 24, f"fade starts transparent at h={h}"
+            assert strips[-1]["y"] + strips[-1]["height"] >= h, f"scrim reaches bottom at h={h}"
+            done = [r for r in strips if r["color"][3] >= 230]
+            assert done, f"scrim reaches near-opaque at h={h}"
+            assert done[0]["y"] + done[0]["height"] <= pill_top - 8.0 + 1e-6, \
+                f"fade completes into a calm band above the pill at h={h}"
+
+
+class TestPillContentAnchor:
+    """Round 10 (Alec live on `ae7fcc2`): the pill cluster centered on the
+    FULL WINDOW, so the home circle and the pill's left edge sat over the
+    sidebar — obscuring the account/Log out row, in the one region the scrim
+    deliberately does not cover. The cluster now anchors to the content
+    region (x from SIDEBAR_W), same as the scrim; crossing the sidebar is
+    structurally impossible, and the pill shrinks below its design width only
+    as a last resort."""
+
+    _CLUSTER_PAD = sl_views.NAV_CIRCLE_GAP + 2 * sl_views.NAV_CIRCLE_R
+
+    def test_cluster_centers_on_content_region_at_design_width(self):
+        for w in (1280.0, 1440.0):
+            px, _, pw, _ = sl_views.pill_rect(w, 800)
+            assert pw == sl_views.PILL_W
+            cluster_left = px - self._CLUSTER_PAD
+            cluster_right = px + pw + self._CLUSTER_PAD
+            content_cx = (sl_views.SIDEBAR_W + w) / 2.0
+            assert (cluster_left + cluster_right) / 2.0 == pytest.approx(content_cx), \
+                f"cluster not centered on the content region at width {w}"
+
+    def test_cluster_never_crosses_the_sidebar(self):
+        for w in (1440.0, 1280.0, 940.0, 856.0, 800.0, 760.0):
+            px, _, _, _ = sl_views.pill_rect(w, 800)
+            home_left = px - self._CLUSTER_PAD
+            assert home_left >= sl_views.SIDEBAR_W + sl_views.PILL_FLOAT - 1e-6, \
+                f"home circle crosses the sidebar at width {w}"
+
+    def test_pill_shrinks_only_as_last_resort(self):
+        _, _, pw_940, _ = sl_views.pill_rect(940, 800)
+        assert pw_940 == sl_views.PILL_W, "940pt still fits the design-width pill"
+        px8, _, pw8, _ = sl_views.pill_rect(800, 800)
+        assert pw8 < sl_views.PILL_W, "800pt is where the pill starts shrinking"
+        search_right = px8 + pw8 + self._CLUSTER_PAD
+        assert search_right <= 800.0 - sl_views.PILL_FLOAT + 1e-6, \
+            "shrunk cluster keeps the right float margin"
+
+
+class TestGlassSurfaces:
+    """Liquid Glass: app-declared glass regions via the native-controls bridge."""
+
+    def test_login_field_glass_container_borderless_field(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+
+        _tick(app, ctx, 2)
+
+        containers = [g for g in bridge.glass
+                      if g.frame == (450.0, 420.0, 380.0, 40.0) and g.style == "regular"]
+        assert len(containers) == 1
+        container = containers[0]
+        assert container.corner_radius == 20.0
+        field = bridge.created[0]
+        assert field.within is container
+        assert field.bordered is False
+
+    def test_authed_chrome_uses_scene_tint_not_native_glass(self, app_ctx, monkeypatch):
+        """Live bug: NSGlassEffectView plates composite ABOVE the Metal scene,
+        so every scene glyph under them was backdrop-blurred — sidebar nav and
+        player controls unreadable. Text-bearing chrome now draws its material
+        as a scene tint plate (same layer as the text → crisp by
+        construction). Native glass stays only behind NATIVE content (login
+        capsules, sheet controls)."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+
+        _tick(app, ctx, 2)
+
+        assert bridge.glass == []  # no native plates for sidebar/player pill
+        assert app.glass_active is True
+        rects = _nodes(scene_buffer, RectNode)
+        sidebar_tint = [n for n in rects
+                        if n.color_rgba == sl_views.SIDEBAR_PLATE
+                        and n.width == sl_views.SIDEBAR_W and n.height == 800]
+        assert len(sidebar_tint) == 1, "sidebar needs its scene tint plate"
+        # Round 8: the full-width bar is a centered floating capsule — its
+        # border ring is a rounded rect at the pill rect, radius 32, with the
+        # glass specular highlight just inside its top edge and a soft shadow.
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        rrects = _nodes(scene_buffer, RoundedRectNode)
+        assert any(n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
+                   and n.width == pw and n.height == ph and n.radius == 32.0
+                   for n in rrects), "player pill needs its capsule border ring"
+        assert any(n.color_rgba == sl_views.GLASS_HIGHLIGHT and n.y == py + 1
+                   and px < n.x < px + pw and n.height == 1 for n in rects), \
+            "player pill needs its specular top highlight"
+        assert any(n.color_rgba[0] == 0 and n.color_rgba[3] > 0
+                   and n.width == pw and py < n.y <= py + 5 for n in rrects), \
+            "player pill needs its soft shadow plates"
+        assert any(n.color_rgba == sl_views.SIDEBAR_EDGE
+                   and n.x == sl_views.SIDEBAR_W - 1 and n.width == 1 for n in rects), \
+            "sidebar glass needs its right-edge hairline"
+        # No opaque or full-width chrome backgrounds under the floating pill.
+        assert [n for n in rects if n.color_rgba == sl_views.SIDEBAR_BG
+                and n.width == sl_views.SIDEBAR_W] == []
+        assert [n for n in rects if n.width == 1280 and n.y >= 700] == []
+
+    def test_glass_active_suppresses_drawn_backgrounds(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        monkeypatch.setattr(app_main, "native_controls", lambda: _FakeNativeBridge())
+
+        _tick(app, ctx, 2)
+
+        rects = _nodes(scene_buffer, RectNode)
+        sidebar_bg = [n for n in rects if n.color_rgba == sl_views.SIDEBAR_BG
+                      and n.width == sl_views.SIDEBAR_W and n.height == 800]
+        bar_bg = [n for n in rects if n.width == 1280 and n.y >= 700]
+        assert sidebar_bg == []
+        assert bar_bg == []
+
+    def test_glass_material_renders_without_bridge(self, app_ctx, monkeypatch):
+        """Round 7: the simulated-glass material is scene-drawn, so bridgeless
+        hosts (Linux/headless) get the same sidebar/bar plates — no opaque
+        fallback blocks."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        monkeypatch.setattr(app_main, "native_controls", lambda: None)
+
+        _tick(app, ctx, 2)
+
+        rects = _nodes(scene_buffer, RectNode)
+        assert any(n.color_rgba == sl_views.SIDEBAR_PLATE and n.width == sl_views.SIDEBAR_W
+                   for n in rects)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        assert any(n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
+                   and n.width == pw and n.height == ph
+                   for n in _nodes(scene_buffer, RoundedRectNode)), \
+            "bridgeless hosts get the same floating pill"
+        assert [n for n in rects if n.color_rgba == sl_views.SIDEBAR_BG
+                and n.width == sl_views.SIDEBAR_W] == []
+        assert [n for n in rects if n.width == 1280 and n.y >= 700] == []
+        assert app.glass_active is False
+
+    def test_content_flows_under_floating_pill(self, app_ctx, monkeypatch):
+        """The player pill is simulated glass on every host, so content flows
+        under it everywhere (no opaque bridgeless bar to cull against)."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        app.view = "library"
+        app.playlists = tuple(_playlist(f"Mix {i:02d}") for i in range(48))
+        app.content_scroll = 400.0
+        monkeypatch.setattr(app_main, "native_controls", lambda: None)
+
+        _tick(app, ctx, 2)
+
+        frame = scene_buffer.latest_frame()
+        assert frame is not None
+        card_bottoms = [node.y + node.height for node in frame.nodes
+                        if isinstance(node, RoundedRectNode)
+                        and node.width == sl_views.CARD_W and node.height == sl_views.CARD_H
+                        and node.x >= sl_views.SIDEBAR_W]
+        assert card_bottoms
+        assert max(card_bottoms) > 800.0 - sl_views.DOCK_H
+
+    def test_save_button_native_glass_replaces_drawn(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+
+        _tick(app, ctx, 2)
+
+        capsules = [g for g in bridge.glass if g.frame == (580.0, 476.0, 120.0, 40.0)]
+        assert len(capsules) == 1
+        assert capsules[0].corner_radius == 20.0
+        save = [b for b in bridge.buttons if b.title == "Save"]
+        assert len(save) == 1
+        assert save[0].within is capsules[0]
+        assert "Save" not in _texts(scene_buffer)  # drawn label replaced by the NSButton
+        actions = {region.action for region in app._hits}
+        assert "save_client_id" not in actions  # native button owns the click now
+
+    def test_save_button_enabled_follows_draft(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+
+        _tick(app, ctx, 2)
+        save = bridge.buttons[0]
+        assert save.enabled is False  # empty draft
+
+        app.client_id_draft = "abc123"
+        app.invalidate()
+        _tick(app, ctx, 2)
+        assert save.enabled is True
+
+    def test_connect_button_native_glass_when_client_id_saved(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        app.client_id = "cid-123"
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+
+        _tick(app, ctx, 2)
+
+        capsules = [g for g in bridge.glass if g.frame == (530.0, 336.0, 220.0, 48.0)]
+        assert len(capsules) == 1
+        assert capsules[0].corner_radius == 24.0
+        connect = [b for b in bridge.buttons if b.title == "Connect Spotify"]
+        assert len(connect) == 1
+        assert connect[0].within is capsules[0]
+        assert connect[0].enabled is True
+        assert "Connect Spotify" not in _texts(scene_buffer)
+        assert "start_login" not in {region.action for region in app._hits}
+
+    def test_capsule_tint_lifts_glass_on_dark_backdrop(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+
+        _tick(app, ctx, 2)
+
+        tints = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                 if n.color_rgba == sl_views.GLASS_TINT
+                 and (n.x, n.y, n.width, n.height) == (450.0, 420.0, 380.0, 40.0)]
+        assert len(tints) == 1
+        assert tints[0].radius == 20.0
+
+    def test_no_capsule_tint_in_drawn_fallback(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        monkeypatch.setattr(app_main, "native_controls", lambda: None)
+
+        _tick(app, ctx, 2)
+
+        tints = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                 if n.color_rgba == sl_views.GLASS_TINT]
+        assert tints == []
+        assert "Save" in _texts(scene_buffer)  # drawn fallback intact
+
+    def test_glass_destroyed_when_bridge_goes_away(self, app_ctx, monkeypatch):
+        """Bridge loss must destroy live native surfaces. Authed chrome no
+        longer creates any (scene tint plates replaced it), so this pins the
+        contract on the login wall's capsules, which stay native."""
+        app, ctx, _ = app_ctx
+        app.client_id = "cid-123"  # connect capsule lives on the login wall
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+        _tick(app, ctx, 2)
+        surfaces = list(bridge.glass)
+        assert surfaces
+
+        bridge.available = False
+        app.invalidate()
+        _tick(app, ctx, 2)
+
+        assert all(surface.destroyed for surface in surfaces)
+        assert app.glass_active is False
+
+
+class _FakeFrame:
+    """Records the scene calls the glass recipe makes (frame API surface only)."""
+
+    def __init__(self) -> None:
+        self.rects: list[tuple] = []
+        self.rounded: list[tuple] = []
+
+    def rect(self, *, x, y, width, height, color, z_index):
+        self.rects.append((x, y, width, height, color, z_index))
+
+    def rounded_rect(self, *, x, y, width, height, radius, color, z_index):
+        self.rounded.append((x, y, width, height, radius, color, z_index))
+
+
+class TestSimulatedGlass:
+    """Round 7: native glass blurs Metal scene text, so glass over content is
+    SIMULATED in-scene — translucent fill, hairline border, specular top
+    highlight, soft shadow. `_glass_plate` is the one canonical recipe."""
+
+    def test_glass_plate_composition(self):
+        f = _FakeFrame()
+        sl_views._glass_plate(f, 100.0, 50.0, 180.0, 236.0, radius=14.0, z=2)
+
+        shadows = [r for r in f.rounded
+                   if r[5][:3] == (0, 0, 0) and r[5][3] > 0]
+        assert len(shadows) == 2, "soft shadow = two stacked dark plates"
+        assert all(s[1] > 50.0 for s in shadows), "shadows offset downward"
+        assert all(s[4] == 14.0 for s in shadows)
+
+        border = [r for r in f.rounded
+                  if (r[0], r[1], r[2], r[3], r[4]) == (100.0, 50.0, 180.0, 236.0, 14.0)]
+        assert len(border) == 1, "hairline border ring at the plate rect"
+        assert border[0][5][:3] == (255, 255, 255)
+        assert 16 <= border[0][5][3] <= 64
+
+        fill = [r for r in f.rounded
+                if (r[0], r[1], r[2], r[3], r[4]) == (101.0, 51.0, 178.0, 234.0, 13.0)]
+        assert len(fill) == 1, "translucent fill inset 1px inside the border"
+        assert fill[0][5][:3] == (255, 255, 255)
+        assert 8 <= fill[0][5][3] <= 40
+
+        highlight = [r for r in f.rects
+                     if r[3] <= 1.5 and r[4][:3] == (255, 255, 255) and r[4][3] >= 40]
+        assert highlight, "specular 1px top highlight"
+        sheen = [r for r in f.rects
+                 if r[3] > 20 and r[4][:3] == (255, 255, 255) and 4 <= r[4][3] <= 20]
+        assert sheen, "subtle sheen band under the top edge"
+
+    def test_glass_plate_hover_lifts(self):
+        resting, hovering = _FakeFrame(), _FakeFrame()
+        sl_views._glass_plate(resting, 0.0, 0.0, 100.0, 100.0, radius=12.0, z=2, hovering=False)
+        sl_views._glass_plate(hovering, 0.0, 0.0, 100.0, 100.0, radius=12.0, z=2, hovering=True)
+
+        def alphas(f):
+            border = [r for r in f.rounded if (r[0], r[1]) == (0.0, 0.0) and r[5][:3] == (255, 255, 255)]
+            fill = [r for r in f.rounded if r[0] == 1.0 and r[5][:3] == (255, 255, 255)]
+            return border[0][5][3], fill[0][5][3]
+
+        rest_border, rest_fill = alphas(resting)
+        hov_border, hov_fill = alphas(hovering)
+        assert hov_fill > rest_fill, "hover raises the fill (the light lift)"
+        assert hov_border > rest_border, "hover sharpens the hairline"
+
+    def test_glass_plate_shadow_optional(self):
+        f = _FakeFrame()
+        sl_views._glass_plate(f, 0.0, 0.0, 100.0, 40.0, radius=8.0, z=2, shadow=False)
+        assert [r for r in f.rounded if r[5][:3] == (0, 0, 0)] == []
+        assert any(r[5][:3] == (255, 255, 255) for r in f.rounded)
+
+    def test_cards_are_glass_plates_not_flat_blocks(self, app_ctx):
+        """The round-6c screenshot: cards read as opaque dark slabs. They are
+        now simulated-glass plates (radius 14) with shadow + hairline."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        profile = sl_models.Profile(id="u1", display_name="Alec", email=None,
+                                    image_url=None, product="premium")
+        track = _track("Song One", _artist("Artist One"), _album("Album", _artist("Artist One")))
+
+        class _Client:
+            def me(self): return profile
+            def my_playlists(self, *, limit=50): return []
+            def top_tracks(self, *, limit=20): return [track]
+            def new_releases(self, *, limit=20): return []
+            def top_artists(self, *, limit=20): return []
+
+        app._client = _Client()
+        app._apply_result("bootstrap", app._job_bootstrap())
+        _tick(app, ctx, 2)
+
+        x0 = sl_views.SIDEBAR_W + sl_views.CONTENT_PAD
+        card_y = 24.0 + 46 + 32  # greeting, then "Top tracks" section title
+        cards = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                 if (n.x, n.y, n.width, n.height) == (x0, card_y, sl_views.CARD_W, sl_views.CARD_H)]
+        assert len(cards) == 1, "card hairline border ring"
+        border = cards[0]
+        assert border.radius == sl_views.CARD_RADIUS
+        assert border.color_rgba[:3] == (255, 255, 255)
+        assert border.color_rgba[3] <= 64, "glass hairline, not an opaque slab"
+        fills = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                 if (n.x, n.y) == (x0 + 1, card_y + 1)
+                 and n.width == sl_views.CARD_W - 2 and n.height == sl_views.CARD_H - 2]
+        assert len(fills) == 1, "card translucent fill"
+        assert fills[0].color_rgba[:3] == (255, 255, 255)
+        assert fills[0].color_rgba[3] <= 40
+        shadows = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                   if n.color_rgba[:3] == (0, 0, 0) and n.color_rgba[3] > 0
+                   and n.y > card_y and n.width == sl_views.CARD_W]
+        assert shadows, "card soft shadow"
+        # The flat-block era is over: no opaque card-colored plate at the rect.
+        assert [n for n in _nodes(scene_buffer, RoundedRectNode)
+                if (n.x, n.y) == (x0, card_y)
+                and n.color_rgba in (sl_views.CARD_BG, sl_views.CARD_HOVER_BG)] == []
+
+    def test_notices_stay_readable_over_glass(self, app_ctx):
+        """Degraded-section notes (round 6c) sit on the backdrop above the
+        greeting; the glass recipe must not swallow them."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+
+        class _Client:
+            def _denied(self, *args, **kwargs):
+                raise sl_api.ApiError(sl_api.ErrorKind.API, "403: Forbidden", status=403)
+            me = my_playlists = top_tracks = new_releases = top_artists = _denied
+
+        app._client = _Client()
+        app._apply_result("bootstrap", app._job_bootstrap())
+        _tick(app, ctx, 2)
+
+        texts = _texts(scene_buffer)
+        assert any("Couldn't load new releases right now" in t for t in texts)
+
+
+class TestEmbeddedLogin:
+    """Embedded Spotify authorize flow: WKWebView in-app, redirect intercepted."""
+
+    def _tokens(self):
+        body = json.dumps({
+            "access_token": "at-1", "token_type": "Bearer", "expires_in": 3600,
+            "refresh_token": "rt-1", "scope": "user-read-private",
+        })
+        return sl_oauth.parse_token_response(body, now=time.time())
+
+    def _start(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        app.client_id = "cid-123"
+        bridge = _FakeNativeBridge()
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+        _tick(app, ctx, 2)
+        app._dispatch_action("start_login", None, 0.0)
+        return app, ctx, scene_buffer, bridge
+
+    def _pump(self, app, ctx, predicate, timeout=2.0):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            _tick(app, ctx, 1)
+            if predicate():
+                return True
+            time.sleep(0.005)
+        return predicate()
+
+    def test_connect_opens_embedded_web_view(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer, bridge = self._start(app_ctx, monkeypatch)
+
+        assert len(bridge.web_views) == 1
+        view = bridge.web_views[0]
+        assert view.frame == (0.0, 0.0, 1280.0, 800.0)
+        assert view.redirect_prefix == "http://127.0.0.1:8888/callback"
+        assert len(view.loaded_urls) == 1
+        url = view.loaded_urls[0]
+        assert url.startswith("https://accounts.spotify.com/authorize?")
+        params = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+        assert params["client_id"] == ["cid-123"]
+        assert params["code_challenge_method"] == ["S256"]
+        assert app.auth_working is True
+        assert app._login_receiver is None  # loopback receiver not needed in-app
+        cancel = [b for b in bridge.buttons if b.title == "Cancel"]
+        assert len(cancel) == 1
+
+        _tick(app, ctx, 1)
+        # Embedded view owns the screen; the drawn browser-wait UI stays undrawn.
+        assert not any("Waiting for sign-in" in t for t in _texts(scene_buffer))
+        connect = [b for b in bridge.buttons if b.title == "Connect Spotify"]
+        assert connect[0].destroyed is True
+
+    def test_embedded_redirect_completes_pkce_and_logs_in(self, app_ctx, monkeypatch):
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+        monkeypatch.setattr(app, "_begin_session",
+                            lambda tokens: setattr(app, "authenticated", True))
+        captured = {}
+
+        def fake_exchange(*, client_id, redirect_uri, code, verifier, **_kw):
+            captured.update(client_id=client_id, redirect_uri=redirect_uri,
+                            code=code, verifier=verifier)
+            return self._tokens()
+
+        monkeypatch.setattr(sl_oauth, "exchange_code", fake_exchange)
+        view = bridge.web_views[0]
+        state = urllib.parse.parse_qs(urllib.parse.urlsplit(view.loaded_urls[0]).query)["state"][0]
+
+        view.on_redirect(f"http://127.0.0.1:8888/callback?code=CODE42&state={state}")
+
+        assert self._pump(app, ctx, lambda: app.authenticated)
+        assert captured == {"client_id": "cid-123",
+                            "redirect_uri": "http://127.0.0.1:8888/callback",
+                            "code": "CODE42",
+                            "verifier": captured["verifier"]}
+        assert captured["verifier"]  # PKCE verifier carried through
+        assert view.destroyed is True
+        assert app.auth_working is False
+        assert app.auth_error == ""
+
+    def test_embedded_state_mismatch_rejected(self, app_ctx, monkeypatch):
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+        called = []
+        monkeypatch.setattr(sl_oauth, "exchange_code",
+                            lambda **kw: called.append(kw) or self._tokens())
+        view = bridge.web_views[0]
+
+        view.on_redirect("http://127.0.0.1:8888/callback?code=x&state=forged")
+
+        assert self._pump(app, ctx, lambda: not app.auth_working)
+        assert app.authenticated is False
+        assert "state" in app.auth_error.lower()
+        assert called == []  # token exchange never runs on a forged callback
+        assert view.destroyed is True
+
+    def test_native_cancel_button_dismisses(self, app_ctx, monkeypatch):
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+        view = bridge.web_views[0]
+        cancel = [b for b in bridge.buttons if b.title == "Cancel"][0]
+        capsule = [g for g in bridge.glass if g.frame == (1174.0, 16.0, 90.0, 36.0)][0]
+
+        cancel.on_press()
+
+        assert view.destroyed is True
+        assert cancel.destroyed is True
+        assert capsule.destroyed is True
+        assert app.auth_working is False
+        assert app.authenticated is False
+
+    def test_cancel_without_redirect_leaves_inline_hint(self, app_ctx, monkeypatch):
+        """Alec's round-3 dummy-id run: Spotify dead-ended on its own plain-text
+        `client_id: Invalid` page (its authorize page defers client validation
+        until after IdP sign-in) and Cancel returned to a SILENT wall. A sheet
+        that closes without a redirect intercept leaves a one-line hint
+        instead — the most likely culprit is the Client ID."""
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+        cancel = [b for b in bridge.buttons if b.title == "Cancel"][0]
+
+        cancel.on_press()
+
+        assert "didn't complete" in app.auth_error
+        assert "Client ID" in app.auth_error
+
+    def test_hint_cleared_on_next_login_attempt(self, app_ctx, monkeypatch):
+        """The hint must not poison the retry: starting login again clears it."""
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+        cancel = [b for b in bridge.buttons if b.title == "Cancel"][0]
+        cancel.on_press()
+        assert app.auth_error
+
+        app._dispatch_action("start_login", None, 0.0)
+
+        assert app.auth_error == ""
+
+    def test_successful_redirect_leaves_no_hint(self, app_ctx, monkeypatch):
+        """The hint is only for a redirect-less close: a completed intercept
+        that then fails PKCE keeps the SPECIFIC exchange error instead."""
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+        monkeypatch.setattr(sl_oauth, "exchange_code",
+                            lambda **kw: (_ for _ in ()).throw(
+                                sl_oauth.OAuthError("invalid_client")))
+        view = bridge.web_views[0]
+        state = urllib.parse.parse_qs(urllib.parse.urlsplit(view.loaded_urls[0]).query)["state"][0]
+
+        view.on_redirect(f"http://127.0.0.1:8888/callback?code=CODE42&state={state}")
+
+        assert self._pump(app, ctx, lambda: not app.auth_working)
+        assert app.auth_error == "invalid_client"
+
+    def test_cancel_discards_pending_redirect_callback(self, app_ctx, monkeypatch):
+        """A redirect intercepted in the same tick window as a Cancel must not
+        still fire the token exchange afterwards: cancel wins and discards the
+        stashed callback. Without the guard, the next tick's worker-results
+        pass picks the callback up and logs the user in AFTER they bailed."""
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+        submitted = []
+        monkeypatch.setattr(app.worker, "submit",
+                            lambda label, fn: submitted.append(label))
+        view = bridge.web_views[0]
+        state = urllib.parse.parse_qs(urllib.parse.urlsplit(view.loaded_urls[0]).query)["state"][0]
+        cancel = [b for b in bridge.buttons if b.title == "Cancel"][0]
+
+        view.on_redirect(f"http://127.0.0.1:8888/callback?code=CODE42&state={state}")
+        cancel.on_press()  # same tick window: cancel must win
+        _tick(app, ctx, 2)
+
+        assert app._embedded_callback is None
+        assert submitted == []  # exchange never submitted after cancel
+        assert app.authenticated is False
+
+    def test_cancel_rides_glass_capsule(self, app_ctx, monkeypatch):
+        """Cancel must be visible over arbitrary page content: it rides its own
+        frosted capsule (same construction as Save/Connect) instead of floating
+        as bare text over the web view."""
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+
+        capsules = [g for g in bridge.glass if g.frame == (1174.0, 16.0, 90.0, 36.0)]
+        assert len(capsules) == 1
+        assert capsules[0].corner_radius == 18.0
+        cancel = [b for b in bridge.buttons if b.title == "Cancel"]
+        assert len(cancel) == 1
+        assert cancel[0].within is capsules[0]
+
+    def test_back_button_top_left_in_own_capsule(self, app_ctx, monkeypatch):
+        """Back sits top-LEFT (Cancel keeps top-right), same frosted-capsule
+        family, and starts quiet — there is no history to go back to yet."""
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+
+        capsules = [g for g in bridge.glass if g.frame == (16.0, 16.0, 90.0, 36.0)]
+        assert len(capsules) == 1
+        assert capsules[0].corner_radius == 18.0
+        back = [b for b in bridge.buttons if b.title == "Back"]
+        assert len(back) == 1
+        assert back[0].within is capsules[0]
+        assert back[0].enabled is False
+
+    def test_back_enabled_follows_can_go_back(self, app_ctx, monkeypatch):
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+        back = [b for b in bridge.buttons if b.title == "Back"][0]
+        view = bridge.web_views[0]
+
+        view.can_go_back = True
+        view.on_navigation_state()
+        assert back.enabled is True
+
+        view.can_go_back = False
+        view.on_navigation_state()
+        assert back.enabled is False
+
+    def test_back_press_goes_back_in_web_view(self, app_ctx, monkeypatch):
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+        back = [b for b in bridge.buttons if b.title == "Back"][0]
+        view = bridge.web_views[0]
+
+        back.on_press()
+
+        assert view.went_back == 1
+
+    def test_back_destroyed_with_the_sheet(self, app_ctx, monkeypatch):
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+        back = [b for b in bridge.buttons if b.title == "Back"][0]
+        capsule = [g for g in bridge.glass if g.frame == (16.0, 16.0, 90.0, 36.0)][0]
+        cancel = [b for b in bridge.buttons if b.title == "Cancel"][0]
+
+        cancel.on_press()
+
+        assert back.destroyed is True
+        assert capsule.destroyed is True
+
+    def test_sheet_controls_follow_window_resize(self, app_ctx, monkeypatch):
+        """Mac round-3: Cancel rendered ~22pt right of its design frame — the
+        sheet geometry is baked at creation and never re-applied on window
+        resize (the web view and its capsules sit outside the per-render
+        syncs). Re-apply every render like the other native frames."""
+        app, ctx, _, bridge = self._start(app_ctx, monkeypatch)
+        view = bridge.web_views[0]
+        cancel_capsule = [g for g in bridge.glass
+                          if g.frame == (1174.0, 16.0, 90.0, 36.0)][0]
+        cancel = [b for b in bridge.buttons if b.title == "Cancel"][0]
+        back = [b for b in bridge.buttons if b.title == "Back"][0]
+        back_capsule = [g for g in bridge.glass if g.frame == (16.0, 16.0, 90.0, 36.0)][0]
+
+        ctx.logical_width_px = 1000.0
+        app.invalidate()
+        _tick(app, ctx, 2)
+
+        assert view.frame == (0.0, 0.0, 1000.0, 800.0)
+        assert cancel_capsule.frame == (894.0, 16.0, 90.0, 36.0)
+        assert cancel.frame == (894.0, 16.0, 90.0, 36.0)
+        assert back_capsule.frame == (16.0, 16.0, 90.0, 36.0)
+        assert back.frame == (16.0, 16.0, 90.0, 36.0)
+
+    def test_cancel_button_failure_falls_back_to_browser_job(self, app_ctx, monkeypatch):
+        """Escape is suppressed by design while the sheet is live, so a Cancel
+        that cannot be created leaves no way out: tear the web view down and
+        use the browser flow, which has its own cancel path."""
+        app, ctx, _ = app_ctx
+        app.client_id = "cid-123"
+        bridge = _FakeNativeBridge()
+        bridge.button_error = RuntimeError("boom")
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+        submitted = []
+        monkeypatch.setattr(app.worker, "submit", lambda label, fn: submitted.append(label))
+
+        app._dispatch_action("start_login", None, 0.0)
+
+        assert submitted == ["login"]
+        assert app.auth_working is True
+        assert app._login_web_view is None
+        assert bridge.web_views[0].destroyed is True  # sheet torn down, not orphaned
+
+    def test_fallback_to_browser_job_without_bridge(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        app.client_id = "cid-123"
+        monkeypatch.setattr(app_main, "native_controls", lambda: None)
+        submitted = []
+        monkeypatch.setattr(app.worker, "submit", lambda label, fn: submitted.append(label))
+
+        app._dispatch_action("start_login", None, 0.0)
+
+        assert submitted == ["login"]
+        assert app.auth_working is True
+
+    def test_fallback_to_browser_job_when_web_view_fails(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        app.client_id = "cid-123"
+        bridge = _FakeNativeBridge()
+        bridge.web_view_error = RuntimeError("native web view requires pyobjc-framework-WebKit")
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+        submitted = []
+        monkeypatch.setattr(app.worker, "submit", lambda label, fn: submitted.append(label))
+
+        app._dispatch_action("start_login", None, 0.0)
+
+        assert submitted == ["login"]
+        assert bridge.web_views == []
+        assert app.auth_working is True
 
 
 class TestMcpHooks:
@@ -507,3 +2214,317 @@ class TestMcpHooks:
         app_state = json.loads(state_response["result"]["content"][0]["text"])
         assert app_state["app"]["client_id_draft_len"] == 7
         assert app_state["app"]["view"] == "home"
+
+
+# ---------------------------------------------------------------------------
+# Retina art: decode at device pixels, not points
+# ---------------------------------------------------------------------------
+
+
+def _png_bytes(size: int, color=(200, 30, 30, 255)) -> bytes:
+    import io
+
+    from PIL import Image as _Image
+
+    buf = io.BytesIO()
+    _Image.new("RGBA", (size, size), color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class TestRetinaArt:
+    """On a 2x display a 132pt art slot needs 264px of decoded pixels; the
+    scene node's point size is unchanged (the renderer stretches the payload
+    over the node geometry)."""
+
+    def test_art_fetch_decodes_at_backing_scale(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        ctx.set_backing_scale_provider(lambda: 2.0)
+        submitted: dict[str, object] = {}
+        monkeypatch.setattr(app.worker, "submit", lambda name, fn: submitted.__setitem__(name, fn))
+
+        url = "https://i.scdn.co/image/test640"
+        assert app.art_for(url, 132) is None  # cache miss schedules a worker fetch
+
+        job = submitted[f"art:{url}|264"]
+        monkeypatch.setattr(sl_art, "_default_http_get", lambda _url: _png_bytes(640))
+        _url, size, rgba = job()
+        assert size == 264
+        assert rgba.shape == (264, 264, 4)
+
+        cached = app.art_for(url, 132)
+        assert cached is not None
+        assert cached.shape == (264, 264, 4)
+
+    def test_art_fetch_defaults_to_point_size(self, app_ctx, monkeypatch):
+        app, _ctx, _buffer = app_ctx
+        submitted: dict[str, object] = {}
+        monkeypatch.setattr(app.worker, "submit", lambda name, fn: submitted.__setitem__(name, fn))
+
+        url = "https://i.scdn.co/image/test300"
+        assert app.art_for(url, 132) is None
+        assert f"art:{url}|132" in submitted
+
+    def test_art_pick_target_scales_with_backing_scale(self, app_ctx):
+        app, ctx, _buffer = app_ctx
+        assert app._art_pick_target(180) == 180
+        ctx.set_backing_scale_provider(lambda: 2.0)
+        assert app._art_pick_target(180) == 360
+
+
+class TestArtFailureBackoff:
+    """Round 16 (overnight library-screenshot review): two cards sat on flat
+    placeholder tiles. For art-less items that's the honest state — but a
+    permanently failing image URL looked identical AND `art_for` re-submitted
+    a network fetch on every redraw forever (the failure path only cleared
+    the in-flight marker, so the next frame scheduled it again). Failures
+    must back off for a TTL, then allow a retry; success clears the backoff."""
+
+    def test_failed_fetch_backs_off_then_retries_after_ttl(self, app_ctx, monkeypatch):
+        app, _ctx, _buffer = app_ctx
+        submitted: dict[str, object] = {}
+        monkeypatch.setattr(app.worker, "submit",
+                            lambda name, fn: submitted.__setitem__(name, fn))
+        url = "https://i.scdn.co/image/dead"
+        assert app.art_for(url, 132) is None
+        key = f"{url}|132"
+        job = f"art:{key}"
+        assert job in submitted, "first miss schedules the fetch"
+
+        app._apply_result(job, sl_art.ArtError("404"))
+        submitted.clear()
+        assert app.art_for(url, 132) is None
+        assert not submitted, "a fresh failure must not resubmit on the next redraw"
+
+        app._art_failures[key] -= app_main.ART_FAIL_TTL_SECS + 1.0
+        assert app.art_for(url, 132) is None
+        assert job in submitted, "after the backoff TTL exactly one retry is allowed"
+
+    def test_successful_fetch_clears_the_backoff(self, app_ctx, monkeypatch):
+        app, _ctx, _buffer = app_ctx
+        submitted: dict[str, object] = {}
+        monkeypatch.setattr(app.worker, "submit",
+                            lambda name, fn: submitted.__setitem__(name, fn))
+        url = "https://i.scdn.co/image/flaky"
+        assert app.art_for(url, 132) is None
+        key = f"{url}|132"
+        job = f"art:{key}"
+        app._apply_result(job, sl_art.ArtError("boom"))
+        assert key in app._art_failures
+
+        monkeypatch.setattr(sl_art, "_default_http_get", lambda _u: _png_bytes(300))
+        _u, size, rgba = submitted[job]()
+        app._apply_result(job, (_u, size, rgba))
+        assert key not in app._art_failures, "a landed fetch clears the backoff"
+        assert app.art_for(url, 132) is not None
+
+
+# ---------------------------------------------------------------------------
+# Round 23 (Alec's eyeball pass on 1b71bac): dock glyphs sit off-center inside
+# their circles — x offsets were hardcoded for an old mono font and y assumed
+# the text node's y was a baseline, while the rasterizer treats it as the ink
+# top. The contract: each glyph's INK centroid lands on its target center.
+class TestDockGlyphCentering:
+    TOL = 1.5
+
+    def _render_idle_dock(self, app, ctx, scene_buffer):
+        app.authenticated = True
+        app.view = "library"  # neither nav circle active → uniform SUBTEXT ink
+        app.player = None
+        _tick(app, ctx, 2)
+        frame = scene_buffer.latest_frame()
+        assert frame is not None
+        return rasterize_scene_frame(frame)
+
+    def _ink_centroid(self, img, box, mask):
+        x0, y0, x1, y1 = box
+        xs, ys = [], []
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                r, g, b = (int(v) for v in img[y, x, :3])
+                if mask(r, g, b, x, y):
+                    xs.append(x)
+                    ys.append(y)
+        assert xs, f"no ink pixels found in {box}"
+        return sum(xs) / len(xs), sum(ys) / len(ys)
+
+    def _assert_centered(self, img, box, mask, target, label):
+        cx, cy = self._ink_centroid(img, box, mask)
+        tx, ty = target
+        assert abs(cx - tx) <= self.TOL and abs(cy - ty) <= self.TOL, \
+            f"{label} ink centroid ({cx:.2f}, {cy:.2f}) off target ({tx}, {ty})"
+
+    @staticmethod
+    def _bright(r, g, b, _x, _y) -> bool:
+        return (r + g + b) / 3 >= 140
+
+    def test_nav_circle_glyphs_center_on_their_circles(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        cy = py + ph / 2
+        home_cx = px - sl_views.NAV_CIRCLE_GAP - sl_views.NAV_CIRCLE_R
+        search_cx = px + pw + sl_views.NAV_CIRCLE_GAP + sl_views.NAV_CIRCLE_R
+        self._assert_centered(img, (int(home_cx) - 20, int(cy) - 20, int(home_cx) + 20,
+                                    int(cy) + 20), self._bright, (home_cx, cy), "home ⌂")
+        self._assert_centered(img, (int(search_cx) - 20, int(cy) - 20, int(search_cx) + 20,
+                                    int(cy) + 20), self._bright, (search_cx, cy), "search ⚲")
+
+    def test_overflow_ellipsis_centers_on_its_circle(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        px, py, _, ph = sl_views.pill_rect(1280, 800)
+        cy = py + ph / 2
+        ocx = 1280 - sl_views.PILL_FLOAT - sl_views.OVERFLOW_R
+        self._assert_centered(img, (int(ocx) - 20, int(cy) - 20, int(ocx) + 20, int(cy) + 20),
+                              self._bright, (ocx, cy), "overflow …")
+
+    def test_transport_glyphs_center_on_their_hit_regions(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        hits = {r.action: r for r in app._hits}
+        for action, label in (("prev", "<<"), ("next", ">>")):
+            r = hits[action]
+            target = (r.x + r.w / 2, r.y + r.h / 2)
+            self._assert_centered(img, (int(r.x), int(r.y), int(r.x + r.w), int(r.y + r.h)),
+                                  self._bright, target, f"transport {label}")
+
+    def test_play_glyph_centers_on_its_circle(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        play_cx, cy = px + pw - 72, py + ph / 2
+
+        def dark_ink_in_disc(r, g, b, x, y):
+            return ((r + g + b) / 3 < 80
+                    and (x - play_cx) ** 2 + (y - cy) ** 2 <= 13 ** 2)
+
+        self._assert_centered(img, (int(play_cx) - 14, int(cy) - 14, int(play_cx) + 14,
+                                    int(cy) + 14), dark_ink_in_disc, (play_cx, cy), 'play ">"')
+
+    def test_idle_note_glyph_centers_on_its_tile(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        tile_c = (px + 10 + 22, py + 10 + 22)
+        self._assert_centered(img, (int(tile_c[0]) - 14, int(tile_c[1]) - 14,
+                                    int(tile_c[0]) + 14, int(tile_c[1]) + 14),
+                              self._bright, tile_c, "idle ♪")
+
+
+# ---------------------------------------------------------------------------
+# Round 24 (Alec's eyeball pass on 1b71bac): "ghost corners" on the glass
+# plates. The sheen band in _glass_plate is a SQUARE rect starting 2px inside
+# the plate, so at rounded corners it pokes past the rounded silhouette and
+# reads as bright nubs floating off the plate. The contract: pixels outside
+# the rounded silhouette keep backdrop luminance; the sheen still reads
+# along the straight top edge.
+class TestGlassPlateSheen:
+
+    class _Capture:
+        def __init__(self):
+            self.rrects = []
+            self.rects = []
+
+        def rounded_rect(self, **kw):
+            self.rrects.append(kw)
+
+        def rect(self, **kw):
+            self.rects.append(kw)
+
+    def _rasterize_plate(self, radius):
+        cap = self._Capture()
+        sl_views._glass_plate(cap, 100.0, 100.0, 200.0, 100.0, radius=radius, z=2)
+        nodes = [RectNode(x=0, y=0, width=400, height=300,
+                          color_rgba=(16, 16, 16, 255), z_index=0)]
+        nodes += [RoundedRectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                                  radius=n["radius"], color_rgba=n["color"],
+                                  z_index=n["z_index"]) for n in cap.rrects]
+        nodes += [RectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                           color_rgba=n["color"], z_index=n["z_index"]) for n in cap.rects]
+        frame = SceneFrame(revision=1, logical_width=400, logical_height=300,
+                           display_width=400, display_height=300, ts_ns=0, nodes=tuple(nodes))
+        return rasterize_scene_frame(frame)
+
+    def test_sheen_stays_inside_rounded_silhouette(self):
+        img = self._rasterize_plate(22.0)
+        # Outside the r=22 arc (corner center (122,122)) but inside the old
+        # square sheen band: no plate pixel may brighten these over backdrop.
+        for x, y in ((102, 102), (103, 103), (104, 102), (102, 104), (105, 103),
+                     (297, 102), (296, 103), (298, 104)):
+            lum = int(img[y, x, :3].sum()) / 3
+            assert lum <= 20, f"sheen leaks past the rounded corner at {(x, y)}: lum {lum}"
+        # The sheen must still read along the straight top edge.
+        top = int(img[103, 200, :3].sum()) / 3
+        assert top >= 64, f"sheen band missing at the top edge: lum {top}"
+
+    def test_sheen_inset_scales_with_corner_radius(self):
+        # Pill-radius plate (r=32): the arc cuts deeper, so the leak points
+        # sit further from the corner. Same contract.
+        img = self._rasterize_plate(32.0)
+        for x, y in ((104, 102), (106, 103), (108, 104), (110, 105)):
+            lum = int(img[y, x, :3].sum()) / 3
+            assert lum <= 20, f"r=32 sheen leaks at {(x, y)}: lum {lum}"
+        top = int(img[103, 200, :3].sum()) / 3
+        assert top >= 64, f"r=32 sheen missing at the top edge: lum {top}"
+
+
+# ---------------------------------------------------------------------------
+# Round 25 (Alec's eyeball pass on 1b71bac): the playback popup "doesn't work
+# properly" — clicking its padding, gaps, or labels dismisses it. Root cause:
+# the popup's glass plate registers no hit region, so clicks on dead space
+# fall through _dispatch_click to the empty-space branch that closes the
+# popup (and can bleed into content hits underneath the panel). The contract:
+# clicks inside the plate are swallowed; only a click truly outside closes.
+class TestPopupPlateSwallow:
+
+    def _with_track(self, app, ctx, *, show_devices=False):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.devices = [
+            sl_models.Device(id="d1", name="MacBook Pro", kind="Computer", is_active=True,
+                             is_restricted=False, volume_percent=40),
+        ]
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500, track=track,
+                                           device=app.devices[0], shuffle=True, repeat="context")
+        app._player_synced_at = app.now_monotonic
+        app.show_devices = show_devices
+        _tick(app, ctx, 2)
+
+    def test_clicks_on_popup_dead_space_do_not_dismiss_it(self, app_ctx):
+        app, ctx, _buffer = app_ctx
+        self._with_track(app, ctx, show_devices=True)
+
+        popup_w, row_h, head_h = 300.0, 40.0, 148.0
+        popup_h = head_h + row_h * 1 + 12  # one device
+        popup_x = 1280 - popup_w - 16
+        _, pill_top, _, _ = sl_views.pill_rect(1280, 800)
+        popup_y = pill_top - 12 - popup_h
+
+        # Bottom padding below the last device row: inside the plate, on no control.
+        app._dispatch_click(popup_x + popup_w / 2, popup_y + popup_h - 4)
+        assert app.show_devices is True, "clicking the popup's padding must not dismiss it"
+        # The "Connect to a device" section title: a label, not a control.
+        app._dispatch_click(popup_x + popup_w / 2, popup_y + 132)
+        assert app.show_devices is True, "clicking a popup label must not dismiss it"
+        # The gap between the volume bar and the Shuffle row.
+        app._dispatch_click(popup_x + popup_w / 2, popup_y + 48)
+        assert app.show_devices is True, "clicking a popup gap must not dismiss it"
+
+        # A click truly outside the popup still dismisses it.
+        app._dispatch_click(400, 300)
+        assert app.show_devices is False
+
+    def test_popup_controls_still_win_over_the_plate(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        self._with_track(app, ctx, show_devices=True)
+        actions: list[str] = []
+        monkeypatch.setattr(app, "_player_action", lambda fn: actions.append("player"))
+
+        # Shuffle row hit: (popup_x+8, y1-5, popup_w-16, 30), y1 = popup_y + 48.
+        popup_x = 1280 - 300.0 - 16
+        _, pill_top, _, _ = sl_views.pill_rect(1280, 800)
+        popup_y = pill_top - 12 - (148.0 + 40.0 * 1 + 12)
+        app._dispatch_click(popup_x + 40, popup_y + 48 + 10)
+        assert actions == ["player"], "toggling Shuffle must still reach its control"
+        assert app.show_devices is True, "toggles never dismiss the popup"

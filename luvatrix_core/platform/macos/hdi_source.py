@@ -119,13 +119,18 @@ class MacOSWindowHDISource(HDIEventSource):
                     view_h = float(view.bounds().size.height)
                     phase = _scroll_phase_name(int(event.phase()))
                     momentum_phase = _scroll_phase_name(int(event.momentumPhase()))
-                    scale = _scroll_delta_scale(bool(event.hasPreciseScrollingDeltas()))
+                    delta_x, delta_y = _scroll_content_deltas(
+                        float(event.scrollingDeltaX()),
+                        float(event.scrollingDeltaY()),
+                        bool(event.hasPreciseScrollingDeltas()),
+                    )
                     payload = {
                         "x": float(loc.x),
                         "y": _to_top_left_y(float(loc.y), view_h),
-                        # App-level scroll uses positive x/y for moving content right/down.
-                        "delta_x": -float(event.scrollingDeltaX()) * scale,
-                        "delta_y": -float(event.scrollingDeltaY()) * scale,
+                        # User-intent deltas (system already applied the
+                        # natural-scroll preference): positive moves content right/down.
+                        "delta_x": delta_x,
+                        "delta_y": delta_y,
                         "precise": bool(event.hasPreciseScrollingDeltas()),
                         "phase": phase,
                         "momentum_phase": momentum_phase,
@@ -451,6 +456,16 @@ def _read_pressed_mouse_buttons_mask(*, NSEvent) -> int:
 
 def _scroll_delta_scale(precise: bool) -> float:
     return 48.0 if precise else 120.0
+
+
+def _scroll_content_deltas(delta_x: float, delta_y: float, precise: bool) -> tuple[float, float]:
+    """NSEvent scrollingDelta already reflects the user's natural-scroll
+    preference (the system flips the value; isDirectionInvertedFromDevice
+    reports whether it did). Passing it through sign-preserved is correct
+    for BOTH preference groups — an extra fixed negation here inverted
+    exactly one of them. Only the line/pixel scale applies."""
+    scale = _scroll_delta_scale(precise)
+    return delta_x * scale, delta_y * scale
 
 
 def _scroll_coalesce_key(event: HDIEvent) -> tuple[str, str, str, str]:

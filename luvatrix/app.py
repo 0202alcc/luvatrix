@@ -573,6 +573,11 @@ class Display:
     def height_px(self) -> int:
         return int(round(self._ctx.display_height_px))
 
+    @property
+    def backing_scale(self) -> float:
+        """Device pixels per logical point (2.0 on Retina); 1.0 when unknown."""
+        return float(self._ctx.backing_scale)
+
 
 class Sensors:
     def __init__(self, ctx: AppContext) -> None:
@@ -712,9 +717,9 @@ class SceneFrame(AbstractContextManager["SceneFrame"]):
             z_index=z_index,
         )
 
-    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0, frame: str | None = None) -> None:
+    def text(self, text: str, *, x: float, y: float, font_size_px: float = 14.0, color: tuple[int, int, int, int] | str = (255, 255, 255, 255), z_index: int = 0, cache_key: str | None = None, rotation_deg: float = 0.0, frame: str | None = None, font_family: str | None = None) -> None:
         rx, ry = self._point(x, y, frame=frame)
-        self._ctx.draw_text(text, x=rx, y=ry, font_size_px=font_size_px, color_rgba=_rgba(color), z_index=z_index, cache_key=cache_key, rotation_deg=rotation_deg)
+        self._ctx.draw_text(text, x=rx, y=ry, font_family=font_family or "Comic Mono", font_size_px=font_size_px, color_rgba=_rgba(color), z_index=z_index, cache_key=cache_key, rotation_deg=rotation_deg)
 
     def camera3d(
         self,
@@ -1875,8 +1880,11 @@ _LAZY_EXPORTS = {
         "InteractionAwareWorkScheduler",
     ),
     "MatrixViewport": ("luvatrix_core.core.matrix_viewport", "MatrixViewport"),
+    "NativeButton": ("luvatrix_core.core.native_controls", "NativeButton"),
     "NativeControlBridge": ("luvatrix_core.core.native_controls", "NativeControlBridge"),
+    "NativeGlassSurface": ("luvatrix_core.core.native_controls", "NativeGlassSurface"),
     "NativeTextField": ("luvatrix_core.core.native_controls", "NativeTextField"),
+    "NativeWebView": ("luvatrix_core.core.native_controls", "NativeWebView"),
     "NullNativeControlBridge": ("luvatrix_core.core.native_controls", "NullNativeControlBridge"),
     "native_controls": ("luvatrix_core.core.native_controls", "active_native_control_bridge"),
 }
@@ -1927,6 +1935,7 @@ __all__ = [
     "MatrixFrame",
     "MatrixViewport",
     "MissingOptionalDependencyError",
+    "NativeButton",
     "NativeControlBridge",
     "NativeTextField",
     "NullNativeControlBridge",
