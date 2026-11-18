@@ -8,6 +8,7 @@ schedule jobs, and authenticated views are given in-memory state.
 from __future__ import annotations
 
 import json
+import math
 import sys
 import threading
 import time
@@ -1726,9 +1727,13 @@ class TestSimulatedGlass:
         highlight = [r for r in f.rects
                      if r[3] <= 1.5 and r[4][:3] == (255, 255, 255) and r[4][3] >= 40]
         assert highlight, "specular 1px top highlight"
+        # Round 27: the sheen is a silhouette-clipped falloff (thin rows
+        # fading to zero), not one hard-edged slab.
         sheen = [r for r in f.rects
-                 if r[3] > 20 and r[4][:3] == (255, 255, 255) and 4 <= r[4][3] <= 20]
-        assert sheen, "subtle sheen band under the top edge"
+                 if r[4][:3] == (255, 255, 255) and 0 < r[4][3] <= 20]
+        assert sheen, "subtle sheen falloff under the top edge"
+        assert all(r[3] <= 6 for r in sheen), "sheen is thin rows, not a slab"
+        assert sum(r[3] for r in sheen) >= 20, "rows cover the sheen band"
 
     def test_glass_plate_hover_lifts(self):
         resting, hovering = _FakeFrame(), _FakeFrame()
@@ -2551,6 +2556,104 @@ class TestGlassPlateSheen:
             assert lum <= 20, f"r=32 sheen leaks at {(x, y)}: lum {lum}"
         top = int(img[103, 200, :3].sum()) / 3
         assert top >= 64, f"r=32 sheen missing at the top edge: lum {top}"
+
+
+# ---------------------------------------------------------------------------
+# Round 27 (Alec's eyeball pass on the icon build 0580d52): "looks like
+# there's rectangles behind the pills." The r24 fix kept the square sheen
+# band from poking PAST the silhouette, but the band itself is one hard-edged
+# rect floating inside the plate interior — 14x18 inside the 44px nav
+# circles, 414x27 across the pill — and reads as a rectangle behind the
+# glyph. The contract: the sheen is a silhouette-clipped falloff — thin rows
+# chord-clipped inside the corner arc, alpha ramping to zero — so no edge
+# inside the plate can read as a rectangle.
+class TestGlassSheenSilhouette:
+
+    class _Capture:
+        def __init__(self):
+            self.rrects = []
+            self.rects = []
+
+        def rounded_rect(self, **kw):
+            self.rrects.append(kw)
+
+        def rect(self, **kw):
+            self.rects.append(kw)
+
+    def _sheen_rows(self, cap):
+        return [n for n in cap.rects
+                if n["color"][:3] == (255, 255, 255)
+                and 0 < n["color"][3] <= sl_views.GLASS_SHEEN[3]]
+
+    def test_sheen_is_thin_rows_fading_to_zero(self):
+        cap = self._Capture()
+        sl_views._glass_plate(cap, 100.0, 100.0, 44.0, 44.0, radius=22.0, z=2)
+        rows = self._sheen_rows(cap)
+        assert rows, "sheen missing"
+        assert max(n["height"] for n in rows) <= 2, \
+            "the sheen must be thin rows, not one hard-edged slab"
+        rows.sort(key=lambda n: n["y"])
+        alphas = [n["color"][3] for n in rows]
+        assert alphas == sorted(alphas, reverse=True), \
+            f"sheen alpha must fall monotonically, got {alphas}"
+        assert alphas[-1] <= 2, \
+            f"the sheen's bottom must fade out (last alpha {alphas[-1]}), " \
+            "a hard bottom edge is the rectangle Alec sees"
+
+    def test_sheen_rows_follow_the_corner_chord(self):
+        cap = self._Capture()
+        sl_views._glass_plate(cap, 100.0, 100.0, 44.0, 44.0, radius=22.0, z=2)
+        for n in self._sheen_rows(cap):
+            cy = n["y"] + n["height"] / 2 - 100.0
+            if cy >= 22.0:
+                continue
+            chord = 22.0 - math.sqrt(max(0.0, 22.0 * 22.0 - (22.0 - cy) ** 2))
+            assert n["x"] >= 100.0 + chord - 0.6, \
+                f"row at depth {cy:.1f} starts at {n['x']}, left of the chord"
+            assert n["x"] + n["width"] <= 100.0 + 44.0 - chord + 0.6, \
+                f"row at depth {cy:.1f} ends past the chord"
+
+    def _rasterize_plate(self, w, h, radius):
+        cap = self._Capture()
+        sl_views._glass_plate(cap, 100.0, 100.0, w, h, radius=radius, z=2)
+        nodes = [RectNode(x=0, y=0, width=400, height=400,
+                          color_rgba=(16, 16, 16, 255), z_index=0)]
+        nodes += [RoundedRectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                                  radius=n["radius"], color_rgba=n["color"],
+                                  z_index=n["z_index"]) for n in cap.rrects]
+        nodes += [RectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                           color_rgba=n["color"], z_index=n["z_index"]) for n in cap.rects]
+        frame = SceneFrame(revision=1, logical_width=400, logical_height=400,
+                           display_width=400, display_height=400, ts_ns=0,
+                           nodes=tuple(nodes))
+        return rasterize_scene_frame(frame)
+
+    def _max_steps(self, img, w, h):
+        cy = 100 + int(h * 0.2)
+        hstep = max(
+            abs(int(img[cy, x + 1, :3].sum()) / 3 - int(img[cy, x, :3].sum()) / 3)
+            for x in range(105 + 6, 105 + int(w) - 16))
+        cx = 100 + int(w / 2)
+        # Start below the specular top highlight: its 1px crisp line is
+        # intentional; the rectangle comes from edges floating deeper down.
+        vstep = max(
+            abs(int(img[y + 1, cx, :3].sum()) / 3 - int(img[y, cx, :3].sum()) / 3)
+            for y in range(106, 100 + int(h * 0.6)))
+        return hstep, vstep
+
+    def test_no_hard_sheen_edges_inside_the_plate(self):
+        # A floating sheen edge steps ~9 lum (measured on the r26 build); a
+        # clipped falloff steps <=1 per row.
+        for w, h, r in ((200.0, 100.0, 22.0), (200.0, 100.0, 32.0), (44.0, 44.0, 22.0)):
+            img = self._rasterize_plate(w, h, r)
+            hstep, vstep = self._max_steps(img, w, h)
+            assert hstep <= 3, f"{w}x{h} r={r}: horizontal sheen edge step {hstep}"
+            assert vstep <= 2, f"{w}x{h} r={r}: vertical sheen edge step {vstep}"
+
+    def test_sheen_still_reads_at_the_top(self):
+        img = self._rasterize_plate(200.0, 100.0, 22.0)
+        top = int(img[103, 200, :3].sum()) / 3
+        assert top >= 64, f"sheen band missing at the top edge: lum {top}"
 
 
 # ---------------------------------------------------------------------------
