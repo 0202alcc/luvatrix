@@ -445,10 +445,26 @@ fn paste(
     let src_x0 = x0 - x;
     let src_y0 = y0 - y;
     let copy_w = (x1 - x0) as usize;
+    // Source-alpha compositing, mirroring Python `_paste_rgba` (and the GPU
+    // targets' blend state): alpha-clipped art must show the backdrop at
+    // transparent pixels, not stale corner RGB.
     for row in 0..(y1 - y0) {
         let src = ((src_y0 + row) * width + src_x0) as usize * 4;
         let dst = ((y0 + row) * frame_w + x0) as usize * 4;
-        buf[dst..dst + copy_w * 4].copy_from_slice(&payload[src..src + copy_w * 4]);
+        for col in 0..copy_w {
+            let s = src + col * 4;
+            let d = dst + col * 4;
+            let alpha = payload[s + 3] as f32 / 255.0;
+            for channel in 0..3 {
+                let src_v = payload[s + channel] as f32;
+                let dst_v = buf[d + channel] as f32;
+                buf[d + channel] =
+                    (src_v * alpha + dst_v * (1.0 - alpha)).clamp(0.0, 255.0) as u8;
+            }
+            let src_a = payload[s + 3] as f32;
+            let dst_a = buf[d + 3] as f32;
+            buf[d + 3] = (src_a + dst_a * (1.0 - alpha)).clamp(0.0, 255.0) as u8;
+        }
     }
 }
 
@@ -529,5 +545,34 @@ mod tests {
         let mut buf = vec![0u8; 5 * 5 * 4];
         draw_circle(&mut buf, 5, 5, 2.0, 2.0, 1.5, 0.0, [1, 2, 3, 200], [0, 0, 0, 0]);
         assert_eq!(&buf[(2 * 5 + 2) * 4..(2 * 5 + 2) * 4 + 4], &[1, 2, 3, 200]);
+    }
+
+    #[test]
+    fn paste_alpha_blends_over_backdrop() {
+        // Mirrors Python `_paste_rgba`: source-alpha compositing, so
+        // alpha-clipped art buffers show the backdrop at transparent pixels
+        // instead of stale corner RGB (round-28 pill art parity).
+        let mut buf = vec![0u8; 2 * 4];
+        buf[0..4].copy_from_slice(&[20, 30, 40, 255]);
+        buf[4..8].copy_from_slice(&[20, 30, 40, 255]);
+        let payload: [u8; 8] = [200, 100, 50, 0, 200, 100, 50, 128];
+        paste(&mut buf, 2, 1, 0, 0, 2, 1, &payload);
+        assert_eq!(&buf[0..4], &[20, 30, 40, 255], "alpha-0 must not paint");
+        let alpha = 128.0f32 / 255.0;
+        let blend = |s: f32, d: f32| (s * alpha + d * (1.0 - alpha)).clamp(0.0, 255.0) as u8;
+        assert_eq!(
+            &buf[4..7],
+            &[blend(200.0, 20.0), blend(100.0, 30.0), blend(50.0, 40.0)],
+            "alpha 128 composites source over destination"
+        );
+        assert_eq!(buf[7], 255, "alpha: 128 + 255*(1-128/255) saturates");
+    }
+
+    #[test]
+    fn paste_opaque_matches_straight_copy() {
+        let mut buf = vec![0u8; 2 * 4];
+        let payload: [u8; 8] = [9, 8, 7, 255, 6, 5, 4, 255];
+        paste(&mut buf, 2, 1, 0, 0, 2, 1, &payload);
+        assert_eq!(&buf[..], &payload[..], "opaque pixels paint as-is");
     }
 }
