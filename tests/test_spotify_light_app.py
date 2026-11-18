@@ -2409,3 +2409,60 @@ class TestDockGlyphCentering:
         self._assert_centered(img, (int(tile_c[0]) - 14, int(tile_c[1]) - 14,
                                     int(tile_c[0]) + 14, int(tile_c[1]) + 14),
                               self._bright, tile_c, "idle ♪")
+
+
+# ---------------------------------------------------------------------------
+# Round 24 (Alec's eyeball pass on 1b71bac): "ghost corners" on the glass
+# plates. The sheen band in _glass_plate is a SQUARE rect starting 2px inside
+# the plate, so at rounded corners it pokes past the rounded silhouette and
+# reads as bright nubs floating off the plate. The contract: pixels outside
+# the rounded silhouette keep backdrop luminance; the sheen still reads
+# along the straight top edge.
+class TestGlassPlateSheen:
+
+    class _Capture:
+        def __init__(self):
+            self.rrects = []
+            self.rects = []
+
+        def rounded_rect(self, **kw):
+            self.rrects.append(kw)
+
+        def rect(self, **kw):
+            self.rects.append(kw)
+
+    def _rasterize_plate(self, radius):
+        cap = self._Capture()
+        sl_views._glass_plate(cap, 100.0, 100.0, 200.0, 100.0, radius=radius, z=2)
+        nodes = [RectNode(x=0, y=0, width=400, height=300,
+                          color_rgba=(16, 16, 16, 255), z_index=0)]
+        nodes += [RoundedRectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                                  radius=n["radius"], color_rgba=n["color"],
+                                  z_index=n["z_index"]) for n in cap.rrects]
+        nodes += [RectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                           color_rgba=n["color"], z_index=n["z_index"]) for n in cap.rects]
+        frame = SceneFrame(revision=1, logical_width=400, logical_height=300,
+                           display_width=400, display_height=300, ts_ns=0, nodes=tuple(nodes))
+        return rasterize_scene_frame(frame)
+
+    def test_sheen_stays_inside_rounded_silhouette(self):
+        img = self._rasterize_plate(22.0)
+        # Outside the r=22 arc (corner center (122,122)) but inside the old
+        # square sheen band: no plate pixel may brighten these over backdrop.
+        for x, y in ((102, 102), (103, 103), (104, 102), (102, 104), (105, 103),
+                     (297, 102), (296, 103), (298, 104)):
+            lum = int(img[y, x, :3].sum()) / 3
+            assert lum <= 20, f"sheen leaks past the rounded corner at {(x, y)}: lum {lum}"
+        # The sheen must still read along the straight top edge.
+        top = int(img[103, 200, :3].sum()) / 3
+        assert top >= 64, f"sheen band missing at the top edge: lum {top}"
+
+    def test_sheen_inset_scales_with_corner_radius(self):
+        # Pill-radius plate (r=32): the arc cuts deeper, so the leak points
+        # sit further from the corner. Same contract.
+        img = self._rasterize_plate(32.0)
+        for x, y in ((104, 102), (106, 103), (108, 104), (110, 105)):
+            lum = int(img[y, x, :3].sum()) / 3
+            assert lum <= 20, f"r=32 sheen leaks at {(x, y)}: lum {lum}"
+        top = int(img[103, 200, :3].sum()) / 3
+        assert top >= 64, f"r=32 sheen missing at the top edge: lum {top}"

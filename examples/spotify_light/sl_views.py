@@ -246,7 +246,12 @@ def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
     frame.rounded_rect(x=x + 1, y=y + 1, width=w - 2, height=h - 2,
                        radius=max(0.0, radius - 1),
                        color=fill or (GLASS_FILL_HOVER if hovering else GLASS_FILL), z_index=z)
-    frame.rect(x=x + 2, y=y + 2, width=w - 4, height=h * 0.42, color=GLASS_SHEEN, z_index=z)
+    # The sheen is a square band, so its ends must clear the corner arc or it
+    # pokes past the rounded silhouette (Alec's "ghost corners"). Inset by the
+    # arc's horizontal intrusion at the band's top edge (y + 2).
+    sheen_inset = math.ceil(radius - math.sqrt(max(0.0, radius * radius - (radius - 2) ** 2)))
+    frame.rect(x=x + 2 + sheen_inset, y=y + 2, width=max(0.0, w - 4 - sheen_inset * 2),
+               height=h * 0.42, color=GLASS_SHEEN, z_index=z)
     inset = radius * 0.7
     frame.rect(x=x + inset, y=y + 1, width=max(0.0, w - inset * 2), height=1,
                color=GLASS_HIGHLIGHT, z_index=z)
