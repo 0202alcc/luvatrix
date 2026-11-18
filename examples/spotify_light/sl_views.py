@@ -262,12 +262,30 @@ def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
     frame.rounded_rect(x=x + 1, y=y + 1, width=w - 2, height=h - 2,
                        radius=max(0.0, radius - 1),
                        color=fill or (GLASS_FILL_HOVER if hovering else GLASS_FILL), z_index=z)
-    # The sheen is a square band, so its ends must clear the corner arc or it
-    # pokes past the rounded silhouette (Alec's "ghost corners"). Inset by the
-    # arc's horizontal intrusion at the band's top edge (y + 2).
-    sheen_inset = math.ceil(radius - math.sqrt(max(0.0, radius * radius - (radius - 2) ** 2)))
-    frame.rect(x=x + 2 + sheen_inset, y=y + 2, width=max(0.0, w - 4 - sheen_inset * 2),
-               height=h * 0.42, color=GLASS_SHEEN, z_index=z)
+    # The sheen is a silhouette-clipped falloff, not a square band: thin rows
+    # chord-clipped inside the top corner arc (so they can never poke past
+    # the rounded silhouette) with alpha ramping to zero at the bottom. One
+    # hard-edged slab floats inside the plate interior and reads as a
+    # rectangle behind the glyph (Alec's round-27 finding).
+    band_h = max(1, int(round(h * 0.42)))
+    row_h = max(1, band_h // 18)
+    base_a = GLASS_SHEEN[3]
+    yy = y + 2.0
+    drawn = 0
+    while drawn < band_h:
+        rh = min(float(row_h), float(band_h - drawn))
+        depth = yy + rh / 2 - y
+        if depth < radius:
+            chord = radius - math.sqrt(max(0.0, radius * radius - (radius - depth) ** 2))
+        else:
+            chord = 0.0
+        inset = max(2.0, chord + 1.0)
+        alpha = int(round(base_a * max(0.0, 1.0 - drawn / band_h)))
+        if alpha > 0:
+            frame.rect(x=x + inset, y=yy, width=max(0.0, w - inset * 2),
+                       height=rh, color=(255, 255, 255, alpha), z_index=z)
+        yy += rh
+        drawn += int(rh)
     inset = radius * 0.7
     frame.rect(x=x + inset, y=y + 1, width=max(0.0, w - inset * 2), height=1,
                color=GLASS_HIGHLIGHT, z_index=z)
