@@ -171,6 +171,32 @@ def _clip_head(measure, text: str, *, max_w: float, size: float) -> str:
     return ("…" + tail.lstrip()) if tail else "…"
 
 
+# Ink-height / font-size ratios for the icon glyphs, measured on the
+# rasterizer's font (text node y is the INK TOP, not the baseline). Used to
+# vertically center a glyph's ink box on a target point.
+_GLYPH_INK_RATIO = {"<<": 0.44, ">>": 0.44, ">": 0.52, "⌂": 0.59, "⚲": 0.71,
+                    "…": 0.13, "♪": 0.55}
+
+# Optical-centering corrections in EM units (fraction of font size), measured
+# from rendered ink: glyphs whose visual mass skews off their advance/ink-box
+# center (roof and doorway holes in ⌂, dot spacing in …, asymmetric bearings)
+# get a per-glyph bias. ">" reads left-of-center, so it nudges right.
+_GLYPH_OPTICAL_BIAS_EM = {
+    ">": (0.07, 0.0),
+    "⌂": (0.093, -0.108),
+    "⚲": (0.0, 0.115),
+    "…": (0.156, 0.031),
+}
+
+
+def _centered_glyph(frame, text, *, cx, cy, size, color, z) -> None:
+    w = frame._ctx.measure_text(text, font_size_px=float(size), font_family=FONT_FAMILY)
+    ratio = _GLYPH_INK_RATIO.get(text, 0.72)
+    bias_x, bias_y = _GLYPH_OPTICAL_BIAS_EM.get(text, (0.0, 0.0))
+    _text(frame, text, x=round(cx - w / 2 + bias_x * size),
+          y=round(cy - ratio * size / 2 + bias_y * size), size=size, color=color, z=z)
+
+
 def _text(frame, text, *, x, y, size=14.0, color=TEXT, z=2, max_chars=0) -> None:
     shown = sl_ui.truncate(text, max_chars) if max_chars else text
     if not shown:
@@ -220,7 +246,12 @@ def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
     frame.rounded_rect(x=x + 1, y=y + 1, width=w - 2, height=h - 2,
                        radius=max(0.0, radius - 1),
                        color=fill or (GLASS_FILL_HOVER if hovering else GLASS_FILL), z_index=z)
-    frame.rect(x=x + 2, y=y + 2, width=w - 4, height=h * 0.42, color=GLASS_SHEEN, z_index=z)
+    # The sheen is a square band, so its ends must clear the corner arc or it
+    # pokes past the rounded silhouette (Alec's "ghost corners"). Inset by the
+    # arc's horizontal intrusion at the band's top edge (y + 2).
+    sheen_inset = math.ceil(radius - math.sqrt(max(0.0, radius * radius - (radius - 2) ** 2)))
+    frame.rect(x=x + 2 + sheen_inset, y=y + 2, width=max(0.0, w - 4 - sheen_inset * 2),
+               height=h * 0.42, color=GLASS_SHEEN, z_index=z)
     inset = radius * 0.7
     frame.rect(x=x + inset, y=y + 1, width=max(0.0, w - inset * 2), height=1,
                color=GLASS_HIGHLIGHT, z_index=z)
@@ -336,7 +367,8 @@ def _draw_card(frame, app, out: FrameOut, card: sl_ui.CardView, *, x, y, mouse) 
         frame.circle(cx=x + CARD_W - 28, cy=y + CARD_ART - 26, radius=20,
                      fill=(0, 0, 0, 90), z_index=3)
         frame.circle(cx=x + CARD_W - 28, cy=y + CARD_ART - 28, radius=20, fill=ACCENT, z_index=3)
-        _text(frame, ">", x=x + CARD_W - 35, y=y + CARD_ART - 39, size=18, color=(0, 0, 0, 255), z=4)
+        _centered_glyph(frame, ">", cx=x + CARD_W - 28, cy=y + CARD_ART - 28, size=18,
+                        color=(0, 0, 0, 255), z=4)
 
 
 def _draw_track_table(frame, app, out: FrameOut, rows, *, x0, y0, width, height, context_uri, mouse) -> float:
@@ -622,9 +654,8 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
         # idle idiom), not a saturated hash-colored placeholder square.
         frame.rounded_rect(x=px + 10, y=py + 10, width=44, height=44, radius=8,
                            color=PILL_THUMB_EMPTY, z_index=12)
-        note_w = frame._ctx.measure_text("♪", font_size_px=20.0, font_family=FONT_FAMILY)
-        _text(frame, "♪", x=px + 10 + (44 - note_w) / 2, y=py + 10 + 11,
-              size=20, color=SUBTEXT, z=12)
+        _centered_glyph(frame, "♪", cx=px + 10 + 22, cy=py + 10 + 22, size=20,
+                        color=SUBTEXT, z=12)
         _text(frame, "Nothing playing", x=px + 64, y=py + 15, size=13, color=FAINT, z=12)
         if app.authenticated:
             _text(frame, _fit_width(frame._ctx.measure_text, "Pick a device, or start something from a playlist",
@@ -647,7 +678,7 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
         frame.rect(x=play_cx + bar_gap / 2, y=bar_y, width=bar_w, height=bar_h,
                    color=(0, 0, 0, 255), z_index=13)
     else:
-        _text(frame, ">", x=play_cx - 8, y=py + 24, size=13, color=(0, 0, 0, 255), z=13)
+        _centered_glyph(frame, ">", cx=play_cx, cy=cy, size=13, color=(0, 0, 0, 255), z=13)
     out.hit(play_cx - 17, py + 15, 34, 34, "toggle_play")
     _transport_button(frame, out, mouse, ">>", play_cx + 48, py + 18, "next", SUBTEXT)
 
@@ -681,8 +712,9 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     open_hover = _hover(mouse, ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2)
     _glass_plate(frame, ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2,
                  radius=OVERFLOW_R, z=10, hovering=open_hover or app.show_devices)
-    _text(frame, "…", x=ocx - 7, y=cy - 12, size=16,
-          color=ACCENT if app.show_devices else (TEXT if open_hover else SUBTEXT), z=12)
+    _centered_glyph(frame, "…", cx=ocx, cy=cy, size=16,
+                    color=ACCENT if app.show_devices else (TEXT if open_hover else SUBTEXT),
+                    z=12)
     out.hit(ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2, "open_devices")
 
     if app.show_devices:
@@ -698,14 +730,15 @@ def _nav_circle(frame, app, out: FrameOut, mouse, *, cx: float, cy: float,
                  NAV_CIRCLE_R * 2, NAV_CIRCLE_R * 2, radius=NAV_CIRCLE_R, z=10,
                  hovering=hovering or active)
     color = ACCENT if active else (TEXT if hovering else SUBTEXT)
-    _text(frame, glyph, x=cx - 8, y=cy - 10, size=17, color=color, z=12)
+    _centered_glyph(frame, glyph, cx=cx, cy=cy, size=17, color=color, z=12)
     out.hit(cx - NAV_CIRCLE_R, cy - NAV_CIRCLE_R, NAV_CIRCLE_R * 2, NAV_CIRCLE_R * 2,
             "nav", view)
 
 
 def _transport_button(frame, out: FrameOut, mouse, glyph, cx, y, action, color) -> None:
     hovering = _hover(mouse, cx - 12, y - 4, 34, 34)
-    _text(frame, glyph, x=cx - 8, y=y + 5, size=16, color=TEXT if hovering else color, z=12)
+    _centered_glyph(frame, glyph, cx=cx + 5, cy=y + 13, size=16,
+                    color=TEXT if hovering else color, z=12)
     out.hit(cx - 12, y - 4, 34, 34, action)
 
 
@@ -722,6 +755,11 @@ def _draw_playback_popup(frame, app, out: FrameOut, *, width: float, pill_top: f
     # fill for readability over content, same hairline/shadow language.
     _glass_plate(frame, popup_x, popup_y, popup_w, popup_h, radius=14.0, z=20,
                  fill=(18, 18, 18, 234), border=(255, 255, 255, 30))
+    # Swallow clicks that land on the panel but on no control: registered
+    # first so the popup's own controls (later) win the reversed hit walk,
+    # while dead space no longer falls through to dismiss the popup (or bleed
+    # into content hits underneath the panel).
+    out.hit(popup_x, popup_y, popup_w, popup_h, "popup_plate")
 
     player = app.player
     y0 = popup_y + 14

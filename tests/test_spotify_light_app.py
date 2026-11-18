@@ -2316,3 +2316,215 @@ class TestArtFailureBackoff:
         app._apply_result(job, (_u, size, rgba))
         assert key not in app._art_failures, "a landed fetch clears the backoff"
         assert app.art_for(url, 132) is not None
+
+
+# ---------------------------------------------------------------------------
+# Round 23 (Alec's eyeball pass on 1b71bac): dock glyphs sit off-center inside
+# their circles — x offsets were hardcoded for an old mono font and y assumed
+# the text node's y was a baseline, while the rasterizer treats it as the ink
+# top. The contract: each glyph's INK centroid lands on its target center.
+class TestDockGlyphCentering:
+    TOL = 1.5
+
+    def _render_idle_dock(self, app, ctx, scene_buffer):
+        app.authenticated = True
+        app.view = "library"  # neither nav circle active → uniform SUBTEXT ink
+        app.player = None
+        _tick(app, ctx, 2)
+        frame = scene_buffer.latest_frame()
+        assert frame is not None
+        return rasterize_scene_frame(frame)
+
+    def _ink_centroid(self, img, box, mask):
+        x0, y0, x1, y1 = box
+        xs, ys = [], []
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                r, g, b = (int(v) for v in img[y, x, :3])
+                if mask(r, g, b, x, y):
+                    xs.append(x)
+                    ys.append(y)
+        assert xs, f"no ink pixels found in {box}"
+        return sum(xs) / len(xs), sum(ys) / len(ys)
+
+    def _assert_centered(self, img, box, mask, target, label):
+        cx, cy = self._ink_centroid(img, box, mask)
+        tx, ty = target
+        assert abs(cx - tx) <= self.TOL and abs(cy - ty) <= self.TOL, \
+            f"{label} ink centroid ({cx:.2f}, {cy:.2f}) off target ({tx}, {ty})"
+
+    @staticmethod
+    def _bright(r, g, b, _x, _y) -> bool:
+        return (r + g + b) / 3 >= 140
+
+    def test_nav_circle_glyphs_center_on_their_circles(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        cy = py + ph / 2
+        home_cx = px - sl_views.NAV_CIRCLE_GAP - sl_views.NAV_CIRCLE_R
+        search_cx = px + pw + sl_views.NAV_CIRCLE_GAP + sl_views.NAV_CIRCLE_R
+        self._assert_centered(img, (int(home_cx) - 20, int(cy) - 20, int(home_cx) + 20,
+                                    int(cy) + 20), self._bright, (home_cx, cy), "home ⌂")
+        self._assert_centered(img, (int(search_cx) - 20, int(cy) - 20, int(search_cx) + 20,
+                                    int(cy) + 20), self._bright, (search_cx, cy), "search ⚲")
+
+    def test_overflow_ellipsis_centers_on_its_circle(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        px, py, _, ph = sl_views.pill_rect(1280, 800)
+        cy = py + ph / 2
+        ocx = 1280 - sl_views.PILL_FLOAT - sl_views.OVERFLOW_R
+        self._assert_centered(img, (int(ocx) - 20, int(cy) - 20, int(ocx) + 20, int(cy) + 20),
+                              self._bright, (ocx, cy), "overflow …")
+
+    def test_transport_glyphs_center_on_their_hit_regions(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        hits = {r.action: r for r in app._hits}
+        for action, label in (("prev", "<<"), ("next", ">>")):
+            r = hits[action]
+            target = (r.x + r.w / 2, r.y + r.h / 2)
+            self._assert_centered(img, (int(r.x), int(r.y), int(r.x + r.w), int(r.y + r.h)),
+                                  self._bright, target, f"transport {label}")
+
+    def test_play_glyph_centers_on_its_circle(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        play_cx, cy = px + pw - 72, py + ph / 2
+
+        def dark_ink_in_disc(r, g, b, x, y):
+            return ((r + g + b) / 3 < 80
+                    and (x - play_cx) ** 2 + (y - cy) ** 2 <= 13 ** 2)
+
+        self._assert_centered(img, (int(play_cx) - 14, int(cy) - 14, int(play_cx) + 14,
+                                    int(cy) + 14), dark_ink_in_disc, (play_cx, cy), 'play ">"')
+
+    def test_idle_note_glyph_centers_on_its_tile(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        tile_c = (px + 10 + 22, py + 10 + 22)
+        self._assert_centered(img, (int(tile_c[0]) - 14, int(tile_c[1]) - 14,
+                                    int(tile_c[0]) + 14, int(tile_c[1]) + 14),
+                              self._bright, tile_c, "idle ♪")
+
+
+# ---------------------------------------------------------------------------
+# Round 24 (Alec's eyeball pass on 1b71bac): "ghost corners" on the glass
+# plates. The sheen band in _glass_plate is a SQUARE rect starting 2px inside
+# the plate, so at rounded corners it pokes past the rounded silhouette and
+# reads as bright nubs floating off the plate. The contract: pixels outside
+# the rounded silhouette keep backdrop luminance; the sheen still reads
+# along the straight top edge.
+class TestGlassPlateSheen:
+
+    class _Capture:
+        def __init__(self):
+            self.rrects = []
+            self.rects = []
+
+        def rounded_rect(self, **kw):
+            self.rrects.append(kw)
+
+        def rect(self, **kw):
+            self.rects.append(kw)
+
+    def _rasterize_plate(self, radius):
+        cap = self._Capture()
+        sl_views._glass_plate(cap, 100.0, 100.0, 200.0, 100.0, radius=radius, z=2)
+        nodes = [RectNode(x=0, y=0, width=400, height=300,
+                          color_rgba=(16, 16, 16, 255), z_index=0)]
+        nodes += [RoundedRectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                                  radius=n["radius"], color_rgba=n["color"],
+                                  z_index=n["z_index"]) for n in cap.rrects]
+        nodes += [RectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                           color_rgba=n["color"], z_index=n["z_index"]) for n in cap.rects]
+        frame = SceneFrame(revision=1, logical_width=400, logical_height=300,
+                           display_width=400, display_height=300, ts_ns=0, nodes=tuple(nodes))
+        return rasterize_scene_frame(frame)
+
+    def test_sheen_stays_inside_rounded_silhouette(self):
+        img = self._rasterize_plate(22.0)
+        # Outside the r=22 arc (corner center (122,122)) but inside the old
+        # square sheen band: no plate pixel may brighten these over backdrop.
+        for x, y in ((102, 102), (103, 103), (104, 102), (102, 104), (105, 103),
+                     (297, 102), (296, 103), (298, 104)):
+            lum = int(img[y, x, :3].sum()) / 3
+            assert lum <= 20, f"sheen leaks past the rounded corner at {(x, y)}: lum {lum}"
+        # The sheen must still read along the straight top edge.
+        top = int(img[103, 200, :3].sum()) / 3
+        assert top >= 64, f"sheen band missing at the top edge: lum {top}"
+
+    def test_sheen_inset_scales_with_corner_radius(self):
+        # Pill-radius plate (r=32): the arc cuts deeper, so the leak points
+        # sit further from the corner. Same contract.
+        img = self._rasterize_plate(32.0)
+        for x, y in ((104, 102), (106, 103), (108, 104), (110, 105)):
+            lum = int(img[y, x, :3].sum()) / 3
+            assert lum <= 20, f"r=32 sheen leaks at {(x, y)}: lum {lum}"
+        top = int(img[103, 200, :3].sum()) / 3
+        assert top >= 64, f"r=32 sheen missing at the top edge: lum {top}"
+
+
+# ---------------------------------------------------------------------------
+# Round 25 (Alec's eyeball pass on 1b71bac): the playback popup "doesn't work
+# properly" — clicking its padding, gaps, or labels dismisses it. Root cause:
+# the popup's glass plate registers no hit region, so clicks on dead space
+# fall through _dispatch_click to the empty-space branch that closes the
+# popup (and can bleed into content hits underneath the panel). The contract:
+# clicks inside the plate are swallowed; only a click truly outside closes.
+class TestPopupPlateSwallow:
+
+    def _with_track(self, app, ctx, *, show_devices=False):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.devices = [
+            sl_models.Device(id="d1", name="MacBook Pro", kind="Computer", is_active=True,
+                             is_restricted=False, volume_percent=40),
+        ]
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500, track=track,
+                                           device=app.devices[0], shuffle=True, repeat="context")
+        app._player_synced_at = app.now_monotonic
+        app.show_devices = show_devices
+        _tick(app, ctx, 2)
+
+    def test_clicks_on_popup_dead_space_do_not_dismiss_it(self, app_ctx):
+        app, ctx, _buffer = app_ctx
+        self._with_track(app, ctx, show_devices=True)
+
+        popup_w, row_h, head_h = 300.0, 40.0, 148.0
+        popup_h = head_h + row_h * 1 + 12  # one device
+        popup_x = 1280 - popup_w - 16
+        _, pill_top, _, _ = sl_views.pill_rect(1280, 800)
+        popup_y = pill_top - 12 - popup_h
+
+        # Bottom padding below the last device row: inside the plate, on no control.
+        app._dispatch_click(popup_x + popup_w / 2, popup_y + popup_h - 4)
+        assert app.show_devices is True, "clicking the popup's padding must not dismiss it"
+        # The "Connect to a device" section title: a label, not a control.
+        app._dispatch_click(popup_x + popup_w / 2, popup_y + 132)
+        assert app.show_devices is True, "clicking a popup label must not dismiss it"
+        # The gap between the volume bar and the Shuffle row.
+        app._dispatch_click(popup_x + popup_w / 2, popup_y + 48)
+        assert app.show_devices is True, "clicking a popup gap must not dismiss it"
+
+        # A click truly outside the popup still dismisses it.
+        app._dispatch_click(400, 300)
+        assert app.show_devices is False
+
+    def test_popup_controls_still_win_over_the_plate(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        self._with_track(app, ctx, show_devices=True)
+        actions: list[str] = []
+        monkeypatch.setattr(app, "_player_action", lambda fn: actions.append("player"))
+
+        # Shuffle row hit: (popup_x+8, y1-5, popup_w-16, 30), y1 = popup_y + 48.
+        popup_x = 1280 - 300.0 - 16
+        _, pill_top, _, _ = sl_views.pill_rect(1280, 800)
+        popup_y = pill_top - 12 - (148.0 + 40.0 * 1 + 12)
+        app._dispatch_click(popup_x + 40, popup_y + 48 + 10)
+        assert actions == ["player"], "toggling Shuffle must still reach its control"
+        assert app.show_devices is True, "toggles never dismiss the popup"
