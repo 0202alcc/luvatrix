@@ -2316,3 +2316,96 @@ class TestArtFailureBackoff:
         app._apply_result(job, (_u, size, rgba))
         assert key not in app._art_failures, "a landed fetch clears the backoff"
         assert app.art_for(url, 132) is not None
+
+
+# ---------------------------------------------------------------------------
+# Round 23 (Alec's eyeball pass on 1b71bac): dock glyphs sit off-center inside
+# their circles — x offsets were hardcoded for an old mono font and y assumed
+# the text node's y was a baseline, while the rasterizer treats it as the ink
+# top. The contract: each glyph's INK centroid lands on its target center.
+class TestDockGlyphCentering:
+    TOL = 1.5
+
+    def _render_idle_dock(self, app, ctx, scene_buffer):
+        app.authenticated = True
+        app.view = "library"  # neither nav circle active → uniform SUBTEXT ink
+        app.player = None
+        _tick(app, ctx, 2)
+        frame = scene_buffer.latest_frame()
+        assert frame is not None
+        return rasterize_scene_frame(frame)
+
+    def _ink_centroid(self, img, box, mask):
+        x0, y0, x1, y1 = box
+        xs, ys = [], []
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                r, g, b = (int(v) for v in img[y, x, :3])
+                if mask(r, g, b, x, y):
+                    xs.append(x)
+                    ys.append(y)
+        assert xs, f"no ink pixels found in {box}"
+        return sum(xs) / len(xs), sum(ys) / len(ys)
+
+    def _assert_centered(self, img, box, mask, target, label):
+        cx, cy = self._ink_centroid(img, box, mask)
+        tx, ty = target
+        assert abs(cx - tx) <= self.TOL and abs(cy - ty) <= self.TOL, \
+            f"{label} ink centroid ({cx:.2f}, {cy:.2f}) off target ({tx}, {ty})"
+
+    @staticmethod
+    def _bright(r, g, b, _x, _y) -> bool:
+        return (r + g + b) / 3 >= 140
+
+    def test_nav_circle_glyphs_center_on_their_circles(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        cy = py + ph / 2
+        home_cx = px - sl_views.NAV_CIRCLE_GAP - sl_views.NAV_CIRCLE_R
+        search_cx = px + pw + sl_views.NAV_CIRCLE_GAP + sl_views.NAV_CIRCLE_R
+        self._assert_centered(img, (int(home_cx) - 20, int(cy) - 20, int(home_cx) + 20,
+                                    int(cy) + 20), self._bright, (home_cx, cy), "home ⌂")
+        self._assert_centered(img, (int(search_cx) - 20, int(cy) - 20, int(search_cx) + 20,
+                                    int(cy) + 20), self._bright, (search_cx, cy), "search ⚲")
+
+    def test_overflow_ellipsis_centers_on_its_circle(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        px, py, _, ph = sl_views.pill_rect(1280, 800)
+        cy = py + ph / 2
+        ocx = 1280 - sl_views.PILL_FLOAT - sl_views.OVERFLOW_R
+        self._assert_centered(img, (int(ocx) - 20, int(cy) - 20, int(ocx) + 20, int(cy) + 20),
+                              self._bright, (ocx, cy), "overflow …")
+
+    def test_transport_glyphs_center_on_their_hit_regions(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        hits = {r.action: r for r in app._hits}
+        for action, label in (("prev", "<<"), ("next", ">>")):
+            r = hits[action]
+            target = (r.x + r.w / 2, r.y + r.h / 2)
+            self._assert_centered(img, (int(r.x), int(r.y), int(r.x + r.w), int(r.y + r.h)),
+                                  self._bright, target, f"transport {label}")
+
+    def test_play_glyph_centers_on_its_circle(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        play_cx, cy = px + pw - 72, py + ph / 2
+
+        def dark_ink_in_disc(r, g, b, x, y):
+            return ((r + g + b) / 3 < 80
+                    and (x - play_cx) ** 2 + (y - cy) ** 2 <= 13 ** 2)
+
+        self._assert_centered(img, (int(play_cx) - 14, int(cy) - 14, int(play_cx) + 14,
+                                    int(cy) + 14), dark_ink_in_disc, (play_cx, cy), 'play ">"')
+
+    def test_idle_note_glyph_centers_on_its_tile(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        img = self._render_idle_dock(app, ctx, scene_buffer)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        tile_c = (px + 10 + 22, py + 10 + 22)
+        self._assert_centered(img, (int(tile_c[0]) - 14, int(tile_c[1]) - 14,
+                                    int(tile_c[0]) + 14, int(tile_c[1]) + 14),
+                              self._bright, tile_c, "idle ♪")
