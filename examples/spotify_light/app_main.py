@@ -58,6 +58,12 @@ CONTROL_KEYCODES = {
     48: "tab",
 }
 
+# Synthetic keyboards (the MCP tunnel, accessibility drivers) name control
+# keys instead of sending platform keycodes — and the HDI keyboard
+# normalizer rebuilds key_down payloads without `code`, so keycodes never
+# survive remote input. Names are the portable contract.
+CONTROL_KEY_NAMES = frozenset(CONTROL_KEYCODES.values())
+
 
 class TokenManager:
     """Thread-safe token access with automatic refresh (worker thread only)."""
@@ -775,6 +781,8 @@ class SpotifyLightApp(App):
         key = str(payload.get("key", ""))
         code = payload.get("code")
         control = CONTROL_KEYCODES.get(code) if isinstance(code, int) else None
+        if control is None and key in CONTROL_KEY_NAMES:
+            control = key
 
         if self.client_id_focused:
             self.client_id_draft = self._edit_text(self.client_id_draft, key, control)

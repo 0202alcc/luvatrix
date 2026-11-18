@@ -1031,6 +1031,45 @@ class TestNativeClientIdField:
         assert app.client_id_draft == ""
 
 
+class TestControlKeyNames:
+    """Synthetic keyboards (the MCP tunnel, accessibility drivers) name
+    control keys instead of sending macOS keycodes: the payload carries
+    key="backspace"/"enter"/"escape" with no `code`. The HDI keyboard
+    normalizer also rebuilds key_down payloads as {phase, key, active_keys}
+    — `code` never survives the tunnel. Key names must act exactly like
+    their keycode equivalents or remote drivers cannot edit text."""
+
+    @staticmethod
+    def _event(key: str):
+        return type("E", (), {"payload": {"key": key, "phase": "down"}})()
+
+    def test_backspace_name_deletes_a_character(self, app_ctx):
+        app, _, _ = app_ctx
+        app.authenticated = True
+        app.search_focused = True
+        app.search_query = "blue"
+        app._handle_key(self._event("backspace"))
+        assert app.search_query == "blu"
+
+    def test_escape_name_unfocuses_the_field(self, app_ctx):
+        app, _, _ = app_ctx
+        app.authenticated = True
+        app.search_focused = True
+        app._handle_key(self._event("escape"))
+        assert app.search_focused is False
+
+    def test_enter_name_submits_the_search(self, app_ctx):
+        app, _, _ = app_ctx
+        app.authenticated = True
+        app.search_focused = True
+        app.search_query = "blue"
+        app._client = object()
+        submitted = []
+        app.worker.submit = lambda name, job: submitted.append(name)
+        app._handle_key(self._event("enter"))
+        assert submitted == ["search"]
+
+
 class TestPlayerBar:
     def test_transport_and_device_popup(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
