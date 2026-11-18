@@ -2,7 +2,7 @@
 # Spotify Light sync + relaunch + tunnel for Alec's Mac (paste 2: round 13).
 # Alec runs ONE short line: bash <this file>. It self-checks and prints
 # TUNNEL_URL + TOKEN at the end to paste back into chat.
-TARGET=f973dc739b2344a739fab46a84aa40279b30cd6a
+TARGET=752f324b2253d99dd3856dd97658a48cd2bf96ca
 cd /Users/alec/Documents/Projects/luvatrix-spotify-light || { echo "REPO PATH NOT FOUND - stop"; exit 1; }
 git fetch origin || echo "WARN: fetch origin failed"
 git fetch origin "$TARGET" || echo "WARN: fetch target failed"
