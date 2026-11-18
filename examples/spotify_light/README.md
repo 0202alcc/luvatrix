@@ -199,6 +199,7 @@ PR description, or on macOS run the app under `--render macos-metal` and sample
 | --- | --- |
 | `app_main.py` | `App` subclass: worker-job wiring, timers, input dispatch, render gating |
 | `sl_views.py` | scene-graph drawing of every view + hit regions |
+| `sl_icons.py` | dock/card icon glyphs: Phosphor codepoints + the regular/Fill family split |
 | `sl_oauth.py` | PKCE, authorize URL, loopback receiver, token exchange/refresh |
 | `sl_api.py` | Web API + Connect endpoints with injectable transport, pagination, error kinds |
 | `sl_models.py` | defensive parsers for Spotify's JSON shapes |
@@ -206,6 +207,15 @@ PR description, or on macOS run the app under `--render macos-metal` and sample
 | `sl_store.py` | config dir, client id, `0600` token persistence |
 | `sl_art.py` | album-art LRU + disk cache, deterministic placeholders |
 | `sl_worker.py` | single daemon thread; the render loop never touches the network |
+
+## Icons
+
+Dock and card icons are [Phosphor](https://phosphoricons.com) (MIT): regular
+weight for nav/search/overflow/note, Phosphor-Fill for the transport
+play/prev/next. The TTFs ship in `assets/fonts/` with their license
+(`Phosphor-LICENSE.txt`); the runtime font resolver picks them up from there
+on every host, so macOS Metal and the headless CI rasterizer draw identical
+icon pixels through the normal text path.
 
 ## Limitations and follow-ups
 

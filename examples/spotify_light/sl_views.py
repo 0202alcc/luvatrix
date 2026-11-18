@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from luvatrix_core.core.scene_graph import CpuLayerNode
 
+import sl_icons
 import sl_models
 import sl_ui
 
@@ -171,33 +172,48 @@ def _clip_head(measure, text: str, *, max_w: float, size: float) -> str:
     return ("…" + tail.lstrip()) if tail else "…"
 
 
-# Ink-height / font-size ratios for the icon glyphs, measured on the
-# rasterizer's font (text node y is the INK TOP, not the baseline). Used to
-# vertically center a glyph's ink box on a target point.
-_GLYPH_INK_RATIO = {"<<": 0.44, ">>": 0.44, ">": 0.52, "⌂": 0.59, "⚲": 0.71,
-                    "…": 0.13, "♪": 0.55}
+# Ink-height / font-size ratios for the Phosphor icons, measured on the
+# bundled TTFs through the headless rasterizer with the same bright-ink mask
+# as the TestDockIconCentering pins (text node y is the INK TOP, not the
+# baseline). Used to vertically center an icon's ink box on a target point.
+_ICON_INK_RATIO = {
+    sl_icons.HOME: 0.765,
+    sl_icons.SEARCH: 0.824,
+    sl_icons.MORE: 0.062,   # three small dots: a short, thin row of ink
+    sl_icons.PREV: 0.750,
+    sl_icons.NEXT: 0.750,
+    sl_icons.PLAY: 0.769,
+    sl_icons.NOTE: 0.750,
+}
 
 # Optical-centering corrections in EM units (fraction of font size), measured
-# from rendered ink: glyphs whose visual mass skews off their advance/ink-box
-# center (roof and doorway holes in ⌂, dot spacing in …, asymmetric bearings)
-# get a per-glyph bias. ">" reads left-of-center, so it nudges right.
-_GLYPH_OPTICAL_BIAS_EM = {
-    ">": (0.07, 0.0),
-    "⌂": (0.093, -0.108),
-    "⚲": (0.0, 0.115),
-    "…": (0.156, 0.031),
+# from rendered ink-mass centroids: a right-pointing triangle's mass sits left
+# of its ink-box center, the skip buttons carry a bar on one side, and thin
+# outlines (house, note) have uneven mass. Each entry shifts placement so the
+# measured centroid lands on the target center.
+_ICON_OPTICAL_BIAS_EM = {
+    sl_icons.HOME: (0.086, -0.098),
+    sl_icons.SEARCH: (0.088, 0.046),
+    sl_icons.MORE: (0.219, -0.032),
+    sl_icons.PREV: (0.175, 0.031),
+    sl_icons.NEXT: (0.262, 0.031),
+    sl_icons.PLAY: (0.289, -0.021),
+    sl_icons.NOTE: (0.131, -0.002),
 }
 
 
-def _centered_glyph(frame, text, *, cx, cy, size, color, z) -> None:
-    w = frame._ctx.measure_text(text, font_size_px=float(size), font_family=FONT_FAMILY)
-    ratio = _GLYPH_INK_RATIO.get(text, 0.72)
-    bias_x, bias_y = _GLYPH_OPTICAL_BIAS_EM.get(text, (0.0, 0.0))
+def _centered_glyph(frame, text, *, cx, cy, size, color, z,
+                    font=FONT_FAMILY) -> None:
+    w = frame._ctx.measure_text(text, font_size_px=float(size), font_family=font)
+    ratio = _ICON_INK_RATIO.get(text, 0.882)
+    bias_x, bias_y = _ICON_OPTICAL_BIAS_EM.get(text, (0.0, 0.0))
     _text(frame, text, x=round(cx - w / 2 + bias_x * size),
-          y=round(cy - ratio * size / 2 + bias_y * size), size=size, color=color, z=z)
+          y=round(cy - ratio * size / 2 + bias_y * size), size=size, color=color,
+          z=z, font=font)
 
 
-def _text(frame, text, *, x, y, size=14.0, color=TEXT, z=2, max_chars=0) -> None:
+def _text(frame, text, *, x, y, size=14.0, color=TEXT, z=2, max_chars=0,
+          font=FONT_FAMILY) -> None:
     shown = sl_ui.truncate(text, max_chars) if max_chars else text
     if not shown:
         return
@@ -208,8 +224,8 @@ def _text(frame, text, *, x, y, size=14.0, color=TEXT, z=2, max_chars=0) -> None
         font_size_px=size,
         color=color,
         z_index=z,
-        cache_key=_ck("t", shown, size, color),
-        font_family=FONT_FAMILY,
+        cache_key=_ck("t", shown, size, color, font),
+        font_family=font,
     )
 
 
@@ -367,8 +383,8 @@ def _draw_card(frame, app, out: FrameOut, card: sl_ui.CardView, *, x, y, mouse) 
         frame.circle(cx=x + CARD_W - 28, cy=y + CARD_ART - 26, radius=20,
                      fill=(0, 0, 0, 90), z_index=3)
         frame.circle(cx=x + CARD_W - 28, cy=y + CARD_ART - 28, radius=20, fill=ACCENT, z_index=3)
-        _centered_glyph(frame, ">", cx=x + CARD_W - 28, cy=y + CARD_ART - 28, size=18,
-                        color=(0, 0, 0, 255), z=4)
+        _centered_glyph(frame, sl_icons.PLAY, cx=x + CARD_W - 28, cy=y + CARD_ART - 28,
+                        size=18, color=(0, 0, 0, 255), z=4, font=sl_icons.ICON_FONT_FILL)
 
 
 def _draw_track_table(frame, app, out: FrameOut, rows, *, x0, y0, width, height, context_uri, mouse) -> float:
@@ -654,8 +670,8 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
         # idle idiom), not a saturated hash-colored placeholder square.
         frame.rounded_rect(x=px + 10, y=py + 10, width=44, height=44, radius=8,
                            color=PILL_THUMB_EMPTY, z_index=12)
-        _centered_glyph(frame, "♪", cx=px + 10 + 22, cy=py + 10 + 22, size=20,
-                        color=SUBTEXT, z=12)
+        _centered_glyph(frame, sl_icons.NOTE, cx=px + 10 + 22, cy=py + 10 + 22,
+                        size=20, color=SUBTEXT, z=12, font=sl_icons.ICON_FONT)
         _text(frame, "Nothing playing", x=px + 64, y=py + 15, size=13, color=FAINT, z=12)
         if app.authenticated:
             _text(frame, _fit_width(frame._ctx.measure_text, "Pick a device, or start something from a playlist",
@@ -665,7 +681,8 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     # Transport: prev / play / next on the pill's right.
     playing = bool(player and player.is_playing)
     play_cx = px + pw - 72
-    _transport_button(frame, out, mouse, "<<", play_cx - 48, py + 18, "prev", SUBTEXT)
+    _transport_button(frame, out, mouse, sl_icons.PREV, play_cx - 48, py + 18, "prev",
+                      SUBTEXT, font=sl_icons.ICON_FONT_FILL)
     play_hover = _hover(mouse, play_cx - 17, py + 15, 34, 34)
     frame.circle(cx=play_cx, cy=cy, radius=15,
                  fill=TEXT if play_hover else (225, 225, 225, 255), z_index=12)
@@ -678,9 +695,11 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
         frame.rect(x=play_cx + bar_gap / 2, y=bar_y, width=bar_w, height=bar_h,
                    color=(0, 0, 0, 255), z_index=13)
     else:
-        _centered_glyph(frame, ">", cx=play_cx, cy=cy, size=13, color=(0, 0, 0, 255), z=13)
+        _centered_glyph(frame, sl_icons.PLAY, cx=play_cx, cy=cy, size=13,
+                        color=(0, 0, 0, 255), z=13, font=sl_icons.ICON_FONT_FILL)
     out.hit(play_cx - 17, py + 15, 34, 34, "toggle_play")
-    _transport_button(frame, out, mouse, ">>", play_cx + 48, py + 18, "next", SUBTEXT)
+    _transport_button(frame, out, mouse, sl_icons.NEXT, play_cx + 48, py + 18, "next",
+                      SUBTEXT, font=sl_icons.ICON_FONT_FILL)
 
     # Progress strip along the pill's lower interior, with tiny time labels.
     duration = track.duration_ms if track else 0
@@ -703,18 +722,18 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
 
     # Circular Home/Search nav buttons flanking the pill (reference layout).
     _nav_circle(frame, app, out, mouse, cx=px - NAV_CIRCLE_GAP - NAV_CIRCLE_R, cy=cy,
-                view="home", glyph="⌂")
+                view="home", glyph=sl_icons.HOME)
     _nav_circle(frame, app, out, mouse, cx=px + pw + NAV_CIRCLE_GAP + NAV_CIRCLE_R, cy=cy,
-                view="search", glyph="⚲")
+                view="search", glyph=sl_icons.SEARCH)
 
     # Overflow circle (bottom-right): volume / shuffle / repeat / devices.
     ocx = width - PILL_FLOAT - OVERFLOW_R
     open_hover = _hover(mouse, ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2)
     _glass_plate(frame, ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2,
                  radius=OVERFLOW_R, z=10, hovering=open_hover or app.show_devices)
-    _centered_glyph(frame, "…", cx=ocx, cy=cy, size=16,
+    _centered_glyph(frame, sl_icons.MORE, cx=ocx, cy=cy, size=16,
                     color=ACCENT if app.show_devices else (TEXT if open_hover else SUBTEXT),
-                    z=12)
+                    z=12, font=sl_icons.ICON_FONT)
     out.hit(ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2, "open_devices")
 
     if app.show_devices:
@@ -730,15 +749,17 @@ def _nav_circle(frame, app, out: FrameOut, mouse, *, cx: float, cy: float,
                  NAV_CIRCLE_R * 2, NAV_CIRCLE_R * 2, radius=NAV_CIRCLE_R, z=10,
                  hovering=hovering or active)
     color = ACCENT if active else (TEXT if hovering else SUBTEXT)
-    _centered_glyph(frame, glyph, cx=cx, cy=cy, size=17, color=color, z=12)
+    _centered_glyph(frame, glyph, cx=cx, cy=cy, size=17, color=color, z=12,
+                    font=sl_icons.ICON_FONT)
     out.hit(cx - NAV_CIRCLE_R, cy - NAV_CIRCLE_R, NAV_CIRCLE_R * 2, NAV_CIRCLE_R * 2,
             "nav", view)
 
 
-def _transport_button(frame, out: FrameOut, mouse, glyph, cx, y, action, color) -> None:
+def _transport_button(frame, out: FrameOut, mouse, glyph, cx, y, action, color,
+                      *, font=FONT_FAMILY) -> None:
     hovering = _hover(mouse, cx - 12, y - 4, 34, 34)
     _centered_glyph(frame, glyph, cx=cx + 5, cy=y + 13, size=16,
-                    color=TEXT if hovering else color, z=12)
+                    color=TEXT if hovering else color, z=12, font=font)
     out.hit(cx - 12, y - 4, 34, 34, action)
 
 
