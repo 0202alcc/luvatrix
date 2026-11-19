@@ -687,7 +687,9 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
                  fill=PILL_FILL, border=PILL_BORDER)
 
     player = app.player
-    track = player.track if player else None
+    # Pre-staged at the wall-clock boundary: the queue head shows while the
+    # confirming poll is still in flight (event-driven sync).
+    track = app.displayed_track()
 
     # Album art thumb with a hairline ring, alpha-clipped to the same r8
     # tile the idle state draws — a square image sits flush at the pill's

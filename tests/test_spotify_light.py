@@ -744,6 +744,49 @@ class TestApiClient:
             _client(http).devices()
         assert excinfo.value.retry_after_secs is None
 
+    def test_up_next_returns_the_first_queue_track(self):
+        """Event-driven sync: the pill pre-stages the queued track at the
+        boundary, so the client exposes the queue head."""
+        http = FakeHttp()
+        http.add("GET", "/me/player/queue", 200, {
+            "currently_playing": {"id": "cur", "name": "Current", "uri": "spotify:track:cur",
+                                  "duration_ms": 1000,
+                                  "artists": [{"id": "a", "name": "A", "uri": "u"}],
+                                  "album": {"id": "al", "name": "Al", "uri": "ua",
+                                            "artists": [{"id": "a", "name": "A", "uri": "u"}],
+                                            "images": []}},
+            "queue": [
+                {"id": "n1", "name": "Next One", "uri": "spotify:track:n1", "duration_ms": 2000,
+                 "artists": [{"id": "a", "name": "A", "uri": "u"}],
+                 "album": {"id": "al", "name": "Al", "uri": "ua",
+                           "artists": [{"id": "a", "name": "A", "uri": "u"}], "images": []}},
+                {"id": "n2", "name": "Next Two", "uri": "spotify:track:n2", "duration_ms": 3000,
+                 "artists": [{"id": "a", "name": "A", "uri": "u"}],
+                 "album": {"id": "al", "name": "Al", "uri": "ua",
+                           "artists": [{"id": "a", "name": "A", "uri": "u"}], "images": []}},
+            ]})
+        track = _client(http).up_next()
+        assert track is not None and track.id == "n1", "the head of the queue, not the whole list"
+
+    def test_up_next_empty_or_missing_queue_is_none(self):
+        http = FakeHttp()
+        http.add("GET", "/me/player/queue", 200, {"currently_playing": None, "queue": []})
+        assert _client(http).up_next() is None
+
+    def test_up_next_skips_unparseable_items(self):
+        """Local files and partial items in the queue must not hide the head."""
+        http = FakeHttp()
+        http.add("GET", "/me/player/queue", 200, {
+            "queue": [
+                {"id": None, "name": "local file"},
+                {"id": "n1", "name": "Next One", "uri": "spotify:track:n1", "duration_ms": 2000,
+                 "artists": [{"id": "a", "name": "A", "uri": "u"}],
+                 "album": {"id": "al", "name": "Al", "uri": "ua",
+                           "artists": [{"id": "a", "name": "A", "uri": "u"}], "images": []}},
+            ]})
+        track = _client(http).up_next()
+        assert track is not None and track.id == "n1"
+
 
 # --------------------------------------------------------------------------
 # UI helpers (pure presentation logic)

@@ -40,9 +40,22 @@ import sl_worker
 
 log = logging.getLogger("spotify_light")
 
-POLL_PLAYING_SECS = 3.0
-POLL_IDLE_SECS = 5.0
+# Event-driven sync (Alec): the bar moves on the wall clock, so steady-state
+# polls exist only to catch what the app cannot know — the track boundary
+# and external control. The heartbeat bounds that drift: 60s while playing
+# (worst-case stale display after an external skip), 180s while paused
+# (nothing advances; the user's return resyncs via activity anyway).
+HEARTBEAT_PLAYING_SECS = 60.0
+HEARTBEAT_PAUSED_SECS = 180.0
 POLL_AFTER_ACTION_SECS = 0.7
+# Fire this far before the computed track end: covers /me/player progress
+# quantization and the request round-trip, so the flip confirms on time.
+POLL_BOUNDARY_SKEW_SECS = 2.0
+# Floor for any computed wait — a track shorter than the skew must not
+# schedule a zero/negative wait or spin.
+POLL_MIN_INTERVAL_SECS = 5.0
+# Input after this much sync staleness means "user came back": resync once.
+ACTIVITY_RESYNC_MIN_SECS = 15.0
 # Fallback when a 429 arrives without a usable Retry-After header: long
 # enough for a sliding-window limit to open up, short enough to feel alive.
 RATE_LIMIT_DEFAULT_SECS = 10.0
@@ -154,6 +167,9 @@ class SpotifyLightApp(App):
         self._next_progress_tick = 0.0
         self._last_player_action = None  # for no-active-device transfer+retry
         self._rate_limited_until = 0.0  # poll loop stays quiet while ahead
+        self.up_next = None  # queue head, pre-staged into the pill at the boundary
+        self._pending_device_recovery = False  # NO_ACTIVE_DEVICE awaiting fresh devices
+        self._last_activity_resync = 0.0
         self._art_in_flight: set[str] = set()
         self._art_failures: dict[str, float] = {}
         self._art_pending: dict[str, tuple[str, int]] = {}
@@ -183,6 +199,7 @@ class SpotifyLightApp(App):
         self._bootstrap_done = False
         self.bootstrap_notices = []
         self.worker.submit("bootstrap", self._job_bootstrap)
+        self.worker.submit("poll-devices", self._job_poll_devices)
         self._next_player_poll = 0.0  # poll immediately
 
     def _end_session(self) -> None:
@@ -380,10 +397,22 @@ class SpotifyLightApp(App):
             self._login_receiver = None
 
     def _job_poll_player(self):
+        """Playback snapshot + queue head. Devices are NOT fetched here —
+        they change on human timescales, so they ride their own triggers.
+        The queue fetch degrades to None: tokens minted before the queue
+        scope existed 403 there, and that must not sink the snapshot."""
         assert self._client is not None
         player = self._client.player_state()
-        devices = self._client.devices()
-        return (player, devices)
+        try:
+            up_next = self._client.up_next()
+        except sl_api.ApiError as exc:
+            log.info("queue fetch degraded (%s); pre-staging off this poll", exc)
+            up_next = None
+        return (player, up_next)
+
+    def _job_poll_devices(self):
+        assert self._client is not None
+        return self._client.devices()
 
     def _job_search(self, query: str):
         assert self._client is not None
@@ -474,12 +503,21 @@ class SpotifyLightApp(App):
             sl_store.save_tokens(self.cfg_dir, outcome)
             self._begin_session(outcome)
         elif label == "poll-player":
-            player, devices = outcome
+            player, up_next = outcome
             self.player = player
-            self.devices = devices
+            self.up_next = up_next
             self._player_synced_at = time.monotonic()
+            self._schedule_player_poll()
             if player and player.device and player.device.volume_percent is not None:
                 self.last_volume = player.device.volume_percent
+            if self._pending_device_recovery and time.monotonic() >= self._rate_limited_until:
+                # A rate limit earlier held the recovery fetch; take it now.
+                self.worker.submit("poll-devices", self._job_poll_devices)
+        elif label == "poll-devices":
+            self.devices = outcome
+            if self._pending_device_recovery:
+                self._pending_device_recovery = False
+                self._recover_device()
         elif label == "search":
             self.search_results = outcome
             self.search_error = ""
@@ -507,17 +545,16 @@ class SpotifyLightApp(App):
         if error.kind == sl_api.ErrorKind.PREMIUM_REQUIRED:
             self._toast("Spotify Premium is required for playback control")
         elif error.kind == sl_api.ErrorKind.DEVICE_NOT_FOUND:
-            if label == "player-action" and self._auto_pick_device():
-                pass  # obvious target: transfer + retry, like the real app
-            elif label == "player-action" and len(self.devices) > 1 and not any(
-                    d.is_active for d in self.devices):
-                # Genuinely ambiguous — the only case that prompts.
-                self.show_devices = True
-                self._toast("Pick a device")
-            elif label == "player-action" and not self.devices:
-                self._toast("No devices found — open Spotify on a device first")
+            if label == "player-action":
+                # The cached device list led us astray — refetch, then decide.
+                # While rate-limited we hold the flag; the next successful
+                # player poll takes the recovery fetch instead of queueing up.
+                self._pending_device_recovery = True
+                if time.monotonic() >= self._rate_limited_until:
+                    self.worker.submit("poll-devices", self._job_poll_devices)
             else:
                 self._toast("No active device — pick one under Devices")
+
         elif label == "search":
             self.search_error = str(error)
         elif label.startswith("playlist:"):
@@ -532,6 +569,20 @@ class SpotifyLightApp(App):
             self._toast(str(error))
         self.invalidate()
 
+    def _recover_device(self) -> None:
+        """Decision after the fresh devices fetch for a NO_ACTIVE_DEVICE
+        player action: auto-pick when obvious, prompt only when ambiguous."""
+        if self._auto_pick_device():
+            pass  # obvious target: transfer + retry, like the real app
+        elif len(self.devices) > 1 and not any(d.is_active for d in self.devices):
+            # Genuinely ambiguous — the only case that prompts.
+            self.show_devices = True
+            self._toast("Pick a device")
+        elif not self.devices:
+            self._toast("No devices found — open Spotify on a device first")
+        else:
+            self._toast("No active device — pick one under Devices")
+
     def _toast(self, message: str) -> None:
         self.status_message = message
         self._status_until = time.monotonic() + STATUS_TOAST_SECS
@@ -541,11 +592,29 @@ class SpotifyLightApp(App):
         duration = retry_after_secs if retry_after_secs and retry_after_secs > 0 else RATE_LIMIT_DEFAULT_SECS
         already_quiet = now < self._rate_limited_until
         self._rate_limited_until = now + duration
+        # One resync the moment the window lifts — the app has been blind for
+        # the whole backoff; boundary/heartbeat resume from that fresh state.
+        self._next_player_poll = self._rate_limited_until
         if not already_quiet:
             # Once per limiting window, not once per failed poll.
             self._toast(f"Spotify rate limit hit — backing off {duration:g}s")
 
     # -- timers -----------------------------------------------------------------
+
+    def _schedule_player_poll(self) -> None:
+        """Next proactive poll: the heartbeat, or the track boundary when that
+        lands sooner. Recomputed on every fresh player state, so an external
+        seek/skip moves the boundary instead of being missed until a fixed
+        interval expires."""
+        now = time.monotonic()
+        heartbeat = HEARTBEAT_PLAYING_SECS if (
+            self.player and self.player.is_playing) else HEARTBEAT_PAUSED_SECS
+        next_poll = now + heartbeat
+        if self.player and self.player.is_playing and self.player.track:
+            remaining = (self.player.track.duration_ms - self.progress_ms()) / 1000.0
+            boundary = now + max(remaining - POLL_BOUNDARY_SKEW_SECS, POLL_MIN_INTERVAL_SECS)
+            next_poll = min(next_poll, boundary)
+        self._next_player_poll = next_poll
 
     def _handle_timers(self) -> None:
         now = time.monotonic()
@@ -553,9 +622,7 @@ class SpotifyLightApp(App):
 
         if (self.authenticated and self._client is not None
                 and now >= self._next_player_poll and now >= self._rate_limited_until):
-            self._next_player_poll = now + (
-                POLL_PLAYING_SECS if (self.player and self.player.is_playing) else POLL_IDLE_SECS
-            )
+            self._schedule_player_poll()
             self.worker.submit("poll-player", self._job_poll_player)
 
         # While playing, tick the progress bar once per second between polls.
@@ -577,9 +644,28 @@ class SpotifyLightApp(App):
 
     # -- input --------------------------------------------------------------------
 
+    def _maybe_activity_resync(self) -> None:
+        """Input after a stale stretch means the user is back at the window:
+        resync now rather than waiting out the heartbeat. Stand-in for a
+        window-focus event, which AppContext does not expose today."""
+        now = time.monotonic()
+        if not (self.authenticated and self._client is not None):
+            return
+        if now - self._player_synced_at < ACTIVITY_RESYNC_MIN_SECS:
+            return  # fresh enough — ordinary interaction stays free
+        if now - self._last_activity_resync < ACTIVITY_RESYNC_MIN_SECS:
+            return  # throttle: at most one resync per stale window
+        if now < self._rate_limited_until:
+            return  # a rate-limit deadline suppresses every scheduled poll
+        self._last_activity_resync = now
+        self._next_player_poll = now
+
     def _handle_input(self, events) -> None:
         state = self.input.state
         self._mouse = (state.mouse_x, state.mouse_y)
+
+        if events:
+            self._maybe_activity_resync()
 
         for event in events:
             if getattr(event, "device", None) == "keyboard":
@@ -752,8 +838,10 @@ class SpotifyLightApp(App):
             self._player_action(lambda c: c.set_volume(pct))
         elif action == "open_devices":
             self.show_devices = not self.show_devices
-            if self.show_devices and self.authenticated:
-                self.worker.submit("poll-player", self._job_poll_player)
+            if (self.show_devices and self.authenticated and self._client is not None
+                    and time.monotonic() >= self._rate_limited_until):
+                # Popup open is a devices trigger, not a player poll.
+                self.worker.submit("poll-devices", self._job_poll_devices)
             self.invalidate()
         elif action == "pick_device":
             _transfer = lambda c: c.transfer(payload, play=True)  # noqa: E731
@@ -808,6 +896,10 @@ class SpotifyLightApp(App):
         self._last_player_action = fn
         self.worker.submit("player-action", lambda: self._job_player_action(fn))
         self._next_player_poll = time.monotonic() + POLL_AFTER_ACTION_SECS
+        if time.monotonic() >= self._rate_limited_until:
+            # Device reality may change with an action (transfer, wake); the
+            # devices list rides actions, not the player tick.
+            self.worker.submit("poll-devices", self._job_poll_devices)
         self.invalidate()
 
     def _auto_pick_device(self) -> bool:
@@ -924,7 +1016,16 @@ class SpotifyLightApp(App):
 
     # -- progress ---------------------------------------------------------------------
 
-    def progress_ms(self) -> int:
+    def _pre_staged(self) -> bool:
+        """True when the wall clock has run past the current track's end and
+        the queue head is known — the pill shows the next track while the
+        boundary poll is still in flight."""
+        return bool(
+            self.player and self.player.is_playing and self.player.track
+            and self.up_next is not None
+            and self.progress_ms_unstaged() >= self.player.track.duration_ms)
+
+    def progress_ms_unstaged(self) -> int:
         if self.player is None:
             return 0
         duration = self.player.track.duration_ms if self.player.track else 0
@@ -934,6 +1035,18 @@ class SpotifyLightApp(App):
             duration_ms=duration,
             playing=self.player.is_playing,
         )
+
+    def progress_ms(self) -> int:
+        if self._pre_staged():
+            return 0
+        return self.progress_ms_unstaged()
+
+    def displayed_track(self):
+        """Track the pill should show: the queue head once the current track's
+        wall-clock duration has run out, otherwise the polled track."""
+        if self._pre_staged():
+            return self.up_next
+        return self.player.track if self.player else None
 
     # -- native controls -------------------------------------------------------------
 
