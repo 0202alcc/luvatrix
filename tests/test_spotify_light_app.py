@@ -2981,6 +2981,106 @@ class TestDeviceAutoPick:
 
 
 # ---------------------------------------------------------------------------
+# Rate limiting (Alec, round-28 build): a spontaneous 429 while idling. The
+# app must honor Retry-After — pause the poll loop for the window, say so
+# once, and resume on schedule — never keep hammering through the limit.
+# ---------------------------------------------------------------------------
+
+class TestRateLimitBackoff:
+
+    class _Clock:
+        def __init__(self):
+            self.now = 1_000.0
+
+        def __call__(self):
+            return self.now
+
+    def _base(self, app, ctx, monkeypatch, *, playing=False):
+        app.authenticated = True
+        app.view = "home"
+        app._client = object()  # jobs never run; only the timer submits
+        if playing:
+            app.player = sl_models.PlayerState(is_playing=True, progress_ms=0,
+                                               track=None, device=None, shuffle=False,
+                                               repeat="off")
+            app._player_synced_at = 0.0
+        submits: list = []
+        monkeypatch.setattr(app.worker, "submit", lambda label, job: submits.append(label))
+        toasts: list = []
+        monkeypatch.setattr(app, "_toast", lambda message: toasts.append(message))
+        clock = self._Clock()
+        monkeypatch.setattr(app_main.time, "monotonic", clock)
+        return submits, toasts, clock
+
+    @staticmethod
+    def _rate_error(retry_after=30.0):
+        return sl_api.ApiError(sl_api.ErrorKind.RATE_LIMITED,
+                               "429: API rate limit exceeded", 429,
+                               retry_after_secs=retry_after)
+
+    def test_poll_429_pauses_polling_for_the_retry_after_window(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        submits, toasts, clock = self._base(app, ctx, monkeypatch)
+        _tick(app, ctx, 2)
+        assert submits == ["poll-player"], "the steady-state poll fires on schedule"
+
+        app._apply_result("poll-player", self._rate_error(30.0))
+        clock.now += 29.0
+        _tick(app, ctx, 5)
+        assert submits == ["poll-player"], "no polls inside the Retry-After window"
+
+        clock.now += 2.0
+        _tick(app, ctx, 2)
+        assert submits == ["poll-player", "poll-player"], "polling resumes after the window"
+        assert toasts and "rate limit" in toasts[0].lower(), "the pause is announced once"
+
+    def test_repeated_429s_extend_the_window_but_toast_once(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        submits, toasts, clock = self._base(app, ctx, monkeypatch)
+        app._apply_result("poll-player", self._rate_error(30.0))
+        clock.now += 20.0
+        app._apply_result("poll-player", self._rate_error(30.0))
+        assert toasts == [toasts[0]] and len(toasts) == 1, \
+            "already backing off: extend the deadline, don't re-toast"
+        clock.now += 25.0
+        _tick(app, ctx, 3)
+        assert submits == [], "the second 429 restarted the window"
+        clock.now += 6.0
+        _tick(app, ctx, 2)
+        assert submits == ["poll-player"], "resume 30s after the LAST 429"
+
+    def test_429_without_retry_after_uses_the_default_backoff(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        submits, toasts, clock = self._base(app, ctx, monkeypatch)
+        app._apply_result("poll-player", self._rate_error(None))
+        clock.now += app_main.POLL_PLAYING_SECS + 1.0
+        _tick(app, ctx, 3)
+        assert submits == [], "missing header must not mean 'no backoff'"
+        assert toasts and "rate limit" in toasts[0].lower()
+
+    def test_player_action_429_also_pauses_the_poll_loop(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        submits, toasts, clock = self._base(app, ctx, monkeypatch)
+        app._apply_result("player-action", self._rate_error(20.0))
+        clock.now += 10.0
+        _tick(app, ctx, 3)
+        assert submits == [], "a limited player action quiets polling too"
+
+    def test_cadence_resumes_at_the_normal_interval_after_recovery(self, app_ctx, monkeypatch):
+        app, ctx, _buffer = app_ctx
+        submits, toasts, clock = self._base(app, ctx, monkeypatch, playing=True)
+        app._apply_result("poll-player", self._rate_error(10.0))
+        clock.now += 11.0
+        _tick(app, ctx, 1)
+        assert submits == ["poll-player"], "first poll right after the window"
+        app._apply_result("poll-player", (None, []))  # a clean success
+        clock.now += app_main.POLL_PLAYING_SECS + 0.1
+        _tick(app, ctx, 1)
+        assert submits == ["poll-player", "poll-player"], \
+            "backoff resets: success returns to the playing cadence, not a stale long one"
+
+
+# ---------------------------------------------------------------------------
 # Round 28, finding 4 (Alec on the #362 build): the thin specular top-edge
 # line on the glass plates reads as a hard artifact. The contract: the
 # highlight is a segmented falloff — lower peak, ends fading to nothing —

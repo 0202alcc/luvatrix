@@ -23,15 +23,18 @@ class ErrorKind(Enum):
     UNAUTHORIZED = "unauthorized"
     PREMIUM_REQUIRED = "premium_required"
     DEVICE_NOT_FOUND = "device_not_found"
+    RATE_LIMITED = "rate_limited"
     API = "api"
     NETWORK = "network"
 
 
 class ApiError(Exception):
-    def __init__(self, kind: ErrorKind, message: str, status: int | None = None) -> None:
+    def __init__(self, kind: ErrorKind, message: str, status: int | None = None,
+                 *, retry_after_secs: float | None = None) -> None:
         super().__init__(message)
         self.kind = kind
         self.status = status
+        self.retry_after_secs = retry_after_secs
 
 
 def _extract_error(body: object, fallback: str) -> tuple[str, str | None]:
@@ -54,11 +57,38 @@ def _extract_error_message(body: object, fallback: str) -> str:
     return _extract_error(body, fallback)[0]
 
 
-def classify_error(status: int, body: object) -> ApiError:
+def _parse_retry_after(headers: dict | None) -> float | None:
+    """Retry-After seconds from a response header map, any casing.
+
+    Spotify sends integer seconds; anything missing or non-numeric leaves
+    the hint absent so the caller falls back to its default backoff.
+    """
+    if not headers:
+        return None
+    raw = None
+    for name, value in headers.items():
+        if str(name).lower() == "retry-after":
+            raw = value
+            break
+    if raw is None:
+        return None
+    try:
+        secs = float(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return secs if secs > 0 else None
+
+
+def classify_error(status: int, body: object, headers: dict | None = None) -> ApiError:
     message, reason = _extract_error(body, f"Spotify request failed ({status})")
     lowered = message.lower()
     if status == 401:
         return ApiError(ErrorKind.UNAUTHORIZED, message, status)
+    if status == 429:
+        # Its own kind: the only correct response to a rate limit is to stop
+        # sending for the Retry-After window, so the app must see it.
+        return ApiError(ErrorKind.RATE_LIMITED, message, status,
+                        retry_after_secs=_parse_retry_after(headers))
     # No-active-device arrives as 404 on some endpoints and as 403 + a
     # NO_ACTIVE_DEVICE reason (or message) on others — it is always the
     # device flow, never a generic failure.
@@ -103,10 +133,11 @@ class _UrllibHttp:
         try:
             with urllib.request.urlopen(request, timeout=15) as response:
                 body = response.read().decode("utf-8")
-                return response.status, _safe_json(body)
+                return response.status, _safe_json(body), dict(response.headers.items())
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8")
-            return exc.code, _safe_json(body)
+            headers = dict(exc.headers.items()) if exc.headers is not None else {}
+            return exc.code, _safe_json(body), headers
         except OSError as exc:
             raise ApiError(ErrorKind.NETWORK, f"network error: {exc}") from exc
 
@@ -125,11 +156,11 @@ class SpotifyClient:
 
     def _request(self, method: str, url: str, payload: dict | None = None):
         token = self._token_provider()
-        status, body = self._http.request(method, url, token=token, payload=payload)
+        status, body, headers = self._http.request(method, url, token=token, payload=payload)
         if status == 204 or status == 304:
             return None
         if status >= 400:
-            raise classify_error(status, body)
+            raise classify_error(status, body, headers)
         return body
 
     # -- user / library ----------------------------------------------------

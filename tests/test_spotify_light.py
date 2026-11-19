@@ -519,15 +519,15 @@ class FakeHttp:
         self.routes = {}
         self.calls = []
 
-    def add(self, method, path_substring, status, payload):
-        self.routes[(method, path_substring)] = (status, payload)
+    def add(self, method, path_substring, status, payload, headers=None):
+        self.routes[(method, path_substring)] = (status, payload, headers or {})
 
     def request(self, method, url, *, token, payload=None):
         self.calls.append((method, url, payload))
-        for (m, sub), (status, body) in self.routes.items():
+        for (m, sub), (status, body, headers) in self.routes.items():
             if m == method and sub in url:
-                return status, body
-        return 404, {"error": {"status": 404, "message": "Not found"}}
+                return status, body, headers
+        return 404, {"error": {"status": 404, "message": "Not found"}}, {}
 
 
 def _client(http):
@@ -696,6 +696,53 @@ class TestApiClient:
         message = str(excinfo.value)
         assert "unsupported for this app" in message
         assert "UNSUPPORTED_ACTION" in message
+
+    def test_429_maps_to_rate_limited_with_retry_after(self):
+        """Alec hit a spontaneous 429 while idling (round-28 build). The
+        client must surface 429 as its own kind carrying the Retry-After
+        seconds, so the app can pause its poll loop instead of hammering
+        straight through the rate-limit window."""
+        http = FakeHttp()
+        http.add("GET", "/me/player/devices", 429,
+                 {"error": {"status": 429, "message": "API rate limit exceeded"}},
+                 headers={"Retry-After": "30"})
+        with pytest.raises(sl_api.ApiError) as excinfo:
+            _client(http).devices()
+        error = excinfo.value
+        assert error.kind == sl_api.ErrorKind.RATE_LIMITED
+        assert error.status == 429
+        assert error.retry_after_secs == 30.0
+        assert "rate limit" in str(error).lower()
+
+    def test_429_retry_after_lookup_is_case_insensitive(self):
+        """HTTP header names are case-insensitive; Spotify's casing is not
+        a contract we control."""
+        http = FakeHttp()
+        http.add("GET", "/me/player/devices", 429,
+                 {"error": {"status": 429, "message": "API rate limit exceeded"}},
+                 headers={"retry-after": "7"})
+        with pytest.raises(sl_api.ApiError) as excinfo:
+            _client(http).devices()
+        assert excinfo.value.retry_after_secs == 7.0
+
+    def test_429_without_retry_after_leaves_hint_none(self):
+        """No header → the app falls back to its default backoff."""
+        http = FakeHttp()
+        http.add("GET", "/me/player/devices", 429,
+                 {"error": {"status": 429, "message": "API rate limit exceeded"}})
+        with pytest.raises(sl_api.ApiError) as excinfo:
+            _client(http).devices()
+        assert excinfo.value.kind == sl_api.ErrorKind.RATE_LIMITED
+        assert excinfo.value.retry_after_secs is None
+
+    def test_429_non_numeric_retry_after_leaves_hint_none(self):
+        http = FakeHttp()
+        http.add("GET", "/me/player/devices", 429,
+                 {"error": {"status": 429, "message": "API rate limit exceeded"}},
+                 headers={"Retry-After": "soon"})
+        with pytest.raises(sl_api.ApiError) as excinfo:
+            _client(http).devices()
+        assert excinfo.value.retry_after_secs is None
 
 
 # --------------------------------------------------------------------------
