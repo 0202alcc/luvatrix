@@ -43,6 +43,9 @@ log = logging.getLogger("spotify_light")
 POLL_PLAYING_SECS = 3.0
 POLL_IDLE_SECS = 5.0
 POLL_AFTER_ACTION_SECS = 0.7
+# Fallback when a 429 arrives without a usable Retry-After header: long
+# enough for a sliding-window limit to open up, short enough to feel alive.
+RATE_LIMIT_DEFAULT_SECS = 10.0
 SEARCH_DEBOUNCE_SECS = 0.4
 STATUS_TOAST_SECS = 6.0
 LOGIN_TIMEOUT_SECS = 180.0
@@ -150,6 +153,7 @@ class SpotifyLightApp(App):
         self._next_player_poll = 0.0
         self._next_progress_tick = 0.0
         self._last_player_action = None  # for no-active-device transfer+retry
+        self._rate_limited_until = 0.0  # poll loop stays quiet while ahead
         self._art_in_flight: set[str] = set()
         self._art_failures: dict[str, float] = {}
         self._art_pending: dict[str, tuple[str, int]] = {}
@@ -490,6 +494,12 @@ class SpotifyLightApp(App):
         self.invalidate()
 
     def _apply_api_error(self, label: str, error: sl_api.ApiError) -> None:
+        if error.kind == sl_api.ErrorKind.RATE_LIMITED:
+            # Any job can see the 429; whatever it was, the whole app quiets
+            # down for the window — that is what lets the limit recover.
+            self._enter_rate_limit(error.retry_after_secs)
+            self.invalidate()
+            return
         if error.kind == sl_api.ErrorKind.UNAUTHORIZED:
             self._toast("Session expired — please reconnect Spotify")
             self._end_session()
@@ -526,13 +536,23 @@ class SpotifyLightApp(App):
         self.status_message = message
         self._status_until = time.monotonic() + STATUS_TOAST_SECS
 
+    def _enter_rate_limit(self, retry_after_secs: float | None) -> None:
+        now = time.monotonic()
+        duration = retry_after_secs if retry_after_secs and retry_after_secs > 0 else RATE_LIMIT_DEFAULT_SECS
+        already_quiet = now < self._rate_limited_until
+        self._rate_limited_until = now + duration
+        if not already_quiet:
+            # Once per limiting window, not once per failed poll.
+            self._toast(f"Spotify rate limit hit — backing off {duration:g}s")
+
     # -- timers -----------------------------------------------------------------
 
     def _handle_timers(self) -> None:
         now = time.monotonic()
         self.now_monotonic = now
 
-        if self.authenticated and self._client is not None and now >= self._next_player_poll:
+        if (self.authenticated and self._client is not None
+                and now >= self._next_player_poll and now >= self._rate_limited_until):
             self._next_player_poll = now + (
                 POLL_PLAYING_SECS if (self.player and self.player.is_playing) else POLL_IDLE_SECS
             )
