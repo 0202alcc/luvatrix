@@ -2817,7 +2817,8 @@ class TestOverflowClickSequence:
                              is_active=False, is_restricted=False, volume_percent=None)
             for i in range(5)
         ]
-        app._apply_result("poll-player", (app.player, more_devices))
+        app._apply_result("poll-player", (app.player, None))
+        app._apply_result("poll-devices", more_devices)
         _tick(app, ctx, 2)
         assert app.show_devices is True, "a poll result must not dismiss the popup"
         self._click(app, ctx, *self.CIRCLE)
@@ -2884,6 +2885,9 @@ class TestDeviceAutoPick:
             def play(self, **kwargs):
                 calls.append(("play", kwargs))
 
+            def devices(self):
+                return list(app.devices)
+
         app._client = _Client()
         _tick(app, ctx, 1)
 
@@ -2900,15 +2904,24 @@ class TestDeviceAutoPick:
             def __getitem__(self, index):
                 return self._jobs()[index]
 
-        return _PlayerSubmits(), calls
+        return _PlayerSubmits(), calls, submits
+
+    @staticmethod
+    def _recover(app, raw_submits):
+        """Drive the two-phase device recovery: a NO_ACTIVE_DEVICE action
+        error queues a fresh devices fetch; its result runs the decision."""
+        entry = next((label, job) for label, job in raw_submits if label == "poll-devices")
+        raw_submits.remove(entry)
+        app._apply_result("poll-devices", entry[1]())
 
     def test_single_device_transfers_and_reissues_without_prompting(self, app_ctx, monkeypatch):
         app, ctx, _buffer = app_ctx
-        submits, calls = self._base(app, ctx, monkeypatch, [self._device("d1")])
+        submits, calls, raw = self._base(app, ctx, monkeypatch, [self._device("d1")])
         app._dispatch_action("toggle_play", None, 0.0)
         assert len(submits) == 1, "the user's play action is queued"
 
         app._apply_api_error("player-action", self._no_active_error())
+        self._recover(app, raw)
         assert len(submits) == 2, "an obvious device means transfer + retry, not a prompt"
         submits[1]()  # run the queued retry job against the fake client
         assert calls == [("transfer", "d1", False), ("play", {})]
@@ -2917,10 +2930,11 @@ class TestDeviceAutoPick:
 
     def test_active_device_wins_among_many(self, app_ctx, monkeypatch):
         app, ctx, _buffer = app_ctx
-        submits, calls = self._base(app, ctx, monkeypatch,
-                                    [self._device("d1"), self._device("d2", active=True)])
+        submits, calls, raw = self._base(app, ctx, monkeypatch,
+                                         [self._device("d1"), self._device("d2", active=True)])
         app._dispatch_action("toggle_play", None, 0.0)
         app._apply_api_error("player-action", self._no_active_error())
+        self._recover(app, raw)
         assert len(submits) == 2
         submits[1]()
         assert calls[0] == ("transfer", "d2", False), "the active device is the target"
@@ -2928,41 +2942,46 @@ class TestDeviceAutoPick:
 
     def test_multiple_inactive_devices_is_the_only_prompt(self, app_ctx, monkeypatch):
         app, ctx, _buffer = app_ctx
-        submits, _calls = self._base(app, ctx, monkeypatch,
-                                     [self._device("d1"), self._device("d2")])
+        submits, _calls, raw = self._base(app, ctx, monkeypatch,
+                                          [self._device("d1"), self._device("d2")])
         app._dispatch_action("toggle_play", None, 0.0)
         app._apply_api_error("player-action", self._no_active_error())
+        self._recover(app, raw)
         assert len(submits) == 1, "ambiguous means no silent transfer"
         assert app.show_devices is True, "the picker opens — this is the only prompt"
         assert app.status_message == "Pick a device"
 
     def test_zero_devices_explains_without_prompting(self, app_ctx, monkeypatch):
         app, ctx, _buffer = app_ctx
-        submits, _calls = self._base(app, ctx, monkeypatch, [])
+        submits, _calls, raw = self._base(app, ctx, monkeypatch, [])
         app._dispatch_action("toggle_play", None, 0.0)
         app._apply_api_error("player-action", self._no_active_error())
+        self._recover(app, raw)
         assert len(submits) == 1
         assert app.show_devices is False
         assert "No devices found" in app.status_message
 
     def test_retry_failure_does_not_loop(self, app_ctx, monkeypatch):
         app, ctx, _buffer = app_ctx
-        submits, _calls = self._base(app, ctx, monkeypatch, [self._device("d1")])
+        submits, _calls, raw = self._base(app, ctx, monkeypatch, [self._device("d1")])
         app._dispatch_action("toggle_play", None, 0.0)
         app._apply_api_error("player-action", self._no_active_error())
+        self._recover(app, raw)
         assert len(submits) == 2
         # The transfer+retry fails the same way (device vanished): stop
         # retrying and say so — never loop transfers across worker trips.
         app._apply_api_error("player-action", self._no_active_error())
+        self._recover(app, raw)
         assert len(submits) == 2, "a failed auto-retry must not chain another"
         assert "pick one under Devices" in app.status_message
 
     def test_pick_device_transfer_does_not_chain(self, app_ctx, monkeypatch):
         app, ctx, _buffer = app_ctx
-        submits, _calls = self._base(app, ctx, monkeypatch, [self._device("d1")])
+        submits, _calls, raw = self._base(app, ctx, monkeypatch, [self._device("d1")])
         app._dispatch_action("pick_device", "d1", 0.0)
         assert len(submits) == 1
         app._apply_api_error("player-action", self._no_active_error())
+        self._recover(app, raw)
         assert len(submits) == 1, "a failed explicit transfer must not auto-transfer again"
 
     def test_other_403s_reach_the_toast_verbatim(self, app_ctx, monkeypatch):
@@ -3053,7 +3072,7 @@ class TestRateLimitBackoff:
         app, ctx, _buffer = app_ctx
         submits, toasts, clock = self._base(app, ctx, monkeypatch)
         app._apply_result("poll-player", self._rate_error(None))
-        clock.now += app_main.POLL_PLAYING_SECS + 1.0
+        clock.now += app_main.POLL_MIN_INTERVAL_SECS + 1.0
         _tick(app, ctx, 3)
         assert submits == [], "missing header must not mean 'no backoff'"
         assert toasts and "rate limit" in toasts[0].lower()
@@ -3073,11 +3092,13 @@ class TestRateLimitBackoff:
         clock.now += 11.0
         _tick(app, ctx, 1)
         assert submits == ["poll-player"], "first poll right after the window"
-        app._apply_result("poll-player", (None, []))  # a clean success
-        clock.now += app_main.POLL_PLAYING_SECS + 0.1
+        playing = sl_models.PlayerState(is_playing=True, progress_ms=0, track=None,
+                                        device=None, shuffle=False, repeat="off")
+        app._apply_result("poll-player", (playing, None))  # a clean success
+        clock.now += app_main.HEARTBEAT_PLAYING_SECS + 0.1
         _tick(app, ctx, 1)
         assert submits == ["poll-player", "poll-player"], \
-            "backoff resets: success returns to the playing cadence, not a stale long one"
+            "backoff resets: success returns to the playing heartbeat, not a stale long one"
 
 
 # ---------------------------------------------------------------------------
@@ -3196,3 +3217,277 @@ def test_note_optical_bias_lifts_the_idle_glyph():
     _bias_x, bias_y = sl_views._ICON_OPTICAL_BIAS_EM[sl_icons.NOTE]
     assert bias_y <= -0.07, \
         f"the idle note needs a ~0.1em upward optical bias (2px at the 20px tile), got {bias_y}"
+
+
+# ---------------------------------------------------------------------------
+# Event-driven sync (Alec): replace fixed-interval polling with wall-clock
+# progress + a poll scheduled at the track boundary, a slow heartbeat to
+# bound drift from external control, activity-regain resync, and devices
+# fetched on demand instead of every refresh.
+# ---------------------------------------------------------------------------
+
+class TestEventDrivenSync:
+
+    class _Clock:
+        def __init__(self):
+            self.now = 1_000.0
+
+        def __call__(self):
+            return self.now
+
+    @staticmethod
+    def _track(name="t1", *, ms=200_000):
+        artist = _artist(f"artist-{name}")
+        return _track(name, artist, _album(f"album-{name}", artist), ms=ms)
+
+    def _player(self, track, *, playing=True, progress_ms=0, repeat="off"):
+        return sl_models.PlayerState(is_playing=playing, progress_ms=progress_ms,
+                                     track=track, device=None, shuffle=False, repeat=repeat)
+
+    def _base(self, app, ctx, monkeypatch, track=None, *, playing=True, progress_ms=0):
+        app.authenticated = True
+        app.view = "home"
+        submits: list = []
+        monkeypatch.setattr(app.worker, "submit", lambda label, job: submits.append((label, job)))
+        toasts: list = []
+        monkeypatch.setattr(app, "_toast", lambda message: toasts.append(message))
+        clock = self._Clock()
+        monkeypatch.setattr(app_main.time, "monotonic", clock)
+        track = track if track is not None else self._track()
+        app.player = self._player(track, playing=playing, progress_ms=progress_ms)
+        app._player_synced_at = clock.now
+        app._client = object()
+        return submits, toasts, clock, track
+
+    def test_progress_bar_advances_on_wall_clock_without_api_traffic(self, app_ctx, monkeypatch):
+        """CORE 1: between syncs the bar moves on the local clock alone."""
+        app, ctx, _buffer = app_ctx
+        submits, _toasts, clock, _t = self._base(app, ctx, monkeypatch, progress_ms=10_000)
+        app._schedule_player_poll()  # steady state: boundary ~190s out, heartbeat 60s
+        start = app.progress_ms()
+        clock.now += 10.0
+        _tick(app, ctx, 5)
+        assert submits == [], "no API traffic just to move the bar"
+        assert 9_000 <= app.progress_ms() - start <= 11_000, "wall clock advanced the bar"
+
+    def test_next_poll_lands_at_track_end_minus_skew(self, app_ctx, monkeypatch):
+        """CORE 2: the proactive poll is scheduled at the boundary."""
+        app, ctx, _buffer = app_ctx
+        _submits, _toasts, clock, _t = self._base(app, ctx, monkeypatch, progress_ms=170_000)
+        app._apply_result("poll-player", (self._player(self._track(), progress_ms=170_000), None))
+        expected = clock.now + (30.0 - app_main.POLL_BOUNDARY_SKEW_SECS)
+        assert abs(app._next_player_poll - expected) < 0.01, \
+            f"boundary poll at end minus skew, got {app._next_player_poll - clock.now:.2f}s out"
+
+    def test_heartbeat_caps_the_wait_on_long_tracks(self, app_ctx, monkeypatch):
+        """CORE 3c: the heartbeat bounds drift from external control."""
+        app, ctx, _buffer = app_ctx
+        _s, _t, clock, _tr = self._base(app, ctx, monkeypatch, progress_ms=0)  # 200s track
+        app._apply_result("poll-player", (self._player(self._track(), progress_ms=0), None))
+        assert abs(app._next_player_poll - (clock.now + app_main.HEARTBEAT_PLAYING_SECS)) < 0.01
+
+    def test_external_pause_leaves_heartbeat_only(self, app_ctx, monkeypatch):
+        """EDGE: externally paused — no boundary exists, heartbeat only."""
+        app, ctx, _buffer = app_ctx
+        _s, _t, clock, track = self._base(app, ctx, monkeypatch)
+        app._apply_result("poll-player", (self._player(track, playing=False, progress_ms=50_000), None))
+        assert abs(app._next_player_poll - (clock.now + app_main.HEARTBEAT_PAUSED_SECS)) < 0.01
+
+    def test_external_seek_recomputes_the_boundary(self, app_ctx, monkeypatch):
+        """EDGE: an external seek moves the boundary to the new remaining time."""
+        app, ctx, _buffer = app_ctx
+        _s, _t, clock, track = self._base(app, ctx, monkeypatch, progress_ms=170_000)
+        app._apply_result("poll-player", (self._player(track, progress_ms=170_000), None))
+        first = app._next_player_poll
+        app._apply_result("poll-player", (self._player(track, progress_ms=140_000), None))
+        expected = clock.now + (60.0 - app_main.POLL_BOUNDARY_SKEW_SECS)
+        assert abs(app._next_player_poll - expected) < 0.01
+        assert app._next_player_poll > first, "seeking back pushes the boundary out"
+
+    def test_external_skip_recomputes_from_the_new_track(self, app_ctx, monkeypatch):
+        """EDGE: heartbeat discovers a new track; boundary comes from ITS end."""
+        app, ctx, _buffer = app_ctx
+        _s, _t, clock, _tr = self._base(app, ctx, monkeypatch)
+        new_track = self._track("t2", ms=20_000)
+        app._apply_result("poll-player", (self._player(new_track, progress_ms=5_000), None))
+        expected = clock.now + (15.0 - app_main.POLL_BOUNDARY_SKEW_SECS)
+        assert abs(app._next_player_poll - expected) < 0.01
+
+    def test_repeat_one_reschedules_the_same_duration(self, app_ctx, monkeypatch):
+        """EDGE: repeat-one restarts the same track; the boundary is its length again."""
+        app, ctx, _buffer = app_ctx
+        track = self._track(ms=30_000)
+        _s, _t, clock, _tr = self._base(app, ctx, monkeypatch, track=track)
+        app._apply_result("poll-player",
+                          (self._player(track, progress_ms=500, repeat="track"), None))
+        expected = clock.now + (29.5 - app_main.POLL_BOUNDARY_SKEW_SECS)
+        assert abs(app._next_player_poll - expected) < 0.01
+
+    def test_track_shorter_than_the_skew_clamps_to_a_minimum(self, app_ctx, monkeypatch):
+        """EDGE: a 3s-remaining track must not schedule a negative/zero wait."""
+        app, ctx, _buffer = app_ctx
+        _s, _t, clock, track = self._base(app, ctx, monkeypatch, progress_ms=197_000)
+        app._apply_result("poll-player", (self._player(track, progress_ms=197_000), None))
+        assert abs(app._next_player_poll - (clock.now + app_main.POLL_MIN_INTERVAL_SECS)) < 0.01
+
+    def test_paused_at_the_boundary_polls_on_the_paused_heartbeat(self, app_ctx, monkeypatch):
+        """EDGE: paused AT track end — nothing advances, no boundary poll."""
+        app, ctx, _buffer = app_ctx
+        _s, _t, clock, track = self._base(app, ctx, monkeypatch, playing=False)
+        app._apply_result("poll-player",
+                          (self._player(track, playing=False, progress_ms=200_000), None))
+        assert abs(app._next_player_poll - (clock.now + app_main.HEARTBEAT_PAUSED_SECS)) < 0.01
+
+    def test_rate_limit_suppresses_every_scheduled_poll(self, app_ctx, monkeypatch):
+        """COMPOSE with the 429 fix: boundary, heartbeat and activity all
+        stay silent until the Retry-After window lifts, then resume."""
+        app, ctx, _buffer = app_ctx
+        submits, _t, clock, track = self._base(app, ctx, monkeypatch, progress_ms=170_000)
+        app._apply_result("poll-player", (self._player(track, progress_ms=170_000), None))
+        app._apply_result("poll-player", sl_api.ApiError(
+            sl_api.ErrorKind.RATE_LIMITED, "429", 429, retry_after_secs=60.0))
+        clock.now += 59.0  # boundary (28s) AND heartbeat (60s) both pass inside the window
+        _tick(app, ctx, 5)
+        assert submits == [], "rate-limit deadline suppresses every scheduled poll"
+        clock.now += 2.0
+        _tick(app, ctx, 2)
+        assert [label for label, _job in submits] == ["poll-player"], "resume when it lifts"
+
+    def test_activity_regain_triggers_a_throttled_resync(self, app_ctx, monkeypatch):
+        """CORE 3b: returning to the app resyncs — once per stale window,
+        not per event, and never when the sync is already fresh."""
+        app, ctx, _buffer = app_ctx
+        submits, _t, clock, _tr = self._base(app, ctx, monkeypatch)
+        app._player_synced_at = clock.now - 100.0  # stale: user was away
+        event = HDIEvent(event_id=1, ts_ns=1, window_id="w", device="mouse",
+                         event_type="pointer_move", status="OK",
+                         payload={"x": 5.0, "y": 5.0, "buttons_mask": 0})
+        app._handle_input([event])
+        _tick(app, ctx, 1)
+        assert [label for label, _job in submits] == ["poll-player"], "returning user gets a resync"
+        app._handle_input([event])
+        _tick(app, ctx, 1)
+        assert len(submits) == 1, "throttled: one resync per stale window"
+        clock.now += 100.0
+        app._player_synced_at = clock.now  # fresh again
+        next_before = app._next_player_poll
+        app._handle_input([event])
+        assert app._next_player_poll == next_before and len(submits) == 1, \
+            "no resync when the state is already fresh"
+
+    def test_steady_state_poll_no_longer_fetches_devices(self, app_ctx, monkeypatch):
+        """CORE 4: the player sync job carries player + queue only; devices
+        move to their own on-demand fetch."""
+        app, ctx, _buffer = app_ctx
+        submits, _t, _c, _tr = self._base(app, ctx, monkeypatch)
+        calls: list = []
+
+        class _Client:
+            def player_state(self):
+                calls.append("player_state")
+                return app.player
+
+            def up_next(self):
+                calls.append("up_next")
+                return None
+
+            def devices(self):
+                calls.append("devices")
+                return []
+
+        app._client = _Client()
+        _tick(app, ctx, 1)
+        poll_jobs = [job for label, job in submits if label == "poll-player"]
+        assert len(poll_jobs) == 1
+        poll_jobs[0]()
+        assert "devices" not in calls, "devices are decoupled from the player tick"
+        assert "player_state" in calls
+
+    def test_queue_failure_degrades_the_poll_never_sinks_it(self, app_ctx, monkeypatch):
+        """Tokens minted before the queue scope existed 403 on /me/player/
+        queue; the player snapshot must still land, pre-staging just stays
+        off until re-login."""
+        app, ctx, _buffer = app_ctx
+        self._base(app, ctx, monkeypatch)
+
+        class _Client:
+            def player_state(self):
+                return app.player
+
+            def up_next(self):
+                raise sl_api.classify_error(403, {"error": {
+                    "status": 403, "message": "Insufficient client scope"}})
+
+        app._client = _Client()
+        player, up_next = app._job_poll_player()
+        assert player is app.player, "the playback snapshot survives a queue 403"
+        assert up_next is None, "no queue scope: pre-staging quietly off"
+
+    def test_devices_fetched_on_popup_open_action_and_session(self, app_ctx, monkeypatch):
+        """CORE 4: the three on-demand device triggers."""
+        app, ctx, _buffer = app_ctx
+        submits, _t, clock, _tr = self._base(app, ctx, monkeypatch)
+        app._dispatch_action("open_devices", None, 0.0)
+        assert "poll-devices" in [label for label, _job in submits], "popup open fetches devices"
+        submits.clear()
+        app._player_action(lambda c: None)
+        assert "poll-devices" in [label for label, _job in submits], "player action fetches devices"
+
+    def test_device_recovery_waits_for_a_fresh_devices_fetch(self, app_ctx, monkeypatch):
+        """CORE 4 + round 28: NO_ACTIVE_DEVICE no longer decides from the
+        stale cached list — it fetches devices, then auto-picks/prompts."""
+        app, ctx, _buffer = app_ctx
+        submits, toasts, clock, _tr = self._base(app, ctx, monkeypatch)
+        calls: list = []
+
+        class _Client:
+            def devices(self):
+                calls.append("devices")
+                return [sl_models.Device(id="d1", name="Mac", kind="Computer", is_active=False,
+                                         is_restricted=False, volume_percent=50)]
+
+            def transfer(self, device_id, *, play=True):
+                calls.append(("transfer", device_id, play))
+
+            def play(self, **kwargs):
+                calls.append(("play", kwargs))
+
+        app._client = _Client()
+        app._player_action(lambda c: c.play())
+        error = sl_api.classify_error(403, {"error": {"status": 403,
+                                            "message": "Player command failed: No active device found",
+                                            "reason": "NO_ACTIVE_DEVICE"}})
+        app._apply_api_error("player-action", error)
+        labels = [label for label, _job in submits]
+        assert "poll-devices" in labels, "recovery starts with a fresh devices fetch"
+        actions_before = labels.count("player-action")
+        device_job = next(job for label, job in submits if label == "poll-devices")
+        app._apply_result("poll-devices", device_job())
+        labels = [label for label, _job in submits]
+        assert labels.count("player-action") == actions_before + 1, \
+            "after fresh devices land: transfer + retry, queued only then"
+        assert getattr(app._last_player_action, "_sl_device_retry", False), \
+            "the queued retry carries the no-chain marker"
+        app._last_player_action(app._client)
+        assert calls[0] == "devices" and ("transfer", "d1", False) in calls
+
+    def test_up_next_pre_staged_into_the_pill_at_the_boundary(self, app_ctx, monkeypatch):
+        """CORE 2: at the computed end the pill already shows the queued
+        track — the boundary poll confirms, it doesn't cause the flip."""
+        app, ctx, buffer = app_ctx
+        current = self._track("current", ms=200_000)
+        upcoming = self._track("up-next", ms=180_000)
+        _s, _t, clock, _tr = self._base(app, ctx, monkeypatch, track=current, progress_ms=199_000)
+        app.up_next = upcoming
+        clock.now += 2.0  # wall clock is now past the current track's end
+        _tick(app, ctx, 2)
+        texts = _texts(buffer)
+        assert "up-next" in texts, "pill pre-stages the queued track at the boundary"
+        assert "current" not in texts
+
+    def test_post_action_one_shot_survives(self, app_ctx, monkeypatch):
+        """CORE 3a: the 0.7s re-poll after a user action is unchanged."""
+        app, ctx, _buffer = app_ctx
+        _s, _t, clock, _tr = self._base(app, ctx, monkeypatch)
+        app._player_action(lambda c: None)
+        assert abs(app._next_player_poll - (clock.now + app_main.POLL_AFTER_ACTION_SECS)) < 0.01

@@ -231,6 +231,19 @@ class SpotifyClient:
             return []
         return [sl_models.parse_device(d) for d in devices if isinstance(d, dict)]
 
+    def up_next(self) -> sl_models.Track | None:
+        """Head of the playback queue, for pre-staging the pill at the track
+        boundary; None when the queue is empty or its head is unplayable."""
+        body = self._request("GET", f"{API_BASE}/me/player/queue")
+        queue = (body or {}).get("queue")
+        if not isinstance(queue, list):
+            return None
+        for item in queue:
+            track = sl_models.parse_track_or_none(item)
+            if track is not None:
+                return track
+        return None
+
     def play(
         self,
         *,
