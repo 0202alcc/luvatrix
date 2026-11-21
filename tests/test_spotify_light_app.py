@@ -1148,8 +1148,9 @@ class TestFloatingPill:
         # Round 30 (Alec): the pill left the bottom dock for the window's
         # TOP-RIGHT corner — right edge pinned at width - PILL_FLOAT, top at
         # the same 16pt float margin the dock used; round 32: 108pt tall, so
-        # the right-edge anchor grows the capsule leftward (744 = 1280-16-520).
-        assert (px, py, pw, ph) == (744.0, 16.0, 520.0, 108.0)
+        # the right-edge anchor grows the capsule leftward; round 38 (SL-23):
+        # 692 = 1280-16-572, the width derived from the transport center.
+        assert (px, py, pw, ph) == (692.0, 16.0, 572.0, 108.0)
         rrects = _nodes(scene_buffer, RoundedRectNode)
         rings = [n for n in rrects
                  if n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
@@ -1367,14 +1368,14 @@ class TestBigPillTransportRow:
 
     def test_pill_rect_grows_and_keeps_the_320_floor(self):
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
-        assert (pw, ph) == (520.0, 108.0), "the capsule scales up"
+        assert (pw, ph) == (572.0, 108.0), "the capsule scales up (SL-23: 2 x the transport center)"
         assert py == sl_views.PILL_FLOAT, "the top float margin is unchanged"
         assert px + pw == 1280.0 - sl_views.PILL_FLOAT, \
             "right edge pinned — the growth goes leftward"
         _, _, pw_narrow, _ = sl_views.pill_rect(560.0, 800.0)
         assert pw_narrow == sl_views.PILL_MIN_W == 320.0, "the 320pt floor still holds"
         _, _, pw_mid, _ = sl_views.pill_rect(940.0, 800.0)
-        assert pw_mid == 520.0, "940pt still fits the design-width pill"
+        assert pw_mid == 572.0, "940pt still fits the design-width pill"
 
     def test_art_tile_scales_up_with_the_pill(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
@@ -1403,7 +1404,10 @@ class TestBigPillTransportRow:
         seek = self._hit(app, "seek_bar")
         assert artist[0].y < seek.y, "the bar sits below the text rows"
 
-    def test_transport_row_sits_under_the_bar_centered_on_the_column(self, app_ctx):
+    def test_transport_row_sits_under_the_bar_centered_on_the_pill(self, app_ctx):
+        """Round 38 (SL-23) re-axes this round-32 pin: the transport centers
+        on the PILL, not the text column — the play button IS the plate's
+        geometric center, and the strip keeps its own column alignment."""
         app, ctx, scene_buffer = app_ctx
         self._playing(app, ctx)
         px, _, pw, _ = sl_views.pill_rect(1280, 800)
@@ -1413,10 +1417,9 @@ class TestBigPillTransportRow:
         nxt = self._hit(app, "next")
         assert toggle.y >= seek.y + seek.h, \
             "the transport row lives strictly under the progress bar"
-        col_cx = px + 110.0 + (pw - 128.0) / 2
         play_cx = toggle.x + toggle.w / 2
-        assert abs(play_cx - col_cx) < 1e-6, \
-            "play centers under the text/bar column"
+        assert abs(play_cx - (px + pw / 2)) < 1e-6, \
+            "play centers on the PILL (SL-23), not the column"
         assert prev.x + prev.w / 2 < play_cx < nxt.x + nxt.w / 2, \
             "prev / play / next reading order"
 
@@ -1469,10 +1472,11 @@ class TestProgressAlignsWithText:
     """Round 37 (Alec, SL-21 on the SL-22 tool): the progress strip's left
     edge aligns with the title text column, baked via layout_align as a
     persisted RELATIONSHIP in the shipped layout.toml — not resolved pixels.
-    At 1280x800 the strip sits at pill-local (110, 59, 352, 3): left edge on
-    the text column's left, right edge holding 462 (the runner's acceptance
-    spec). The time labels moved above the strip's ends, so the widened
-    strip never paints them over the art tile."""
+    At 1280x800 on the round-38 plate the strip sits at pill-local
+    (110, 59, 404, 3): left edge on the text column's left, right edge
+    holding 514 (its natural right, 40pt inside the column pad). The time
+    labels moved above the strip's ends, so the widened strip never paints
+    them over the art tile."""
 
     def _playing(self, app, ctx):
         app.authenticated = True
@@ -1498,10 +1502,10 @@ class TestProgressAlignsWithText:
         assert title and seek
         assert seek[0].x == title[0].x == px + 110.0, \
             "strip left == text column left — the SL-21 alignment"
-        assert seek[0].w == 352.0 and seek[0].x + seek[0].w == px + 462.0, \
-            "the right edge holds at 462 (the runner's acceptance spec)"
+        assert seek[0].w == 404.0 and seek[0].x + seek[0].w == px + 514.0, \
+            "the right edge holds at 514 (natural right on the 572 plate)"
         strip = self._strip(scene_buffer)
-        assert (strip.x, strip.y, strip.width) == (px + 110.0, py + 59.0, 352.0)
+        assert (strip.x, strip.y, strip.width) == (px + 110.0, py + 59.0, 404.0)
 
     def test_the_alignment_holds_idle(self, app_ctx):
         """The strip geometry is identical with or without a track (the
@@ -1511,7 +1515,7 @@ class TestProgressAlignsWithText:
         _tick(app, ctx, 2)
         px, py, _, _ = sl_views.pill_rect(1280, 800)
         strip = self._strip(scene_buffer)
-        assert (strip.x, strip.y, strip.width) == (px + 110.0, py + 59.0, 352.0)
+        assert (strip.x, strip.y, strip.width) == (px + 110.0, py + 59.0, 404.0)
 
     def test_time_labels_sit_above_the_strip_clear_of_the_art(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
@@ -1528,7 +1532,7 @@ class TestProgressAlignsWithText:
         assert elapsed[0].y == py + 59.0 - 11, "the labels float above the strip"
         dur_w = ctx.measure_text("4:17", font_size_px=9.0,
                                  font_family=sl_views.FONT_FAMILY)
-        assert duration and duration[0].x == pytest.approx(px + 462.0 - dur_w), \
+        assert duration and duration[0].x == pytest.approx(px + 514.0 - dur_w), \
             "the duration's right edge meets the strip's right end"
         assert duration[0].y == py + 59.0 - 11
 
@@ -3082,8 +3086,10 @@ class TestPopupPlateSwallow:
         app._dispatch_click(popup_x + popup_w / 2, popup_y + 48)
         assert app.show_devices is True, "clicking a popup gap must not dismiss it"
 
-        # A click truly outside the popup still dismisses it.
-        app._dispatch_click(400, 300)
+        # A click truly outside the popup still dismisses it (round 38: the
+        # dead strip between the sidebar and the popup, which now drops
+        # from the SL-23 circle at x 380).
+        app._dispatch_click(350, 300)
         assert app.show_devices is False
 
     def test_popup_controls_still_win_over_the_plate(self, app_ctx, monkeypatch):
@@ -3113,9 +3119,9 @@ class TestPopupPlateSwallow:
 # ---------------------------------------------------------------------------
 
 class TestOverflowClickSequence:
-    # Overflow circle centre at 1280x800 (round 36: the shipped layout.toml
-    # position on the pill's left flank — (688,48,44,44)).
-    CIRCLE = (710.0, 70.0)
+    # Overflow circle centre at 1280x800 (round 38: the shipped layout.toml
+    # relationship parks it on the pill's left flank — (636,48,44,44)).
+    CIRCLE = (658.0, 70.0)
 
     def _with_track(self, app, ctx, monkeypatch, *, devices=1, show_devices=False):
         app.authenticated = True
@@ -4080,7 +4086,7 @@ class TestPillTopRight:
         _tick(app, ctx, 2)
 
     def test_pill_anchors_top_right_at_design_width(self):
-        assert sl_views.pill_rect(1280, 800) == (744.0, 16.0, 520.0, 108.0), \
+        assert sl_views.pill_rect(1280, 800) == (692.0, 16.0, 572.0, 108.0), \
             "right edge pinned at width - PILL_FLOAT, top at the dock's margin idiom"
 
     def test_right_edge_stays_pinned_across_window_widths(self):
@@ -4197,9 +4203,10 @@ class TestPillTopRight:
 # ---------------------------------------------------------------------------
 # Round 36 (Alec, SL-19 via SL-20): the overflow (⋯) circle's position is
 # the PERSISTED spec in the shipped layout.toml — 12pt left of the top-right
-# pill, vertically centered (Alec's live nudge, baked by the persist path
-# itself). The bottom dock keeps just home + search; the popup drops from
-# the moved circle menu-style; the search field caps at the circle.
+# pill, vertically centered — round 38 re-specs it as a two-axis align
+# RELATIONSHIP riding the pill's left edge. The bottom dock keeps just home
+# + search; the popup drops from the moved circle menu-style; the search
+# field caps at the circle.
 class TestOverflowPersistsLeftOfPill:
 
     def _with_track(self, app, ctx, *, show_devices=False):
@@ -4222,14 +4229,15 @@ class TestOverflowPersistsLeftOfPill:
         self._with_track(app, ctx)
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         overflow = next(r for r in app._hits if r.action == "open_devices")
-        assert (overflow.x, overflow.y, overflow.w, overflow.h) == (688.0, 48.0, 44.0, 44.0), \
-            "Alec's live nudge, baked: (688,48,44,44) at 1280x800"
+        assert (overflow.x, overflow.y, overflow.w, overflow.h) == (636.0, 48.0, 44.0, 44.0), \
+            "SL-23's relationship, baked: (636,48,44,44) at 1280x800"
         assert px - (overflow.x + overflow.w) == 12.0, "12pt left of the pill"
         assert overflow.y + overflow.h / 2 == py + ph / 2, "vertically centered on the pill"
 
     def test_circle_tracks_the_window_right_edge(self, app_ctx):
-        """The persisted spec is anchor-based: resizes keep the 12pt gap as
-        long as the pill rides its own top-right rule at full width."""
+        """The persisted spec is a RELATIONSHIP (round 38, SL-23): resizes
+        keep the 12pt gap because the circle rides the pill's left edge —
+        no window-anchored form remains."""
         app, ctx, scene_buffer = app_ctx
         self._with_track(app, ctx)
         for w in (1280.0, 1100.0, 940.0):
@@ -4238,7 +4246,7 @@ class TestOverflowPersistsLeftOfPill:
             _tick(app, ctx, 2)
             px = sl_views.pill_rect(w, 800)[0]
             overflow = next(r for r in app._hits if r.action == "open_devices")
-            assert overflow.x == w - 548.0 - 44.0, f"anchor resolution at width {w}"
+            assert overflow.x == px - 12.0 - 44.0, f"align resolution at width {w}"
             assert px - (overflow.x + overflow.w) == 12.0, f"gap drifts at width {w}"
 
     def test_bottom_dock_keeps_only_home_and_search(self, app_ctx):
@@ -4259,7 +4267,7 @@ class TestOverflowPersistsLeftOfPill:
                   if n.color_rgba == (18, 18, 18, 234) and n.width == 298]
         assert plates, "popup missing"
         for n in plates:
-            assert n.x + n.width + 1 == 688.0 + 44.0, \
+            assert n.x + n.width + 1 == 636.0 + 44.0, \
                 "popup right edge aligns to the circle's right edge (menu idiom)"
             assert n.y - 1 == 48.0 + 44.0 + 12.0, "popup drops 12pt below the circle"
 
@@ -4271,7 +4279,7 @@ class TestOverflowPersistsLeftOfPill:
         app.view = "search"
         ctx.logical_width_px = 1100.0
         _tick(app, ctx, 2)
-        circle_x = 1100.0 - 548.0 - 44.0
+        circle_x = sl_views.pill_rect(1100.0, 800.0)[0] - 12.0 - 44.0
         fields = [n for n in _nodes(buf, RoundedRectNode)
                   if n.radius == 20.0 and abs(n.y - 24.0) < 1.0]
         assert fields, "search field missing"
@@ -4289,3 +4297,79 @@ class TestOverflowPersistsLeftOfPill:
         _tick(app, ctx, 2)
         overflow = next(r for r in app._hits if r.action == "open_devices")
         assert (overflow.x, overflow.y) == (600.0, 300.0)
+
+
+# ---------------------------------------------------------------------------
+# Round 38 (Alec, SL-23): the plate grows to 2 x 286 (right edge pinned) so
+# the play button IS the pill's geometric center; empty space after "next"
+# mirrors the left half; nav_more rides the pill's left edge at 12pt.
+# ---------------------------------------------------------------------------
+
+class TestPlayButtonIsPillCenter:
+    """Alec: 'left half and right half relative to the play button even.'"""
+
+    @staticmethod
+    def _playing(app, ctx):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500, track=track,
+                                           device=None, shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        _tick(app, ctx, 2)
+
+    def _hit_center(self, app, action):
+        hit = next(r for r in app._hits if r.action == action)
+        return hit.x + hit.w / 2, hit.y + hit.h / 2
+
+    def test_play_center_is_the_pill_center_at_several_widths(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._playing(app, ctx)
+        for w in (1280.0, 1100.0, 940.0):
+            ctx.logical_width_px = w
+            app.invalidate()
+            _tick(app, ctx, 2)
+            px, py, pw, ph = sl_views.pill_rect(w, 800)
+            cx, cy = self._hit_center(app, "toggle_play")
+            assert cx == pytest.approx(px + pw / 2, abs=1e-6), \
+                f"play centered at width {w}"
+            assert cy == pytest.approx(py + 87.0, abs=1e-6), \
+                "the row's vertical slot is unchanged (SL-23 is an x-axis move)"
+            prev_cx, _ = self._hit_center(app, "prev")
+            next_cx, _ = self._hit_center(app, "next")
+            assert (prev_cx + next_cx) / 2 == pytest.approx(px + pw / 2, abs=1e-6), \
+                "the whole transport is symmetric about the plate center"
+
+    def test_the_right_half_after_next_is_empty(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._playing(app, ctx)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        nxt = next(r for r in app._hits if r.action == "next")
+        right_margin = px + pw
+        assert right_margin - (nxt.x + nxt.w) >= 60.0, \
+            "the space after 'next' mirrors the left half"
+        for hit in app._hits:
+            if hit is nxt or hit.action == "seek_bar":
+                continue
+            row_overlap = hit.y < py + ph and hit.y + hit.h > py + 60
+            assert not (row_overlap and hit.x > nxt.x + nxt.w and hit.x < right_margin), \
+                f"{hit.action} sits in the mirrored empty half"
+
+    def test_pill_growth_lands_on_the_left_edge_only(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._playing(app, ctx)
+        px, _, pw, _ = sl_views.pill_rect(1280, 800)
+        assert pw == 572.0 and px + pw == 1280.0 - 16.0
+        seek = next(r for r in app._hits if r.action == "seek_bar")
+        assert seek.x == pytest.approx(px + 110.0), \
+            "the SL-21 text-column alignment still holds on the new plate"
+        assert seek.w == pytest.approx(404.0), \
+            "left edge pinned to the column, natural right edge held (404 on the 572 plate)"
+
+    def test_nav_more_gap_is_12pt_and_rides(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._playing(app, ctx)
+        px, _, _, _ = sl_views.pill_rect(1280, 800)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        assert px - (overflow.x + overflow.w) == pytest.approx(12.0)
+        assert (overflow.x, overflow.y) == (636.0, 48.0)

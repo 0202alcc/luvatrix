@@ -33,6 +33,17 @@ CURRENT rect (natural or overridden), keeping the opposite edge fixed
 the layout file records "progress aligns to the text column" — resize-safe,
 and it tracks the reference if the reference later moves.
 
+Round 38 (SL-23) extends the relationship form in two ways. keep="size" on
+an EDGE rule turns it into a position move — the named edge meets the
+reference line and the extent holds (the default extent-changing behavior
+collapses a component whose natural sits past the reference, e.g. nav_more
+at the dock aligning right → pill.left). And an align spec may carry up to
+two rules, one per axis — {align: [rule, rule]} persists as an array of
+tables — so a component can ride a reference in x and y at once
+(nav_more: right → pill.left −12 keep-size AND center_y → pill.center_y).
+The layout_align MCP tool upserts one rule per call: same axis replaces,
+the other axis adds; a rect/anchor spec is replaced by the align form.
+
 Validation happens at set() time only: rect/anchor specs never raise from
 resolve(), so a bad value can never crash the scene (align specs need the
 frame's naturals map at resolve() time — every app call path supplies it).
@@ -130,7 +141,7 @@ class LayoutOverrides:
                 f"spec for {cid} needs exactly one of 'rect', 'anchor', or 'align', "
                 f"got {sorted(spec)}")
         if "align" in spec:
-            stored = {"align": self._validate_align(cid, spec["align"])}
+            stored = {"align": self._validate_align_spec(cid, spec["align"])}
         elif "rect" in spec:
             raw = spec["rect"]
             if not isinstance(raw, dict):
@@ -166,14 +177,17 @@ class LayoutOverrides:
         return dict(stored)
 
     @staticmethod
-    def _validate_align(cid: str, raw: object) -> dict:
-        """Validate an align spec (round 37, SL-22): edge-to-edge alignment
-        against another id's CURRENT rect. ref_edge defaults to edge; the
-        two must share an axis. References stay in one frame — interior ids
-        reference interior ids (or the pill frame itself as "pill"), window
-        ids reference window ids — and never the component itself."""
+    def _validate_align_rule(cid: str, raw: object) -> dict:
+        """Validate ONE align rule: edge-to-edge alignment against another
+        id's CURRENT rect. ref_edge defaults to edge; the two must share an
+        axis. keep="size" (round 38) is only meaningful on edge rules — it
+        moves the named edge to the reference line holding the extent,
+        where the default keeps the opposite edge fixed and changes the
+        extent. References stay in one frame — interior ids reference
+        interior ids (or the pill frame itself as "pill"), window ids
+        reference window ids — and never the component itself."""
         if not isinstance(raw, dict):
-            raise LayoutError(f"align for {cid} must be an object, got {raw!r}")
+            raise LayoutError(f"align rule for {cid} must be an object, got {raw!r}")
         edge = raw.get("edge")
         if edge not in EDGES:
             raise LayoutError(f"unknown align edge {edge!r}; valid edges: {', '.join(EDGES)}")
@@ -194,31 +208,92 @@ class LayoutOverrides:
                     f"(or 'pill' itself), not {to!r}")
         elif to in INTERIOR_IDS:
             raise LayoutError(f"window id {cid} cannot reference interior id {to!r}")
-        return {
+        keep = raw.get("keep", "opposite")
+        if keep not in ("opposite", "size"):
+            raise LayoutError(f"align keep must be 'opposite' or 'size', got {keep!r}")
+        if keep == "size" and edge in ("center_x", "center_y"):
+            raise LayoutError(
+                f"keep='size' applies to edge rules, not center edge {edge!r} "
+                "(center rules already hold the size)")
+        rule = {
             "edge": edge,
             "to": to,
             "ref_edge": ref_edge,
             "offset": _num(raw.get("offset", 0.0), field="offset"),
         }
+        if keep == "size":
+            rule["keep"] = "size"  # stored only when non-default, so single-rule specs stay round-37-shaped
+        return rule
+
+    def _validate_align_spec(self, cid: str, raw: object) -> dict | list[dict]:
+        """The align VALUE: one rule dict (the round-37 form) or a list of
+        up to two rules on distinct axes (round 38). Lists normalize to a
+        deterministic order (x rule first, then y, by edge name) so the
+        persisted file is stable; a single-rule list canonicalizes to the
+        plain dict form."""
+        if isinstance(raw, dict):
+            return self._validate_align_rule(cid, raw)
+        if isinstance(raw, list):
+            if not 1 <= len(raw) <= 2:
+                raise LayoutError(
+                    f"align for {cid} takes 1 or 2 rules (one per axis), got {len(raw)}")
+            rules = [self._validate_align_rule(cid, item) for item in raw]
+            axes = ["x" if rule["edge"] in _X_EDGES else "y" for rule in rules]
+            if len(set(axes)) != len(axes):
+                raise LayoutError(
+                    f"align rules for {cid} must be on distinct axes, got {axes}")
+            rules.sort(key=lambda rule: (0 if rule["edge"] in _X_EDGES else 1, rule["edge"]))
+            return rules[0] if len(rules) == 1 else rules
+        raise LayoutError(
+            f"align for {cid} must be a rule object or a list of rules, got {raw!r}")
+
+    def set_align(self, component_id: object, rule: object) -> dict:
+        """Upsert ONE align rule — the layout_align tool's verb (round 38).
+        A rule on the same axis replaces the existing one; a rule on the
+        other axis is added, so two calls build a two-axis relationship.
+        Any rect/anchor spec on the id is replaced by the align form."""
+        cid = _check_id(component_id)
+        new_rule = self._validate_align_rule(cid, rule)
+        new_axis = "x" if new_rule["edge"] in _X_EDGES else "y"
+        rules: list[dict] = []
+        current = self._specs.get(cid)
+        if current is not None and "align" in current:
+            existing = current["align"]
+            rules = list(existing) if isinstance(existing, list) else [existing]
+        rules = [rule_ for rule_ in rules
+                 if ("x" if rule_["edge"] in _X_EDGES else "y") != new_axis]
+        rules.append(new_rule)
+        staged = {"align": self._validate_align_spec(cid, rules)}
+        self._check_align_cycle(cid, staged)
+        self._specs[cid] = staged
+        return dict(staged)
 
     def _check_align_cycle(self, cid: str, staged: dict) -> None:
-        """Walk the align reference chain with the new spec staged; landing
-        back on an id already in the chain means the specs would resolve
-        each other forever. Checked at set() time so resolve() never loops."""
+        """Walk the align reference graph with the new spec staged; reaching
+        cid again means the specs would resolve each other forever. Checked
+        at set() time so resolve() never loops. From an interior id, the
+        "pill" reference is the local FRAME (terminal), not the window pill."""
         specs = dict(self._specs)
         specs[cid] = staged
-        seen = {cid}
-        current = cid
-        while True:
+        stack = [cid]
+        seen: set[str] = set()
+        while stack:
+            current = stack.pop()
             spec = specs.get(current)
             if spec is None or "align" not in spec:
-                return
-            nxt = spec["align"]["to"]
-            if nxt in seen:
-                raise LayoutError(
-                    f"align cycle through {nxt!r}: {cid} would resolve against itself")
-            seen.add(nxt)
-            current = nxt
+                continue
+            align = spec["align"]
+            rules = align if isinstance(align, list) else [align]
+            for rule in rules:
+                nxt = rule["to"]
+                if current in INTERIOR_IDS and nxt == "pill":
+                    continue  # the local frame, not the window pill spec
+                if nxt == cid:
+                    raise LayoutError(
+                        f"align cycle through {nxt!r}: {cid} would resolve against itself")
+                if nxt not in seen:
+                    seen.add(nxt)
+                    stack.append(nxt)
 
     def clear(self, component_id: object = None) -> list[str]:
         """Clear one id or (None) all; returns the cleared ids."""
@@ -246,25 +321,40 @@ class LayoutOverrides:
         nx, ny, nw, nh = natural
         if "align" in spec:
             align = spec["align"]
-            ref = self._align_reference_rect(component_id, align,
-                                             width=width, height=height, naturals=naturals)
-            point = _edge_point(ref, align["ref_edge"]) + align["offset"]
+            rules = align if isinstance(align, list) else [align]
             x, y, w, h = nx, ny, nw, nh
-            edge = align["edge"]
-            if edge == "left":
-                x = min(point, nx + nw - 1.0)  # right edge fixed; 1pt floor
-                w = nx + nw - x
-            elif edge == "right":
-                w = max(1.0, point - nx)       # left edge fixed
-            elif edge == "center_x":
-                x = point - nw / 2.0           # size fixed; position moves
-            elif edge == "top":
-                y = min(point, ny + nh - 1.0)  # bottom edge fixed
-                h = ny + nh - y
-            elif edge == "bottom":
-                h = max(1.0, point - ny)       # top edge fixed
-            else:  # center_y
-                y = point - nh / 2.0
+            for rule in rules:  # at most one rule per axis, validated at set()
+                ref = self._align_reference_rect(component_id, rule,
+                                                 width=width, height=height, naturals=naturals)
+                point = _edge_point(ref, rule["ref_edge"]) + rule["offset"]
+                keep_size = rule.get("keep") == "size"
+                edge = rule["edge"]
+                if edge == "left":
+                    if keep_size:
+                        x = point              # left edge meets the line; size holds
+                    else:
+                        x = min(point, nx + nw - 1.0)  # right edge fixed; 1pt floor
+                        w = nx + nw - x
+                elif edge == "right":
+                    if keep_size:
+                        x = point - nw         # right edge meets the line; size holds
+                    else:
+                        w = max(1.0, point - nx)       # left edge fixed
+                elif edge == "center_x":
+                    x = point - nw / 2.0       # size fixed; position moves
+                elif edge == "top":
+                    if keep_size:
+                        y = point
+                    else:
+                        y = min(point, ny + nh - 1.0)  # bottom edge fixed
+                        h = ny + nh - y
+                elif edge == "bottom":
+                    if keep_size:
+                        y = point - nh
+                    else:
+                        h = max(1.0, point - ny)       # top edge fixed
+                else:  # center_y
+                    y = point - nh / 2.0
         elif "rect" in spec:
             rect = spec["rect"]
             x, y, w, h = rect["x"], rect["y"], rect["width"], rect["height"]
@@ -365,6 +455,16 @@ def _toml_num(value: float) -> str:
     return repr(float(value))
 
 
+def _align_toml_lines(rule: dict) -> list[str]:
+    lines = [f'edge = "{rule["edge"]}"',
+             f'to = "{rule["to"]}"',
+             f'ref_edge = "{rule["ref_edge"]}"',
+             f"offset = {_toml_num(rule['offset'])}"]
+    if rule.get("keep") == "size":
+        lines.append('keep = "size"')
+    return lines
+
+
 def save(specs: dict[str, dict], path: Path) -> None:
     """Rewrite the persisted file with the registry's specs. Deterministic
     (sorted ids, fixed formatting) so the git diff shows only the nudge.
@@ -378,11 +478,14 @@ def save(specs: dict[str, dict], path: Path) -> None:
         spec = specs[cid]
         if "align" in spec:
             align = spec["align"]
-            lines = [f'edge = "{align["edge"]}"',
-                     f'to = "{align["to"]}"',
-                     f'ref_edge = "{align["ref_edge"]}"',
-                     f"offset = {_toml_num(align['offset'])}"]
-            chunks.append(f"[{quoted}.align]\n" + "\n".join(lines) + "\n")
+            rules = align if isinstance(align, list) else [align]
+            if len(rules) == 1:
+                body = "\n".join(_align_toml_lines(rules[0]))
+                chunks.append(f"[{quoted}.align]\n{body}\n")
+            else:  # two-axis relationship (round 38): one array entry per rule
+                for rule in rules:
+                    body = "\n".join(_align_toml_lines(rule))
+                    chunks.append(f"[[{quoted}.align]]\n{body}\n")
         elif "rect" in spec:
             rect = spec["rect"]
             body = "\n".join(

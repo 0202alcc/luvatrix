@@ -71,7 +71,13 @@ SIDEBAR_SEAM_FADE_PX = 20.0
 # flanked by circular nav buttons; playback extras live in a popup.
 # Round 32 (Alec): the capsule grows to a 108pt-tall column layout — bigger
 # album tile, title/artist over the progress bar, transport row under it.
-PILL_W = 520.0
+# Round 38 (Alec, SL-23): the width DERIVES from the transport center —
+# 2 x 286, where 286 was the transport's center on the round-32 plate
+# (column-left 110 + half the SL-21 strip 176) — so the play button is the
+# plate's geometric center and the empty right half after "next" mirrors
+# the left half. The right edge stays pinned at PILL_FLOAT: all growth
+# lands on the left edge.
+PILL_W = 572.0
 PILL_MIN_W = 320.0
 PILL_H = 108.0
 PILL_FLOAT = 16.0
@@ -243,9 +249,11 @@ def pill_transport_local(pw: float, ph: float) -> tuple[float, float, float, flo
     """The transport row's bounding rect in PILL-LOCAL space (round 33), the
     pill.transport override's geometry. The override positions the cluster
     by the rect's CENTER; prev/play/next keep fixed offsets and 34pt hits —
-    cluster size is not a layout input."""
-    col_x, col_w, _ = pill_column(pw, ph)
-    return (col_x + col_w / 2 - 65.0, 69.0, 130.0, 36.0)
+    cluster size is not a layout input. Round 38 (SL-23): the row centers
+    on the PILL itself (not the text column) so the play button is the
+    plate's geometric center by construction at any width — PILL_W derives
+    from this center, never the other way round."""
+    return (pw / 2.0 - 65.0, 69.0, 130.0, 36.0)
 
 TEXT = (255, 255, 255, 255)
 SUBTEXT = (179, 179, 179, 255)
@@ -416,7 +424,14 @@ def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
     """One canonical simulated-glass plate. Composed back-to-front: soft
     shadow (two stacked dark plates), hairline border ring, translucent fill
     inset 1px so the ring reads as the edge, a sheen band, and the specular
-    top highlight that catches the light."""
+    top highlight that catches the light. Degenerate geometry must never
+    crash the frame (round-38 probe: a 1pt override circle put a negative
+    width into the fill rect and killed the whole scene) — extents and the
+    corner radius clamp to what the composition can express, and any
+    sub-draw that would go non-positive skips."""
+    w = max(w, 1.0)
+    h = max(h, 1.0)
+    radius = max(0.0, min(radius, w / 2.0, h / 2.0))
     if shadow:
         frame.rounded_rect(x=x - 1, y=y + 5, width=w + 2, height=h, radius=radius,
                            color=GLASS_SHADOW_FAR, z_index=z)
@@ -425,9 +440,10 @@ def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
     frame.rounded_rect(x=x, y=y, width=w, height=h, radius=radius,
                        color=border or (GLASS_BORDER_HOVER if hovering else GLASS_BORDER),
                        z_index=z)
-    frame.rounded_rect(x=x + 1, y=y + 1, width=w - 2, height=h - 2,
-                       radius=max(0.0, radius - 1),
-                       color=fill or (GLASS_FILL_HOVER if hovering else GLASS_FILL), z_index=z)
+    if w > 2.0 and h > 2.0:
+        frame.rounded_rect(x=x + 1, y=y + 1, width=w - 2, height=h - 2,
+                           radius=max(0.0, radius - 1),
+                           color=fill or (GLASS_FILL_HOVER if hovering else GLASS_FILL), z_index=z)
     # The sheen is a silhouette-clipped falloff, not a square band: thin rows
     # chord-clipped inside the top corner arc (so they can never poke past
     # the rounded silhouette) with alpha ramping to zero at the bottom. One
@@ -447,8 +463,9 @@ def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
             chord = 0.0
         inset = max(2.0, chord + 1.0)
         alpha = int(round(base_a * max(0.0, 1.0 - drawn / band_h)))
-        if alpha > 0:
-            frame.rect(x=x + inset, y=yy, width=max(0.0, w - inset * 2),
+        sheen_w = w - inset * 2
+        if alpha > 0 and sheen_w > 0.0:
+            frame.rect(x=x + inset, y=yy, width=sheen_w,
                        height=rh, color=(255, 255, 255, alpha), z_index=z)
         yy += rh
         drawn += int(rh)
@@ -457,15 +474,16 @@ def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
     # nothing at the ends — same chord-safe span, no hard wire.
     inset = radius * 0.7
     line_x = x + inset
-    line_w = max(0.0, w - inset * 2)
+    line_w = w - inset * 2
     segments = 16
-    seg_w = line_w / segments
-    for i in range(segments):
-        d = abs((i + 0.5) / segments - 0.5) * 2  # 0 at the centre, ~1 at the ends
-        alpha = int(round(GLASS_HIGHLIGHT[3] * max(0.0, (1.0 - d * d) ** 2)))
-        if alpha > 0:
-            frame.rect(x=line_x + i * seg_w, y=y + 1, width=seg_w + 0.5, height=1,
-                       color=(255, 255, 255, alpha), z_index=z)
+    if line_w > 0.0:
+        seg_w = line_w / segments
+        for i in range(segments):
+            d = abs((i + 0.5) / segments - 0.5) * 2  # 0 at the centre, ~1 at the ends
+            alpha = int(round(GLASS_HIGHLIGHT[3] * max(0.0, (1.0 - d * d) ** 2)))
+            if alpha > 0:
+                frame.rect(x=line_x + i * seg_w, y=y + 1, width=seg_w + 0.5, height=1,
+                           color=(255, 255, 255, alpha), z_index=z)
 
 
 def _daypart() -> str:
@@ -753,6 +771,10 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
     # narrow widths the 460pt field would slide under the glass. Round 36:
     # the shipped layout puts the overflow circle on the pill's left flank,
     # in the field's band — the resolved circle is the nearer obstacle.
+    # Round 38 (SL-23): the circle rides 52pt further left, and the 12pt
+    # clearance is now a HARD constraint — the 180pt floor only applies when
+    # it fits; below that the field shrinks (60pt floor) rather than slide
+    # under the chrome.
     pill_x = pill_rect(width, height)[0]
     obstacle_x = pill_x
     dpx, dpy, dpw, dph = dock_cluster_rect(width, height)
@@ -761,7 +783,11 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
     cx, cy, cw, ch = _layout(app, "nav_more", nav_natural, width, height)
     if cy < y + 40.0 and y < cy + ch:
         obstacle_x = min(obstacle_x, cx)
-    field_w = max(180.0, min(460.0, view_w, obstacle_x - 12.0 - x0))
+    gap_cap = obstacle_x - 12.0 - x0
+    if gap_cap >= 180.0:
+        field_w = max(180.0, min(460.0, view_w, gap_cap))
+    else:
+        field_w = max(60.0, min(460.0, view_w, gap_cap))
     _glass_plate(frame, x0, y, field_w, 40, radius=20.0, z=2, shadow=False,
                  border=(ACCENT[0], ACCENT[1], ACCENT[2], 200) if app.search_focused else None)
     shown = app.search_query or ("What do you want to listen to?" if not app.search_focused else "")
