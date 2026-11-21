@@ -301,6 +301,13 @@ class TestLayoutMcpSurface:
         assert labels and labels[0].x == 22.0 + (30.0 - sl_views.SIDEBAR_GLASS_MARGIN), \
             "sidebar contents shift with the rail by the delta from its natural origin"
 
+    def test_sidebar_natural_rect_is_the_floating_rail(self, app_ctx):
+        app, ctx, _buf = app_ctx
+        natural = app._layout_naturals(1280.0, 800.0)["sidebar"]
+        m = sl_views.SIDEBAR_GLASS_MARGIN
+        assert natural == (m, m, sl_views.SIDEBAR_W - 2 * m, 800.0 - 2 * m), \
+            "the overridable sidebar natural tracks the floating liquid-glass rail"
+
     def test_layout_clear_restores_natural_geometry(self, app_ctx):
         app, ctx, buf = app_ctx
         _with_track(app, ctx)
