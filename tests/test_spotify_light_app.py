@@ -1145,8 +1145,10 @@ class TestFloatingPill:
         rrects = _nodes(scene_buffer, RoundedRectNode)
         rings = [n for n in rrects
                  if n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
-                 and n.width == pw and n.height == ph and n.radius == 54.0]
-        assert len(rings) == 1, "pill must be one centered capsule glass plate"
+                 and n.width == pw and n.height == ph
+                 and n.radius == sl_views.glass_silhouette_radius(ph)]
+        assert len(rings) == 1, \
+            "pill must be one glass plate; at 108pt the size rule makes it a rounded rect"
         # The full-width bar is gone: nothing spans the window at the bottom.
         assert [n for n in rrects if n.width == 1280] == []
         rects = _nodes(scene_buffer, RectNode)
@@ -1651,13 +1653,15 @@ class TestGlassSurfaces:
                    and n.color_rgba == sl_views.GLASS_BORDER for n in rrects), \
             "sidebar needs its scene-drawn glass rail"
         # Round 8: the full-width bar is a centered floating capsule — its
-        # border ring is a rounded rect at the pill rect, radius ph/2, with the
-        # glass specular highlight just inside its top edge and a soft shadow.
+        # border ring is a rounded rect at the pill rect, radius from the
+        # Liquid Glass size rule (round 34), with the glass specular highlight
+        # just inside its top edge and a soft shadow.
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         rrects = _nodes(scene_buffer, RoundedRectNode)
         assert any(n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
-                   and n.width == pw and n.height == ph and n.radius == ph / 2
-                   for n in rrects), "player pill needs its capsule border ring"
+                   and n.width == pw and n.height == ph
+                   and n.radius == sl_views.glass_silhouette_radius(ph)
+                   for n in rrects), "player pill needs its silhouette border ring"
         assert any(n.color_rgba == sl_views.GLASS_HIGHLIGHT and n.y == py + 1
                    and px < n.x < px + pw and n.height == 1 for n in rects), \
             "player pill needs its specular top highlight"
@@ -4013,11 +4017,13 @@ class TestPillTopRight:
         app.authenticated = True
         _tick(app, ctx, 2)
         ring_idle = [n for n in _nodes(buf, RoundedRectNode)
-                     if n.color_rgba == sl_views.PILL_BORDER and n.radius == 54.0]
+                     if n.color_rgba == sl_views.PILL_BORDER
+                     and n.radius == sl_views.GLASS_RECT_RADIUS]
         assert len(ring_idle) == 1
         self._with_track(app, ctx)
         ring_playing = [n for n in _nodes(buf, RoundedRectNode)
-                        if n.color_rgba == sl_views.PILL_BORDER and n.radius == 54.0]
+                        if n.color_rgba == sl_views.PILL_BORDER
+                        and n.radius == sl_views.GLASS_RECT_RADIUS]
         assert len(ring_playing) == 1
         assert (ring_idle[0].x + ring_idle[0].width) == \
             (ring_playing[0].x + ring_playing[0].width), "right edge must not move"
