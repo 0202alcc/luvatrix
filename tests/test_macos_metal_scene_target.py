@@ -552,3 +552,15 @@ class MacOSMetalBackingScaleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestUnderGlassTransparency(unittest.TestCase):
+    """SL-36: the presenter flips the window + CAMetalLayer to transparent
+    only while the app clears fully transparent (under-glass live); any
+    alpha keeps today's opaque compositing."""
+
+    def test_only_fully_transparent_clear_enables_it(self):
+        assert mst._under_glass_transparency((0, 0, 0, 0)) is True
+        assert mst._under_glass_transparency((255, 255, 255, 0)) is True
+        assert mst._under_glass_transparency((18, 18, 18, 255)) is False
+        assert mst._under_glass_transparency((0, 0, 0, 1)) is False
