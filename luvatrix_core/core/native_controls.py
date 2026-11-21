@@ -17,6 +17,7 @@ events inside a native control's frame must not also trigger scene hits.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Callable, Protocol, runtime_checkable
 
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIEventSource
@@ -437,6 +438,34 @@ class _NullWebView:
         self.destroyed = True
 
 
+def normalize_script_message(body):
+    """Deep-convert a WKScriptMessage body to plain Python data.
+
+    PyObjC delivers bodies as ``__NSDictionaryM``/``__NSArrayM``/``NSNumber``/
+    ``NSNull`` — none of which pass ``isinstance(dict``/``list``/``int)``, and
+    every consumer downstream gates on those checks, so an unconverted body
+    drops silently at each of them. Duck-typed (no PyObjC import: core stays
+    platform-free) so the null stub and tests reproduce the real wire exactly.
+    """
+    if body is None or isinstance(body, (str, bool, int, float)):
+        return body
+    if isinstance(body, Mapping):
+        return {str(key): normalize_script_message(value) for key, value in body.items()}
+    if type(body).__name__ == "NSNull":
+        return None
+    if isinstance(body, (list, tuple)):
+        return [normalize_script_message(value) for value in body]
+    double_value = getattr(body, "doubleValue", None)
+    if callable(double_value):  # PyObjC NSNumber duck-type
+        value = float(double_value())
+        return int(value) if value.is_integer() else value
+    if isinstance(body, Sequence) and not isinstance(body, (str, bytes, bytearray)):
+        return [normalize_script_message(value) for value in body]
+    if hasattr(body, "__iter__"):  # PyObjC NSArray when Sequence registration lags
+        return [normalize_script_message(value) for value in body]
+    return body
+
+
 class _NullScriptedWebView:
     """In-memory stand-in for a scripted web view on unsupported hosts.
 
@@ -459,9 +488,11 @@ class _NullScriptedWebView:
         self.evaluated.append(script)
 
     def post_message(self, message) -> None:
-        """Test affordance: deliver a message as the page's JS would."""
+        """Test affordance: deliver a message as the page's JS would. Runs the
+        same boundary normalization as the real WK path so tests reproduce the
+        production wire, PyObjC container shapes and all."""
         if self._on_message is not None:
-            self._on_message(message)
+            self._on_message(normalize_script_message(message))
 
     def set_frame(self, x: float, y: float, width: float, height: float) -> None:
         self.frame = (x, y, width, height)
