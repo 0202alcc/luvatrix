@@ -4223,30 +4223,27 @@ class TestPillTopRight:
         assert fields[0].x + fields[0].width <= pill_x - 12.0 + 1e-6, \
             "the field's rounded cap must not slide under the top-right pill"
 
-    def test_top_scrim_mirrors_the_dock_idiom(self, app_ctx):
-        """Content scrolls UNDER the top glass exactly like the dock: a calm
-        near-opaque band over the pill zone, then a smooth fade downward —
-        above content (z<=5), below the pill (z=10)."""
+    def test_window_top_is_clear_of_scrim(self, app_ctx):
+        """SL-33 (Alec): the round-30 top scrim is gone. It spanned the full
+        content width, so the Top tracks grid's first row scrolled under a
+        dark gradient that ate the top ~25% of the card art while second-row
+        cards rendered clean. The window top over content now holds zero
+        scrim strips; the dock scrim still fades content at the bottom."""
         app, ctx, buf = app_ctx
         app.authenticated = True
         _tick(app, ctx, 2)
+        top_zone = (sl_views.PILL_FLOAT + sl_views.PILL_H + sl_views.SCRIM_GAP
+                    + sl_views.SCRIM_FADE + 10)
         strips = [n for n in _nodes(buf, RectNode)
                   if n.x == sl_views.SIDEBAR_W and n.width == 1280 - sl_views.SIDEBAR_W
                   and n.color_rgba[:3] == sl_views.BG[:3]
-                  and n.y < sl_views.PILL_FLOAT + sl_views.PILL_H + sl_views.SCRIM_GAP
-                  + sl_views.SCRIM_FADE + 10]
-        assert strips, "no top scrim"
-        strips.sort(key=lambda n: n.y)
-        band = [n for n in strips if n.y == 0]
-        assert band and band[0].color_rgba[3] >= 230, \
-            "a calm near-opaque band caps the window top over the pill zone"
-        pill_bottom = sl_views.PILL_FLOAT + sl_views.PILL_H
-        assert band[0].height >= pill_bottom + 8.0, "the band covers the pill with margin"
-        fade = [n for n in strips if n.y >= band[0].height]
-        assert len(fade) >= 8, "the fade dissolves content over ~1px strips"
-        alphas = [n.color_rgba[3] for n in fade]
-        assert alphas == sorted(alphas, reverse=True), "fade alpha falls monotonically downward"
-        assert alphas[0] >= 200 and alphas[-1] <= 24
+                  and n.y < top_zone]
+        assert strips == [], f"top scrim strips linger over content: {strips[:3]}"
+        dock = [n for n in _nodes(buf, RectNode)
+                if n.x == sl_views.SIDEBAR_W and n.width == 1280 - sl_views.SIDEBAR_W
+                and n.color_rgba[:3] == sl_views.BG[:3]
+                and n.y >= 800.0 - sl_views.SCRIM_H]
+        assert dock, "the dock scrim must keep fading content at the bottom"
         assert all(6 <= n.z_index < 10 for n in strips), \
             "scrim above content and its scrollbar, below the pill"
 
