@@ -123,6 +123,21 @@ Addressable component ids:
   centered (`{anchor: "top-right", dx: 548, dy: 48}`)
 - `sidebar` — the left rail plate (its contents shift with it)
 
+Interior ids rearrange the pill's inside in PILL-LOCAL space: `(0, 0)` is
+the pill's top-left, rects and anchors clamp into the pill's current rect
+(never the window), and locals compose with whole-pill moves — overriding
+`pill` carries the interior, and an interior override keeps its local offset
+when the pill moves. `layout_set`, `layout_list`, and `layout_export` report
+interior rects in these local coordinates.
+
+- `pill.art` — the album tile (also the idle thumb). Square: the drawn side
+  is `min(width, height)`.
+- `pill.progress` — the progress strip; `x`/`y`/`width` are layout inputs
+  (height stays 3pt) and the elapsed/remaining labels ride the strip's edges.
+- `pill.transport` — the prev/play/next cluster, positioned by the rect's
+  center. Cluster size is not a layout input: the buttons keep fixed offsets
+  and 34pt hit targets.
+
 Tools:
 
 - `layout_set {id, rect: {x, y, width, height}}` or
