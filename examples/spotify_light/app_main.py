@@ -399,10 +399,15 @@ class SpotifyLightApp(App):
     def _job_poll_player(self):
         """Playback snapshot + queue head. Devices are NOT fetched here —
         they change on human timescales, so they ride their own triggers.
-        The queue fetch degrades to None: tokens minted before the queue
-        scope existed 403 there, and that must not sink the snapshot."""
+        The queue fetch is gated on the granted scope (SL-32): the scope is
+        no longer requested, so fresh tokens would 403 every poll. Legacy
+        scope-holding tokens keep pre-staging, and a revoked-endpoint 403
+        still degrades to None rather than sinking the snapshot."""
         assert self._client is not None
         player = self._client.player_state()
+        granted = (self._tokens.scope if self._tokens is not None else "").split()
+        if "user-read-playback-queue" not in granted:
+            return (player, None)
         try:
             up_next = self._client.up_next()
         except sl_api.ApiError as exc:
