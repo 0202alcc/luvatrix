@@ -120,6 +120,36 @@ def pill_rect(width: float, height: float) -> tuple[float, float, float, float]:
     return (pill_x, PILL_FLOAT, pill_w, PILL_H)
 
 
+def window_naturals(width: float, height: float) -> dict:
+    """The natural chrome rects at a window size — the layout the overrides
+    sit on top of. Also the reference map for window-space align specs
+    (round 37)."""
+    dpx, dpy, dpw, dph = dock_cluster_rect(width, height)
+    dock_cy = dpy + dph / 2
+    radius, gap, oradius = NAV_CIRCLE_R, NAV_CIRCLE_GAP, OVERFLOW_R
+    return {
+        "pill": pill_rect(width, height),
+        "nav_home": (dpx - gap - 2 * radius, dock_cy - radius, 2 * radius, 2 * radius),
+        "nav_search": (dpx + dpw + gap, dock_cy - radius, 2 * radius, 2 * radius),
+        "nav_more": (width - PILL_FLOAT - 2 * oradius, dock_cy - oradius,
+                     2 * oradius, 2 * oradius),
+        "sidebar": (SIDEBAR_GLASS_MARGIN, SIDEBAR_GLASS_MARGIN,
+                    SIDEBAR_W - SIDEBAR_GLASS_MARGIN * 2,
+                    height - SIDEBAR_GLASS_MARGIN * 2),
+    }
+
+
+def pill_frame_naturals(pw: float, ph: float) -> dict:
+    """The interior natural rects in PILL-LOCAL space at a pill size — the
+    reference map for pill-local align specs (round 37)."""
+    return {
+        "pill.art": pill_art_local(pw, ph),
+        "pill.progress": pill_progress_local(pw, ph),
+        "pill.title": pill_title_local(pw, ph),
+        "pill.transport": pill_transport_local(pw, ph),
+    }
+
+
 def _layout(app, component_id: str, natural: tuple[float, float, float, float],
             width: float, height: float) -> tuple[float, float, float, float]:
     """Consult the live layout-override registry (round 31): an override wins
@@ -128,7 +158,22 @@ def _layout(app, component_id: str, natural: tuple[float, float, float, float],
     overrides = getattr(app, "layout_overrides", None)
     if overrides is None:
         return natural
-    return overrides.resolve(component_id, natural, width=width, height=height)
+    return overrides.resolve(component_id, natural, width=width, height=height,
+                             naturals=window_naturals(width, height))
+
+
+def _layout_local(app, component_id: str, natural_local: tuple[float, float, float, float],
+                  frame_w: float, frame_h: float) -> tuple[float, float, float, float]:
+    """Resolve an interior override in its component's LOCAL frame (round 33):
+    the natural and the spec both live in local coordinates, so resolution
+    and clamping run against the frame's size (the pill), not the window's.
+    The caller offsets the result by the frame's position. Apps without the
+    registry (tests, older hosts) get the natural local rect."""
+    overrides = getattr(app, "layout_overrides", None)
+    if overrides is None:
+        return natural_local
+    return overrides.resolve(component_id, natural_local, width=frame_w, height=frame_h,
+                             naturals=pill_frame_naturals(frame_w, frame_h))
 
 
 def dock_cluster_rect(width: float, height: float) -> tuple[float, float, float, float]:
@@ -164,6 +209,43 @@ def pill_column(pw: float, ph: float) -> tuple[float, float, float]:
     art = ph - 2 * PILL_ART_INSET
     col_x = PILL_ART_INSET + art + PILL_ART_GAP
     return col_x, pw - col_x - PILL_META_RIGHT_PAD, art
+
+
+def pill_art_local(pw: float, ph: float) -> tuple[float, float, float, float]:
+    """The album tile's natural rect in PILL-LOCAL space (round 33) — the
+    addressable geometry for the pill.art layout override. The tile is
+    square and grows with the pill height via the PILL_ART_INSET idiom."""
+    art = ph - 2 * PILL_ART_INSET
+    return (PILL_ART_INSET, PILL_ART_INSET, art, art)
+
+
+def pill_progress_local(pw: float, ph: float) -> tuple[float, float, float, float]:
+    """The progress strip's natural rect in PILL-LOCAL space (round 33), the
+    pill.progress override's geometry: x/width are layout inputs, the strip
+    height stays 3pt, and the time labels ride the strip's ends (round 37:
+    ABOVE it, so a text-column-aligned strip never paints them over art)."""
+    col_x, col_w, _ = pill_column(pw, ph)
+    strip_w = max(80.0, col_w - 34.0 - 40.0)
+    return (col_x + 34.0, 59.0, strip_w, 3.0)
+
+
+def pill_title_local(pw: float, ph: float) -> tuple[float, float, float, float]:
+    """The title/artist text column's natural rect in PILL-LOCAL space
+    (round 37, SL-22), the pill.title override's geometry — and, above all,
+    the alignment REFERENCE for the progress strip (SL-21). The rect spans
+    both text rows: title at its top, artist 14pt below (idle: "Nothing
+    playing" at the top, the subtitle 19pt below)."""
+    col_x, col_w, _ = pill_column(pw, ph)
+    return (col_x, 21.0, col_w, 32.0)
+
+
+def pill_transport_local(pw: float, ph: float) -> tuple[float, float, float, float]:
+    """The transport row's bounding rect in PILL-LOCAL space (round 33), the
+    pill.transport override's geometry. The override positions the cluster
+    by the rect's CENTER; prev/play/next keep fixed offsets and 34pt hits —
+    cluster size is not a layout input."""
+    col_x, col_w, _ = pill_column(pw, ph)
+    return (col_x + col_w / 2 - 65.0, 69.0, 130.0, 36.0)
 
 TEXT = (255, 255, 255, 255)
 SUBTEXT = (179, 179, 179, 255)
@@ -828,50 +910,64 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     # Round 32 (Alec): the capsule grows and its interior becomes a column
     # layout — bigger album tile at the left cap; right of it, top to bottom:
     # title/artist, the progress bar with times, then the transport row.
-    col_x, col_w, art = pill_column(pw, ph)
+    # Round 33: the interior rects resolve through the layout registry in
+    # PILL-LOCAL space — pill.art / pill.progress / pill.transport overrides
+    # clamp into the pill and ride whole-pill moves. Round 37: the text
+    # column is an interior id too (pill.title) — the strip's alignment
+    # reference — and the playing title row moved to the idle row's y, so
+    # the first text line no longer jumps 5pt when a track starts.
+    tx, ty, tw_, _ = _layout_local(app, "pill.title", pill_title_local(pw, ph), pw, ph)
     # Album art thumb with a hairline ring, alpha-clipped to the same rounded
     # tile the idle state draws — a square image sits flush at the pill's
     # left cap and its corners cross the rounded silhouette (Alec, round 28).
-    frame.rounded_rect(x=px + PILL_ART_INSET - 1, y=py + PILL_ART_INSET - 1,
+    ax, ay, aw, ah = _layout_local(app, "pill.art", pill_art_local(pw, ph), pw, ph)
+    art = min(aw, ah)
+    frame.rounded_rect(x=px + ax - 1, y=py + ay - 1,
                        width=art + 2, height=art + 2, radius=15,
                        color=(255, 255, 255, 24), z_index=11)
     if track is not None:
         image_url = sl_models.pick_image_url(track.album.images if track.album else (), app._art_pick_target(art))
-        _art(frame, app, image_url, x=px + PILL_ART_INSET, y=py + PILL_ART_INSET,
+        _art(frame, app, image_url, x=px + ax, y=py + ay,
              size=art, seed=track.name, z=12, corner_radius=14.0)
-        _text(frame, _fit_width(frame._ctx.measure_text, track.name, max_w=col_w, size=13),
-              x=px + col_x, y=py + 16, size=13, z=12)
+        _text(frame, _fit_width(frame._ctx.measure_text, track.name, max_w=tw_, size=13),
+              x=px + tx, y=py + ty, size=13, z=12)
         artists = ", ".join(a.name for a in track.artists if a.name)
-        _text(frame, _fit_width(frame._ctx.measure_text, artists, max_w=col_w, size=11),
-              x=px + col_x, y=py + 35, size=11, color=SUBTEXT, z=12)
+        _text(frame, _fit_width(frame._ctx.measure_text, artists, max_w=tw_, size=11),
+              x=px + tx, y=py + ty + 14, size=11, color=SUBTEXT, z=12)
     else:
         # Idle thumb: a quiet neutral tile with a centered note glyph (Spotify's
         # idle idiom), not a saturated hash-colored placeholder square.
-        frame.rounded_rect(x=px + PILL_ART_INSET, y=py + PILL_ART_INSET,
+        frame.rounded_rect(x=px + ax, y=py + ay,
                            width=art, height=art, radius=14,
                            color=PILL_THUMB_EMPTY, z_index=12)
-        _centered_glyph(frame, sl_icons.NOTE, cx=px + PILL_ART_INSET + art / 2,
-                        cy=py + PILL_ART_INSET + art / 2,
+        _centered_glyph(frame, sl_icons.NOTE, cx=px + ax + art / 2,
+                        cy=py + ay + art / 2,
                         size=36, color=SUBTEXT, z=12, font=sl_icons.ICON_FONT)
-        _text(frame, "Nothing playing", x=px + col_x, y=py + 21, size=13, color=FAINT, z=12)
+        _text(frame, "Nothing playing", x=px + tx, y=py + ty, size=13, color=FAINT, z=12)
         if app.authenticated:
             _text(frame, _fit_width(frame._ctx.measure_text, "Pick a device, or start something from a playlist",
-                                    max_w=col_w, size=11),
-                  x=px + col_x, y=py + 40, size=11, color=FAINT, z=12)
+                                    max_w=tw_, size=11),
+                  x=px + tx, y=py + ty + 19, size=11, color=FAINT, z=12)
 
-    # Progress bar with tiny time labels, below the text rows. The strip
-    # geometry is identical with or without a track — the times simply don't
-    # draw when idle — so the bar never jumps between states.
+    # Progress bar with tiny time labels ABOVE the strip's ends (round 37):
+    # the strip's left edge aligns with the text column now (SL-21), so the
+    # old beside-the-strip label spots are gone — left of the strip is the
+    # art tile. The elapsed label left-aligns at the strip's left, the
+    # duration's right edge meets the strip's right, and both derive from
+    # the resolved strip so a pill.progress override carries them. The
+    # strip geometry is identical with or without a track — the times
+    # simply don't draw when idle — so the bar never jumps between states.
     duration = track.duration_ms if track else 0
     progress = app.progress_ms()
-    strip_x = px + col_x + 34.0
-    strip_w = max(80.0, col_w - 34.0 - 40.0)
-    strip_y = py + 59.0
+    gx, gy, gw, _ = _layout_local(app, "pill.progress", pill_progress_local(pw, ph), pw, ph)
+    strip_x, strip_y, strip_w = px + gx, py + gy, gw
     if track is not None:
-        _text(frame, sl_ui.format_duration_ms(progress), x=px + col_x, y=py + 56, size=9,
-              color=FAINT, z=12)
-        _text(frame, sl_ui.format_duration_ms(duration), x=strip_x + strip_w + 6,
-              y=py + 56, size=9, color=FAINT, z=12)
+        _text(frame, sl_ui.format_duration_ms(progress), x=strip_x, y=strip_y - 11,
+              size=9, color=FAINT, z=12)
+        dur_text = sl_ui.format_duration_ms(duration)
+        dur_w = frame._ctx.measure_text(dur_text, font_size_px=9.0, font_family=FONT_FAMILY)
+        _text(frame, dur_text, x=strip_x + strip_w - dur_w, y=strip_y - 11,
+              size=9, color=FAINT, z=12)
     frame.rounded_rect(x=strip_x, y=strip_y, width=strip_w, height=3, radius=1.5,
                        color=(70, 70, 70, 255), z_index=11)
     frac = sl_ui.seek_fraction(progress, duration)
@@ -883,11 +979,12 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     # Transport row UNDER the bar, centered on the column; the white play
     # disc keeps its prominence and every hit stays at least yesterday's 34pt.
     playing = bool(player and player.is_playing)
-    row_cx = px + col_x + col_w / 2
-    row_cy = py + 87.0
-    _transport_button(frame, out, mouse, sl_icons.PREV, row_cx - 53, py + 74, "prev",
+    tx, ty, tw, th = _layout_local(app, "pill.transport", pill_transport_local(pw, ph), pw, ph)
+    row_cx = px + tx + tw / 2
+    row_cy = py + ty + th / 2
+    _transport_button(frame, out, mouse, sl_icons.PREV, row_cx - 53, row_cy - 13, "prev",
                       SUBTEXT, font=sl_icons.ICON_FONT_FILL)
-    play_hover = _hover(mouse, row_cx - 18, py + 69, 36, 36)
+    play_hover = _hover(mouse, row_cx - 18, row_cy - 18, 36, 36)
     frame.circle(cx=row_cx, cy=row_cy, radius=16,
                  fill=TEXT if play_hover else (225, 225, 225, 255), z_index=12)
     if playing:
@@ -901,8 +998,8 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     else:
         _centered_glyph(frame, sl_icons.PLAY, cx=row_cx, cy=row_cy, size=14,
                         color=(0, 0, 0, 255), z=13, font=sl_icons.ICON_FONT_FILL)
-    out.hit(row_cx - 18, py + 69, 36, 36, "toggle_play")
-    _transport_button(frame, out, mouse, sl_icons.NEXT, row_cx + 43, py + 74, "next",
+    out.hit(row_cx - 18, row_cy - 18, 36, 36, "toggle_play")
+    _transport_button(frame, out, mouse, sl_icons.NEXT, row_cx + 43, row_cy - 13, "next",
                       SUBTEXT, font=sl_icons.ICON_FONT_FILL)
 
     # Circular Home/Search nav buttons: unchanged on the bottom dock (Alec,
