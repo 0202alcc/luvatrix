@@ -224,6 +224,33 @@ Tools:
 - `layout_export {}` — JSON dump of the current specs plus rects resolved at
   the current window size, for inspection.
 
+## Spotify Light: live visual effects (SL-34)
+
+The same write-through loop covers scrim/gradient bands — the kind the old
+`draw_top_scrim`/`draw_dock_scrim` hardcoded (both removed: SL-33/SL-35, so
+the app boots with zero declared effects and renders none). Effects are
+declared data, tuned live, and persisted as `["<id>".effect]` tables in the
+SAME `layout.toml`:
+
+- `effect_apply {id, kind?, edge, height, fade?, alpha?, margin?}` — add or
+  tune an effect. The one kind today is `scrim` (default): a solid backdrop
+  band in from `edge` (`top`/`bottom`/`left`/`right`), then a smoothstep
+  fade. `height` is the total thickness (band + fade), `fade` the gradient
+  length (0..height), `alpha` the band opacity (0-255), `margin` an inset
+  along the band's long axis (x for top/bottom, y for left/right; 240 keeps
+  a top/bottom scrim off the sidebar). A partial call on an existing id
+  tunes — omitted knobs keep their stored values
+  (`effect_apply {id: "scrim.dock", alpha: 120}` dims a dock dissolve).
+  New ids need `edge` + `height`. The band renders on the next frame and
+  the spec persists. Recreate the old dock idiom with
+  `effect_apply {id: "scrim.dock", edge: "bottom", height: 148, fade: 56,
+  alpha: 240, margin: 240}`.
+- `effect_remove {id?}` — remove one effect, or all when `id` is omitted.
+  Also persists: the band disappears on the next frame and the file drops
+  the table.
+- `effect_list {}` — declared effects with their specs and each scrim's
+  region resolved at the current window size. Read-only.
+
 The persisted file is TOML, one table per component, in exactly the spec
 shape the tools accept (`["nav_more"]` with `anchor`/`dx`/`dy`,
 `["nav_more".rect]` with `x`/`y`/`width`/`height`,
