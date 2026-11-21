@@ -70,9 +70,15 @@ sinks from `--audit-sqlite`.
   level is lowered to INFO for the session and restored on shutdown.
 - `app_input` — inject synthetic HDI events: `{event: {device, event_type,
   payload}}` or `{events: [...]}`. Events flow through the real normalization
-  path (keyboard state machine, touch fan-out, window-geometry bounds) and are
-  visible to the app on the next tick. The app still needs the matching
-  `hdi.<device>` capability to consume them.
+  path (keyboard state machine, touch fan-out) and are visible to the app on
+  the next tick. The app still needs the matching `hdi.<device>` capability
+  to consume them. Position payloads (`x`/`y`) are SCENE coordinates — the
+  same space `app_screenshot`, `app_scene_tree`, and `app_state` report — so
+  injected input lands on the same point no matter how the window has been
+  resized; bounds are validated against the scene extent. Use
+  `screen_x`/`screen_y` instead when you hold raw screen points: those route
+  through window geometry and project into the scene exactly like
+  OS-delivered events.
 - `app_pause` / `app_step {ticks}` / `app_resume` — deterministic run-loop
   control. While paused, targets keep pumping and inspection tools keep
   working; `app_step` releases an exact number of ticks.
