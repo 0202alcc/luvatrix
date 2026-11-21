@@ -234,6 +234,25 @@ class TestNullBridgeGlass:
         view.go_back()  # inert, must not raise
         view.destroy()
 
+    def test_scripted_web_view_stub(self):
+        """SL-31: the playback surface's vehicle — a web view with a script
+        message channel and a JS evaluation path. The null handle stays inert
+        but records, so app tests can assert on the commands that WOULD run."""
+        bridge = NullNativeControlBridge()
+        messages: list = []
+        view = bridge.create_scripted_web_view(
+            x=0, y=0, width=1, height=1,
+            handler_name="luvatrixPlayer", on_message=messages.append,
+            html="<html></html>")
+        assert view.frame == (0, 0, 1, 1)
+        assert view.handler_name == "luvatrixPlayer"
+        view.evaluate_js('window.LuvatrixPlayerHost.invoke("pause", {})')
+        assert view.evaluated == ['window.LuvatrixPlayerHost.invoke("pause", {})']
+        view.hide()
+        assert view.is_visible is False
+        view.destroy()
+        assert view.destroyed is True
+
 
 # -- Fake AppKit stack for bridge-level glass tests ----------------------------
 

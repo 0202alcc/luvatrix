@@ -32,6 +32,23 @@ _ROUNDED_BEZEL = 1  # NSTextFieldRoundedBezel
 _GLASS_EFFECT_VIEW_CLASS = None
 
 
+def _on_main(fn) -> None:
+    """Run ``fn`` on the AppKit main thread, now or from the main queue.
+
+    Native views are main-thread-only, but playback commands originate on the
+    app's worker thread; evaluate-js calls hop queues transparently.
+    """
+    if threading.current_thread() is threading.main_thread():
+        fn()
+        return
+    try:
+        from Foundation import NSOperationQueue  # type: ignore
+
+        NSOperationQueue.mainQueue().addOperationWithBlock_(fn)
+    except Exception:  # noqa: BLE001 — without a main queue there is no window
+        pass
+
+
 def _glass_effect_view_class():
     """Return NSGlassEffectView when the host has it (macOS 26+), else None."""
     global _GLASS_EFFECT_VIEW_CLASS
@@ -64,6 +81,7 @@ class AppKitNativeControlBridge:
         self._fields: list[_AppKitTextField] = []
         self._buttons: list[_AppKitButton] = []
         self._web_views: list[_AppKitWebView] = []
+        self._scripted_views: list[_AppKitScriptedWebView] = []
         self._glass: list[_AppKitGlassSurface] = []
         self._button_monitor = None
         self._closed = False
@@ -146,6 +164,41 @@ class AppKitNativeControlBridge:
         )
         self._web_views.append(view)
         self._install_button_monitor()
+        return view
+
+    def create_scripted_web_view(
+        self,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        handler_name: str,
+        on_message=None,
+        html: str = "",
+        base_url: str = "",
+    ) -> "_AppKitScriptedWebView":
+        self._require_main_thread()
+        if not self.available:
+            raise RuntimeError("native-control bridge is not available (no live window)")
+        try:
+            from WebKit import WKWebView  # type: ignore  # noqa: F401
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(
+                "scripted web view requires pyobjc-framework-WebKit (luvatrix[macos])"
+            ) from exc
+        view = _AppKitScriptedWebView(
+            self,
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+            handler_name=handler_name,
+            on_message=on_message,
+            html=html,
+            base_url=base_url,
+        )
+        self._scripted_views.append(view)
         return view
 
     def create_button(
@@ -373,6 +426,10 @@ class AppKitNativeControlBridge:
     def _remove_glass(self, surface: "_AppKitGlassSurface") -> None:
         if surface in self._glass:
             self._glass.remove(surface)
+
+    def _remove_scripted_view(self, view: "_AppKitScriptedWebView") -> None:
+        if view in self._scripted_views:
+            self._scripted_views.remove(view)
 
     def _set_view_frame(self, view, x: float, y: float, width: float, height: float) -> None:
         """Place a subview using scene logical (top-left) coordinates."""
@@ -696,6 +753,169 @@ class _AppKitWebView:
         _AppKitWebView._delegate_owners[key] = self
         self._owner_key = key
         return delegate_cls.alloc().initWithOwnerKey_(key)
+
+
+class _AppKitScriptedWebView:
+    """One WKWebView with a two-way JS channel, for in-app web services.
+
+    Unlike the OAuth web view, this view loads an app-supplied host document
+    and never navigates user pages: JS posts ``{...}`` messages into the
+    named ``WKScriptMessageHandler`` (delivered on the main thread), and the
+    app evaluates JS back with ``evaluate_js`` (safe to call from any
+    thread — it hops to the main queue when needed). Media playback is
+    allowed without a user gesture; DRM hosts (the Web Playback SDK) need
+    that for autoplay-after-transfer.
+    """
+
+    _HANDLER_CLASS = None
+
+    def __init__(self, bridge: AppKitNativeControlBridge, *, x, y, width, height,
+                 handler_name, on_message, html, base_url) -> None:
+        from AppKit import NSMakeRect, NSWindowBelow  # type: ignore
+        from Foundation import NSURL  # type: ignore
+        from WebKit import WKWebView, WKWebViewConfiguration  # type: ignore
+
+        self._bridge = bridge
+        self._handler_name = str(handler_name)
+        self._on_message = on_message
+        self.destroyed = False
+        config = WKWebViewConfiguration.alloc().init()
+        self._handler = self._make_handler()
+        config.userContentController().addScriptMessageHandler_name_(
+            self._handler, self._handler_name)
+        try:
+            # WKAudiovisualMediaTypeNone — play without a user gesture.
+            config.setMediaTypesRequiringUserActionForPlayback_(0)
+        except Exception:  # noqa: BLE001
+            pass
+        self._wk = WKWebView.alloc().initWithFrame_configuration_(
+            NSMakeRect(0.0, 0.0, float(width), float(height)), config)
+        # Same compositing lesson as the OAuth view: WKWebView can obscure
+        # siblings regardless of add order, so it always goes in at the back.
+        bridge._content_view().addSubview_positioned_relativeTo_(
+            self._wk, NSWindowBelow, None)
+        self._logical_frame = (float(x), float(y), float(width), float(height))
+        self.set_frame(x, y, width, height)
+        if html:
+            base = NSURL.URLWithString_(base_url) if base_url else None
+            self._wk.loadHTMLString_baseURL_(html, base)
+
+    # -- NativeScriptedWebView -------------------------------------------------
+
+    @property
+    def frame(self) -> tuple[float, float, float, float]:
+        return self._logical_frame
+
+    @property
+    def handler_name(self) -> str:
+        return self._handler_name
+
+    def evaluate_js(self, script: str) -> None:
+        def _run() -> None:
+            if self.destroyed:
+                return
+            try:
+                self._wk.evaluateJavaScript_completionHandler_(str(script), None)
+            except Exception:  # noqa: BLE001 — a dead page eats commands
+                pass
+
+        _on_main(_run)
+
+    def set_frame(self, x: float, y: float, width: float, height: float) -> None:
+        self._logical_frame = (float(x), float(y), float(width), float(height))
+        self._bridge._set_view_frame(self._wk, x, y, width, height)
+
+    def show(self) -> None:
+        self._wk.setHidden_(False)
+
+    def hide(self) -> None:
+        self._wk.setHidden_(True)
+
+    @property
+    def is_visible(self) -> bool:
+        return not bool(self._wk.isHidden())
+
+    def destroy(self) -> None:
+        if self.destroyed:
+            return
+        self.destroyed = True
+        _AppKitScriptedWebView._handler_owners.pop(getattr(self, "_owner_key", None), None)
+        try:
+            self._wk.configuration().userContentController() \
+                .removeScriptMessageHandlerForName_(self._handler_name)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self._wk.removeFromSuperview()
+        except Exception:  # noqa: BLE001
+            pass
+        self._bridge._remove_scripted_view(self)
+
+    @property
+    def ns_web_view(self):
+        return self._wk
+
+    def _receive_message(self, body) -> None:
+        if self._on_message is None or self.destroyed:
+            return
+        try:
+            self._on_message(dict(body) if isinstance(body, dict) else body)
+        except Exception:  # noqa: BLE001 — a bad app callback must not kill the page
+            pass
+
+    # -- script message handler ------------------------------------------------
+
+    @classmethod
+    def _handler_class(cls):
+        if cls._HANDLER_CLASS is not None:
+            return cls._HANDLER_CLASS
+        import objc  # type: ignore
+        from Foundation import NSObject  # type: ignore
+
+        name = "_LuvatrixScriptMessageHandler"
+        try:
+            existing = objc.lookUpClass(name)
+            if existing is not None:
+                cls._HANDLER_CLASS = existing
+                return existing
+        except Exception:  # noqa: BLE001
+            pass
+
+        def userContentController_didReceiveScriptMessage_(self, _controller, message):  # noqa: N802
+            owner = _AppKitScriptedWebView._handler_owners.get(self._owner_key)
+            if owner is None:
+                return
+            try:
+                body = message.body()
+            except Exception:  # noqa: BLE001
+                return
+            owner._receive_message(body)
+
+        def initWithOwnerKey_(self, key):
+            self._owner_key = key
+            return self
+
+        cls._HANDLER_CLASS = type(
+            name,
+            (NSObject,),
+            {
+                "userContentController_didReceiveScriptMessage_":
+                    userContentController_didReceiveScriptMessage_,
+                "initWithOwnerKey_": initWithOwnerKey_,
+            },
+        )
+        return cls._HANDLER_CLASS
+
+    _handler_owners: dict[int, "_AppKitScriptedWebView"] = {}
+    _next_owner_key = 1
+
+    def _make_handler(self):
+        handler_cls = self._handler_class()
+        key = _AppKitScriptedWebView._next_owner_key
+        _AppKitScriptedWebView._next_owner_key += 1
+        _AppKitScriptedWebView._handler_owners[key] = self
+        self._owner_key = key
+        return handler_cls.alloc().initWithOwnerKey_(key)
 
 
 class _AppKitButton:

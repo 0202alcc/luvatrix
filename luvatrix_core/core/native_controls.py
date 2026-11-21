@@ -200,6 +200,38 @@ class NativeWebView(Protocol):
 
 
 @runtime_checkable
+class NativeScriptedWebView(Protocol):
+    """Handle for one embedded web view with a two-way script channel.
+
+    The vehicle for in-app web *services* (as opposed to pages): the view
+    loads an app-supplied host document, JS posts ``{...}`` messages to the
+    named handler (``on_message`` receives them as dicts, on the main
+    thread), and the app evaluates JS back via ``evaluate_js``. The playback
+    surface (SL-31) is built on this. Coordinates are window-local,
+    top-left origin, logical points.
+    """
+
+    @property
+    def frame(self) -> tuple[float, float, float, float]: ...
+
+    @property
+    def handler_name(self) -> str: ...
+
+    def evaluate_js(self, script: str) -> None: ...
+
+    def set_frame(self, x: float, y: float, width: float, height: float) -> None: ...
+
+    def show(self) -> None: ...
+
+    def hide(self) -> None: ...
+
+    @property
+    def is_visible(self) -> bool: ...
+
+    def destroy(self) -> None: ...
+
+
+@runtime_checkable
 class NativeControlBridge(Protocol):
     """Factory + input gate for native controls over one window."""
 
@@ -258,6 +290,19 @@ class NativeControlBridge(Protocol):
         corner_radius: float = 0.0,
         style: str = "regular",
     ) -> NativeGlassSurface: ...
+
+    def create_scripted_web_view(
+        self,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        handler_name: str,
+        on_message: Callable[[dict], None] | None = None,
+        html: str = "",
+        base_url: str = "",
+    ) -> NativeScriptedWebView: ...
 
     def close(self) -> None: ...
 
@@ -392,6 +437,40 @@ class _NullWebView:
         self.destroyed = True
 
 
+class _NullScriptedWebView:
+    """In-memory stand-in for a scripted web view on unsupported hosts.
+
+    Inert, but it records ``evaluate_js`` calls — app tests assert on the
+    commands that would have run in the page.
+    """
+
+    def __init__(self, *, x, y, width, height, handler_name, on_message, html,
+                 base_url) -> None:
+        self.frame = (x, y, width, height)
+        self.handler_name = handler_name
+        self._on_message = on_message
+        self.html = html
+        self.base_url = base_url
+        self.is_visible = True
+        self.destroyed = False
+        self.evaluated: list[str] = []
+
+    def evaluate_js(self, script: str) -> None:
+        self.evaluated.append(script)
+
+    def set_frame(self, x: float, y: float, width: float, height: float) -> None:
+        self.frame = (x, y, width, height)
+
+    def show(self) -> None:
+        self.is_visible = True
+
+    def hide(self) -> None:
+        self.is_visible = False
+
+    def destroy(self) -> None:
+        self.destroyed = True
+
+
 class NullNativeControlBridge:
     """Bridge for hosts without native-control support.
 
@@ -444,6 +523,18 @@ class NullNativeControlBridge:
             height=kwargs.get("height", 0.0),
             corner_radius=kwargs.get("corner_radius", 0.0),
             style=kwargs.get("style", "regular"),
+        )
+
+    def create_scripted_web_view(self, **kwargs) -> _NullScriptedWebView:
+        return _NullScriptedWebView(
+            x=kwargs.get("x", 0.0),
+            y=kwargs.get("y", 0.0),
+            width=kwargs.get("width", 0.0),
+            height=kwargs.get("height", 0.0),
+            handler_name=kwargs.get("handler_name", ""),
+            on_message=kwargs.get("on_message"),
+            html=kwargs.get("html", ""),
+            base_url=kwargs.get("base_url", ""),
         )
 
     def suppress_keyboard(self) -> bool:
