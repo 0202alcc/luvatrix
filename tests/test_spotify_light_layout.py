@@ -568,11 +568,11 @@ class TestLayoutPersistence:
     def test_shipped_layout_file_bakes_the_progress_alignment(self):
         """SL-21's end-to-end artifact (round 37): the repo's layout.toml —
         written by layout_align itself — pins the strip's left edge to the
-        text column's left as a RELATIONSHIP, resolving to (110, 59, 352, 3)
-        pill-local (right edge 462) at the round-39 shipping pill size
-        (PILL_W 572): the SL-24 natural derives the bar-on-play centering,
-        the relationship no-ops on it and keeps guarding the left edge.
-        The runner cross-checks exactly this."""
+        text         column's left as a RELATIONSHIP, resolving to (110, 59, 444, 3)
+        pill-local (right edge 554 — the text column's own right edge) at
+        the round-40 shipping pill size (PILL_W 572): the SL-25 natural
+        spans the column, the relationship no-ops on it and keeps guarding
+        the left edge. The runner cross-checks exactly this."""
         import tomllib
         data = tomllib.loads(Path(sl_layout.APP_LAYOUT_FILE).read_text())
         align = data["pill.progress"]["align"]
@@ -584,8 +584,8 @@ class TestLayoutPersistence:
         nats = _interior_naturals(pw=572.0)
         rect = ov.resolve("pill.progress", nats["pill.progress"],
                           width=572, height=108, naturals=nats)
-        assert rect == (110.0, 59.0, 352.0, 3.0)
-        assert rect[0] + rect[2] == 462.0, "2 x 286 - 110 — mirrored about the play center"
+        assert rect == (110.0, 59.0, 444.0, 3.0)
+        assert rect[0] + rect[2] == 554.0, "right edge == the column's right edge"
 
 
 class TestPillInteriorOverrides:
@@ -610,9 +610,9 @@ class TestPillInteriorOverrides:
         col_x, col_w, art = sl_views.pill_column(520.0, 108.0)
         assert sl_views.pill_art_local(520.0, 108.0) == (12.0, 12.0, 84.0, 84.0)
         gx, gy, gw, gh = sl_views.pill_progress_local(520.0, 108.0)
-        assert (gx, gy, gh) == (col_x, 59.0, 3.0), "SL-24: left edge IS the column left"
-        assert gw == pytest.approx(520.0 - 2 * col_x), \
-            "SL-24: the right edge mirrors the left about the transport center"
+        assert (gx, gy, gh) == (col_x, 59.0, 3.0), "left edge IS the column left"
+        assert gw == pytest.approx(col_w), \
+            "SL-25: the strip spans exactly the text column (right inset == the column's)"
         tx, ty, tw, th = sl_views.pill_transport_local(520.0, 108.0)
         assert (tx + tw / 2, ty + th / 2) == pytest.approx((260.0, 87.0)), \
             "SL-23: the transport centers on the PILL, not the text column"
@@ -815,17 +815,18 @@ class TestLayoutAlignSpec:
             "the title/artist column: right of the art + gap, above the strip"
 
     def test_left_align_keeps_the_right_edge_fixed(self):
-        """The SL-21 geometry, post-SL-24: the natural already sits on the
+        """The SL-21 geometry, post-SL-25: the natural already sits on the
         column left, so the relationship no-ops on position — and still
-        guards it (the right edge holds at the natural 410)."""
+        guards it (the right edge holds at the natural 502, the column's
+        own right edge)."""
         ov = sl_layout.LayoutOverrides()
         ov.set("pill.progress", {"align": {
             "edge": "left", "to": "pill.title", "ref_edge": "left", "offset": 0}})
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (110.0, 59.0, 300.0, 3.0)
-        assert got[0] + got[2] == 410.0, "right edge unmoved"
+        assert got == (110.0, 59.0, 392.0, 3.0)
+        assert got[0] + got[2] == 502.0, "right edge unmoved — the column's right"
 
     def test_right_align_keeps_the_left_edge_fixed(self):
         ov = sl_layout.LayoutOverrides()
@@ -844,14 +845,14 @@ class TestLayoutAlignSpec:
             "edge": "center_x", "to": "pill.title", "ref_edge": "center_x"}})
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == pytest.approx((306.0 - 150.0, 59.0, 300.0, 3.0)), \
+        assert got == pytest.approx((306.0 - 196.0, 59.0, 392.0, 3.0)), \
             "only the position moves; the strip keeps its width"
         ov2 = sl_layout.LayoutOverrides()
         ov2.set("pill.progress", {"align": {
             "edge": "center_y", "to": "pill.art", "ref_edge": "center_y"}})
         got2 = ov2.resolve("pill.progress", nats["pill.progress"],
                            width=520, height=108, naturals=nats)
-        assert got2 == pytest.approx((110.0, 54.0 - 1.5, 300.0, 3.0))
+        assert got2 == pytest.approx((110.0, 54.0 - 1.5, 392.0, 3.0))
 
     def test_top_and_bottom_align_keep_the_vertical_extent(self):
         nats = _interior_naturals()
@@ -860,13 +861,13 @@ class TestLayoutAlignSpec:
             "edge": "top", "to": "pill.art", "ref_edge": "top"}})
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (110.0, 12.0, 300.0, 50.0), "bottom edge (62) fixed; the top moves"
+        assert got == (110.0, 12.0, 392.0, 50.0), "bottom edge (62) fixed; the top moves"
         ov2 = sl_layout.LayoutOverrides()
         ov2.set("pill.progress", {"align": {
             "edge": "bottom", "to": "pill.art", "ref_edge": "bottom"}})
         got2 = ov2.resolve("pill.progress", nats["pill.progress"],
                            width=520, height=108, naturals=nats)
-        assert got2 == (110.0, 59.0, 300.0, 37.0), \
+        assert got2 == (110.0, 59.0, 392.0, 37.0), \
             "top fixed; the bottom edge moves to the art's bottom (96)"
 
     def test_offset_shifts_the_aligned_edge(self):
@@ -876,7 +877,7 @@ class TestLayoutAlignSpec:
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (116.0, 59.0, 294.0, 3.0)
+        assert got == (116.0, 59.0, 386.0, 3.0)
 
     def test_resolution_uses_the_references_current_rect(self):
         """The relationship tracks the reference: an override on pill.title
@@ -887,8 +888,8 @@ class TestLayoutAlignSpec:
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (130.0, 59.0, 280.0, 3.0), \
-            "the reference's override wins the resolution; the right edge still holds 410"
+        assert got == (130.0, 59.0, 372.0, 3.0), \
+            "the reference's override wins the resolution; the right edge still holds 502"
         ov2 = sl_layout.LayoutOverrides()
         ov2.set("pill.progress", {"align": {"edge": "left", "to": "pill.title"}})
         assert ov2.resolve("pill.progress", nats["pill.progress"],
@@ -907,11 +908,11 @@ class TestLayoutAlignSpec:
     def test_a_collapsed_extent_guards_to_one_point(self):
         ov = sl_layout.LayoutOverrides()
         ov.set("pill.progress", {"align": {
-            "edge": "left", "to": "pill.title", "ref_edge": "right"}})  # 502 > right 410
+            "edge": "left", "to": "pill.title", "ref_edge": "right"}})  # 502 == right 502
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (409.0, 59.0, 1.0, 3.0), "the extent collapses to 1pt, never negative"
+        assert got == (501.0, 59.0, 1.0, 3.0), "the extent collapses to 1pt, never negative"
 
     def test_window_ids_align_in_window_space(self):
         ov = sl_layout.LayoutOverrides()
@@ -977,14 +978,14 @@ class TestLayoutAlignTool:
 
     def test_align_applies_immediately_and_persists_the_relationship(self, app_ctx):
         """SL-21 through the tool: pin the strip's left edge to the text
-        column's left. The runner's acceptance on 1280x800: (110, 59, 352, 3)
-        pill-local on the round-39 plate, right edge 462."""
+        column's left. The runner's acceptance on 1280x800: (110, 59, 444, 3)
+        pill-local on the round-40 plate, right edge 554 (SL-25)."""
         app, ctx, buf = app_ctx
         _with_track(app, ctx)
         result = app.mcp_call("layout_align", {
             "id": "pill.progress", "edge": "left",
             "to": "pill.title", "ref_edge": "left"})
-        assert result["rect"] == [110.0, 59.0, 352.0, 3.0]
+        assert result["rect"] == [110.0, 59.0, 444.0, 3.0]
         assert result["persisted"] is True
         text = sl_layout.default_path().read_text()
         assert '["pill.progress".align]' in text
@@ -994,12 +995,12 @@ class TestLayoutAlignTool:
         _tick(app, ctx, 2)
         px, _, _, _ = sl_views.pill_rect(1280, 800)
         seek = [r for r in app._hits if r.action == "seek_bar"]
-        assert seek and (seek[0].x, seek[0].w) == (px + 110, 352.0)
+        assert seek and (seek[0].x, seek[0].w) == (px + 110, 444.0)
         app.init(ctx)  # reboot: the file is the source of truth
         _with_track(app, ctx)
         px, _, _, _ = sl_views.pill_rect(1280, 800)
         seek = [r for r in app._hits if r.action == "seek_bar"]
-        assert seek and (seek[0].x, seek[0].w) == (px + 110, 352.0), \
+        assert seek and (seek[0].x, seek[0].w) == (px + 110, 444.0), \
             "the persisted relationship survives the reboot"
 
     def test_align_tracks_a_later_reference_move(self, app_ctx):
@@ -1012,8 +1013,8 @@ class TestLayoutAlignTool:
         _tick(app, ctx, 2)
         px, _, _, _ = sl_views.pill_rect(1280, 800)
         seek = [r for r in app._hits if r.action == "seek_bar"]
-        assert seek and (seek[0].x, seek[0].w) == (px + 130, 332.0), \
-            "the aligned edge tracks the reference's current rect (right edge still 462)"
+        assert seek and (seek[0].x, seek[0].w) == (px + 130, 424.0), \
+            "the aligned edge tracks the reference's current rect (right edge still 554)"
 
     def test_align_is_resize_safe(self, app_ctx):
         app, ctx, buf = app_ctx
@@ -1025,7 +1026,7 @@ class TestLayoutAlignTool:
         _tick(app, ctx, 2)
         px, _, _, _ = sl_views.pill_rect(1000, 800)
         seek = [r for r in app._hits if r.action == "seek_bar"]
-        assert seek and seek[0].x - px == 110.0 and seek[0].w == 352.0, \
+        assert seek and seek[0].x - px == 110.0 and seek[0].w == 444.0, \
             "pill-local alignment is indifferent to the window size"
 
     def test_align_errors_never_touch_scene_or_file(self, app_ctx):
@@ -1317,22 +1318,37 @@ class TestPlayCenteredPillGeometry:
 
 
 # ---------------------------------------------------------------------------
-# Round 39 (Alec, SL-24): the strip's NATURAL derives the bar-on-play
-# centering — left edge on the text column (the SL-21 relationship keeps
-# guarding it), right edge mirrored about the transport center.
+# Round 40 (Alec, SL-25): "the actual progress bar needs to go further to
+# the right. but keep consistent x-distance spacing." The strip's NATURAL
+# spans EXACTLY the text column — left edge on the title (the SL-21
+# relationship keeps guarding it), right edge on the column's right edge,
+# so the bar's right inset IS the text's own right inset. This replaces
+# SL-24's centered-on-play derivation: the midpoint sits a constant 46pt
+# right of the play center (the art tile skews the column) — known and
+# accepted, play itself stays pill-centered (SL-23).
 # ---------------------------------------------------------------------------
 
-class TestProgressNaturalCentersOnTransport:
-    """pill_progress_local is symmetric about pill_transport_local's center
-    at ANY pill width: strip center == transport center by construction."""
+class TestProgressNaturalSpansTextColumn:
+    """pill_progress_local spans the full pill_column span at ANY pill
+    width: left edge == column left, right edge == column right."""
 
-    def test_strip_natural_center_equals_transport_center(self):
+    def test_strip_natural_spans_the_column(self):
+        for pw in (572.0, 520.0, 508.0, 400.0, 320.0):
+            col_x, col_w, _ = sl_views.pill_column(pw, 108.0)
+            gx, _, gw, _ = sl_views.pill_progress_local(pw, 108.0)
+            assert (gx, gw) == (col_x, col_w), \
+                f"strip drifts from the text column's span at pw={pw}"
+            assert gx + gw == pw - sl_views.PILL_META_RIGHT_PAD, \
+                "the bar's right inset IS the column's right inset"
+
+    def test_midpoint_sits_a_constant_46_right_of_the_play_center(self):
+        """The accepted skew: col_x is fixed (110) while the transport
+        centers on pw/2, so bar center - play center == 46 at any width."""
         for pw in (572.0, 520.0, 508.0, 400.0, 320.0):
             gx, _, gw, _ = sl_views.pill_progress_local(pw, 108.0)
             tx, _, tw, _ = sl_views.pill_transport_local(pw, 108.0)
-            assert gx + gw / 2 == pytest.approx(tx + tw / 2), \
-                f"strip center drifts from the transport center at pw={pw}"
-            assert gx == 110.0, "left edge stays the text column's left"
+            assert (gx + gw / 2) - (tx + tw / 2) == pytest.approx(46.0), \
+                f"the accepted art-tile skew drifts at pw={pw}"
 
     def test_572_numbers(self):
-        assert sl_views.pill_progress_local(572.0, 108.0) == (110.0, 59.0, 352.0, 3.0)
+        assert sl_views.pill_progress_local(572.0, 108.0) == (110.0, 59.0, 444.0, 3.0)

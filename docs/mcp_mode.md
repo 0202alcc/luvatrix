@@ -138,12 +138,15 @@ interior rects in these local coordinates.
 - `pill.progress` — the progress strip; `x`/`y`/`width` are layout inputs
   (height stays 3pt) and the elapsed/remaining labels ride above the
   strip's ends. The shipped `layout.toml` aligns its left edge to
-  `pill.title`'s left edge (SL-21). Round 39 (SL-24): the strip's natural
-  CENTERS ON THE PLAY BUTTON — left edge on the text column, right edge
-  mirrored about the transport center — so at 1280×800 it resolves to
-  pill-local `(110, 59, 352, 3)` (right edge 462) and the align
-  relationship no-ops on the natural while still guarding the column edge:
-  bar and transport share one axis at any window width.
+  `pill.title`'s left edge (SL-21). Round 40 (SL-25): the strip's natural
+  SPANS THE TEXT COLUMN — left edge on the title, right edge on the
+  column's right edge — so at 1280×800 it resolves to pill-local
+  `(110, 59, 444, 3)` (right edge 554: the bar's right inset IS the
+  text's own 18pt inset) and the align relationship no-ops on the natural
+  while still guarding the column edge. The bar's midpoint sits a constant
+  46pt right of the play center (the art tile skews the column) — known
+  and accepted; play itself stays pill-centered (SL-23). This replaces
+  SL-24's centered-on-play derivation.
 - `pill.transport` — the prev/play/next cluster, positioned by the rect's
   center. Cluster size is not a layout input: the buttons keep fixed offsets
   and 34pt hit targets. Round 38 (SL-23): the natural centers on the PILL
