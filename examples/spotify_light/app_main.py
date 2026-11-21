@@ -171,6 +171,15 @@ class SpotifyLightApp(App):
         self._pill_glass_live = False
         self._pill_glass_disabled = False
         self._pill_glass_rect: tuple[float, float, float, float] | None = None
+        # Whole-window material (SL-38): one behind-window backdrop surface
+        # replaces the scene's near-black base on capable hosts.
+        # _window_material_active — the backdrop is wanted this frame;
+        # _window_material_live — the native backdrop exists (scene tiles and
+        # component fill alphas key off this); _backdrop_disabled — creation
+        # failed, keep the SL-36 opaque tiles and stop retrying.
+        self._window_material_active = False
+        self._window_material_live = False
+        self._backdrop_disabled = False
         self._glass_specs: dict[str, dict] = {}
 
         # Live layout overrides (MCP, round 31): seeded from the persisted
@@ -1076,7 +1085,8 @@ class SpotifyLightApp(App):
                              want_login_field: bool,
                              want_save_button: bool = False,
                              want_connect_button: bool = False,
-                             want_pill: bool = False) -> None:
+                             want_pill: bool = False,
+                             want_backdrop: bool = False) -> None:
         """Create/update/destroy app-declared glass regions to match the layout.
 
         Login-wall capsules sit ABOVE the Metal layer behind native content.
@@ -1107,6 +1117,12 @@ class SpotifyLightApp(App):
                                       corner_radius=sl_views.glass_silhouette_radius(ph),
                                       style="regular", placement="under")
                 self._pill_glass_rect = (px, py, pw, ph)
+            if want_backdrop:
+                # SL-38: one window-spanning behind-window material at the
+                # very back — the scene's only base once it exists.
+                wanted["backdrop"] = dict(x=0.0, y=0.0, width=width, height=height,
+                                          corner_radius=0.0, style="regular",
+                                          placement="backdrop")
         for key in list(self._glass_surfaces):
             if key not in wanted:
                 self._glass_surfaces.pop(key).destroy()
@@ -1123,6 +1139,8 @@ class SpotifyLightApp(App):
                           file=sys.stderr, flush=True)
                     if key == "pill":
                         self._pill_glass_disabled = True
+                    elif key == "backdrop":
+                        self._backdrop_disabled = True
                     continue
             else:
                 # Always re-apply: the bridge derives the AppKit frame from the
@@ -1681,16 +1699,24 @@ class SpotifyLightApp(App):
         simulated plate and the opaque clear."""
         if not self.authenticated or self._pill_glass_disabled:
             return False
+        return self._under_glass_capable()
+
+    def _under_glass_capable(self) -> bool:
         bridge = native_controls()
-        return bool(bridge is not None and bridge.available
+        return bool(self.authenticated and bridge is not None and bridge.available
                     and getattr(bridge, "supports_under_glass", False))
 
     def render(self) -> None:
         self._pill_glass_active = self._pill_glass_supported()
+        self._window_material_active = (self._under_glass_capable()
+                                        and not self._backdrop_disabled)
         # Fully transparent clear is the presenter's cue to make the window
-        # see-through for the under-glass pill zone; the opaque backdrop in
-        # _render_scene covers everything else.
-        clear = (0, 0, 0, 0) if self._pill_glass_active else sl_views.BG
+        # see-through — for the under-glass pill zone (SL-36) and the
+        # whole-window material (SL-38). While the material is live the scene
+        # paints no opaque base at all; the SL-36 tiles only backstop a
+        # failed backdrop.
+        clear = ((0, 0, 0, 0) if (self._pill_glass_active or self._window_material_active)
+                 else sl_views.BG)
         if self.ctx.supports_scene_graph:
             with self.scene_frame(clear=clear) as frame:
                 self._render_scene(frame)
@@ -1709,6 +1735,7 @@ class SpotifyLightApp(App):
             bridge_up = bridge is not None and bridge.available
             self.glass_active = False  # chrome glass is an authed-only concern
             self._pill_glass_live = False
+            self._window_material_live = False
             want_field = bool(bridge_up and not self.client_id and not self.auth_working)
             want_connect = bool(bridge_up and self.client_id and not self.auth_working)
             self._sync_glass_surfaces(width, height,
@@ -1730,12 +1757,17 @@ class SpotifyLightApp(App):
             # content-under-bar flow while the bridge is up.
             self.glass_active = bridge is not None and bridge.available
             self._sync_glass_surfaces(width, height, want_login_field=False,
-                                      want_pill=self._pill_glass_active)
+                                      want_pill=self._pill_glass_active,
+                                      want_backdrop=self._window_material_active)
             self._pill_glass_live = "pill" in self._glass_surfaces
-            if self._pill_glass_live and self._pill_glass_rect is not None:
+            self._window_material_live = "backdrop" in self._glass_surfaces
+            if (self._pill_glass_live and self._pill_glass_rect is not None
+                    and not self._window_material_live):
                 # Opaque base everywhere but the glass zone: the clear is
                 # transparent now, so the window's near-black must come from
                 # the scene — content still floats over the real material.
+                # SL-38: only a backstop for a failed backdrop creation;
+                # once the window material is live it IS the base.
                 sl_views.draw_window_backdrop(frame, width=width, height=height,
                                               skip=self._pill_glass_rect)
             if self.view == "search":
@@ -1832,6 +1864,8 @@ class SpotifyLightApp(App):
         self.glass_active = False
         self._pill_glass_active = False
         self._pill_glass_live = False
+        self._window_material_active = False
+        self._window_material_live = False
         if self._login_receiver is not None:
             self._login_receiver.close()
         self.worker.shutdown()

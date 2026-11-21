@@ -705,10 +705,17 @@ def _draw_rect(out, x: float, y: float, width: float, height: float, color: tupl
     if np is None:
         out[y0:y1, x0:x1, :] = color
         return
-    dst = out[y0:y1, x0:x1, :3].astype(np.float32)
+    dst = out[y0:y1, x0:x1, :].astype(np.float32)
     src = np.asarray(color[:3], dtype=np.float32).reshape(1, 1, 3)
-    out[y0:y1, x0:x1, :3] = np.clip(src * alpha + dst * (1.0 - alpha), 0, 255).astype(np.uint8)
-    out[y0:y1, x0:x1, 3] = 255
+    out[y0:y1, x0:x1, :3] = np.clip(src * alpha + dst[:, :, :3] * (1.0 - alpha), 0, 255).astype(np.uint8)
+    # Source-over for the alpha channel too (matching _paste_rgba and the
+    # GPU blend state): a translucent fill over a transparent clear keeps
+    # its alpha — the SL-38 window material reads through it. Written as
+    # 255-(255-d)*(1-a) so an opaque destination stays exactly 255 (the
+    # a + d*(1-a) form lands at 254.999… in float32 and truncates to 254,
+    # which broke Rust parity on AA edge pixels).
+    out[y0:y1, x0:x1, 3] = np.clip(
+        255.0 - (255.0 - dst[:, :, 3]) * (1.0 - alpha), 0, 255).astype(np.uint8)
 
 
 def _draw_rounded_rect(out, x: float, y: float, width: float, height: float, radius: float, color: tuple[int, int, int, int]) -> None:
@@ -739,11 +746,12 @@ def _draw_rounded_rect(out, x: float, y: float, width: float, height: float, rad
     if alpha >= 0.999:
         patch[mask] = color
         return
-    dst = patch[:, :, :3].astype(np.float32)
+    dst = patch[:, :, :].astype(np.float32)
     src = np.asarray(color[:3], dtype=np.float32).reshape(1, 1, 3)
-    blended = np.clip(src * alpha + dst * (1.0 - alpha), 0, 255).astype(np.uint8)
+    blended = np.clip(src * alpha + dst[:, :, :3] * (1.0 - alpha), 0, 255).astype(np.uint8)
     patch[:, :, :3] = np.where(mask[:, :, None], blended, patch[:, :, :3])
-    patch[:, :, 3] = np.where(mask, 255, patch[:, :, 3])
+    blended_a = np.clip(255.0 - (255.0 - dst[:, :, 3]) * (1.0 - alpha), 0, 255).astype(np.uint8)
+    patch[:, :, 3] = np.where(mask, blended_a, patch[:, :, 3])
 
 
 def _draw_line(out, x0: float, y0: float, x1: float, y1: float, color: tuple[int, int, int, int]) -> None:
@@ -887,10 +895,12 @@ def _blend_alpha_mask(out, mask, *, x: int, y: int, color: tuple[int, int, int, 
     alpha = (mask_np[sy0 : sy0 + (y1 - y0), sx0 : sx0 + (x1 - x0)].astype(np.float32) / 255.0) * (color[3] / 255.0)
     if not bool(np.any(alpha > 0.0)):
         return
-    dst = out[y0:y1, x0:x1, :3].astype(np.float32)
+    dst = out[y0:y1, x0:x1, :].astype(np.float32)
     src = np.asarray(color[:3], dtype=np.float32).reshape(1, 1, 3)
-    out[y0:y1, x0:x1, :3] = np.clip(src * alpha[:, :, None] + dst * (1.0 - alpha[:, :, None]), 0, 255).astype(np.uint8)
-    out[y0:y1, x0:x1, 3] = 255
+    out[y0:y1, x0:x1, :3] = np.clip(src * alpha[:, :, None] + dst[:, :, :3] * (1.0 - alpha[:, :, None]), 0, 255).astype(np.uint8)
+    # Same cancellation-free alpha form as _draw_rect (opaque dst stays 255).
+    out[y0:y1, x0:x1, 3] = np.clip(
+        255.0 - (255.0 - dst[:, :, 3]) * (1.0 - alpha), 0, 255).astype(np.uint8)
 
 
 def _paste_rgba(out, src, *, x: int, y: int, width: int, height: int) -> None:

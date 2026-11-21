@@ -57,7 +57,15 @@ fn blend_px_f32(buf: &mut [u8], offset: usize, color: [u8; 4], alpha_f64: f64) {
     for channel in 0..3 {
         buf[offset + channel] = blend_channel_f32(color[channel], buf[offset + channel], alpha_f64);
     }
-    buf[offset + 3] = 255;
+    // Source-over for the alpha channel too (mirroring `paste` and the GPU
+    // blend state): a translucent fill over a transparent clear keeps its
+    // alpha — the SL-38 window material reads through it. Written on the
+    // 0..255 scale as 255-(255-d)(1-a) in f32, bit-exact with the numpy
+    // path: exact 255 over an opaque destination (the a + d*(1-a) form
+    // truncates to 254 on AA edges) with no 0..1-scale cancellation at d=0.
+    let one_minus = (1.0 - alpha_f64) as f32;
+    let out_a = 255.0f32 - (255.0f32 - buf[offset + 3] as f32) * one_minus;
+    buf[offset + 3] = out_a.clamp(0.0, 255.0) as u8;
 }
 
 pub fn prepare(buf: &mut [u8]) {
@@ -489,7 +497,6 @@ fn mask_blend(
     }
     let color_alpha = (f64::from(color[3]) / 255.0) as f32;
     let src = [color[0] as f32, color[1] as f32, color[2] as f32];
-    let mut any_alpha = false;
     for py in y0..y1 {
         for px in x0..x1 {
             let coverage = mask[((py - y) * width + (px - x)) as usize];
@@ -497,21 +504,19 @@ fn mask_blend(
             if alpha <= 0.0 {
                 continue;
             }
-            any_alpha = true;
             let offset = (py * frame_w + px) as usize * 4;
             for channel in 0..3 {
                 let dst = buf[offset + channel] as f32;
                 let value = src[channel] * alpha + dst * (1.0 - alpha);
                 buf[offset + channel] = value.clamp(0.0, 255.0) as u8;
             }
-        }
-    }
-    if !any_alpha {
-        return;
-    }
-    for py in y0..y1 {
-        for px in x0..x1 {
-            buf[(py * frame_w + px) as usize * 4 + 3] = 255;
+            // Alpha composites source-over with the per-pixel coverage, the
+            // same as `paste`: text/masks must not stomp the bbox opaque.
+            // Same 0..255-scale 255-(255-d)(1-a) form as `blend_px_f32`,
+            // bit-exact with the numpy f32 path at both ends.
+            let dst_a = buf[offset + 3] as f32;
+            let out_a = 255.0f32 - (255.0f32 - dst_a) * (1.0 - alpha);
+            buf[offset + 3] = out_a.clamp(0.0, 255.0) as u8;
         }
     }
 }
@@ -526,6 +531,46 @@ mod tests {
         draw_rect(&mut buf, 4, 4, 1.0, 1.0, 2.0, 2.0, [9, 8, 7, 255]);
         assert_eq!(&buf[(1 * 4 + 1) * 4..(1 * 4 + 1) * 4 + 4], &[9, 8, 7, 255]);
         assert_eq!(&buf[0..4], &[0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn rect_translucent_fill_keeps_its_alpha() {
+        // SL-38: over a transparent clear the fill's alpha must survive —
+        // the behind-window material reads through covered pixels. (RGB is
+        // the source-over composite over the black clear: 16*166/255 ≈ 10.)
+        let mut buf = vec![0u8; 4 * 4];
+        draw_rect(&mut buf, 4, 1, 0.0, 0.0, 4.0, 1.0, [16, 16, 16, 166]);
+        assert_eq!(&buf[0..4], &[10, 10, 10, 166]);
+    }
+
+    #[test]
+    fn rect_stacked_fills_composite_alpha_source_over() {
+        let mut buf = vec![0u8; 4 * 4];
+        draw_rect(&mut buf, 4, 1, 0.0, 0.0, 4.0, 1.0, [16, 16, 16, 64]);
+        draw_rect(&mut buf, 4, 1, 0.0, 0.0, 4.0, 1.0, [16, 16, 16, 166]);
+        let a_lo = 64.0 / 255.0;
+        let a_hi = 166.0 / 255.0;
+        let expected = ((a_hi + a_lo * (1.0 - a_hi)) * 255.0) as u8;
+        assert!(
+            (buf[3] as i32 - expected as i32).abs() <= 1,
+            "stacked alpha composites source-over: got {} want ~{expected}",
+            buf[3]
+        );
+    }
+
+    #[test]
+    fn mask_blend_keeps_color_alpha_per_pixel() {
+        let mut buf = vec![0u8; 4 * 4 * 4];
+        let mask = [255u8, 255, 0, 255];
+        mask_blend(&mut buf, 4, 4, 1, 1, 2, 2, &mask, [255, 255, 255, 200]);
+        let offset = (1 * 4 + 1) * 4;
+        assert!(
+            (buf[offset + 3] as i32 - 200).abs() <= 1,
+            "full-ink pixel keeps the text color alpha: got {}",
+            buf[offset + 3]
+        );
+        let zero_coverage = (1 * 4 + 3) * 4;
+        assert_eq!(buf[zero_coverage + 3], 0, "zero-coverage pixels stay transparent");
     }
 
     #[test]

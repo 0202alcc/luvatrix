@@ -566,6 +566,46 @@ class TestUnderGlassTransparency(unittest.TestCase):
         assert mst._under_glass_transparency((0, 0, 0, 1)) is False
 
 
+class TestFragmentAlphaContract(unittest.TestCase):
+    """SL-38 eyeball follow-up: the alpha'd component fills must reach the
+    CAMetalLayer with alpha intact — the whole-window material only reads as
+    "frosted" when covered pixels keep a<255 (gaps already kept a=0). The
+    flatten was in the CPU rasterizer (the MCP readback path); these pins
+    keep the GPU side honest: fragment shaders emit their input alpha and
+    the pipeline blends the alpha channel standard source-over, so a 0.65
+    fill lands in the drawable as 0.65, not 1.0."""
+
+    def test_fragment_shaders_emit_input_alpha(self):
+        msl = mst._SCENE_MSL
+        assert "return in.color;" in msl, "rect fragments pass color+alpha through"
+        assert "in.fill_color.a * alpha" in msl, "rounded rect keeps fill alpha * coverage"
+        assert "in.color.a * alpha" in msl, "glyphs keep text color alpha * coverage"
+        # No fragment path may force an opaque alpha for a translucent fill.
+        for line in msl.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("return float4("):
+                assert not stripped.rstrip().endswith(", 1.0);"), \
+                    f"fragment forces alpha=1: {stripped}"
+
+    def test_pipeline_blends_alpha_source_over(self):
+        import inspect
+
+        src = inspect.getsource(mst._compile_pipeline)
+        # MTLBlendFactor: 1 == One, 5 == OneMinusSourceAlpha — the alpha
+        # channel must composite a' = a_src + a_dst*(1-a_src): a 0.65 fill
+        # over a transparent clear stores 0.65 in the drawable.
+        assert "attach.setSourceAlphaBlendFactor_(1)" in src
+        assert "attach.setDestinationAlphaBlendFactor_(5)" in src
+        assert "attach.setBlendingEnabled_(True)" in src
+
+    def test_blend_math_keeps_fill_alpha(self):
+        # The configured equation, evaluated: 166/255 over a 0-alpha clear.
+        a_src = 166 / 255.0
+        a_dst = 0.0
+        out = a_src * 1.0 + a_dst * (1.0 - a_src)  # One / OneMinusSourceAlpha, Add
+        assert abs(out - a_src) < 1e-9
+
+
 class _FakeMainQueue:
     """Stands in for NSOperationQueue.mainQueue(): captures blocks and runs
     them under a flipped is-main flag, the way the real main queue executes

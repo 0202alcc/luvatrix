@@ -242,9 +242,9 @@ class AppKitNativeControlBridge:
         self._require_main_thread()
         if not self.available:
             raise RuntimeError("native-control bridge is not available (no live window)")
-        if placement == "under" and not self.supports_under_glass:
+        if placement in ("under", "backdrop") and not self.supports_under_glass:
             raise RuntimeError(
-                'placement="under" requires an under-glass-capable window '
+                f'placement="{placement}" requires an under-glass-capable window '
                 "(render-host split + Metal presenter transparency)")
         surface = _AppKitGlassSurface(
             self,
@@ -463,7 +463,29 @@ class _AppKitGlassSurface:
         self.destroyed = False
         glass_cls = _glass_effect_view_class()
         self._is_glass_effect = glass_cls is not None
-        if glass_cls is not None:
+        if placement == "backdrop":
+            # SL-38 whole-window material: the Apple behind-window idiom is
+            # NSVisualEffectView (NSGlassEffectView is a foreground effect —
+            # a window-spanning one would also double the pill's own glass).
+            # underWindowBackground keeps the desktop's color/light lensing
+            # through (the pretty bleed); hudWindow would be a darker, more
+            # uniform tint — more raw legibility, less alive. Behind-window
+            # blending is what makes desktop content blur instead of smear.
+            from AppKit import (  # type: ignore
+                NSVisualEffectBlendingModeBehindWindow,
+                NSVisualEffectMaterialUnderWindowBackground,
+                NSVisualEffectStateActive,
+                NSVisualEffectView,
+            )
+
+            self._view = NSVisualEffectView.alloc().initWithFrame_(
+                NSMakeRect(0.0, 0.0, float(width), float(height)))
+            self._view.setMaterial_(NSVisualEffectMaterialUnderWindowBackground)
+            self._view.setBlendingMode_(NSVisualEffectBlendingModeBehindWindow)
+            self._view.setState_(NSVisualEffectStateActive)
+            self._is_glass_effect = False
+            self._host = self._view
+        elif glass_cls is not None:
             from AppKit import NSView  # type: ignore
 
             self._view = glass_cls.alloc().initWithFrame_(
@@ -504,7 +526,14 @@ class _AppKitGlassSurface:
         # The material follows the view's appearance — pin dark before the
         # view is parented so it never flashes light (SL-36 eyeball).
         _pin_dark_appearance(self._view)
-        if placement == "under":
+        if placement == "backdrop":
+            from AppKit import NSWindowBelow  # type: ignore
+
+            # The very back of the content view: scene content, then chrome
+            # (pill glass, native controls) all composite above the material.
+            bridge._content_view().addSubview_positioned_relativeTo_(
+                self._view, NSWindowBelow, None)
+        elif placement == "under":
             from AppKit import NSWindowBelow  # type: ignore
 
             # Under the render surface: scene content composites crisply on
