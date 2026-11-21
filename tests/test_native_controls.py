@@ -263,6 +263,7 @@ class _FakeNSView:
         self._layer = None
         self.bounds_width = 1280.0
         self.bounds_height = 800.0
+        self.appearance = None
 
     @classmethod
     def alloc(cls):
@@ -315,6 +316,22 @@ class _FakeNSView:
     def bounds(self):
         size = type("S", (), {"width": self.bounds_width, "height": self.bounds_height})()
         return type("B", (), {"size": size})()
+
+    def setAppearance_(self, appearance):
+        self.appearance = appearance
+
+
+class _FakeNSAppearance:
+    """Mirrors AppKit: appearanceNamed: returns nil for unknown names."""
+
+    def __init__(self, name) -> None:
+        self.name = name
+
+    @classmethod
+    def appearanceNamed_(cls, name):
+        if name == "NSAppearanceNameDarkAqua":
+            return cls(name)
+        return None
 
 
 class _FakeGlassEffectView(_FakeNSView):
@@ -518,6 +535,8 @@ def _fake_appkit_module(glass_view_cls=_FakeGlassEffectView):
         "NSVisualEffectMaterialHUD": 10,
         "NSVisualEffectBlendingModeWithinWindow": 0,
         "NSVisualEffectStateActive": 0,
+        "NSAppearance": _FakeNSAppearance,
+        "NSAppearanceNameDarkAqua": "NSAppearanceNameDarkAqua",
     })
 
 
@@ -763,6 +782,75 @@ class TestAppKitGlassSurfaces:
         bridge.close()
         assert surface._view.removed is True
         assert bridge.available is False
+
+
+class TestNativeDarkAppearance:
+    """SL-36 eyeball follow-up: native surfaces must pin the dark Aqua
+    appearance at creation. Unpinned, NSGlassEffectView follows the default
+    light appearance and renders WHITE over the near-black scene (Alec's
+    screen captures: glass live, correct shape, wrong material). Every
+    native view the bridge adds pins dark so the bug class cannot recur."""
+
+    def setup_method(self):
+        import luvatrix_core.platform.macos.native_controls as mac_native
+
+        self._mac = mac_native
+        self._patchers = []
+        mac_native._GLASS_EFFECT_VIEW_CLASS = None
+        # The fake AppKit/objc environment simulates a macOS 26 host — the
+        # resolver's version gate must see it as one.
+        from unittest.mock import patch
+
+        version = patch.object(self._mac, "_macos_major_version", lambda: 26)
+        version.start()
+        self._patchers.append(version)
+
+    def teardown_method(self):
+        for patcher in self._patchers:
+            patcher.stop()
+        self._mac._GLASS_EFFECT_VIEW_CLASS = None
+        unregister_native_control_bridge()
+
+    def _bridge(self, *, with_glass: bool, with_webkit: bool = False):
+        from unittest.mock import patch
+
+        handle = _FakeWindowHandle()
+        modules = {
+            "AppKit": _fake_appkit_module(),
+            "objc": _fake_objc_module(with_glass=with_glass),
+            "Foundation": _fake_foundation_module(),
+        }
+        if with_webkit:
+            modules["WebKit"] = type("WebKit", (), {"WKWebView": _FakeWKWebView})
+        patcher = patch.dict("sys.modules", modules)
+        patcher.start()
+        self._patchers.append(patcher)
+        bridge = self._mac.AppKitNativeControlBridge(handle)
+        return bridge, handle
+
+    def test_glass_effect_view_pins_dark_appearance(self):
+        bridge, _ = self._bridge(with_glass=True)
+        surface = bridge.create_glass_surface(x=0, y=704, width=1280, height=96,
+                                              corner_radius=0.0, style="regular")
+        appearance = surface._view.appearance
+        assert appearance is not None
+        assert appearance.name == "NSAppearanceNameDarkAqua"
+
+    def test_visual_effect_fallback_pins_dark_appearance(self):
+        bridge, _ = self._bridge(with_glass=False)
+        surface = bridge.create_glass_surface(x=0, y=0, width=240, height=800,
+                                              corner_radius=0.0, style="sidebar")
+        assert isinstance(surface._view, _FakeVisualEffectView)
+        appearance = surface._view.appearance
+        assert appearance is not None
+        assert appearance.name == "NSAppearanceNameDarkAqua"
+
+    def test_oauth_web_view_pins_dark_appearance(self):
+        bridge, _ = self._bridge(with_glass=True, with_webkit=True)
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800)
+        appearance = view.ns_web_view.appearance
+        assert appearance is not None
+        assert appearance.name == "NSAppearanceNameDarkAqua"
 
 
 class TestGlassEffectResolverGate:

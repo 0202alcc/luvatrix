@@ -251,5 +251,52 @@ class TestRenderHostInstall(unittest.TestCase):
         assert capable.under_glass_capable is True
 
 
+class _FakeAppearanceWindow:
+    def __init__(self) -> None:
+        self.appearance = None
+
+    def setAppearance_(self, appearance):
+        self.appearance = appearance
+
+
+class _FakeWSAppearance:
+    """Mirrors AppKit: appearanceNamed: returns nil for unknown names."""
+
+    def __init__(self, name) -> None:
+        self.name = name
+
+    @classmethod
+    def appearanceNamed_(cls, name):
+        if name == "NSAppearanceNameDarkAqua":
+            return cls(name)
+        return None
+
+
+class TestWindowDarkAppearance(unittest.TestCase):
+    """SL-36 eyeball follow-up: the window itself pins dark Aqua so EVERY
+    native descendant — glass plates, web views, buttons, fields, popovers —
+    inherits the dark material instead of the default light appearance that
+    rendered the pill glass white over the near-black scene."""
+
+    def _ns(self):
+        return {
+            "NSAppearance": _FakeWSAppearance,
+            "NSAppearanceNameDarkAqua": "NSAppearanceNameDarkAqua",
+        }
+
+    def test_window_pins_dark_appearance(self):
+        window = _FakeAppearanceWindow()
+        window_system._pin_window_appearance(window, self._ns())
+        assert window.appearance is not None
+        assert window.appearance.name == "NSAppearanceNameDarkAqua"
+
+    def test_missing_appearance_class_is_tolerated(self):
+        # A stripped-down AppKit must not break window creation — the pin is
+        # best-effort and the scene renders identically without it.
+        window = _FakeAppearanceWindow()
+        window_system._pin_window_appearance(window, {})
+        assert window.appearance is None
+
+
 if __name__ == "__main__":
     unittest.main()
