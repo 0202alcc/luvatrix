@@ -99,8 +99,9 @@ class TestInMemoryBridge:
 
     def test_send_rejects_unknown_verbs(self):
         bridge = pb.InMemoryPlaybackBridge()
+        bridge.start()
         with pytest.raises(ValueError):
-            bridge.send("rm_rf", {})
+            bridge.send("rm_rf")
 
     def test_injected_events_drain_in_order_then_empty(self):
         bridge = pb.InMemoryPlaybackBridge()
