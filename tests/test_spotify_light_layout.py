@@ -1116,3 +1116,192 @@ class TestPillTitleInterior:
         hint = [n for n in _nodes(buf, TextNode) if n.text.startswith("Pick a device")]
         assert nothing and (nothing[0].x, nothing[0].y) == (px + 124, py + 24)
         assert hint and hint[0].y == py + 24 + 19
+
+
+# ---------------------------------------------------------------------------
+# Round 38 (Alec, SL-23): the plate grows right until the play button is
+# its geometric center (PILL_W 520 → 572, right edge pinned); the transport
+# centers on the PILL so centering holds by construction at any width;
+# nav_more's persisted entry becomes a RELATIONSHIP (multi-axis align +
+# keep="size") riding the pill's left edge at 12pt — retiring the last
+# window-anchor form.
+# ---------------------------------------------------------------------------
+
+class TestAlignKeepSizeAndMultiAxis:
+    """SL-23 extend the round-37 align rule in two ways: keep="size" turns
+    an edge rule into a POSITION move (the named edge meets the reference
+    line, the extent holds) instead of an extent change, and an align spec
+    may carry up to two rules — one per axis — so a component can ride a
+    reference in x and y at once."""
+
+    def test_keep_size_moves_the_edge_without_resizing(self):
+        ov = sl_layout.LayoutOverrides()
+        ov.set("pill.art", {"align": {
+            "edge": "right", "to": "pill.title", "ref_edge": "left",
+            "offset": -6, "keep": "size"}})
+        nats = _interior_naturals()
+        got = ov.resolve("pill.art", nats["pill.art"], width=520, height=108,
+                         naturals=nats)
+        assert got == (20.0, 12.0, 84.0, 84.0), \
+            "right edge at 110 - 6 = 104, size held → x = 104 - 84; default would grow (12, 92)"
+
+    def test_two_axis_rules_resolve_both_axes(self):
+        ov = sl_layout.LayoutOverrides()
+        ov.set("pill.art", {"align": [
+            {"edge": "right", "to": "pill", "ref_edge": "right",
+             "offset": -12, "keep": "size"},
+            {"edge": "center_y", "to": "pill", "ref_edge": "center_y"},
+        ]})
+        nats = _interior_naturals()
+        got = ov.resolve("pill.art", nats["pill.art"], width=520, height=108,
+                         naturals=nats)
+        assert got == (520.0 - 12 - 84, 54.0 - 42, 84.0, 84.0)
+
+    def test_two_rules_on_the_same_axis_are_rejected(self):
+        ov = sl_layout.LayoutOverrides()
+        with pytest.raises(sl_layout.LayoutError):
+            ov.set("pill.art", {"align": [
+                {"edge": "left", "to": "pill.title"},
+                {"edge": "right", "to": "pill.title"},
+            ]})
+        with pytest.raises(sl_layout.LayoutError):
+            ov.set("pill.art", {"align": [
+                {"edge": "left", "to": "pill.title"},
+                {"edge": "center_x", "to": "pill.title"},
+            ]})
+        with pytest.raises(sl_layout.LayoutError):
+            ov.set("pill.art", {"align": []})
+        assert len(ov) == 0
+
+    def test_keep_is_only_meaningful_on_edge_rules(self):
+        ov = sl_layout.LayoutOverrides()
+        with pytest.raises(sl_layout.LayoutError):
+            ov.set("pill.art", {"align": {
+                "edge": "center_x", "to": "pill.title", "keep": "size"}})
+        with pytest.raises(sl_layout.LayoutError):
+            ov.set("pill.art", {"align": {
+                "edge": "left", "to": "pill.title", "keep": "banana"}})
+        assert len(ov) == 0
+
+    def test_multi_axis_cycles_are_rejected(self):
+        ov = sl_layout.LayoutOverrides()
+        ov.set("pill.art", {"align": [
+            {"edge": "right", "to": "pill.transport", "keep": "size"},
+            {"edge": "center_y", "to": "pill.transport"},
+        ]})
+        with pytest.raises(sl_layout.LayoutError) as exc:
+            ov.set("pill.transport", {"align": {"edge": "left", "to": "pill.art"}})
+        assert "cycle" in str(exc.value)
+
+    def test_layout_align_tool_upserts_one_rule_per_axis(self, app_ctx):
+        """Each call pins one edge; a second call on the OTHER axis adds to
+        the relationship instead of replacing it. Same-axis re-calls
+        replace their rule."""
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        r1 = app.mcp_call("layout_align", {
+            "id": "nav_more", "edge": "right", "to": "pill",
+            "ref_edge": "left", "offset": -12, "keep": "size"})
+        assert r1["rect"] == [636.0, 730.0, 44.0, 44.0], \
+            "x rides the pill's left edge; y untouched until a y rule exists"
+        r2 = app.mcp_call("layout_align", {
+            "id": "nav_more", "edge": "center_y", "to": "pill",
+            "ref_edge": "center_y"})
+        assert r2["rect"] == [636.0, 48.0, 44.0, 44.0], \
+            "the SL-23 target: 12pt left of the pill, pill-centered"
+        spec = app.layout_overrides.specs()["nav_more"]["align"]
+        assert isinstance(spec, list) and len(spec) == 2, \
+            "two axis rules persist as one relationship"
+        r3 = app.mcp_call("layout_align", {
+            "id": "nav_more", "edge": "right", "to": "pill",
+            "ref_edge": "left", "offset": -20, "keep": "size"})
+        assert r3["rect"][0] == 692.0 - 20 - 44, "the same-axis rule replaced, not stacked"
+        assert len(app.layout_overrides.specs()["nav_more"]["align"]) == 2
+
+    def test_multi_axis_persists_as_an_array_of_tables(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        app.mcp_call("layout_align", {
+            "id": "nav_more", "edge": "right", "to": "pill",
+            "ref_edge": "left", "offset": -12, "keep": "size"})
+        app.mcp_call("layout_align", {
+            "id": "nav_more", "edge": "center_y", "to": "pill", "ref_edge": "center_y"})
+        text = sl_layout.default_path().read_text()
+        assert text.count('[["nav_more".align]]') == 2, \
+            "each axis rule is one array-of-tables entry"
+        assert 'keep = "size"' in text
+        app.init(ctx)  # reboot: the relationship reloads
+        _with_track(app, ctx)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        assert (overflow.x, overflow.y) == (636.0, 48.0)
+
+
+class TestPlayCenteredPillGeometry:
+    """The SL-23 plate: PILL_W = 2 × 286 (the transport center on the
+    round-32 plate: column-left 110 + half the SL-21 strip 176), right edge
+    pinned at PILL_FLOAT, so all growth lands leftward; the transport
+    centers on the PILL — play == plate center by construction."""
+
+    def test_pill_rect_is_572_wide_right_edge_pinned(self):
+        assert sl_views.PILL_W == 572.0
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        assert (px, py, pw, ph) == (692.0, 16.0, 572.0, 108.0)
+        assert px + pw == 1280.0 - sl_views.PILL_FLOAT, "right edge pinned"
+        for w in (1100.0, 940.0):
+            px2, _, pw2, _ = sl_views.pill_rect(w, 800)
+            assert pw2 == 572.0 and px2 + pw2 == w - sl_views.PILL_FLOAT
+
+    def test_transport_centers_on_the_pill_not_the_column(self):
+        tx, ty, tw, th = sl_views.pill_transport_local(572.0, 108.0)
+        assert (tx + tw / 2, ty + th / 2) == (286.0, 87.0), \
+            "the play button sits at the plate's geometric center"
+        tx2, _, tw2, _ = sl_views.pill_transport_local(400.0, 108.0)
+        assert tx2 + tw2 / 2 == 200.0, "centering holds at any pill width"
+
+    def test_shipped_nav_more_is_a_relationship_riding_the_pill(self):
+        """The last window-anchor form retires: nav_more persists as TWO
+        align rules (right → pill.left −12 keep-size, center_y →
+        pill.center_y) and resolves to (636, 48, 44, 44) at 1280x800."""
+        import tomllib
+        data = tomllib.loads(Path(sl_layout.APP_LAYOUT_FILE).read_text())
+        rules = data["nav_more"]["align"]
+        assert isinstance(rules, list) and len(rules) == 2
+        by_edge = {rule["edge"]: rule for rule in rules}
+        assert by_edge["right"] == {"edge": "right", "to": "pill",
+                                    "ref_edge": "left", "offset": -12.0, "keep": "size"}
+        assert by_edge["center_y"] == {"edge": "center_y", "to": "pill",
+                                       "ref_edge": "center_y", "offset": 0.0}
+        ov = sl_layout.LayoutOverrides()
+        for cid, spec in data.items():
+            ov.set(cid, spec)
+        nats = sl_views.window_naturals(1280.0, 800.0)
+        rect = ov.resolve("nav_more", nats["nav_more"], width=1280, height=800,
+                          naturals=nats)
+        assert rect == (636.0, 48.0, 44.0, 44.0)
+        pill = sl_views.pill_rect(1280, 800)
+        assert pill[0] - (rect[0] + rect[2]) == 12.0, "12pt left of the pill"
+        assert rect[1] + rect[3] / 2 == pill[1] + pill[3] / 2, "vertically centered"
+
+    def test_nav_more_relationship_rides_window_resizes(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)  # shipped entry is active from the fixture's file copy
+        for w in (1280.0, 1100.0, 940.0):
+            ctx.logical_width_px = w
+            app.invalidate()
+            _tick(app, ctx, 2)
+            px, _, _, _ = sl_views.pill_rect(w, 800)
+            overflow = next(r for r in app._hits if r.action == "open_devices")
+            assert (overflow.x, overflow.y) == (px - 12 - 44, 48.0), \
+                f"the circle rides the pill's left edge at width {w}"
+
+    def test_a_degenerate_one_point_circle_never_crashes(self, app_ctx):
+        """Probe-found bug (round 38): an override collapsing nav_more to
+        1pt crashed the glass plate draw (radius-derived rects went
+        non-positive). Degenerate geometry must render, not raise."""
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        app.mcp_call("layout_set", {
+            "id": "nav_more", "rect": {"x": 1200, "y": 730, "width": 1, "height": 1}})
+        _tick(app, ctx, 2)  # must not raise
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        assert (overflow.x, overflow.y) == (1200.0, 730.0)

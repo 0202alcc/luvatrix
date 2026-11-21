@@ -4289,3 +4289,77 @@ class TestOverflowPersistsLeftOfPill:
         _tick(app, ctx, 2)
         overflow = next(r for r in app._hits if r.action == "open_devices")
         assert (overflow.x, overflow.y) == (600.0, 300.0)
+
+
+# ---------------------------------------------------------------------------
+# Round 38 (Alec, SL-23): the plate grows to 2 x 286 (right edge pinned) so
+# the play button IS the pill's geometric center; empty space after "next"
+# mirrors the left half; nav_more rides the pill's left edge at 12pt.
+# ---------------------------------------------------------------------------
+
+class TestPlayButtonIsPillCenter:
+    """Alec: 'left half and right half relative to the play button even.'"""
+
+    def _hit_center(self, app, action):
+        hit = next(r for r in app._hits if r.action == action)
+        return hit.x + hit.width / 2, hit.y + hit.height / 2
+
+    def test_play_center_is_the_pill_center_at_several_widths(self, app_ctx):
+        app, ctx, buf = app_ctx
+        with _playing(app, ctx):
+            for w in (1280.0, 1100.0, 940.0):
+                ctx.logical_width_px = w
+                app.invalidate()
+                tick(app, ctx, 2)
+                px, py, pw, ph = sl_views.pill_rect(w, 800)
+                cx, cy = self._hit_center(app, "toggle_play")
+                assert cx == pytest.approx(px + pw / 2, abs=1e-6), \
+                    f"play centered at width {w}"
+                assert cy == pytest.approx(py + ph / 2, abs=1e-6)
+                prev_cx, _ = self._hit_center(app, "prev_track")
+                next_cx, _ = self._hit_center(app, "next_track")
+                assert (prev_cx + next_cx) / 2 == pytest.approx(px + pw / 2, abs=1e-6), \
+                    "the whole transport is symmetric about the plate center"
+
+    def test_the_right_half_after_next_is_empty(self, app_ctx):
+        app, ctx, buf = app_ctx
+        with _playing(app, ctx):
+            tick(app, ctx, 2)
+            px, py, pw, ph = sl_views.pill_rect(1280, 800)
+            nxt = next(r for r in app._hits if r.action == "next_track")
+            right_margin = px + pw
+            assert right_margin - (nxt.x + nxt.width) >= 60.0, \
+                "the space after 'next' mirrors the left half"
+            for hit in app._hits:
+                if hit is nxt or hit.action == "seek":
+                    continue
+                row_overlap = hit.y < py + ph and hit.y + hit.height > py + 60
+                assert not (row_overlap and hit.x > nxt.x + nxt.width and hit.x < right_margin), \
+                    f"{hit.action} sits in the mirrored empty half"
+            for node in walk(buf.root):
+                if isinstance(node, TextNode):
+                    node_cy = node.y + node.height / 2
+                    if py + 60 < node_cy < py + ph:  # transport row
+                        assert node.x + node.width / 2 < nxt.x + nxt.width, \
+                            f"text {node.text!r} leaks into the right half"
+
+    def test_pill_growth_lands_on_the_left_edge_only(self, app_ctx):
+        app, ctx, buf = app_ctx
+        with _playing(app, ctx):
+            tick(app, ctx, 2)
+            px, _, pw, _ = sl_views.pill_rect(1280, 800)
+            assert pw == 572.0 and px + pw == 1280.0 - 16.0
+            seek = next(r for r in app._hits if r.action == "seek")
+            assert seek.x == pytest.approx(px + 110.0), \
+                "the SL-21 text-column alignment still holds on the new plate"
+            assert seek.width == pytest.approx(572.0 - 110.0 - 68.0), \
+                "the strip rides pill.title's right edge (394 on the 572 plate)"
+
+    def test_nav_more_gap_is_12pt_and_rides(self, app_ctx):
+        app, ctx, buf = app_ctx
+        with _playing(app, ctx):
+            tick(app, ctx, 2)
+            pill = next(r for r in app._hits if r.action == "toggle_pill")
+            overflow = next(r for r in app._hits if r.action == "open_devices")
+            assert pill.x - (overflow.x + overflow.width) == pytest.approx(12.0)
+            assert (overflow.x, overflow.y) == (636.0, 48.0)
