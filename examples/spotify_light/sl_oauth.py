@@ -23,13 +23,16 @@ REDIRECT_PATH = "/callback"
 REFRESH_SKEW_SECS = 60
 DEFAULT_EXPIRES_IN_SECS = 3600
 
+# user-read-playback-queue is deliberately absent: Spotify rejects it at
+# authorize time for this client id (invalid_scope), so requesting it bounces
+# every fresh auth. The queue-head fetch is gated on the granted scope
+# instead (see app_main._job_poll_player).
 _SCOPES = (
     "user-read-private",
     "user-read-email",
     "user-read-playback-state",
     "user-modify-playback-state",
     "user-read-currently-playing",
-    "user-read-playback-queue",
     "playlist-read-private",
     "playlist-read-collaborative",
     "user-library-read",
