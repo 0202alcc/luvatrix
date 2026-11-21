@@ -31,6 +31,7 @@ from luvatrix.app import (
 
 import sl_api
 import sl_art
+import sl_layout
 import sl_models
 import sl_oauth
 import sl_store
@@ -160,6 +161,10 @@ class SpotifyLightApp(App):
         self.content_scroll = 0.0
         self.sidebar_scroll = 0.0
         self._content_height = 0.0
+
+        # Live layout overrides (MCP, round 31): created in setup(), so every
+        # boot starts clean — session-scoped by construction, no persistence.
+        self.layout_overrides = sl_layout.LayoutOverrides()
 
         # Bookkeeping.
         self.now_monotonic = time.monotonic()
@@ -1245,6 +1250,52 @@ class SpotifyLightApp(App):
                 "description": "Save the current Client ID draft (same as pressing Enter in the field).",
                 "inputSchema": {"type": "object", "properties": {}},
             },
+            {
+                "name": "layout_set",
+                "description": (
+                    "Move a chrome component on the running app. Pass 'id' plus exactly one "
+                    "shape: 'rect' ({x, y, width, height}) or 'anchor' (top-left/top-right/"
+                    "bottom-left/bottom-right/center) with dx/dy offsets and optional "
+                    "width/height. Anchor offsets measure inward from that window corner; "
+                    "right/bottom anchors re-resolve when the window resizes. Rects clamp "
+                    "into the window. Session-scoped: overrides die with the app. Valid ids: "
+                    "pill, nav_home, nav_search, nav_more, sidebar."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "anchor": {"type": "string"},
+                        "dx": {"type": "number"},
+                        "dy": {"type": "number"},
+                        "width": {"type": "number"},
+                        "height": {"type": "number"},
+                        "rect": {"type": "object"},
+                    },
+                    "required": ["id"],
+                },
+            },
+            {
+                "name": "layout_list",
+                "description": "List the valid layout ids and every active override with its resolved rect.",
+                "inputSchema": {"type": "object", "properties": {}},
+            },
+            {
+                "name": "layout_clear",
+                "description": "Clear one override ('id') or, with no id, all of them; returns the cleared ids.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"id": {"type": "string"}},
+                },
+            },
+            {
+                "name": "layout_export",
+                "description": (
+                    "Dump the current overrides as JSON (specs + rects resolved at the "
+                    "current window size) for transcribing into the layout constants."
+                ),
+                "inputSchema": {"type": "object", "properties": {}},
+            },
         ]
 
     def mcp_call(self, name: str, arguments: dict) -> dict:
@@ -1264,7 +1315,57 @@ class SpotifyLightApp(App):
         if name == "sl_submit_client_id":
             self._dispatch_action("save_client_id", None, 0.0)
             return {"client_id_configured": bool(self.client_id)}
+        if name == "layout_set":
+            args = dict(arguments or {})
+            cid = sl_layout._check_id(args.get("id"))
+            stored = self.layout_overrides.set(cid, args)
+            self.invalidate()
+            width, height = self._window_size()
+            natural = self._layout_naturals(width, height)[cid]
+            return {"id": cid, "spec": stored,
+                    "rect": list(self.layout_overrides.resolve(cid, natural,
+                                                               width=width, height=height))}
+        if name == "layout_list":
+            width, height = self._window_size()
+            naturals = self._layout_naturals(width, height)
+            return {
+                "valid_ids": list(sl_layout.COMPONENT_IDS),
+                "overrides": [
+                    {"id": cid, "spec": spec,
+                     "rect": list(self.layout_overrides.resolve(cid, naturals[cid],
+                                                                width=width, height=height))}
+                    for cid, spec in sorted(self.layout_overrides.specs().items())
+                ],
+            }
+        if name == "layout_clear":
+            cleared = self.layout_overrides.clear((arguments or {}).get("id"))
+            if cleared:
+                self.invalidate()
+            return {"cleared": cleared}
+        if name == "layout_export":
+            width, height = self._window_size()
+            return self.layout_overrides.export(width=width, height=height,
+                                                naturals=self._layout_naturals(width, height))
         raise KeyError(name)
+
+    def _window_size(self) -> tuple[float, float]:
+        return float(self.ctx.display_width_px), float(self.ctx.display_height_px)
+
+    def _layout_naturals(self, width: float, height: float) -> dict:
+        """Natural chrome rects at a window size — the layout the overrides sit on top of."""
+        dpx, dpy, dpw, dph = sl_views.dock_cluster_rect(width, height)
+        dock_cy = dpy + dph / 2
+        radius, gap, oradius = sl_views.NAV_CIRCLE_R, sl_views.NAV_CIRCLE_GAP, sl_views.OVERFLOW_R
+        return {
+            "pill": sl_views.pill_rect(width, height),
+            "nav_home": (dpx - gap - 2 * radius, dock_cy - radius, 2 * radius, 2 * radius),
+            "nav_search": (dpx + dpw + gap, dock_cy - radius, 2 * radius, 2 * radius),
+            "nav_more": (width - sl_views.PILL_FLOAT - 2 * oradius, dock_cy - oradius,
+                         2 * oradius, 2 * oradius),
+            "sidebar": (sl_views.SIDEBAR_GLASS_MARGIN, sl_views.SIDEBAR_GLASS_MARGIN,
+                        sl_views.SIDEBAR_W - sl_views.SIDEBAR_GLASS_MARGIN * 2,
+                        height - sl_views.SIDEBAR_GLASS_MARGIN * 2),
+        }
 
     # -- app loop ---------------------------------------------------------------------
 
