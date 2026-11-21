@@ -1472,11 +1472,11 @@ class TestProgressAlignsWithText:
     """Round 37 (Alec, SL-21 on the SL-22 tool): the progress strip's left
     edge aligns with the title text column, baked via layout_align as a
     persisted RELATIONSHIP in the shipped layout.toml — not resolved pixels.
-    At 1280x800 on the round-38 plate the strip sits at pill-local
-    (110, 59, 404, 3): left edge on the text column's left, right edge
-    holding 514 (its natural right, 40pt inside the column pad). The time
-    labels moved above the strip's ends, so the widened strip never paints
-    them over the art tile."""
+    At 1280x800 on the round-39 plate the strip sits at pill-local
+    (110, 59, 352, 3): left edge on the text column's left, right edge
+    mirrored about the play button at 462 (SL-24). The time labels moved
+    above the strip's ends, so the widened strip never paints them over
+    the art tile."""
 
     def _playing(self, app, ctx):
         app.authenticated = True
@@ -1502,10 +1502,10 @@ class TestProgressAlignsWithText:
         assert title and seek
         assert seek[0].x == title[0].x == px + 110.0, \
             "strip left == text column left — the SL-21 alignment"
-        assert seek[0].w == 404.0 and seek[0].x + seek[0].w == px + 514.0, \
-            "the right edge holds at 514 (natural right on the 572 plate)"
+        assert seek[0].w == 352.0 and seek[0].x + seek[0].w == px + 462.0, \
+            "the right edge mirrors the left about the play center (SL-24)"
         strip = self._strip(scene_buffer)
-        assert (strip.x, strip.y, strip.width) == (px + 110.0, py + 59.0, 404.0)
+        assert (strip.x, strip.y, strip.width) == (px + 110.0, py + 59.0, 352.0)
 
     def test_the_alignment_holds_idle(self, app_ctx):
         """The strip geometry is identical with or without a track (the
@@ -1515,7 +1515,7 @@ class TestProgressAlignsWithText:
         _tick(app, ctx, 2)
         px, py, _, _ = sl_views.pill_rect(1280, 800)
         strip = self._strip(scene_buffer)
-        assert (strip.x, strip.y, strip.width) == (px + 110.0, py + 59.0, 404.0)
+        assert (strip.x, strip.y, strip.width) == (px + 110.0, py + 59.0, 352.0)
 
     def test_time_labels_sit_above_the_strip_clear_of_the_art(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
@@ -1532,7 +1532,7 @@ class TestProgressAlignsWithText:
         assert elapsed[0].y == py + 59.0 - 11, "the labels float above the strip"
         dur_w = ctx.measure_text("4:17", font_size_px=9.0,
                                  font_family=sl_views.FONT_FAMILY)
-        assert duration and duration[0].x == pytest.approx(px + 514.0 - dur_w), \
+        assert duration and duration[0].x == pytest.approx(px + 462.0 - dur_w), \
             "the duration's right edge meets the strip's right end"
         assert duration[0].y == py + 59.0 - 11
 
@@ -4363,8 +4363,8 @@ class TestPlayButtonIsPillCenter:
         seek = next(r for r in app._hits if r.action == "seek_bar")
         assert seek.x == pytest.approx(px + 110.0), \
             "the SL-21 text-column alignment still holds on the new plate"
-        assert seek.w == pytest.approx(404.0), \
-            "left edge pinned to the column, natural right edge held (404 on the 572 plate)"
+        assert seek.w == pytest.approx(352.0), \
+            "SL-24: mirrored about the transport center — bar and transport share one axis"
 
     def test_nav_more_gap_is_12pt_and_rides(self, app_ctx):
         app, ctx, buf = app_ctx
@@ -4373,3 +4373,68 @@ class TestPlayButtonIsPillCenter:
         overflow = next(r for r in app._hits if r.action == "open_devices")
         assert px - (overflow.x + overflow.w) == pytest.approx(12.0)
         assert (overflow.x, overflow.y) == (636.0, 48.0)
+
+
+# ---------------------------------------------------------------------------
+# Round 39 (Alec, SL-24): "not the pill, i meant the now playing bar." The
+# halves-even rule applies to the PROGRESS BAR relative to the play button:
+# strip center x == transport center x (286 pill-local on the SL-23 plate),
+# while the SL-21 left-align relationship (strip.left = pill.title.left)
+# stays. The strip's NATURAL now derives exactly that: left edge on the
+# column, right edge mirrored about the transport center — (110, 59, 352,
+# 3), right edge 462, at any window width. Bar and transport share one axis.
+# ---------------------------------------------------------------------------
+
+class TestProgressBarCentersOnPlay:
+
+    @staticmethod
+    def _playing(app, ctx):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500, track=track,
+                                           device=None, shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        _tick(app, ctx, 2)
+
+    def test_strip_center_equals_play_center_at_several_widths(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        for w in (1280.0, 1100.0, 940.0, 800.0):
+            ctx.logical_width_px = w
+            app.invalidate()
+            _tick(app, ctx, 2)
+            seek = next(r for r in app._hits if r.action == "seek_bar")
+            play = next(r for r in app._hits if r.action == "toggle_play")
+            assert seek.x + seek.w / 2 == pytest.approx(play.x + play.w / 2, abs=1e-6), \
+                f"bar not centered on the play button at width {w}"
+
+    def test_left_edge_still_meets_the_title_text(self, app_ctx):
+        """SL-21 holds: the widening is symmetric, the left edge stays glued
+        to the text column — the relationship is a no-op on the new natural
+        but still guards a title move."""
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        px, _, _, _ = sl_views.pill_rect(1280, 800)
+        title = [n for n in _nodes(scene_buffer, TextNode) if n.text == "Lithium"]
+        seek = next(r for r in app._hits if r.action == "seek_bar")
+        assert title and seek.x == title[0].x == px + 110.0
+
+    def test_the_round_37_numbers_return_on_the_new_plate(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        seek = next(r for r in app._hits if r.action == "seek_bar")
+        assert (seek.x, seek.w) == (px + 110.0, 352.0)
+        assert seek.x + seek.w == px + 462.0, "2 x 286 - 110 — mirrored about the play center"
+
+    def test_the_centering_holds_idle(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        px, _, pw, _ = sl_views.pill_rect(1280, 800)
+        strips = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                  if n.color_rgba == (70, 70, 70, 255) and n.height == 3]
+        assert len(strips) == 1
+        assert strips[0].x + strips[0].width / 2 == px + pw / 2, \
+            "idle bar centered too — the geometry is state-invariant"
