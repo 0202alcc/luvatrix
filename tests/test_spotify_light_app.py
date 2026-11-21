@@ -1139,12 +1139,13 @@ class TestFloatingPill:
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         # Round 30 (Alec): the pill left the bottom dock for the window's
         # TOP-RIGHT corner — right edge pinned at width - PILL_FLOAT, top at
-        # the same 16pt float margin the dock used.
-        assert (px, py, pw, ph) == (804.0, 16.0, 460.0, 64.0)
+        # the same 16pt float margin the dock used; round 32: 108pt tall, so
+        # the right-edge anchor grows the capsule leftward (744 = 1280-16-520).
+        assert (px, py, pw, ph) == (744.0, 16.0, 520.0, 108.0)
         rrects = _nodes(scene_buffer, RoundedRectNode)
         rings = [n for n in rrects
                  if n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
-                 and n.width == pw and n.height == ph and n.radius == 32.0]
+                 and n.width == pw and n.height == ph and n.radius == 54.0]
         assert len(rings) == 1, "pill must be one centered capsule glass plate"
         # The full-width bar is gone: nothing spans the window at the bottom.
         assert [n for n in rrects if n.width == 1280] == []
@@ -1162,7 +1163,7 @@ class TestFloatingPill:
         assert "||" not in texts, "pause is drawn bars, not text pipes"
         assert any(t in ("0:30", "0:31") for t in texts), "elapsed time stays in the pill"
         art = [n for n in _nodes(scene_buffer, CpuLayerNode)
-               if n.x == px + 10 and n.y == py + 10 and n.width == 44]
+               if n.x == px + 12 and n.y == py + 12 and n.width == 84]
         assert len(art) == 1, "album art thumb sits at the pill's left"
         hits = {(r.action, r.payload if isinstance(r.payload, str) else None): r
                 for r in app._hits}
@@ -1250,19 +1251,20 @@ class TestFloatingPill:
 
         px, py, _, _ = sl_views.pill_rect(1280, 800)
         thumb_layers = [n for n in _nodes(scene_buffer, CpuLayerNode)
-                        if n.x == px + 10 and n.y == py + 10]
+                        if n.x == px + 12 and n.y == py + 12]
         assert not thumb_layers, \
             "the empty pill must not render a hash-colored placeholder tile"
         notes = [n for n in _nodes(scene_buffer, TextNode) if n.text == sl_icons.NOTE]
         assert notes, "the empty thumb shows a calm note glyph"
         note = notes[0]
-        cx, cy = px + 10 + 22, py + 10 + 22
-        assert abs(note.x - cx) < 12 and abs(note.y - cy) < 14, \
+        cx, cy = px + 12 + 42, py + 12 + 42
+        assert abs(note.x - cx) < 20 and abs(note.y - cy) < 22, \
             f"note glyph should sit at the thumb's center, got ({note.x}, {note.y})"
 
     @staticmethod
     def _meta_budget(pw: float) -> float:
-        return pw - 64 - sl_views.PILL_META_RIGHT_PAD
+        col_x, col_w, _ = sl_views.pill_column(pw, sl_views.PILL_H)
+        return col_w
 
     def test_idle_hint_shows_the_full_sentence_at_design_width(self, app_ctx):
         """Round 18 (overnight live pass on `670b15c`): the idle pill subtext
@@ -1297,7 +1299,7 @@ class TestFloatingPill:
         assert width <= budget + 1e-6, \
             f"hint overflows the metadata budget: {width:.1f} > {budget:.1f}"
         assert hint.text.endswith("…"), "a cut hint should say so"
-        assert hint.x == px + 64
+        assert hint.x == px + 110
 
     def test_track_metadata_truncates_to_measured_width_not_char_count(self, app_ctx):
         """Same width-blindness in the playing state: 32 chars of a wide
@@ -1326,6 +1328,129 @@ class TestFloatingPill:
         assert width <= budget + 1e-6, \
             f"wide title overflows the metadata budget: {width:.1f} > {budget:.1f}"
         assert title.text.endswith("…")
+
+
+class TestBigPillTransportRow:
+    """Round 32 (Alec, pill-v2.png): the pill grows — taller capsule, album
+    tile scaled to match with the same inset idiom — and the transport row
+    leaves the pill's right side for a spot UNDER the progress bar. The
+    right column reads top-to-bottom: title/artist, bar with times, then
+    prev/play/next centered under the column. Idle and playing share one
+    geometry so nothing jumps when a track starts."""
+
+    def _playing(self, app, ctx):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500, track=track,
+                                           device=None, shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        _tick(app, ctx, 2)
+
+    @staticmethod
+    def _hit(app, action):
+        hits = [r for r in app._hits if r.action == action]
+        assert len(hits) == 1, f"expected exactly one {action} hit region"
+        return hits[0]
+
+    def test_pill_rect_grows_and_keeps_the_320_floor(self):
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        assert (pw, ph) == (520.0, 108.0), "the capsule scales up"
+        assert py == sl_views.PILL_FLOAT, "the top float margin is unchanged"
+        assert px + pw == 1280.0 - sl_views.PILL_FLOAT, \
+            "right edge pinned — the growth goes leftward"
+        _, _, pw_narrow, _ = sl_views.pill_rect(560.0, 800.0)
+        assert pw_narrow == sl_views.PILL_MIN_W == 320.0, "the 320pt floor still holds"
+        _, _, pw_mid, _ = sl_views.pill_rect(940.0, 800.0)
+        assert pw_mid == 520.0, "940pt still fits the design-width pill"
+
+    def test_art_tile_scales_up_with_the_pill(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        px, py, _, ph = sl_views.pill_rect(1280, 800)
+        art_size = ph - 24.0
+        art = [n for n in _nodes(scene_buffer, CpuLayerNode)
+               if n.x == px + 12 and n.y == py + 12 and n.width == art_size]
+        assert len(art) == 1, \
+            "the album tile grows with the pill height, same 12pt inset idiom"
+        rings = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                 if n.color_rgba == (255, 255, 255, 24)
+                 and n.x == px + 11 and n.y == py + 11 and n.width == art_size + 2]
+        assert len(rings) == 1, "the hairline ring hugs the bigger tile"
+
+    def test_metadata_column_starts_right_of_the_bigger_art(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        px, _, _, _ = sl_views.pill_rect(1280, 800)
+        title = [n for n in _nodes(scene_buffer, TextNode) if n.text == "Lithium"]
+        artist = [n for n in _nodes(scene_buffer, TextNode) if n.text == "Nirvana"]
+        assert title and artist
+        assert title[0].x == px + 110.0, \
+            "the text column starts right of the bigger tile + gap"
+        assert title[0].y < artist[0].y, "title over artist"
+        seek = self._hit(app, "seek_bar")
+        assert artist[0].y < seek.y, "the bar sits below the text rows"
+
+    def test_transport_row_sits_under_the_bar_centered_on_the_column(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        px, _, pw, _ = sl_views.pill_rect(1280, 800)
+        seek = self._hit(app, "seek_bar")
+        toggle = self._hit(app, "toggle_play")
+        prev = self._hit(app, "prev")
+        nxt = self._hit(app, "next")
+        assert toggle.y >= seek.y + seek.h, \
+            "the transport row lives strictly under the progress bar"
+        col_cx = px + 110.0 + (pw - 128.0) / 2
+        play_cx = toggle.x + toggle.w / 2
+        assert abs(play_cx - col_cx) < 1e-6, \
+            "play centers under the text/bar column"
+        assert prev.x + prev.w / 2 < play_cx < nxt.x + nxt.w / 2, \
+            "prev / play / next reading order"
+
+    def test_play_keeps_its_white_circle_and_hits_stay_generous(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        toggle = self._hit(app, "toggle_play")
+        cx, cy = toggle.x + toggle.w / 2, toggle.y + toggle.h / 2
+        discs = [n for n in _nodes(scene_buffer, CircleNode)
+                 if abs(n.cx - cx) < 1e-6 and abs(n.cy - cy) < 1e-6
+                 and n.fill_rgba[0] >= 225 and n.radius >= 16.0]
+        assert discs, "the white play disc keeps its prominence at the row center"
+        for action in ("prev", "next"):
+            r = self._hit(app, action)
+            assert r.w >= 34.0 and r.h >= 34.0, f"{action} hit shrank below today's 34pt"
+        assert toggle.w >= 36.0 and toggle.h >= 36.0, "the play hit grows with the disc"
+
+    def test_idle_and_playing_share_the_same_row_geometry(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        idle = {a: (self._hit(app, a).x, self._hit(app, a).y,
+                    self._hit(app, a).w, self._hit(app, a).h)
+                for a in ("seek_bar", "toggle_play", "prev", "next")}
+        strip_idle = [(n.x, n.y, n.width) for n in _nodes(scene_buffer, RoundedRectNode)
+                      if n.color_rgba == (70, 70, 70, 255) and n.height == 3]
+        self._playing(app, ctx)
+        playing = {a: (self._hit(app, a).x, self._hit(app, a).y,
+                       self._hit(app, a).w, self._hit(app, a).h)
+                   for a in ("seek_bar", "toggle_play", "prev", "next")}
+        strip_playing = [(n.x, n.y, n.width) for n in _nodes(scene_buffer, RoundedRectNode)
+                         if n.color_rgba == (70, 70, 70, 255) and n.height == 3]
+        assert idle == playing, "the bar and transport row must not jump between states"
+        assert strip_idle == strip_playing, "the strip itself holds still too"
+
+    def test_times_appear_only_with_a_track_but_the_bar_is_always_there(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        texts = _texts(scene_buffer)
+        assert "Nothing playing" in texts
+        assert not any(t[:1].isdigit() and ":" in t and len(t) <= 5 for t in texts), \
+            "idle shows no time labels"
+        strips = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                  if n.color_rgba == (70, 70, 70, 255) and n.height == 3]
+        assert strips, "the idle pill still shows the (empty) bar"
 
 
 class TestDockScrim:
@@ -1525,12 +1650,12 @@ class TestGlassSurfaces:
                    and n.color_rgba == sl_views.GLASS_BORDER for n in rrects), \
             "sidebar needs its scene-drawn glass rail"
         # Round 8: the full-width bar is a centered floating capsule — its
-        # border ring is a rounded rect at the pill rect, radius 32, with the
+        # border ring is a rounded rect at the pill rect, radius ph/2, with the
         # glass specular highlight just inside its top edge and a soft shadow.
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         rrects = _nodes(scene_buffer, RoundedRectNode)
         assert any(n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
-                   and n.width == pw and n.height == ph and n.radius == 32.0
+                   and n.width == pw and n.height == ph and n.radius == ph / 2
                    for n in rrects), "player pill needs its capsule border ring"
         assert any(n.color_rgba == sl_views.GLASS_HIGHLIGHT and n.y == py + 1
                    and px < n.x < px + pw and n.height == 1 for n in rects), \
@@ -2481,15 +2606,17 @@ class TestDockIconCentering:
     def test_idle_note_icon_centers_on_its_tile(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
         img, _ = self._render_idle_dock(app, ctx, scene_buffer)
-        px, py, _, _ = sl_views.pill_rect(1280, 800)
-        tile_c = (px + 10 + 22, py + 10 + 22)
+        px, py, _, ph = sl_views.pill_rect(1280, 800)
+        art = ph - 2 * sl_views.PILL_ART_INSET
+        tile_c = (px + sl_views.PILL_ART_INSET + art / 2,
+                  py + sl_views.PILL_ART_INSET + art / 2)
         # The note carries an intentional upward optical bias (round 28: it
         # read ~2px low): its centroid pin targets the biased placement,
-        # not the geometric tile centre.
+        # not the geometric tile centre. The glyph is 36pt on the 84pt tile.
         _bias_x, bias_y = sl_views._ICON_OPTICAL_BIAS_EM[sl_icons.NOTE]
-        target = (tile_c[0], tile_c[1] + bias_y * 20)
-        self._assert_centered(img, (int(tile_c[0]) - 14, int(tile_c[1]) - 14,
-                                    int(tile_c[0]) + 14, int(tile_c[1]) + 14),
+        target = (tile_c[0], tile_c[1] + bias_y * 36)
+        self._assert_centered(img, (int(tile_c[0]) - 25, int(tile_c[1]) - 25,
+                                    int(tile_c[0]) + 25, int(tile_c[1]) + 25),
                               self._bright, target, "idle note")
 
     def test_card_play_fab_uses_the_fill_icon(self, app_ctx):
@@ -2757,7 +2884,7 @@ class TestPopupPlateSwallow:
 # ---------------------------------------------------------------------------
 
 class TestOverflowClickSequence:
-    CIRCLE = (1242.0, 752.0)  # overflow circle centre at 1280x800
+    CIRCLE = (1242.0, 730.0)  # overflow circle centre at 1280x800
 
     def _with_track(self, app, ctx, monkeypatch, *, devices=1, show_devices=False):
         app.authenticated = True
@@ -3211,7 +3338,7 @@ class TestPillArtRounded:
 
         px, py, _, _ = sl_views.pill_rect(1280, 800)
         thumbs = [n for n in _nodes(scene_buffer, CpuLayerNode)
-                  if abs(n.x - (px + 10)) < 0.5 and abs(n.y - (py + 10)) < 0.5]
+                  if abs(n.x - (px + 12)) < 0.5 and abs(n.y - (py + 12)) < 0.5]
         assert thumbs, "pill art thumb missing"
         rgba = thumbs[0].rgba
         h, w = rgba.shape[0], rgba.shape[1]
