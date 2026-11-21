@@ -311,6 +311,24 @@ def _hover(mouse, x, y, w, h) -> bool:
     return x <= mx <= x + w and y <= my <= y + h
 
 
+# Apple's Liquid Glass size rule (Alec, round 34, reference: the large-panel
+# corner). Small plates are capsules — radius = h/2, full semicircular ends.
+# Past GLASS_CAPSULE_MAX_H the corner stops growing with the plate and caps
+# at GLASS_RECT_RADIUS: long straight edges with the reference's r24-r32
+# continuous-corner feel. The rule decides the silhouette ONLY where a plate
+# derives its radius from its height (the pill); explicit radii (nav rows,
+# popup r14, sidebar rail r16) already sit on their side of the rule.
+GLASS_CAPSULE_MAX_H = 80.0
+GLASS_RECT_RADIUS = 28.0
+
+
+def glass_silhouette_radius(h: float) -> float:
+    """Capsule below and at the threshold, capped rounded-rect above it."""
+    if h <= GLASS_CAPSULE_MAX_H:
+        return h / 2.0
+    return GLASS_RECT_RADIUS
+
+
 def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
                  fill=None, border=None) -> None:
     """One canonical simulated-glass plate. Composed back-to-front: soft
@@ -783,12 +801,14 @@ def draw_top_scrim(frame, *, width: float, height: float) -> None:
 
 def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
     # Round 8: floating glass capsule (liquid-glass music-pill reference,
-    # dark-adapted); round 30 moved the capsule to the window's top-right.
-    # The circular Home/Search nav buttons and the overflow circle (volume,
-    # shuffle, repeat, devices popup) stayed on the bottom dock, anchored to
-    # the slot the pill vacated. Scene-drawn → same on every host.
+    # dark-adapted); round 30 moved the capsule to the window's top-right;
+    # round 34 caps its corner by the Liquid Glass size rule — at 108pt the
+    # capsule becomes a rounded rectangle. The circular Home/Search nav
+    # buttons and the overflow circle (volume, shuffle, repeat, devices
+    # popup) stayed on the bottom dock, anchored to the slot the pill
+    # vacated. Scene-drawn → same on every host.
     px, py, pw, ph = _layout(app, "pill", pill_rect(width, height), width, height)
-    _glass_plate(frame, px, py, pw, ph, radius=ph / 2, z=10,
+    _glass_plate(frame, px, py, pw, ph, radius=glass_silhouette_radius(ph), z=10,
                  fill=PILL_FILL, border=PILL_BORDER)
 
     player = app.player
