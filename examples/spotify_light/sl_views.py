@@ -230,14 +230,16 @@ def pill_progress_local(pw: float, ph: float) -> tuple[float, float, float, floa
     pill.progress override's geometry: x/width are layout inputs, the strip
     height stays 3pt, and the time labels ride the strip's ends (round 37:
     ABOVE it, so a text-column-aligned strip never paints them over art).
-    Round 39 (SL-24, Alec: "the now playing bar" is what evens): the strip
-    CENTERS ON THE TRANSPORT — left edge on the text column (the SL-21
-    relationship keeps guarding it), right edge mirrored about pw/2, so
-    strip center == play-button center by construction at any width. Bar
-    and transport share one axis."""
-    col_x, _, _ = pill_column(pw, ph)
-    strip_w = max(80.0, pw - 2.0 * col_x)
-    return (col_x, 59.0, strip_w, 3.0)
+    Round 40 (SL-25, Alec: "go further to the right, keep consistent
+    x-distance spacing"): the strip spans EXACTLY the text column — left
+    edge on the title (the SL-21 relationship keeps guarding it), right
+    edge on the column's right edge, so the bar's right inset IS the
+    text's own right inset at any width. The midpoint sits a constant
+    46pt right of the play center (the art tile skews the column) — known
+    and accepted: play stays pill-centered (SL-23), the bar owns the
+    column. Replaces SL-24's centered-on-play derivation."""
+    col_x, col_w, _ = pill_column(pw, ph)
+    return (col_x, 59.0, max(80.0, col_w), 3.0)
 
 
 def pill_title_local(pw: float, ph: float) -> tuple[float, float, float, float]:

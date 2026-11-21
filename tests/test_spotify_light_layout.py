@@ -845,14 +845,14 @@ class TestLayoutAlignSpec:
             "edge": "center_x", "to": "pill.title", "ref_edge": "center_x"}})
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == pytest.approx((306.0 - 150.0, 59.0, 300.0, 3.0)), \
+        assert got == pytest.approx((306.0 - 196.0, 59.0, 392.0, 3.0)), \
             "only the position moves; the strip keeps its width"
         ov2 = sl_layout.LayoutOverrides()
         ov2.set("pill.progress", {"align": {
             "edge": "center_y", "to": "pill.art", "ref_edge": "center_y"}})
         got2 = ov2.resolve("pill.progress", nats["pill.progress"],
                            width=520, height=108, naturals=nats)
-        assert got2 == pytest.approx((110.0, 54.0 - 1.5, 300.0, 3.0))
+        assert got2 == pytest.approx((110.0, 54.0 - 1.5, 392.0, 3.0))
 
     def test_top_and_bottom_align_keep_the_vertical_extent(self):
         nats = _interior_naturals()
@@ -861,13 +861,13 @@ class TestLayoutAlignSpec:
             "edge": "top", "to": "pill.art", "ref_edge": "top"}})
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (110.0, 12.0, 300.0, 50.0), "bottom edge (62) fixed; the top moves"
+        assert got == (110.0, 12.0, 392.0, 50.0), "bottom edge (62) fixed; the top moves"
         ov2 = sl_layout.LayoutOverrides()
         ov2.set("pill.progress", {"align": {
             "edge": "bottom", "to": "pill.art", "ref_edge": "bottom"}})
         got2 = ov2.resolve("pill.progress", nats["pill.progress"],
                            width=520, height=108, naturals=nats)
-        assert got2 == (110.0, 59.0, 300.0, 37.0), \
+        assert got2 == (110.0, 59.0, 392.0, 37.0), \
             "top fixed; the bottom edge moves to the art's bottom (96)"
 
     def test_offset_shifts_the_aligned_edge(self):
@@ -877,7 +877,7 @@ class TestLayoutAlignSpec:
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (116.0, 59.0, 294.0, 3.0)
+        assert got == (116.0, 59.0, 386.0, 3.0)
 
     def test_resolution_uses_the_references_current_rect(self):
         """The relationship tracks the reference: an override on pill.title
@@ -888,8 +888,8 @@ class TestLayoutAlignSpec:
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (130.0, 59.0, 280.0, 3.0), \
-            "the reference's override wins the resolution; the right edge still holds 410"
+        assert got == (130.0, 59.0, 372.0, 3.0), \
+            "the reference's override wins the resolution; the right edge still holds 502"
         ov2 = sl_layout.LayoutOverrides()
         ov2.set("pill.progress", {"align": {"edge": "left", "to": "pill.title"}})
         assert ov2.resolve("pill.progress", nats["pill.progress"],
@@ -908,11 +908,11 @@ class TestLayoutAlignSpec:
     def test_a_collapsed_extent_guards_to_one_point(self):
         ov = sl_layout.LayoutOverrides()
         ov.set("pill.progress", {"align": {
-            "edge": "left", "to": "pill.title", "ref_edge": "right"}})  # 502 > right 410
+            "edge": "left", "to": "pill.title", "ref_edge": "right"}})  # 502 == right 502
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (409.0, 59.0, 1.0, 3.0), "the extent collapses to 1pt, never negative"
+        assert got == (501.0, 59.0, 1.0, 3.0), "the extent collapses to 1pt, never negative"
 
     def test_window_ids_align_in_window_space(self):
         ov = sl_layout.LayoutOverrides()
