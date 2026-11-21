@@ -1540,80 +1540,24 @@ class TestProgressAlignsWithText:
         assert duration[0].y == py + 59.0 - 11
 
 
-class TestDockScrim:
-    """Round 8b: playlist labels scrolling under the translucent dock chrome
-    clashed text-on-text (Alec read it as a z-index bug; the chrome IS
-    topmost). Apple Music idiom: a bottom scrim — transparent to near-opaque
-    backdrop gradient — dissolves content before it reaches the dock, and the
-    bottom scroll inset lets the last row scroll fully clear of it. Round 30:
-    the pill moved top-right, but the nav/overflow circles stayed on the
-    bottom dock, so the scrim stays too."""
+class TestDockScrimRemoved:
+    """SL-35 (Alec): "i wanna get rid of the bottom one too" — the round-8b
+    dock scrim follows the top one (SL-33) out. Content renders at natural
+    brightness all the way to the window's bottom edge; the dock's glass
+    circles keep their own material, with no dissolve layer in between.
+    (History: round 8b added the scrim for text-on-text clashes under the
+    translucent dock; the liquid-glass chrome reads fine without it.) The
+    bottom scroll inset stays: the last row still clears the dock CHROME."""
 
-    def _scrim_strips(self, scene_buffer, *, width=1280.0, height=800.0):
-        rects = _nodes(scene_buffer, RectNode)
-        strips = [
-            n for n in rects
-            if n.x == sl_views.SIDEBAR_W and n.width == width - sl_views.SIDEBAR_W
-            and n.color_rgba[:3] == sl_views.BG[:3] and n.color_rgba[3] < 255
-            and n.y >= height - sl_views.SCRIM_H  # bottom scrim only, not the top one
-        ]
-        return sorted(strips, key=lambda n: n.y)
-
-    def test_bottom_scrim_gradient_dissolves_content_under_pill(self, app_ctx):
+    def test_window_bottom_is_clear_of_scrim(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
         app.authenticated = True
         _tick(app, ctx, 2)
-
-        strips = self._scrim_strips(scene_buffer)
-        assert len(strips) >= 8, "scrim is a vertical gradient of backdrop strips"
-        _, dock_top, _, _ = sl_views.dock_cluster_rect(1280, 800)
-        assert strips[0].y < dock_top, "fade starts above the dock zone"
-        assert strips[-1].y + strips[-1].height >= 800.0, "scrim reaches the window bottom"
-        alphas = [n.color_rgba[3] for n in strips]
-        assert alphas[0] <= 24, "fade starts transparent"
-        assert alphas == sorted(alphas), "alpha ramps monotonically downward"
-        at_dock_top = [n.color_rgba[3] for n in strips
-                       if n.y < dock_top <= n.y + n.height]
-        assert at_dock_top and at_dock_top[0] >= 230, \
-            "content is fully dissolved by the time it reaches the dock"
-        assert all(n.z_index > 5 for n in strips), "scrim covers content and its scrollbar"
-        assert all(n.z_index < 10 for n in strips), \
-            "scrim stays under the pill, nav circles, overflow, and popup"
-
-    def test_scrim_fade_has_no_visible_banding(self):
-        """Round 14 (live search-view pass on `670b15c`): over busy album art
-        the coarse alpha-stepped scrim strips read as horizontal scanlines.
-        Sampled row-to-row over bright content, the fade must not jump by a
-        step a viewer can see."""
-
-        class _Frame:
-            def __init__(self):
-                self.rects = []
-
-            def rect(self, **kw):
-                self.rects.append(kw)
-
-        capture = _Frame()
-        sl_views.draw_dock_scrim(capture, width=1280, height=800)
-        top = 800 - sl_views.SCRIM_H
-        nodes = [
-            RectNode(
-                x=sl_views.SIDEBAR_W, y=top, width=1280 - sl_views.SIDEBAR_W,
-                height=sl_views.SCRIM_H, color_rgba=(190, 190, 190, 255), z_index=3),
-        ]
-        nodes += [
-            RectNode(
-                x=r["x"], y=r["y"], width=r["width"], height=r["height"],
-                color_rgba=r["color"], z_index=r["z_index"])
-            for r in capture.rects
-        ]
-        frame = SceneFrame(
-            revision=1, logical_width=1280, logical_height=800,
-            display_width=1280, display_height=800, ts_ns=0, nodes=tuple(nodes))
-        img = rasterize_scene_frame(frame)
-        fade = img[int(top):int(top + sl_views.SCRIM_FADE), 700, :3].astype(int)
-        steps = int((fade[:-1] - fade[1:]).max())  # darkens downward → positive jumps
-        assert steps <= 12, f"scrim fade banding: max row-to-row step {steps}"
+        strips = [n for n in _nodes(scene_buffer, RectNode)
+                  if n.x == sl_views.SIDEBAR_W and n.width == 1280 - sl_views.SIDEBAR_W
+                  and n.color_rgba[:3] == sl_views.BG[:3]
+                  and n.y >= 800.0 - 160.0]  # the round-8b scrim's footprint + margin
+        assert strips == [], f"dock scrim strips linger over content: {strips[:3]}"
 
     def test_scroll_inset_lets_last_row_clear_the_dock(self, app_ctx):
         app, ctx, _ = app_ctx
@@ -1624,31 +1568,6 @@ class TestDockScrim:
         max_offset = app._clamp_scroll(1e9, 3000.0, viewport)
         assert 3000.0 - max_offset <= dock_top - 8.0, \
             "at max scroll the last content row sits fully above the dock"
-
-    def test_scrim_fade_completes_into_a_calm_band_above_the_dock(self):
-        """Alec's round-10 pass: content must be fully dissolved BEFORE the
-        dock top, leaving a calm near-opaque band between content and chrome —
-        at any window height (the scrim is bottom-anchored, so the geometry
-        is height-independent; pin it)."""
-
-        class _Frame:
-            def __init__(self):
-                self.rects = []
-
-            def rect(self, **kw):
-                self.rects.append(kw)
-
-        for h in (800.0, 700.0, 600.0, 520.0):
-            frame = _Frame()
-            sl_views.draw_dock_scrim(frame, width=1280, height=h)
-            _, dock_top, _, _ = sl_views.dock_cluster_rect(1280, h)
-            strips = sorted(frame.rects, key=lambda r: r["y"])
-            assert strips[0]["color"][3] <= 24, f"fade starts transparent at h={h}"
-            assert strips[-1]["y"] + strips[-1]["height"] >= h, f"scrim reaches bottom at h={h}"
-            done = [r for r in strips if r["color"][3] >= 230]
-            assert done, f"scrim reaches near-opaque at h={h}"
-            assert done[0]["y"] + done[0]["height"] <= dock_top - 8.0 + 1e-6, \
-                f"fade completes into a calm band above the dock at h={h}"
 
 
 class TestDockContentAnchor:
@@ -4228,24 +4147,17 @@ class TestPillTopRight:
         content width, so the Top tracks grid's first row scrolled under a
         dark gradient that ate the top ~25% of the card art while second-row
         cards rendered clean. The window top over content now holds zero
-        scrim strips; the dock scrim still fades content at the bottom."""
+        scrim strips. (SL-35 then removed the dock scrim too; the bottom
+        guard lives in TestDockScrimRemoved.)"""
         app, ctx, buf = app_ctx
         app.authenticated = True
         _tick(app, ctx, 2)
-        top_zone = (sl_views.PILL_FLOAT + sl_views.PILL_H + sl_views.SCRIM_GAP
-                    + sl_views.SCRIM_FADE + 10)
+        top_zone = 200.0  # the round-30 scrim's footprint: band + fade + margin
         strips = [n for n in _nodes(buf, RectNode)
                   if n.x == sl_views.SIDEBAR_W and n.width == 1280 - sl_views.SIDEBAR_W
                   and n.color_rgba[:3] == sl_views.BG[:3]
                   and n.y < top_zone]
         assert strips == [], f"top scrim strips linger over content: {strips[:3]}"
-        dock = [n for n in _nodes(buf, RectNode)
-                if n.x == sl_views.SIDEBAR_W and n.width == 1280 - sl_views.SIDEBAR_W
-                and n.color_rgba[:3] == sl_views.BG[:3]
-                and n.y >= 800.0 - sl_views.SCRIM_H]
-        assert dock, "the dock scrim must keep fading content at the bottom"
-        assert all(6 <= n.z_index < 10 for n in strips), \
-            "scrim above content and its scrollbar, below the pill"
 
     def test_scrolled_content_flows_under_the_top_glass(self, app_ctx):
         app, ctx, buf = app_ctx
