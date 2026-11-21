@@ -77,6 +77,78 @@ def player_state_from_sdk(payload: object, device: sl_models.Device | None) -> s
     )
 
 
+class TransportRouter:
+    """SpotifyClient-shaped dispatcher for transport actions.
+
+    SDK-local verbs go to the web device, but only while it is the active
+    Connect device — otherwise the user is listening elsewhere and the
+    action must ride the Connect Web API as today. Content plays (uris/
+    context), shuffle, repeat, and transfers always stay on Connect: the
+    SDK cannot do them (starting playback *on* the SDK device is a Connect
+    ``play`` targeting its device id). Anything not listed delegates.
+    """
+
+    def __init__(self, client, web_device: WebPlaybackDevice, is_web_active) -> None:
+        self._client = client
+        self._web = web_device
+        self._is_web_active = is_web_active
+
+    def _local(self) -> bool:
+        return bool(self._is_web_active())
+
+    def pause(self, **kwargs) -> None:
+        if self._local():
+            self._web.pause()
+        else:
+            self._client.pause(**kwargs)
+
+    def play(self, *, context_uri=None, uris=None, offset_uri=None, **kwargs) -> None:
+        if context_uri is None and uris is None and offset_uri is None:
+            if self._local():
+                self._web.resume()  # bare play == resume
+            else:
+                self._client.play(**kwargs)
+            return
+        content = {"context_uri": context_uri, "uris": uris, "offset_uri": offset_uri}
+        self._client.play(**{k: v for k, v in content.items() if v is not None}, **kwargs)
+
+    def next_track(self, **kwargs) -> None:
+        if self._local():
+            self._web.next_track()
+        else:
+            self._client.next_track(**kwargs)
+
+    def previous_track(self, **kwargs) -> None:
+        if self._local():
+            self._web.previous_track()
+        else:
+            self._client.previous_track(**kwargs)
+
+    def seek(self, position_ms: int, **kwargs) -> None:
+        if self._local():
+            self._web.seek(position_ms)
+        else:
+            self._client.seek(position_ms, **kwargs)
+
+    def set_volume(self, percent: int, **kwargs) -> None:
+        if self._local():
+            self._web.set_volume(percent)
+        else:
+            self._client.set_volume(percent, **kwargs)
+
+    def set_shuffle(self, enabled: bool, **kwargs) -> None:
+        self._client.set_shuffle(enabled, **kwargs)
+
+    def set_repeat(self, mode: str, **kwargs) -> None:
+        self._client.set_repeat(mode, **kwargs)
+
+    def transfer(self, device_id: str, **kwargs) -> None:
+        self._client.transfer(device_id, **kwargs)
+
+    def __getattr__(self, name: str):
+        return getattr(self._client, name)
+
+
 class WebPlaybackDevice:
     """A Connect-visible device whose transport is the in-page SDK player."""
 

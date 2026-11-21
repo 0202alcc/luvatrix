@@ -199,10 +199,10 @@ class _ManualWorker:
 @pytest.fixture
 def app(tmp_path, monkeypatch):
     monkeypatch.setenv("SPOTIFY_LIGHT_CONFIG_DIR", str(tmp_path))
-    from luvatrix_core.core.runtime import AppRuntime
+    from luvatrix_core.core.app_runtime import AppRuntime
+    from luvatrix_core.core.hdi_thread import HDIThread
     from luvatrix_core.core.scene_graph import SceneGraphBuffer
-    from luvatrix_core.core.hdi import HDIThread
-    from luvatrix_core.core.sensors import SensorManagerThread
+    from luvatrix_core.core.sensor_manager import SensorManagerThread
     from luvatrix_core.core.window_matrix import WindowMatrix
 
     class _NoopHDISource:
