@@ -177,5 +177,79 @@ class MacOSWindowSystemTargetClassTests(unittest.TestCase):
         self.assertIsInstance(target, window_system._MenuActionTarget)
 
 
+class _FakeRenderContentView:
+    def __init__(self) -> None:
+        self.subviews: list = []
+        self.wants_layer = False
+
+    def addSubview_(self, view):
+        self.subviews.append(view)
+
+    def bounds(self):
+        size = type("S", (), {"width": 1280.0, "height": 800.0})()
+        return type("B", (), {"size": size})()
+
+
+class _FakeRenderHostView:
+    def __init__(self) -> None:
+        self.frame = None
+        self.wants_layer = False
+        self.layer = None
+        self.autoresizing_mask = None
+
+    @classmethod
+    def alloc(cls):
+        return cls()
+
+    def initWithFrame_(self, frame):
+        self.frame = frame
+        return self
+
+    def setWantsLayer_(self, wants):
+        self.wants_layer = wants
+
+    def setLayer_(self, layer):
+        self.layer = layer
+
+    def setAutoresizingMask_(self, mask):
+        self.autoresizing_mask = mask
+
+
+class TestRenderHostInstall(unittest.TestCase):
+    """SL-36: every macOS window gets a render-host view covering the content
+    view; the Metal/Quartz layer lives on the host so a glass plate can slot
+    in UNDER it while native controls attach above. With no glass installed
+    the host is the content view's only subview and the structure renders
+    pixel-identically to the pre-split hierarchy."""
+
+    def _ns(self):
+        return {
+            "NSView": _FakeRenderHostView,
+            "NSMakeRect": lambda x, y, w, h: (x, y, w, h),
+            "NSViewWidthSizable": 2,
+            "NSViewHeightSizable": 16,
+        }
+
+    def test_host_covers_content_and_owns_layer(self):
+        content = _FakeRenderContentView()
+        layer = object()
+        host = window_system._install_render_host(content, layer, self._ns())
+        assert host in content.subviews
+        assert host.frame == (0.0, 0.0, 1280.0, 800.0)
+        assert host.autoresizing_mask == 2 | 16
+        assert host.wants_layer is True
+        assert host.layer is layer
+
+    def test_handle_carries_render_view_fields(self):
+        handle = window_system.MacOSWindowHandle(window=object(), layer=object())
+        assert handle.render_view is None
+        assert handle.under_glass_capable is False
+        capable = window_system.MacOSWindowHandle(
+            window=object(), layer=object(), render_view=object(),
+            under_glass_capable=True)
+        assert capable.render_view is not None
+        assert capable.under_glass_capable is True
+
+
 if __name__ == "__main__":
     unittest.main()
