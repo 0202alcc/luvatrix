@@ -1729,7 +1729,6 @@ class SpotifyLightApp(App):
                     )
 
             sl_views.draw_dock_scrim(frame, width=width, height=height)
-            sl_views.draw_top_scrim(frame, width=width, height=height)
             sl_views.draw_sidebar(frame, self, out, width=width, height=height, mouse=mouse)
             sl_views.draw_player_bar(frame, self, out, width=width, height=height, mouse=mouse)
 
