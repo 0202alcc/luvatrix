@@ -20,7 +20,7 @@ import sl_ui
 # -- layout ------------------------------------------------------------------
 SIDEBAR_W = 240.0
 SIDEBAR_LIST_TOP = 142.0  # title + one nav row (Library) + section header
-DOCK_H = 92.0             # bottom reservation for the floating pill zone
+DOCK_H = 92.0             # bottom reservation for the dock circle zone
 CONTENT_PAD = 28.0
 CARD_W = 180.0
 CARD_H = 236.0
@@ -69,14 +69,21 @@ SIDEBAR_SEAM_FADE_PX = 20.0
 # Floating player pill: a centered capsule (liquid-glass music-pill
 # reference), dark-frosted so scene text stays readable over content,
 # flanked by circular nav buttons; playback extras live in a popup.
-PILL_W = 460.0
+# Round 32 (Alec): the capsule grows to a 108pt-tall column layout — bigger
+# album tile, title/artist over the progress bar, transport row under it.
+PILL_W = 520.0
 PILL_MIN_W = 320.0
-PILL_H = 64.0
+PILL_H = 108.0
 PILL_FLOAT = 16.0
 PILL_FILL = (16, 16, 16, 208)
 PILL_BORDER = (255, 255, 255, 40)
 PILL_THUMB_EMPTY = (255, 255, 255, 16)
-PILL_META_RIGHT_PAD = 150.0
+# Interior column: the album tile sits flush at the left cap with the
+# PILL_ART_INSET idiom; title/artist, the progress bar, and the transport
+# row stack in the column to its right.
+PILL_ART_INSET = 12.0
+PILL_ART_GAP = 14.0
+PILL_META_RIGHT_PAD = 18.0
 NAV_CIRCLE_R = 22.0
 NAV_CIRCLE_GAP = 18.0
 OVERFLOW_R = NAV_CIRCLE_R
@@ -88,7 +95,12 @@ OVERFLOW_R = NAV_CIRCLE_R
 # near-opaque band between dissolved content and the chrome.
 SCRIM_FADE = 56.0
 SCRIM_GAP = 12.0
-SCRIM_H = PILL_FLOAT + PILL_H + SCRIM_GAP + SCRIM_FADE
+# The vacated dock slot keeps the OLD pill's footprint (round 32): the nav
+# circles, playback popup, and bottom scrim stay pixel-identical to round 30
+# even though the top-right pill grew — the slot does not inherit PILL_W/H.
+DOCK_SLOT_W = 460.0
+DOCK_SLOT_H = 64.0
+SCRIM_H = PILL_FLOAT + DOCK_SLOT_H + SCRIM_GAP + SCRIM_FADE
 SCRIM_MAX_ALPHA = 240
 # Round 14: the fade renders as ~1px strips (coarse strips read as scanlines
 # over album art), and the calm band below the fade is one solid rect.
@@ -96,21 +108,62 @@ SCRIM_STRIP_PX = 1.0
 
 
 def pill_rect(width: float, height: float) -> tuple[float, float, float, float]:
-    """Floating capsule geometry, anchored to the CONTENT REGION (round 10):
-    the cluster (circles + pill) centers between SIDEBAR_W and the window's
-    right edge — never the full window, so it can never cross the sidebar
-    (the scrim anchors the same way). When the cluster at design width can't
-    fit, the left circle pins to SIDEBAR_W + PILL_FLOAT and the right edge
-    floats; only then does the pill shrink below PILL_W (floor PILL_MIN_W).
-    Below ~716pt the search circle may clip the window edge — pathological."""
+    """Now-playing capsule, pinned to the window's TOP-RIGHT corner (Alec,
+    round 30): right edge at width - PILL_FLOAT, top at the same float
+    margin the dock used. Anchoring the RIGHT edge means any width change
+    (window resize, or the pill shrinking below PILL_W when the content
+    region can't fit it) grows the pill leftward — never a jump. The left
+    edge can never cross the sidebar."""
+    fit_w = width - SIDEBAR_W - 2 * PILL_FLOAT
+    pill_w = min(PILL_W, max(PILL_MIN_W, fit_w))
+    pill_x = max(SIDEBAR_W + PILL_FLOAT, width - PILL_FLOAT - pill_w)
+    return (pill_x, PILL_FLOAT, pill_w, PILL_H)
+
+
+def _layout(app, component_id: str, natural: tuple[float, float, float, float],
+            width: float, height: float) -> tuple[float, float, float, float]:
+    """Consult the live layout-override registry (round 31): an override wins
+    over the app's own recomputation because every draw resolves through here.
+    Apps without the registry (tests, older hosts) get the natural rect."""
+    overrides = getattr(app, "layout_overrides", None)
+    if overrides is None:
+        return natural
+    return overrides.resolve(component_id, natural, width=width, height=height)
+
+
+def dock_cluster_rect(width: float, height: float) -> tuple[float, float, float, float]:
+    """The bottom-center cluster slot the pill vacated in round 30. The
+    Home/Search nav circles and the playback popup did NOT move with the
+    pill — they still anchor to this slot, centered on the CONTENT REGION
+    (round 10): the cluster (circles + slot) centers between SIDEBAR_W and
+    the window's right edge — never the full window, so it can never cross
+    the sidebar (the scrim anchors the same way). When the cluster at design
+    width can't fit, the left circle pins to SIDEBAR_W + PILL_FLOAT and the
+    right edge floats; only then does the slot shrink below DOCK_SLOT_W (floor
+    PILL_MIN_W). Below ~716pt the search circle may clip the window edge —
+    pathological. The slot keeps the round-30 pill's footprint (DOCK_SLOT_W ×
+    DOCK_SLOT_H) — independent of the grown top-right pill (round 32)."""
     cluster_pad = NAV_CIRCLE_GAP + 2 * NAV_CIRCLE_R
     min_x = SIDEBAR_W + PILL_FLOAT + cluster_pad
     fit_w = width - PILL_FLOAT - cluster_pad - min_x
-    pill_w = min(PILL_W, max(PILL_MIN_W, fit_w))
+    pill_w = min(DOCK_SLOT_W, max(PILL_MIN_W, fit_w))
     ideal_x = (SIDEBAR_W + width) / 2.0 - pill_w / 2.0
     max_x = width - PILL_FLOAT - cluster_pad - pill_w
     pill_x = min(max(ideal_x, min_x), max(max_x, min_x))
-    return (pill_x, height - PILL_FLOAT - PILL_H, pill_w, PILL_H)
+    return (pill_x, height - PILL_FLOAT - DOCK_SLOT_H, pill_w, DOCK_SLOT_H)
+
+
+def pill_column(pw: float, ph: float) -> tuple[float, float, float]:
+    """The pill's interior right column (round 32), a pure function of the
+    pill's external rect so `pill_rect` stays the single source of truth for
+    the capsule itself: the album tile sits at the left cap with the
+    PILL_ART_INSET idiom and grows with the pill height; title/artist, the
+    progress bar, and the transport row stack in the column to its right.
+    Returns (column x offset from the pill's left edge, column width, art
+    tile size)."""
+    art = ph - 2 * PILL_ART_INSET
+    col_x = PILL_ART_INSET + art + PILL_ART_GAP
+    return col_x, pw - col_x - PILL_META_RIGHT_PAD, art
 
 TEXT = (255, 255, 255, 255)
 SUBTEXT = (179, 179, 179, 255)
@@ -258,6 +311,24 @@ def _hover(mouse, x, y, w, h) -> bool:
     return x <= mx <= x + w and y <= my <= y + h
 
 
+# Apple's Liquid Glass size rule (Alec, round 34, reference: the large-panel
+# corner). Small plates are capsules — radius = h/2, full semicircular ends.
+# Past GLASS_CAPSULE_MAX_H the corner stops growing with the plate and caps
+# at GLASS_RECT_RADIUS: long straight edges with the reference's r24-r32
+# continuous-corner feel. The rule decides the silhouette ONLY where a plate
+# derives its radius from its height (the pill); explicit radii (nav rows,
+# popup r14, sidebar rail r16) already sit on their side of the rule.
+GLASS_CAPSULE_MAX_H = 80.0
+GLASS_RECT_RADIUS = 28.0
+
+
+def glass_silhouette_radius(h: float) -> float:
+    """Capsule below and at the threshold, capped rounded-rect above it."""
+    if h <= GLASS_CAPSULE_MAX_H:
+        return h / 2.0
+    return GLASS_RECT_RADIUS
+
+
 def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
                  fill=None, border=None) -> None:
     """One canonical simulated-glass plate. Composed back-to-front: soft
@@ -345,50 +416,53 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
     # blurred the nav text (live bug), and bridgeless hosts get the same
     # material. Text contrast holds by construction — only the dark window
     # backdrop sits behind the rail (content starts at SIDEBAR_W).
-    px = SIDEBAR_GLASS_MARGIN
-    py = SIDEBAR_GLASS_MARGIN
-    pw = SIDEBAR_W - SIDEBAR_GLASS_MARGIN * 2
-    ph = height - SIDEBAR_GLASS_MARGIN * 2
-    _glass_plate(frame, px, py, pw, ph, radius=SIDEBAR_GLASS_RADIUS, z=1)
-    _text(frame, "Spotify Light", x=22, y=20, size=20, color=ACCENT, z=3)
+    # Round 31: the rail resolves through the live layout registry — an
+    # override moves the plate, and everything on it shifts by the same delta
+    # from the rail's natural origin.
+    m = SIDEBAR_GLASS_MARGIN
+    rx, ry, rw, rh = _layout(
+        app, "sidebar", (m, m, SIDEBAR_W - m * 2, height - m * 2), width, height)
+    _glass_plate(frame, rx, ry, rw, rh, radius=SIDEBAR_GLASS_RADIUS, z=1)
+    ox, oy = rx - m, ry - m
+    _text(frame, "Spotify Light", x=22 + ox, y=20 + oy, size=20, color=ACCENT, z=3)
 
     # Home/Search live on the glass circles flanking the player pill (round
     # 8); the sidebar keeps Library, playlists, and account.
     nav = [("library", "Your Library")]
-    y = 64.0
+    y = 64.0 + oy
     for view, label in nav:
         active = app.view == view
-        hovering = _hover(mouse, 10, y - 6, SIDEBAR_W - 20, NAV_H - 8)
+        hovering = _hover(mouse, 10 + ox, y - 6, SIDEBAR_W - 20, NAV_H - 8)
         if active:
-            _glass_plate(frame, 10, y - 6, SIDEBAR_W - 20, NAV_H - 8, radius=8.0, z=2,
+            _glass_plate(frame, 10 + ox, y - 6, SIDEBAR_W - 20, NAV_H - 8, radius=8.0, z=2,
                          shadow=False)
         elif hovering:
-            frame.rounded_rect(x=10, y=y - 6, width=SIDEBAR_W - 20, height=NAV_H - 8,
+            frame.rounded_rect(x=10 + ox, y=y - 6, width=SIDEBAR_W - 20, height=NAV_H - 8,
                                radius=8.0, color=SIDEBAR_ROW_HOVER, z_index=2)
         color = TEXT if (active or hovering) else SUBTEXT
-        _text(frame, label, x=22, y=y + 2, size=15, color=color, z=3)
-        out.hit(10, y - 6, SIDEBAR_W - 20, NAV_H - 8, "nav", view)
+        _text(frame, label, x=22 + ox, y=y + 2, size=15, color=color, z=3)
+        out.hit(10 + ox, y - 6, SIDEBAR_W - 20, NAV_H - 8, "nav", view)
         y += NAV_H
 
     y += 10
-    _text(frame, "PLAYLISTS", x=22, y=y, size=11, color=FAINT, z=3)
+    _text(frame, "PLAYLISTS", x=22 + ox, y=y, size=11, color=FAINT, z=3)
     y += 24
 
     list_top = y
-    list_bottom = height - 64
+    list_bottom = height - 64 + oy
     row_h = 30.0
     offset = app.sidebar_scroll
     for idx, playlist in enumerate(app.playlists):
         row_y = list_top + row_h * idx - offset
         if row_y + row_h < list_top or row_y > list_bottom:
             continue
-        hovering = _hover(mouse, 10, row_y, SIDEBAR_W - 20, row_h - 4)
+        hovering = _hover(mouse, 10 + ox, row_y, SIDEBAR_W - 20, row_h - 4)
         if hovering:
-            frame.rounded_rect(x=10, y=row_y, width=SIDEBAR_W - 20, height=row_h - 4,
+            frame.rounded_rect(x=10 + ox, y=row_y, width=SIDEBAR_W - 20, height=row_h - 4,
                                radius=6.0, color=SIDEBAR_ROW_HOVER, z_index=2)
-        _text(frame, playlist.name, x=22, y=row_y + 4, size=13,
+        _text(frame, playlist.name, x=22 + ox, y=row_y + 4, size=13,
               color=TEXT if hovering else SUBTEXT, z=3, max_chars=26)
-        out.hit(10, row_y, SIDEBAR_W - 20, row_h - 4, "open_playlist", playlist.id)
+        out.hit(10 + ox, row_y, SIDEBAR_W - 20, row_h - 4, "open_playlist", playlist.id)
 
     # The list scrolls under the glass: dissolve both seams with a short
     # alpha ramp (the pill scrim's idiom) instead of a hard cutoff line.
@@ -396,23 +470,23 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
         strip = SIDEBAR_SEAM_FADE_PX / SIDEBAR_SEAM_STRIPS
         for i in range(SIDEBAR_SEAM_STRIPS):
             a_top = int(round(210 * (1.0 - i / SIDEBAR_SEAM_STRIPS)))
-            frame.rect(x=px + 2, y=list_top + i * strip, width=pw - 4, height=strip,
+            frame.rect(x=rx + 2, y=list_top + i * strip, width=rw - 4, height=strip,
                        color=(14, 14, 14, a_top), z_index=4)
             a_bottom = int(round(210 * (i + 1) / SIDEBAR_SEAM_STRIPS))
-            frame.rect(x=px + 2, y=list_bottom - SIDEBAR_SEAM_FADE_PX + i * strip,
-                       width=pw - 4, height=strip, color=(14, 14, 14, a_bottom), z_index=4)
-    _draw_scrollbar(frame, app.scrollbar_sidebar, out, x=px + pw - 9, top=list_top,
+            frame.rect(x=rx + 2, y=list_bottom - SIDEBAR_SEAM_FADE_PX + i * strip,
+                       width=rw - 4, height=strip, color=(14, 14, 14, a_bottom), z_index=4)
+    _draw_scrollbar(frame, app.scrollbar_sidebar, out, x=rx + rw - 9, top=list_top,
                     bottom=list_bottom, content=row_h * len(app.playlists), offset=offset,
                     tag="sidebar")
 
-    chip_y = height - 52
-    frame.rect(x=px + 14, y=chip_y - 8, width=pw - 28, height=1,
+    chip_y = height - 52 + oy
+    frame.rect(x=rx + 14, y=chip_y - 8, width=rw - 28, height=1,
                color=(255, 255, 255, 20), z_index=2)
     name = app.profile.display_name if app.profile and app.profile.display_name else "Account"
-    _text(frame, name, x=22, y=chip_y + 4, size=13, color=SUBTEXT, z=3, max_chars=16)
-    hovering = _hover(mouse, 150, chip_y, 70, 26)
-    _text(frame, "Log out", x=156, y=chip_y + 4, size=13, color=TEXT if hovering else FAINT, z=3)
-    out.hit(150, chip_y - 2, 74, 28, "logout")
+    _text(frame, name, x=22 + ox, y=chip_y + 4, size=13, color=SUBTEXT, z=3, max_chars=16)
+    hovering = _hover(mouse, 150 + ox, chip_y, 70, 26)
+    _text(frame, "Log out", x=156 + ox, y=chip_y + 4, size=13, color=TEXT if hovering else FAINT, z=3)
+    out.hit(150 + ox, chip_y - 2, 74, 28, "logout")
 
 
 def _draw_scrollbar(frame, controller, out: FrameOut, *, x, top, bottom, content, offset, tag) -> None:
@@ -593,7 +667,19 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
     y = 24.0 - app.content_scroll
     view_w = width - SIDEBAR_W - CONTENT_PAD * 2
 
-    field_w = min(460.0, view_w)
+    # The field's right cap must clear the top-right pill (round 30): at
+    # narrow widths the 460pt field would slide under the glass. Round 36:
+    # the shipped layout puts the overflow circle on the pill's left flank,
+    # in the field's band — the resolved circle is the nearer obstacle.
+    pill_x = pill_rect(width, height)[0]
+    obstacle_x = pill_x
+    dpx, dpy, dpw, dph = dock_cluster_rect(width, height)
+    nav_natural = (width - PILL_FLOAT - 2 * OVERFLOW_R, dpy + dph / 2 - OVERFLOW_R,
+                   2 * OVERFLOW_R, 2 * OVERFLOW_R)
+    cx, cy, cw, ch = _layout(app, "nav_more", nav_natural, width, height)
+    if cy < y + 40.0 and y < cy + ch:
+        obstacle_x = min(obstacle_x, cx)
+    field_w = max(180.0, min(460.0, view_w, obstacle_x - 12.0 - x0))
     _glass_plate(frame, x0, y, field_w, 40, radius=20.0, z=2, shadow=False,
                  border=(ACCENT[0], ACCENT[1], ACCENT[2], 200) if app.search_focused else None)
     shown = app.search_query or ("What do you want to listen to?" if not app.search_focused else "")
@@ -703,14 +789,35 @@ def draw_dock_scrim(frame, *, width: float, height: float) -> None:
                color=(BG[0], BG[1], BG[2], SCRIM_MAX_ALPHA), z_index=6)
 
 
+def draw_top_scrim(frame, *, width: float, height: float) -> None:
+    """Mirrored dock scrim for the top-right pill (round 30): a calm
+    near-opaque band caps the window top over the pill zone, then the fade
+    dissolves content downward over the same smoothstep ~1px strips, so
+    headers and cards scroll under the top glass exactly like they do at the
+    dock. Same z=6 sandwich: above content (z<=4) and the content scrollbar
+    (z=5), below the pill (z=10+)."""
+    band_h = PILL_FLOAT + PILL_H + SCRIM_GAP
+    frame.rect(x=SIDEBAR_W, y=0, width=width - SIDEBAR_W, height=band_h,
+               color=(BG[0], BG[1], BG[2], SCRIM_MAX_ALPHA), z_index=6)
+    fade_rows = max(1, int(round(SCRIM_FADE / SCRIM_STRIP_PX)))
+    strip_h = SCRIM_FADE / fade_rows
+    for i in range(fade_rows):
+        t = min(1.0, max(0.0, ((i + 1) * strip_h) / SCRIM_FADE))
+        alpha = round(SCRIM_MAX_ALPHA * (1.0 - t * t * (3.0 - 2.0 * t)))  # mirrored smoothstep
+        frame.rect(x=SIDEBAR_W, y=band_h + i * strip_h, width=width - SIDEBAR_W,
+                   height=strip_h, color=(BG[0], BG[1], BG[2], alpha), z_index=6)
+
+
 def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
-    # Round 8: centered floating glass capsule (liquid-glass music-pill
-    # reference, dark-adapted), flanked by circular Home/Search nav buttons;
-    # an overflow circle at the bottom-right opens the playback popup
-    # (volume, shuffle, repeat, devices). Scene-drawn → same on every host.
-    px, py, pw, ph = pill_rect(width, height)
-    cy = py + ph / 2
-    _glass_plate(frame, px, py, pw, ph, radius=ph / 2, z=10,
+    # Round 8: floating glass capsule (liquid-glass music-pill reference,
+    # dark-adapted); round 30 moved the capsule to the window's top-right;
+    # round 34 caps its corner by the Liquid Glass size rule — at 108pt the
+    # capsule becomes a rounded rectangle. The circular Home/Search nav
+    # buttons and the overflow circle (volume, shuffle, repeat, devices
+    # popup) stayed on the bottom dock, anchored to the slot the pill
+    # vacated. Scene-drawn → same on every host.
+    px, py, pw, ph = _layout(app, "pill", pill_rect(width, height), width, height)
+    _glass_plate(frame, px, py, pw, ph, radius=glass_silhouette_radius(ph), z=10,
                  fill=PILL_FILL, border=PILL_BORDER)
 
     player = app.player
@@ -718,68 +825,53 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     # confirming poll is still in flight (event-driven sync).
     track = app.displayed_track()
 
-    # Album art thumb with a hairline ring, alpha-clipped to the same r8
+    # Round 32 (Alec): the capsule grows and its interior becomes a column
+    # layout — bigger album tile at the left cap; right of it, top to bottom:
+    # title/artist, the progress bar with times, then the transport row.
+    col_x, col_w, art = pill_column(pw, ph)
+    # Album art thumb with a hairline ring, alpha-clipped to the same rounded
     # tile the idle state draws — a square image sits flush at the pill's
     # left cap and its corners cross the rounded silhouette (Alec, round 28).
-    frame.rounded_rect(x=px + 9, y=py + 9, width=46, height=46, radius=9,
+    frame.rounded_rect(x=px + PILL_ART_INSET - 1, y=py + PILL_ART_INSET - 1,
+                       width=art + 2, height=art + 2, radius=15,
                        color=(255, 255, 255, 24), z_index=11)
-    meta_w = pw - 64 - PILL_META_RIGHT_PAD
     if track is not None:
-        image_url = sl_models.pick_image_url(track.album.images if track.album else (), app._art_pick_target(44))
-        _art(frame, app, image_url, x=px + 10, y=py + 10, size=44, seed=track.name, z=12,
-             corner_radius=8.0)
-        _text(frame, _fit_width(frame._ctx.measure_text, track.name, max_w=meta_w, size=13),
-              x=px + 64, y=py + 11, size=13, z=12)
+        image_url = sl_models.pick_image_url(track.album.images if track.album else (), app._art_pick_target(art))
+        _art(frame, app, image_url, x=px + PILL_ART_INSET, y=py + PILL_ART_INSET,
+             size=art, seed=track.name, z=12, corner_radius=14.0)
+        _text(frame, _fit_width(frame._ctx.measure_text, track.name, max_w=col_w, size=13),
+              x=px + col_x, y=py + 16, size=13, z=12)
         artists = ", ".join(a.name for a in track.artists if a.name)
-        _text(frame, _fit_width(frame._ctx.measure_text, artists, max_w=meta_w, size=11),
-              x=px + 64, y=py + 29, size=11, color=SUBTEXT, z=12)
+        _text(frame, _fit_width(frame._ctx.measure_text, artists, max_w=col_w, size=11),
+              x=px + col_x, y=py + 35, size=11, color=SUBTEXT, z=12)
     else:
         # Idle thumb: a quiet neutral tile with a centered note glyph (Spotify's
         # idle idiom), not a saturated hash-colored placeholder square.
-        frame.rounded_rect(x=px + 10, y=py + 10, width=44, height=44, radius=8,
+        frame.rounded_rect(x=px + PILL_ART_INSET, y=py + PILL_ART_INSET,
+                           width=art, height=art, radius=14,
                            color=PILL_THUMB_EMPTY, z_index=12)
-        _centered_glyph(frame, sl_icons.NOTE, cx=px + 10 + 22, cy=py + 10 + 22,
-                        size=20, color=SUBTEXT, z=12, font=sl_icons.ICON_FONT)
-        _text(frame, "Nothing playing", x=px + 64, y=py + 15, size=13, color=FAINT, z=12)
+        _centered_glyph(frame, sl_icons.NOTE, cx=px + PILL_ART_INSET + art / 2,
+                        cy=py + PILL_ART_INSET + art / 2,
+                        size=36, color=SUBTEXT, z=12, font=sl_icons.ICON_FONT)
+        _text(frame, "Nothing playing", x=px + col_x, y=py + 21, size=13, color=FAINT, z=12)
         if app.authenticated:
             _text(frame, _fit_width(frame._ctx.measure_text, "Pick a device, or start something from a playlist",
-                                    max_w=meta_w, size=11),
-                  x=px + 64, y=py + 34, size=11, color=FAINT, z=12)
+                                    max_w=col_w, size=11),
+                  x=px + col_x, y=py + 40, size=11, color=FAINT, z=12)
 
-    # Transport: prev / play / next on the pill's right.
-    playing = bool(player and player.is_playing)
-    play_cx = px + pw - 72
-    _transport_button(frame, out, mouse, sl_icons.PREV, play_cx - 48, py + 18, "prev",
-                      SUBTEXT, font=sl_icons.ICON_FONT_FILL)
-    play_hover = _hover(mouse, play_cx - 17, py + 15, 34, 34)
-    frame.circle(cx=play_cx, cy=cy, radius=15,
-                 fill=TEXT if play_hover else (225, 225, 225, 255), z_index=12)
-    if playing:
-        # Drawn bars: text pipes ("||") space differently per font and read broken.
-        bar_w, bar_h, bar_gap = 4.0, 13.0, 5.0
-        bar_y = cy - bar_h / 2
-        frame.rect(x=play_cx - bar_gap / 2 - bar_w, y=bar_y, width=bar_w, height=bar_h,
-                   color=(0, 0, 0, 255), z_index=13)
-        frame.rect(x=play_cx + bar_gap / 2, y=bar_y, width=bar_w, height=bar_h,
-                   color=(0, 0, 0, 255), z_index=13)
-    else:
-        _centered_glyph(frame, sl_icons.PLAY, cx=play_cx, cy=cy, size=13,
-                        color=(0, 0, 0, 255), z=13, font=sl_icons.ICON_FONT_FILL)
-    out.hit(play_cx - 17, py + 15, 34, 34, "toggle_play")
-    _transport_button(frame, out, mouse, sl_icons.NEXT, play_cx + 48, py + 18, "next",
-                      SUBTEXT, font=sl_icons.ICON_FONT_FILL)
-
-    # Progress strip along the pill's lower interior, with tiny time labels.
+    # Progress bar with tiny time labels, below the text rows. The strip
+    # geometry is identical with or without a track — the times simply don't
+    # draw when idle — so the bar never jumps between states.
     duration = track.duration_ms if track else 0
     progress = app.progress_ms()
-    strip_x = px + 92
-    strip_w = min(200.0, max(80.0, pw - 240.0))  # narrows with a shrunk pill
-    strip_y = py + ph - 13
+    strip_x = px + col_x + 34.0
+    strip_w = max(80.0, col_w - 34.0 - 40.0)
+    strip_y = py + 59.0
     if track is not None:
-        _text(frame, sl_ui.format_duration_ms(progress), x=px + 64, y=py + ph - 18, size=9,
+        _text(frame, sl_ui.format_duration_ms(progress), x=px + col_x, y=py + 56, size=9,
               color=FAINT, z=12)
         _text(frame, sl_ui.format_duration_ms(duration), x=strip_x + strip_w + 6,
-              y=py + ph - 18, size=9, color=FAINT, z=12)
+              y=py + 56, size=9, color=FAINT, z=12)
     frame.rounded_rect(x=strip_x, y=strip_y, width=strip_w, height=3, radius=1.5,
                        color=(70, 70, 70, 255), z_index=11)
     frac = sl_ui.seek_fraction(progress, duration)
@@ -788,24 +880,69 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
                            radius=1.5, color=(220, 220, 220, 255), z_index=12)
     out.hit(strip_x, strip_y - 6, strip_w, 15, "seek_bar", (strip_x, strip_w, duration))
 
-    # Circular Home/Search nav buttons flanking the pill (reference layout).
-    _nav_circle(frame, app, out, mouse, cx=px - NAV_CIRCLE_GAP - NAV_CIRCLE_R, cy=cy,
+    # Transport row UNDER the bar, centered on the column; the white play
+    # disc keeps its prominence and every hit stays at least yesterday's 34pt.
+    playing = bool(player and player.is_playing)
+    row_cx = px + col_x + col_w / 2
+    row_cy = py + 87.0
+    _transport_button(frame, out, mouse, sl_icons.PREV, row_cx - 53, py + 74, "prev",
+                      SUBTEXT, font=sl_icons.ICON_FONT_FILL)
+    play_hover = _hover(mouse, row_cx - 18, py + 69, 36, 36)
+    frame.circle(cx=row_cx, cy=row_cy, radius=16,
+                 fill=TEXT if play_hover else (225, 225, 225, 255), z_index=12)
+    if playing:
+        # Drawn bars: text pipes ("||") space differently per font and read broken.
+        bar_w, bar_h, bar_gap = 4.0, 14.0, 5.0
+        bar_y = row_cy - bar_h / 2
+        frame.rect(x=row_cx - bar_gap / 2 - bar_w, y=bar_y, width=bar_w, height=bar_h,
+                   color=(0, 0, 0, 255), z_index=13)
+        frame.rect(x=row_cx + bar_gap / 2, y=bar_y, width=bar_w, height=bar_h,
+                   color=(0, 0, 0, 255), z_index=13)
+    else:
+        _centered_glyph(frame, sl_icons.PLAY, cx=row_cx, cy=row_cy, size=14,
+                        color=(0, 0, 0, 255), z=13, font=sl_icons.ICON_FONT_FILL)
+    out.hit(row_cx - 18, py + 69, 36, 36, "toggle_play")
+    _transport_button(frame, out, mouse, sl_icons.NEXT, row_cx + 43, py + 74, "next",
+                      SUBTEXT, font=sl_icons.ICON_FONT_FILL)
+
+    # Circular Home/Search nav buttons: unchanged on the bottom dock (Alec,
+    # round 30), flanking the slot the pill vacated. Each circle's natural
+    # rect resolves through the live layout registry (round 31).
+    dpx, dpy, dpw, dph = dock_cluster_rect(width, height)
+    dock_cy = dpy + dph / 2
+    hx, hy, hw, hh = _layout(app, "nav_home",
+                             (dpx - NAV_CIRCLE_GAP - 2 * NAV_CIRCLE_R,
+                              dock_cy - NAV_CIRCLE_R,
+                              2 * NAV_CIRCLE_R, 2 * NAV_CIRCLE_R), width, height)
+    sx, sy, sw, sh = _layout(app, "nav_search",
+                             (dpx + dpw + NAV_CIRCLE_GAP,
+                              dock_cy - NAV_CIRCLE_R,
+                              2 * NAV_CIRCLE_R, 2 * NAV_CIRCLE_R), width, height)
+    _nav_circle(frame, app, out, mouse, cx=hx + hw / 2, cy=hy + hh / 2,
                 view="home", glyph=sl_icons.HOME)
-    _nav_circle(frame, app, out, mouse, cx=px + pw + NAV_CIRCLE_GAP + NAV_CIRCLE_R, cy=cy,
+    _nav_circle(frame, app, out, mouse, cx=sx + sw / 2, cy=sy + sh / 2,
                 view="search", glyph=sl_icons.SEARCH)
 
-    # Overflow circle (bottom-right): volume / shuffle / repeat / devices.
-    ocx = width - PILL_FLOAT - OVERFLOW_R
-    open_hover = _hover(mouse, ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2)
-    _glass_plate(frame, ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2,
-                 radius=OVERFLOW_R, z=10, hovering=open_hover or app.show_devices)
-    _centered_glyph(frame, sl_icons.MORE, cx=ocx, cy=cy, size=16,
+    # Overflow circle: volume / shuffle / repeat / devices. The dock-side
+    # natural below is just the fallback — the shipped layout.toml (round
+    # 36) re-points nav_more to the pill's left flank, and the registry
+    # resolution is what actually places it.
+    ox, oy, ow, oh = _layout(app, "nav_more",
+                             (width - PILL_FLOAT - 2 * OVERFLOW_R,
+                              dock_cy - OVERFLOW_R,
+                              2 * OVERFLOW_R, 2 * OVERFLOW_R), width, height)
+    ocx, ocy = ox + ow / 2, oy + oh / 2
+    open_hover = _hover(mouse, ox, oy, ow, oh)
+    _glass_plate(frame, ox, oy, ow, oh,
+                 radius=ow / 2, z=10, hovering=open_hover or app.show_devices)
+    _centered_glyph(frame, sl_icons.MORE, cx=ocx, cy=ocy, size=16,
                     color=ACCENT if app.show_devices else (TEXT if open_hover else SUBTEXT),
                     z=12, font=sl_icons.ICON_FONT)
-    out.hit(ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2, "open_devices")
+    out.hit(ox, oy, ow, oh, "open_devices")
 
     if app.show_devices:
-        _draw_playback_popup(frame, app, out, width=width, pill_top=py, mouse=mouse)
+        _draw_playback_popup(frame, app, out, circle=(ox, oy, ow, oh),
+                             width=width, height=height, mouse=mouse)
 
 
 def _nav_circle(frame, app, out: FrameOut, mouse, *, cx: float, cy: float,
@@ -831,15 +968,20 @@ def _transport_button(frame, out: FrameOut, mouse, glyph, cx, y, action, color,
     out.hit(cx - 12, y - 4, 34, 34, action)
 
 
-def _draw_playback_popup(frame, app, out: FrameOut, *, width: float, pill_top: float,
-                         mouse) -> None:
+def _draw_playback_popup(frame, app, out: FrameOut, *,
+                         circle: tuple[float, float, float, float],
+                         width: float, height: float, mouse) -> None:
     popup_w = 300.0
     row_h = 40.0
     rows = max(1, len(app.devices))
     head_h = 148.0  # pad + volume/shuffle/repeat rows + divider + section title
     popup_h = head_h + row_h * rows + 12
-    popup_x = width - popup_w - 16
-    popup_y = pill_top - 12 - popup_h
+    # Round 36: the popup anchors to its button like a menu — right edges
+    # aligned, dropping 12pt below the circle — and clamps into the window
+    # so a low overridden circle can never push it offscreen.
+    cx, cy, cw, ch = circle
+    popup_x = min(max(cx + cw - popup_w, PILL_FLOAT), width - PILL_FLOAT - popup_w)
+    popup_y = min(cy + ch + 12.0, height - PILL_FLOAT - popup_h)
     # Floating panels get the dark variant of the glass plate: mostly-opaque
     # fill for readability over content, same hairline/shadow language.
     _glass_plate(frame, popup_x, popup_y, popup_w, popup_h, radius=14.0, z=20,

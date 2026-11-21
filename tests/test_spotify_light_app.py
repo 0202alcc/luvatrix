@@ -42,6 +42,7 @@ from luvatrix_core.core.window_matrix import WindowMatrix  # noqa: E402
 import app_main  # noqa: E402
 import sl_api  # noqa: E402
 import sl_art  # noqa: E402
+import sl_layout  # noqa: E402
 import sl_models  # noqa: E402
 import sl_oauth  # noqa: E402
 import sl_icons  # noqa: E402
@@ -104,6 +105,13 @@ def _playlist(name: str, count: int = 3) -> sl_models.Playlist:
 @pytest.fixture
 def app_ctx(tmp_path, monkeypatch):
     monkeypatch.setenv("SPOTIFY_LIGHT_CONFIG_DIR", str(tmp_path))
+    # Round 36: boots read the persisted layout file — point it at a tmp
+    # copy of the shipped one so specs load but writes never touch the repo.
+    layout_file = tmp_path / "layout.toml"
+    shipped = getattr(sl_layout, "APP_LAYOUT_FILE", None)
+    if shipped is not None and Path(shipped).exists():
+        layout_file.write_text(Path(shipped).read_text())
+    monkeypatch.setenv("SPOTIFY_LIGHT_LAYOUT_FILE", str(layout_file))
     scene_buffer = SceneGraphBuffer()
     runtime = _runtime(scene_buffer)
     ctx = runtime.build_context({"window.write", "hdi.keyboard", "hdi.mouse", "hdi.trackpad"})
@@ -1132,19 +1140,23 @@ class TestFloatingPill:
         app.show_devices = show_devices
         _tick(app, ctx, 2)
 
-    def test_player_chrome_is_a_centered_floating_capsule(self, app_ctx):
+    def test_player_chrome_is_a_top_right_floating_capsule(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
         self._with_track(app, ctx)
 
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
-        # Round 10: centered on the CONTENT REGION (sidebar excluded), not
-        # the full window — 530 = (1280+240)/2 - 460/2.
-        assert (px, py, pw, ph) == (530.0, 720.0, 460.0, 64.0)
+        # Round 30 (Alec): the pill left the bottom dock for the window's
+        # TOP-RIGHT corner — right edge pinned at width - PILL_FLOAT, top at
+        # the same 16pt float margin the dock used; round 32: 108pt tall, so
+        # the right-edge anchor grows the capsule leftward (744 = 1280-16-520).
+        assert (px, py, pw, ph) == (744.0, 16.0, 520.0, 108.0)
         rrects = _nodes(scene_buffer, RoundedRectNode)
         rings = [n for n in rrects
                  if n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
-                 and n.width == pw and n.height == ph and n.radius == 32.0]
-        assert len(rings) == 1, "pill must be one centered capsule glass plate"
+                 and n.width == pw and n.height == ph
+                 and n.radius == sl_views.glass_silhouette_radius(ph)]
+        assert len(rings) == 1, \
+            "pill must be one glass plate; at 108pt the size rule makes it a rounded rect"
         # The full-width bar is gone: nothing spans the window at the bottom.
         assert [n for n in rrects if n.width == 1280] == []
         rects = _nodes(scene_buffer, RectNode)
@@ -1161,7 +1173,7 @@ class TestFloatingPill:
         assert "||" not in texts, "pause is drawn bars, not text pipes"
         assert any(t in ("0:30", "0:31") for t in texts), "elapsed time stays in the pill"
         art = [n for n in _nodes(scene_buffer, CpuLayerNode)
-               if n.x == px + 10 and n.y == py + 10 and n.width == 44]
+               if n.x == px + 12 and n.y == py + 12 and n.width == 84]
         assert len(art) == 1, "album art thumb sits at the pill's left"
         hits = {(r.action, r.payload if isinstance(r.payload, str) else None): r
                 for r in app._hits}
@@ -1170,19 +1182,22 @@ class TestFloatingPill:
         seek = [r for r in app._hits if r.action == "seek_bar"]
         assert len(seek) == 1 and seek[0].y > py, "seek strip lives inside the pill"
 
-    def test_nav_circles_flank_the_pill(self, app_ctx):
+    def test_nav_circles_hold_the_bottom_dock(self, app_ctx):
+        """Round 30: the pill moved top-right WITHOUT the nav circles — Home
+        and Search keep the exact bottom-dock coordinates the flanking
+        cluster gave them."""
         app, ctx, scene_buffer = app_ctx
         self._with_track(app, ctx)
         app.view = "home"
         _tick(app, ctx, 1)
 
-        px, py, _, _ = sl_views.pill_rect(1280, 800)
-        cy = py + 32
+        dpx, dpy, _, _ = sl_views.dock_cluster_rect(1280, 800)
+        cy = dpy + 32
         home = [r for r in app._hits if r.action == "nav" and r.payload == "home"]
         search = [r for r in app._hits if r.action == "nav" and r.payload == "search"]
         assert len(home) == 1 and len(search) == 1
         assert (home[0].x, home[0].y, home[0].w, home[0].h) == (468.0, cy - 22, 44.0, 44.0)
-        assert (search[0].x, search[0].y) == (px + 460 + 18, cy - 22)
+        assert (search[0].x, search[0].y) == (dpx + 460 + 18, cy - 22)
         assert home[0].x >= sl_views.SIDEBAR_W + sl_views.PILL_FLOAT, \
             "the home circle never crosses the sidebar"
         texts = _texts(scene_buffer)
@@ -1200,19 +1215,21 @@ class TestFloatingPill:
 
         overflow = [r for r in app._hits if r.action == "open_devices"]
         assert len(overflow) == 1
-        # Round 13: the overflow circle matches the nav circles (44pt).
-        assert (overflow[0].x, overflow[0].y, overflow[0].w, overflow[0].h) == \
-            (1220.0, 730.0, 44.0, 44.0)
+        # Round 36: the circle sits at the shipped layout.toml position (the
+        # pill's left flank, 12pt gap); placement itself is pinned by
+        # TestOverflowPersistsLeftOfPill. This test owns the popup's
+        # contents and its menu-style anchoring to the circle.
         texts = _texts(scene_buffer)
         for expected in ("Volume", "Shuffle", "Repeat", "Connect to a device", "MacBook Pro"):
             assert expected in texts, f"missing popup text: {expected!r}"
         actions = {r.action for r in app._hits}
         assert {"volume_bar", "toggle_shuffle", "cycle_repeat", "pick_device"} <= actions
-        px, py, _, _ = sl_views.pill_rect(1280, 800)
         plates = [n for n in _nodes(scene_buffer, RoundedRectNode)
                   if n.color_rgba == (18, 18, 18, 234) and n.width == 298]
-        assert plates and all(n.y + n.height == py - 13 for n in plates), \
-            "playback popup floats just above the pill"
+        assert plates and all(n.y - 1 == overflow[0].y + overflow[0].h + 12
+                              and n.x + n.width + 1 == overflow[0].x + overflow[0].w
+                              for n in plates), \
+            "playback popup drops from the overflow circle, menu-style"
 
     def test_sidebar_keeps_library_and_account(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
@@ -1246,19 +1263,20 @@ class TestFloatingPill:
 
         px, py, _, _ = sl_views.pill_rect(1280, 800)
         thumb_layers = [n for n in _nodes(scene_buffer, CpuLayerNode)
-                        if n.x == px + 10 and n.y == py + 10]
+                        if n.x == px + 12 and n.y == py + 12]
         assert not thumb_layers, \
             "the empty pill must not render a hash-colored placeholder tile"
         notes = [n for n in _nodes(scene_buffer, TextNode) if n.text == sl_icons.NOTE]
         assert notes, "the empty thumb shows a calm note glyph"
         note = notes[0]
-        cx, cy = px + 10 + 22, py + 10 + 22
-        assert abs(note.x - cx) < 12 and abs(note.y - cy) < 14, \
+        cx, cy = px + 12 + 42, py + 12 + 42
+        assert abs(note.x - cx) < 20 and abs(note.y - cy) < 22, \
             f"note glyph should sit at the thumb's center, got ({note.x}, {note.y})"
 
     @staticmethod
     def _meta_budget(pw: float) -> float:
-        return pw - 64 - sl_views.PILL_META_RIGHT_PAD
+        col_x, col_w, _ = sl_views.pill_column(pw, sl_views.PILL_H)
+        return col_w
 
     def test_idle_hint_shows_the_full_sentence_at_design_width(self, app_ctx):
         """Round 18 (overnight live pass on `670b15c`): the idle pill subtext
@@ -1273,16 +1291,16 @@ class TestFloatingPill:
         assert "Pick a device, or start something from a playlist" in _texts(scene_buffer)
 
     def test_idle_hint_truncates_to_measured_width_when_the_pill_shrinks(self, app_ctx):
-        """Char-count truncation is width-blind: at 700pt the pill shrinks
-        (round 10) and 40 chars (~194pt) overflows the ~134pt metadata
-        budget, colliding with the transport. Truncation must be driven by
-        the measured width, ending in an ellipsis when it cuts."""
+        """Char-count truncation is width-blind: at 560pt the pill sits at its
+        320pt floor and 40 chars (~194pt) overflows the ~192pt column
+        budget. Truncation must be driven by the measured width, ending in
+        an ellipsis when it cuts."""
         app, ctx, scene_buffer = app_ctx
         app.authenticated = True
-        ctx.logical_width_px = 700.0
+        ctx.logical_width_px = 560.0
         _tick(app, ctx, 2)
 
-        px, _, pw, _ = sl_views.pill_rect(700.0, 800.0)
+        px, _, pw, _ = sl_views.pill_rect(560.0, 800.0)
         budget = self._meta_budget(pw)
         hints = [n for n in _nodes(scene_buffer, TextNode)
                  if n.text.startswith("Pick a device")]
@@ -1293,7 +1311,7 @@ class TestFloatingPill:
         assert width <= budget + 1e-6, \
             f"hint overflows the metadata budget: {width:.1f} > {budget:.1f}"
         assert hint.text.endswith("…"), "a cut hint should say so"
-        assert hint.x == px + 64
+        assert hint.x == px + 110
 
     def test_track_metadata_truncates_to_measured_width_not_char_count(self, app_ctx):
         """Same width-blindness in the playing state: 32 chars of a wide
@@ -1324,19 +1342,145 @@ class TestFloatingPill:
         assert title.text.endswith("…")
 
 
-class TestDockScrim:
-    """Round 8b: playlist labels scrolling under the translucent pill clashed
-    text-on-text (Alec read it as a z-index bug; the pill IS topmost). Apple
-    Music idiom: a bottom scrim — transparent to near-opaque backdrop
-    gradient — dissolves content before it reaches the pill, and the bottom
-    scroll inset lets the last row scroll fully clear of the pill."""
+class TestBigPillTransportRow:
+    """Round 32 (Alec, pill-v2.png): the pill grows — taller capsule, album
+    tile scaled to match with the same inset idiom — and the transport row
+    leaves the pill's right side for a spot UNDER the progress bar. The
+    right column reads top-to-bottom: title/artist, bar with times, then
+    prev/play/next centered under the column. Idle and playing share one
+    geometry so nothing jumps when a track starts."""
 
-    def _scrim_strips(self, scene_buffer, *, width=1280.0):
+    def _playing(self, app, ctx):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500, track=track,
+                                           device=None, shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        _tick(app, ctx, 2)
+
+    @staticmethod
+    def _hit(app, action):
+        hits = [r for r in app._hits if r.action == action]
+        assert len(hits) == 1, f"expected exactly one {action} hit region"
+        return hits[0]
+
+    def test_pill_rect_grows_and_keeps_the_320_floor(self):
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        assert (pw, ph) == (520.0, 108.0), "the capsule scales up"
+        assert py == sl_views.PILL_FLOAT, "the top float margin is unchanged"
+        assert px + pw == 1280.0 - sl_views.PILL_FLOAT, \
+            "right edge pinned — the growth goes leftward"
+        _, _, pw_narrow, _ = sl_views.pill_rect(560.0, 800.0)
+        assert pw_narrow == sl_views.PILL_MIN_W == 320.0, "the 320pt floor still holds"
+        _, _, pw_mid, _ = sl_views.pill_rect(940.0, 800.0)
+        assert pw_mid == 520.0, "940pt still fits the design-width pill"
+
+    def test_art_tile_scales_up_with_the_pill(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        px, py, _, ph = sl_views.pill_rect(1280, 800)
+        art_size = ph - 24.0
+        art = [n for n in _nodes(scene_buffer, CpuLayerNode)
+               if n.x == px + 12 and n.y == py + 12 and n.width == art_size]
+        assert len(art) == 1, \
+            "the album tile grows with the pill height, same 12pt inset idiom"
+        rings = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                 if n.color_rgba == (255, 255, 255, 24)
+                 and n.x == px + 11 and n.y == py + 11 and n.width == art_size + 2]
+        assert len(rings) == 1, "the hairline ring hugs the bigger tile"
+
+    def test_metadata_column_starts_right_of_the_bigger_art(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        px, _, _, _ = sl_views.pill_rect(1280, 800)
+        title = [n for n in _nodes(scene_buffer, TextNode) if n.text == "Lithium"]
+        artist = [n for n in _nodes(scene_buffer, TextNode) if n.text == "Nirvana"]
+        assert title and artist
+        assert title[0].x == px + 110.0, \
+            "the text column starts right of the bigger tile + gap"
+        assert title[0].y < artist[0].y, "title over artist"
+        seek = self._hit(app, "seek_bar")
+        assert artist[0].y < seek.y, "the bar sits below the text rows"
+
+    def test_transport_row_sits_under_the_bar_centered_on_the_column(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        px, _, pw, _ = sl_views.pill_rect(1280, 800)
+        seek = self._hit(app, "seek_bar")
+        toggle = self._hit(app, "toggle_play")
+        prev = self._hit(app, "prev")
+        nxt = self._hit(app, "next")
+        assert toggle.y >= seek.y + seek.h, \
+            "the transport row lives strictly under the progress bar"
+        col_cx = px + 110.0 + (pw - 128.0) / 2
+        play_cx = toggle.x + toggle.w / 2
+        assert abs(play_cx - col_cx) < 1e-6, \
+            "play centers under the text/bar column"
+        assert prev.x + prev.w / 2 < play_cx < nxt.x + nxt.w / 2, \
+            "prev / play / next reading order"
+
+    def test_play_keeps_its_white_circle_and_hits_stay_generous(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        toggle = self._hit(app, "toggle_play")
+        cx, cy = toggle.x + toggle.w / 2, toggle.y + toggle.h / 2
+        discs = [n for n in _nodes(scene_buffer, CircleNode)
+                 if abs(n.cx - cx) < 1e-6 and abs(n.cy - cy) < 1e-6
+                 and n.fill_rgba[0] >= 225 and n.radius >= 16.0]
+        assert discs, "the white play disc keeps its prominence at the row center"
+        for action in ("prev", "next"):
+            r = self._hit(app, action)
+            assert r.w >= 34.0 and r.h >= 34.0, f"{action} hit shrank below today's 34pt"
+        assert toggle.w >= 36.0 and toggle.h >= 36.0, "the play hit grows with the disc"
+
+    def test_idle_and_playing_share_the_same_row_geometry(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        idle = {a: (self._hit(app, a).x, self._hit(app, a).y,
+                    self._hit(app, a).w, self._hit(app, a).h)
+                for a in ("seek_bar", "toggle_play", "prev", "next")}
+        strip_idle = [(n.x, n.y, n.width) for n in _nodes(scene_buffer, RoundedRectNode)
+                      if n.color_rgba == (70, 70, 70, 255) and n.height == 3]
+        self._playing(app, ctx)
+        playing = {a: (self._hit(app, a).x, self._hit(app, a).y,
+                       self._hit(app, a).w, self._hit(app, a).h)
+                   for a in ("seek_bar", "toggle_play", "prev", "next")}
+        strip_playing = [(n.x, n.y, n.width) for n in _nodes(scene_buffer, RoundedRectNode)
+                         if n.color_rgba == (70, 70, 70, 255) and n.height == 3]
+        assert idle == playing, "the bar and transport row must not jump between states"
+        assert strip_idle == strip_playing, "the strip itself holds still too"
+
+    def test_times_appear_only_with_a_track_but_the_bar_is_always_there(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        texts = _texts(scene_buffer)
+        assert "Nothing playing" in texts
+        assert not any(t[:1].isdigit() and ":" in t and len(t) <= 5 for t in texts), \
+            "idle shows no time labels"
+        strips = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                  if n.color_rgba == (70, 70, 70, 255) and n.height == 3]
+        assert strips, "the idle pill still shows the (empty) bar"
+
+
+class TestDockScrim:
+    """Round 8b: playlist labels scrolling under the translucent dock chrome
+    clashed text-on-text (Alec read it as a z-index bug; the chrome IS
+    topmost). Apple Music idiom: a bottom scrim — transparent to near-opaque
+    backdrop gradient — dissolves content before it reaches the dock, and the
+    bottom scroll inset lets the last row scroll fully clear of it. Round 30:
+    the pill moved top-right, but the nav/overflow circles stayed on the
+    bottom dock, so the scrim stays too."""
+
+    def _scrim_strips(self, scene_buffer, *, width=1280.0, height=800.0):
         rects = _nodes(scene_buffer, RectNode)
         strips = [
             n for n in rects
             if n.x == sl_views.SIDEBAR_W and n.width == width - sl_views.SIDEBAR_W
             and n.color_rgba[:3] == sl_views.BG[:3] and n.color_rgba[3] < 255
+            and n.y >= height - sl_views.SCRIM_H  # bottom scrim only, not the top one
         ]
         return sorted(strips, key=lambda n: n.y)
 
@@ -1347,16 +1491,16 @@ class TestDockScrim:
 
         strips = self._scrim_strips(scene_buffer)
         assert len(strips) >= 8, "scrim is a vertical gradient of backdrop strips"
-        _, pill_top, _, _ = sl_views.pill_rect(1280, 800)
-        assert strips[0].y < pill_top, "fade starts above the pill zone"
+        _, dock_top, _, _ = sl_views.dock_cluster_rect(1280, 800)
+        assert strips[0].y < dock_top, "fade starts above the dock zone"
         assert strips[-1].y + strips[-1].height >= 800.0, "scrim reaches the window bottom"
         alphas = [n.color_rgba[3] for n in strips]
         assert alphas[0] <= 24, "fade starts transparent"
         assert alphas == sorted(alphas), "alpha ramps monotonically downward"
-        at_pill_top = [n.color_rgba[3] for n in strips
-                       if n.y < pill_top <= n.y + n.height]
-        assert at_pill_top and at_pill_top[0] >= 230, \
-            "content is fully dissolved by the time it reaches the pill"
+        at_dock_top = [n.color_rgba[3] for n in strips
+                       if n.y < dock_top <= n.y + n.height]
+        assert at_dock_top and at_dock_top[0] >= 230, \
+            "content is fully dissolved by the time it reaches the dock"
         assert all(n.z_index > 5 for n in strips), "scrim covers content and its scrollbar"
         assert all(n.z_index < 10 for n in strips), \
             "scrim stays under the pill, nav circles, overflow, and popup"
@@ -1396,19 +1540,19 @@ class TestDockScrim:
         steps = int((fade[:-1] - fade[1:]).max())  # darkens downward → positive jumps
         assert steps <= 12, f"scrim fade banding: max row-to-row step {steps}"
 
-    def test_scroll_inset_lets_last_row_clear_the_pill(self, app_ctx):
+    def test_scroll_inset_lets_last_row_clear_the_dock(self, app_ctx):
         app, ctx, _ = app_ctx
-        _, pill_top, _, _ = sl_views.pill_rect(1280, 800)
+        _, dock_top, _, _ = sl_views.dock_cluster_rect(1280, 800)
         viewport = 800.0 - sl_views.DOCK_H
-        assert viewport <= pill_top - 8.0, \
-            "content viewport bottom must clear the pill with margin"
+        assert viewport <= dock_top - 8.0, \
+            "content viewport bottom must clear the dock with margin"
         max_offset = app._clamp_scroll(1e9, 3000.0, viewport)
-        assert 3000.0 - max_offset <= pill_top - 8.0, \
-            "at max scroll the last content row sits fully above the pill"
+        assert 3000.0 - max_offset <= dock_top - 8.0, \
+            "at max scroll the last content row sits fully above the dock"
 
-    def test_scrim_fade_completes_into_a_calm_band_above_the_pill(self):
+    def test_scrim_fade_completes_into_a_calm_band_above_the_dock(self):
         """Alec's round-10 pass: content must be fully dissolved BEFORE the
-        pill top, leaving a calm near-opaque band between content and chrome —
+        dock top, leaving a calm near-opaque band between content and chrome —
         at any window height (the scrim is bottom-anchored, so the geometry
         is height-independent; pin it)."""
 
@@ -1422,31 +1566,34 @@ class TestDockScrim:
         for h in (800.0, 700.0, 600.0, 520.0):
             frame = _Frame()
             sl_views.draw_dock_scrim(frame, width=1280, height=h)
-            _, pill_top, _, _ = sl_views.pill_rect(1280, h)
+            _, dock_top, _, _ = sl_views.dock_cluster_rect(1280, h)
             strips = sorted(frame.rects, key=lambda r: r["y"])
             assert strips[0]["color"][3] <= 24, f"fade starts transparent at h={h}"
             assert strips[-1]["y"] + strips[-1]["height"] >= h, f"scrim reaches bottom at h={h}"
             done = [r for r in strips if r["color"][3] >= 230]
             assert done, f"scrim reaches near-opaque at h={h}"
-            assert done[0]["y"] + done[0]["height"] <= pill_top - 8.0 + 1e-6, \
-                f"fade completes into a calm band above the pill at h={h}"
+            assert done[0]["y"] + done[0]["height"] <= dock_top - 8.0 + 1e-6, \
+                f"fade completes into a calm band above the dock at h={h}"
 
 
-class TestPillContentAnchor:
-    """Round 10 (Alec live on `ae7fcc2`): the pill cluster centered on the
-    FULL WINDOW, so the home circle and the pill's left edge sat over the
+class TestDockContentAnchor:
+    """Round 10 (Alec live on `ae7fcc2`): the bottom cluster centered on the
+    FULL WINDOW, so the home circle and the cluster's left edge sat over the
     sidebar — obscuring the account/Log out row, in the one region the scrim
     deliberately does not cover. The cluster now anchors to the content
     region (x from SIDEBAR_W), same as the scrim; crossing the sidebar is
-    structurally impossible, and the pill shrinks below its design width only
-    as a last resort."""
+    structurally impossible, and the cluster slot shrinks below its design
+    width only as a last resort. Round 30: the pill left this slot for the
+    top-right corner, but the nav/overflow circles and the playback popup
+    still anchor here."""
 
     _CLUSTER_PAD = sl_views.NAV_CIRCLE_GAP + 2 * sl_views.NAV_CIRCLE_R
 
     def test_cluster_centers_on_content_region_at_design_width(self):
         for w in (1280.0, 1440.0):
-            px, _, pw, _ = sl_views.pill_rect(w, 800)
-            assert pw == sl_views.PILL_W
+            px, _, pw, _ = sl_views.dock_cluster_rect(w, 800)
+            assert pw == sl_views.DOCK_SLOT_W, \
+                "the slot keeps the vacated pill's footprint, not the grown pill's"
             cluster_left = px - self._CLUSTER_PAD
             cluster_right = px + pw + self._CLUSTER_PAD
             content_cx = (sl_views.SIDEBAR_W + w) / 2.0
@@ -1455,16 +1602,16 @@ class TestPillContentAnchor:
 
     def test_cluster_never_crosses_the_sidebar(self):
         for w in (1440.0, 1280.0, 940.0, 856.0, 800.0, 760.0):
-            px, _, _, _ = sl_views.pill_rect(w, 800)
+            px, _, _, _ = sl_views.dock_cluster_rect(w, 800)
             home_left = px - self._CLUSTER_PAD
             assert home_left >= sl_views.SIDEBAR_W + sl_views.PILL_FLOAT - 1e-6, \
                 f"home circle crosses the sidebar at width {w}"
 
-    def test_pill_shrinks_only_as_last_resort(self):
-        _, _, pw_940, _ = sl_views.pill_rect(940, 800)
-        assert pw_940 == sl_views.PILL_W, "940pt still fits the design-width pill"
-        px8, _, pw8, _ = sl_views.pill_rect(800, 800)
-        assert pw8 < sl_views.PILL_W, "800pt is where the pill starts shrinking"
+    def test_cluster_shrinks_only_as_last_resort(self):
+        _, _, pw_940, _ = sl_views.dock_cluster_rect(940, 800)
+        assert pw_940 == sl_views.DOCK_SLOT_W, "940pt still fits the design-width cluster"
+        px8, _, pw8, _ = sl_views.dock_cluster_rect(800, 800)
+        assert pw8 < sl_views.DOCK_SLOT_W, "800pt is where the cluster starts shrinking"
         search_right = px8 + pw8 + self._CLUSTER_PAD
         assert search_right <= 800.0 - sl_views.PILL_FLOAT + 1e-6, \
             "shrunk cluster keeps the right float margin"
@@ -1516,13 +1663,15 @@ class TestGlassSurfaces:
                    and n.color_rgba == sl_views.GLASS_BORDER for n in rrects), \
             "sidebar needs its scene-drawn glass rail"
         # Round 8: the full-width bar is a centered floating capsule — its
-        # border ring is a rounded rect at the pill rect, radius 32, with the
-        # glass specular highlight just inside its top edge and a soft shadow.
+        # border ring is a rounded rect at the pill rect, radius from the
+        # Liquid Glass size rule (round 34), with the glass specular highlight
+        # just inside its top edge and a soft shadow.
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         rrects = _nodes(scene_buffer, RoundedRectNode)
         assert any(n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
-                   and n.width == pw and n.height == ph and n.radius == 32.0
-                   for n in rrects), "player pill needs its capsule border ring"
+                   and n.width == pw and n.height == ph
+                   and n.radius == sl_views.glass_silhouette_radius(ph)
+                   for n in rrects), "player pill needs its silhouette border ring"
         assert any(n.color_rgba == sl_views.GLASS_HIGHLIGHT and n.y == py + 1
                    and px < n.x < px + pw and n.height == 1 for n in rects), \
             "player pill needs its specular top highlight"
@@ -2198,7 +2347,8 @@ class TestMcpHooks:
             state_provider=lambda: {},
             app_call_timeout_s=5.0,
         )
-        assert bridge.register_app_hooks(app) == 2
+        assert bridge.register_app_hooks(app) == 6, \
+            "client-id pair plus the round-31 layout_set/list/clear/export tools"
 
         listing = bridge.dispatcher().handle_payload(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
@@ -2427,10 +2577,10 @@ class TestDockIconCentering:
     def test_nav_circle_icons_center_on_their_circles(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
         img, _ = self._render_idle_dock(app, ctx, scene_buffer)
-        px, py, pw, ph = sl_views.pill_rect(1280, 800)
-        cy = py + ph / 2
-        home_cx = px - sl_views.NAV_CIRCLE_GAP - sl_views.NAV_CIRCLE_R
-        search_cx = px + pw + sl_views.NAV_CIRCLE_GAP + sl_views.NAV_CIRCLE_R
+        dpx, dpy, dpw, dph = sl_views.dock_cluster_rect(1280, 800)
+        cy = dpy + dph / 2
+        home_cx = dpx - sl_views.NAV_CIRCLE_GAP - sl_views.NAV_CIRCLE_R
+        search_cx = dpx + dpw + sl_views.NAV_CIRCLE_GAP + sl_views.NAV_CIRCLE_R
         self._assert_centered(img, (int(home_cx) - 20, int(cy) - 20, int(home_cx) + 20,
                                     int(cy) + 20), self._bright, (home_cx, cy), "home")
         self._assert_centered(img, (int(search_cx) - 20, int(cy) - 20, int(search_cx) + 20,
@@ -2439,9 +2589,10 @@ class TestDockIconCentering:
     def test_overflow_icon_centers_on_its_circle(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
         img, _ = self._render_idle_dock(app, ctx, scene_buffer)
-        px, py, _, ph = sl_views.pill_rect(1280, 800)
-        cy = py + ph / 2
-        ocx = 1280 - sl_views.PILL_FLOAT - sl_views.OVERFLOW_R
+        # Round 36: the circle lives at the shipped layout.toml position —
+        # read its resolved rect rather than recomputing a natural.
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        ocx, cy = overflow.x + overflow.w / 2, overflow.y + overflow.h / 2
         self._assert_centered(img, (int(ocx) - 20, int(cy) - 20, int(ocx) + 20, int(cy) + 20),
                               self._bright, (ocx, cy), "overflow more")
 
@@ -2471,15 +2622,17 @@ class TestDockIconCentering:
     def test_idle_note_icon_centers_on_its_tile(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
         img, _ = self._render_idle_dock(app, ctx, scene_buffer)
-        px, py, _, _ = sl_views.pill_rect(1280, 800)
-        tile_c = (px + 10 + 22, py + 10 + 22)
+        px, py, _, ph = sl_views.pill_rect(1280, 800)
+        art = ph - 2 * sl_views.PILL_ART_INSET
+        tile_c = (px + sl_views.PILL_ART_INSET + art / 2,
+                  py + sl_views.PILL_ART_INSET + art / 2)
         # The note carries an intentional upward optical bias (round 28: it
         # read ~2px low): its centroid pin targets the biased placement,
-        # not the geometric tile centre.
+        # not the geometric tile centre. The glyph is 36pt on the 84pt tile.
         _bias_x, bias_y = sl_views._ICON_OPTICAL_BIAS_EM[sl_icons.NOTE]
-        target = (tile_c[0], tile_c[1] + bias_y * 20)
-        self._assert_centered(img, (int(tile_c[0]) - 14, int(tile_c[1]) - 14,
-                                    int(tile_c[0]) + 14, int(tile_c[1]) + 14),
+        target = (tile_c[0], tile_c[1] + bias_y * 36)
+        self._assert_centered(img, (int(tile_c[0]) - 25, int(tile_c[1]) - 25,
+                                    int(tile_c[0]) + 25, int(tile_c[1]) + 25),
                               self._bright, target, "idle note")
 
     def test_card_play_fab_uses_the_fill_icon(self, app_ctx):
@@ -2674,6 +2827,150 @@ class TestGlassSheenSilhouette:
 
 
 # ---------------------------------------------------------------------------
+# Round 34 (Alec, Apple's Liquid Glass size-rule reference): big plates are
+# NOT capsules. At small sizes the corner radius is h/2 (nav circles, the
+# 64pt pill — full semicircular ends); past a height threshold the radius
+# caps at a fixed value and the plate reads as a rounded rectangle with the
+# reference's continuous-corner feel. The 108pt pill crosses the threshold;
+# the sheen chord-clip and the specular must follow the capped arc (same
+# construction, new radius — the round-24/27 pixel discipline still holds).
+class TestGlassSizeRule:
+
+    class _Capture:
+        def __init__(self):
+            self.rrects = []
+            self.rects = []
+
+        def rounded_rect(self, **kw):
+            self.rrects.append(kw)
+
+        def rect(self, **kw):
+            self.rects.append(kw)
+
+    def _rasterize_plate(self, w, h, radius):
+        cap = self._Capture()
+        sl_views._glass_plate(cap, 100.0, 100.0, w, h, radius=radius, z=2)
+        nodes = [RectNode(x=0, y=0, width=400, height=400,
+                          color_rgba=(16, 16, 16, 255), z_index=0)]
+        nodes += [RoundedRectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                                  radius=n["radius"], color_rgba=n["color"],
+                                  z_index=n["z_index"]) for n in cap.rrects]
+        nodes += [RectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                           color_rgba=n["color"], z_index=n["z_index"]) for n in cap.rects]
+        frame = SceneFrame(revision=1, logical_width=400, logical_height=400,
+                           display_width=400, display_height=400, ts_ns=0,
+                           nodes=tuple(nodes))
+        return rasterize_scene_frame(frame)
+
+    def _sheen_rows(self, cap):
+        return [n for n in cap.rects
+                if n["color"][:3] == (255, 255, 255)
+                and 0 < n["color"][3] <= sl_views.GLASS_SHEEN[3]
+                and n["y"] != 101.0]
+
+    def test_rule_constants_come_from_the_reference(self):
+        assert 24.0 <= sl_views.GLASS_RECT_RADIUS <= 32.0, \
+            "the capped corner is the reference's r24-r32 continuous corner"
+        assert 64.0 < sl_views.GLASS_CAPSULE_MAX_H < 108.0, \
+            "the 64pt pill stays capsule; the round-32 108pt pill crosses"
+
+    def test_capsule_at_and_below_the_threshold(self):
+        rule = sl_views.glass_silhouette_radius
+        assert rule(44.0) == 22.0, "nav circles keep r = h/2"
+        assert rule(64.0) == 32.0, "the current pill keeps r = h/2"
+        assert rule(sl_views.GLASS_CAPSULE_MAX_H) == sl_views.GLASS_CAPSULE_MAX_H / 2, \
+            "the boundary itself is still a capsule"
+
+    def test_capped_above_the_threshold(self):
+        rule = sl_views.glass_silhouette_radius
+        assert rule(sl_views.GLASS_CAPSULE_MAX_H + 0.5) == sl_views.GLASS_RECT_RADIUS
+        assert rule(108.0) == sl_views.GLASS_RECT_RADIUS, "the big pill becomes a rect"
+        assert rule(400.0) == sl_views.GLASS_RECT_RADIUS, "the cap never grows"
+
+    def test_pill_silhouette_follows_the_rule_in_both_states(self, app_ctx):
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        _, _, _, ph = sl_views.pill_rect(1280, 800)
+        want = sl_views.glass_silhouette_radius(ph)
+        rings = [n for n in _nodes(buf, RoundedRectNode)
+                 if n.color_rgba == sl_views.PILL_BORDER]
+        assert rings and all(n.radius == want for n in rings), "idle pill ring obeys the rule"
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500,
+                                           track=track, device=None, shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        _tick(app, ctx, 2)
+        rings = [n for n in _nodes(buf, RoundedRectNode)
+                 if n.color_rgba == sl_views.PILL_BORDER]
+        assert rings and all(n.radius == want for n in rings), \
+            "playing pill ring obeys the same rule"
+
+    def test_small_plates_do_not_cross(self, app_ctx):
+        """Only the (big) pill's silhouette may change: nav circles and the
+        overflow stay full capsules (r = h/2 = 22), the popup keeps r14."""
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.devices = [
+            sl_models.Device(id="d1", name="MacBook Pro", kind="Computer", is_active=True,
+                             is_restricted=False, volume_percent=40),
+        ]
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500,
+                                           track=track, device=app.devices[0],
+                                           shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        app.show_devices = True
+        _tick(app, ctx, 2)
+        circles = [n for n in _nodes(buf, RoundedRectNode)
+                   if n.width == 44.0 and n.height == 44.0 and n.radius == 22.0]
+        assert len(circles) >= 3, "home/search/overflow circles stay capsule (r = h/2)"
+        popup = [n for n in _nodes(buf, RoundedRectNode)
+                 if n.color_rgba == (18, 18, 18, 234) and n.width == 298]
+        assert popup and {n.radius for n in popup} == {13.0}, \
+            "the popup fill keeps r13 (its explicit r14 ring minus the 1px inset)"
+
+    def test_capped_corner_keeps_the_sheen_discipline(self):
+        """Pixel contract (round-24 discipline) on the capped arc: outside it
+        the backdrop is untouched, and a point the capsule arc would leave
+        empty now carries plate fill — that difference IS the rectangle."""
+        radius = sl_views.glass_silhouette_radius(108.0)
+        img = self._rasterize_plate(200.0, 108.0, radius)
+        for x, y in ((102, 102), (103, 103), (104, 102), (105, 104), (297, 102), (296, 103)):
+            lum = int(img[y, x, :3].sum()) / 3
+            assert lum <= 20, f"sheen leaks past the capped corner at {(x, y)}: lum {lum}"
+        # (114, 106): outside a capsule arc (center (154, 154), distance ~62.5
+        # > 54) but inside the capped arc (center (128, 128), distance ~26.1
+        # < 28) — the plate must be present here, or it is still a capsule.
+        lum = int(img[106, 114, :3].sum()) / 3
+        assert lum > 20, "the capped corner fills where the capsule would not"
+        top = int(img[103, 200, :3].sum()) / 3
+        assert top >= 64, f"sheen band missing at the top edge: lum {top}"
+
+    def test_sheen_and_specular_follow_the_capped_arc(self):
+        """Same chord-clip construction, new arc: rows above the corner clip
+        against the r-cap, and the specular span insets from the r-cap."""
+        radius = sl_views.glass_silhouette_radius(108.0)
+        cap = self._Capture()
+        sl_views._glass_plate(cap, 100.0, 100.0, 200.0, 108.0, radius=radius, z=2)
+        for n in self._sheen_rows(cap):
+            cy = n["y"] + n["height"] / 2 - 100.0
+            if cy >= radius:
+                continue
+            chord = radius - math.sqrt(max(0.0, radius * radius - (radius - cy) ** 2))
+            assert n["x"] >= 100.0 + chord - 0.6, \
+                f"row at depth {cy:.1f} starts at {n['x']}, left of the capped chord"
+            assert n["x"] + n["width"] <= 100.0 + 200.0 - chord + 0.6, \
+                f"row at depth {cy:.1f} ends past the capped chord"
+        specular = [n for n in cap.rects if n["y"] == 101.0 and n["color"][3] > 0]
+        assert specular, "specular missing"
+        assert min(n["x"] for n in specular) == pytest.approx(100.0 + radius * 0.7), \
+            "the specular span insets from the capped arc, not the capsule's"
+
+
+# ---------------------------------------------------------------------------
 # Round 25 (Alec's eyeball pass on 1b71bac): the playback popup "doesn't work
 # properly" — clicking its padding, gaps, or labels dismisses it. Root cause:
 # the popup's glass plate registers no hit region, so clicks on dead space
@@ -2702,9 +2999,10 @@ class TestPopupPlateSwallow:
 
         popup_w, row_h, head_h = 300.0, 40.0, 148.0
         popup_h = head_h + row_h * 1 + 12  # one device
-        popup_x = 1280 - popup_w - 16
-        _, pill_top, _, _ = sl_views.pill_rect(1280, 800)
-        popup_y = pill_top - 12 - popup_h
+        # Round 36: the popup drops from the overflow circle, menu-style.
+        circle = next(r for r in app._hits if r.action == "open_devices")
+        popup_x = circle.x + circle.w - popup_w
+        popup_y = circle.y + circle.h + 12.0
 
         # Bottom padding below the last device row: inside the plate, on no control.
         app._dispatch_click(popup_x + popup_w / 2, popup_y + popup_h - 4)
@@ -2727,9 +3025,9 @@ class TestPopupPlateSwallow:
         monkeypatch.setattr(app, "_player_action", lambda fn: actions.append("player"))
 
         # Shuffle row hit: (popup_x+8, y1-5, popup_w-16, 30), y1 = popup_y + 48.
-        popup_x = 1280 - 300.0 - 16
-        _, pill_top, _, _ = sl_views.pill_rect(1280, 800)
-        popup_y = pill_top - 12 - (148.0 + 40.0 * 1 + 12)
+        circle = next(r for r in app._hits if r.action == "open_devices")
+        popup_x = circle.x + circle.w - 300.0
+        popup_y = circle.y + circle.h + 12.0
         app._dispatch_click(popup_x + 40, popup_y + 48 + 10)
         assert actions == ["player"], "toggling Shuffle must still reach its control"
         assert app.show_devices is True, "toggles never dismiss the popup"
@@ -2747,7 +3045,9 @@ class TestPopupPlateSwallow:
 # ---------------------------------------------------------------------------
 
 class TestOverflowClickSequence:
-    CIRCLE = (1242.0, 752.0)  # overflow circle centre at 1280x800
+    # Overflow circle centre at 1280x800 (round 36: the shipped layout.toml
+    # position on the pill's left flank — (688,48,44,44)).
+    CIRCLE = (710.0, 70.0)
 
     def _with_track(self, app, ctx, monkeypatch, *, devices=1, show_devices=False):
         app.authenticated = True
@@ -3201,7 +3501,7 @@ class TestPillArtRounded:
 
         px, py, _, _ = sl_views.pill_rect(1280, 800)
         thumbs = [n for n in _nodes(scene_buffer, CpuLayerNode)
-                  if abs(n.x - (px + 10)) < 0.5 and abs(n.y - (py + 10)) < 0.5]
+                  if abs(n.x - (px + 12)) < 0.5 and abs(n.y - (py + 12)) < 0.5]
         assert thumbs, "pill art thumb missing"
         rgba = thumbs[0].rgba
         h, w = rgba.shape[0], rgba.shape[1]
@@ -3640,8 +3940,11 @@ class TestSidebarLiquidGlass:
         rects = _nodes(buf, RectNode)
 
         def seam_strips(region_top, region_bottom):
+            # Scoped to the rail's x range: the round-30 top scrim draws
+            # equally wide dark strips at the same z outside the sidebar.
             strips = [n for n in rects
                       if region_top <= n.y < region_bottom
+                      and n.x < sl_views.SIDEBAR_W
                       and n.color_rgba[:3] < (40, 40, 40)
                       and n.width >= w - 6 and n.z_index >= 4]
             strips.sort(key=lambda n: n.y)
@@ -3683,3 +3986,238 @@ class TestSidebarLiquidGlass:
         mean_lum = float(region.sum() / 3 / region[:, :, 0].size)
         assert mean_lum < 100, \
             f"rail interior lum {mean_lum:.0f} — the glass must stay dark enough for light text"
+
+# ---------------------------------------------------------------------------
+# Pill to the top-right (Alec, round 30): the now-playing pill leaves the
+# bottom dock for the window's top-right corner, right edge pinned so any
+# width change grows leftward. The nav/overflow circles are NOT part of the
+# move — they hold the bottom dock exactly where the cluster put them, and
+# content scrolls under the top glass behind a mirrored scrim.
+# ---------------------------------------------------------------------------
+
+class TestPillTopRight:
+
+    @staticmethod
+    def _with_track(app, ctx, *, show_devices=False):
+        app.authenticated = True
+        artist = _artist("Nirvana")
+        track = _track("Lithium", artist, _album("Nevermind", artist), ms=257_000)
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500,
+                                           track=track, device=None, shuffle=False,
+                                           repeat="off")
+        app._player_synced_at = app.now_monotonic
+        # The scene is retained: show_devices must be set before the tick, or
+        # the popup region never redraws.
+        app.show_devices = show_devices
+        _tick(app, ctx, 2)
+
+    def test_pill_anchors_top_right_at_design_width(self):
+        assert sl_views.pill_rect(1280, 800) == (744.0, 16.0, 520.0, 108.0), \
+            "right edge pinned at width - PILL_FLOAT, top at the dock's margin idiom"
+
+    def test_right_edge_stays_pinned_across_window_widths(self):
+        for w in (1600.0, 1280.0, 1000.0, 760.0):
+            px, py, pw, ph = sl_views.pill_rect(w, 800)
+            assert px + pw == pytest.approx(w - sl_views.PILL_FLOAT), \
+                f"right edge drifts at width {w} — shrinkage must grow leftward"
+            assert py == sl_views.PILL_FLOAT and ph == sl_views.PILL_H
+            assert px >= sl_views.SIDEBAR_W + sl_views.PILL_FLOAT, \
+                f"pill crosses the sidebar at width {w}"
+
+    def test_idle_and_playing_share_the_same_right_edge(self, app_ctx):
+        """Both states anchor the right edge: if the pill's width ever differs
+        between idle and playing, growth reads as leftward, never a jump."""
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        ring_idle = [n for n in _nodes(buf, RoundedRectNode)
+                     if n.color_rgba == sl_views.PILL_BORDER
+                     and n.radius == sl_views.GLASS_RECT_RADIUS]
+        assert len(ring_idle) == 1
+        self._with_track(app, ctx)
+        ring_playing = [n for n in _nodes(buf, RoundedRectNode)
+                        if n.color_rgba == sl_views.PILL_BORDER
+                        and n.radius == sl_views.GLASS_RECT_RADIUS]
+        assert len(ring_playing) == 1
+        assert (ring_idle[0].x + ring_idle[0].width) == \
+            (ring_playing[0].x + ring_playing[0].width), "right edge must not move"
+        assert ring_idle[0].y == ring_playing[0].y == sl_views.PILL_FLOAT
+
+    def test_pill_contents_ride_to_the_top_right(self, app_ctx):
+        """The whole component moves: art tile, metadata, transport hits,
+        progress strip — nothing player-shaped stays bottom-center."""
+        app, ctx, buf = app_ctx
+        self._with_track(app, ctx)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        art = [n for n in _nodes(buf, CpuLayerNode) if n.width == 84]
+        assert art and (art[0].x, art[0].y) == (px + 12, py + 12), "art tile rides along"
+        for action in ("toggle_play", "prev", "next", "seek_bar"):
+            hits = [r for r in app._hits if r.action == action]
+            assert hits and py <= hits[0].y <= py + ph, f"{action} hit left behind at the dock"
+        old_zone = [r for r in app._hits
+                    if r.action in ("toggle_play", "seek_bar") and r.y > 700]
+        assert old_zone == [], "no player hits linger in the old dock zone"
+
+    def test_home_and_search_hold_the_bottom_dock(self, app_ctx):
+        """Home/search are not part of the pill's move: they keep the exact
+        coordinates the bottom cluster gave them. The overflow circle held
+        the dock too until round 36, when the shipped layout file moved it
+        to the pill's left flank (TestOverflowPersistsLeftOfPill owns that)."""
+        app, ctx, buf = app_ctx
+        self._with_track(app, ctx, show_devices=True)
+        home = next(r for r in app._hits if r.action == "nav" and r.payload == "home")
+        search = next(r for r in app._hits if r.action == "nav" and r.payload == "search")
+        assert (home.x, home.y, home.w, home.h) == (468.0, 730.0, 44.0, 44.0)
+        assert (search.x, search.y, search.w, search.h) == (1008.0, 730.0, 44.0, 44.0)
+        assert [r for r in app._hits if r.action == "open_devices" and r.y > 700] == [], \
+            "the bottom-right no longer hosts the overflow circle"
+
+    def test_search_field_clears_the_pill_zone(self, app_ctx):
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        app.view = "search"
+        ctx.logical_width_px = 1000.0
+        _tick(app, ctx, 2)
+        pill_x = sl_views.pill_rect(1000.0, 800.0)[0]
+        fields = [n for n in _nodes(buf, RoundedRectNode)
+                  if n.radius == 20.0 and abs(n.y - 24.0) < 1.0]
+        assert fields, "search field missing"
+        assert fields[0].x + fields[0].width <= pill_x - 12.0 + 1e-6, \
+            "the field's rounded cap must not slide under the top-right pill"
+
+    def test_top_scrim_mirrors_the_dock_idiom(self, app_ctx):
+        """Content scrolls UNDER the top glass exactly like the dock: a calm
+        near-opaque band over the pill zone, then a smooth fade downward —
+        above content (z<=5), below the pill (z=10)."""
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        strips = [n for n in _nodes(buf, RectNode)
+                  if n.x == sl_views.SIDEBAR_W and n.width == 1280 - sl_views.SIDEBAR_W
+                  and n.color_rgba[:3] == sl_views.BG[:3]
+                  and n.y < sl_views.PILL_FLOAT + sl_views.PILL_H + sl_views.SCRIM_GAP
+                  + sl_views.SCRIM_FADE + 10]
+        assert strips, "no top scrim"
+        strips.sort(key=lambda n: n.y)
+        band = [n for n in strips if n.y == 0]
+        assert band and band[0].color_rgba[3] >= 230, \
+            "a calm near-opaque band caps the window top over the pill zone"
+        pill_bottom = sl_views.PILL_FLOAT + sl_views.PILL_H
+        assert band[0].height >= pill_bottom + 8.0, "the band covers the pill with margin"
+        fade = [n for n in strips if n.y >= band[0].height]
+        assert len(fade) >= 8, "the fade dissolves content over ~1px strips"
+        alphas = [n.color_rgba[3] for n in fade]
+        assert alphas == sorted(alphas, reverse=True), "fade alpha falls monotonically downward"
+        assert alphas[0] >= 200 and alphas[-1] <= 24
+        assert all(6 <= n.z_index < 10 for n in strips), \
+            "scrim above content and its scrollbar, below the pill"
+
+    def test_scrolled_content_flows_under_the_top_glass(self, app_ctx):
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        app.view = "library"
+        app.playlists = tuple(_playlist(f"Mix {i:02d}") for i in range(48))
+        app.content_scroll = 400.0
+        _tick(app, ctx, 2)
+        frame = buf.latest_frame()
+        card_tops = [n.y for n in frame.nodes
+                     if isinstance(n, RoundedRectNode) and n.width == sl_views.CARD_W]
+        assert min(card_tops) < sl_views.PILL_FLOAT + sl_views.PILL_H, \
+            "scrolled cards must pass under the top pill zone, not cull at it"
+
+
+# ---------------------------------------------------------------------------
+# Round 36 (Alec, SL-19 via SL-20): the overflow (⋯) circle's position is
+# the PERSISTED spec in the shipped layout.toml — 12pt left of the top-right
+# pill, vertically centered (Alec's live nudge, baked by the persist path
+# itself). The bottom dock keeps just home + search; the popup drops from
+# the moved circle menu-style; the search field caps at the circle.
+class TestOverflowPersistsLeftOfPill:
+
+    def _with_track(self, app, ctx, *, show_devices=False):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.devices = [
+            sl_models.Device(id="d1", name="MacBook Pro", kind="Computer", is_active=True,
+                             is_restricted=False, volume_percent=40),
+        ]
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500,
+                                           track=track, device=app.devices[0],
+                                           shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        app.show_devices = show_devices
+        _tick(app, ctx, 2)
+
+    def test_circle_sits_at_the_shipped_position(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        assert (overflow.x, overflow.y, overflow.w, overflow.h) == (688.0, 48.0, 44.0, 44.0), \
+            "Alec's live nudge, baked: (688,48,44,44) at 1280x800"
+        assert px - (overflow.x + overflow.w) == 12.0, "12pt left of the pill"
+        assert overflow.y + overflow.h / 2 == py + ph / 2, "vertically centered on the pill"
+
+    def test_circle_tracks_the_window_right_edge(self, app_ctx):
+        """The persisted spec is anchor-based: resizes keep the 12pt gap as
+        long as the pill rides its own top-right rule at full width."""
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx)
+        for w in (1280.0, 1100.0, 940.0):
+            ctx.logical_width_px = w
+            app.invalidate()  # stands in for the OS resize event
+            _tick(app, ctx, 2)
+            px = sl_views.pill_rect(w, 800)[0]
+            overflow = next(r for r in app._hits if r.action == "open_devices")
+            assert overflow.x == w - 548.0 - 44.0, f"anchor resolution at width {w}"
+            assert px - (overflow.x + overflow.w) == 12.0, f"gap drifts at width {w}"
+
+    def test_bottom_dock_keeps_only_home_and_search(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx)
+        bottom = [r for r in app._hits
+                  if r.action in ("nav", "open_devices") and r.y > 700]
+        got = {(r.action, r.payload if r.action == "nav" else None): (r.x, r.y)
+               for r in bottom}
+        assert got == {("nav", "home"): (468.0, 730.0),
+                       ("nav", "search"): (1008.0, 730.0)}, \
+            "the bottom-right holds just search; home stays; overflow is gone"
+
+    def test_popup_drops_from_the_shipped_circle(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx, show_devices=True)
+        plates = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                  if n.color_rgba == (18, 18, 18, 234) and n.width == 298]
+        assert plates, "popup missing"
+        for n in plates:
+            assert n.x + n.width + 1 == 688.0 + 44.0, \
+                "popup right edge aligns to the circle's right edge (menu idiom)"
+            assert n.y - 1 == 48.0 + 44.0 + 12.0, "popup drops 12pt below the circle"
+
+    def test_search_field_clears_the_shipped_circle(self, app_ctx):
+        # 1100pt: room for the 180pt field floor AND the circle — the circle
+        # cap binds (the pill cap never did this far right).
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        app.view = "search"
+        ctx.logical_width_px = 1100.0
+        _tick(app, ctx, 2)
+        circle_x = 1100.0 - 548.0 - 44.0
+        fields = [n for n in _nodes(buf, RoundedRectNode)
+                  if n.radius == 20.0 and abs(n.y - 24.0) < 1.0]
+        assert fields, "search field missing"
+        assert fields[0].x + fields[0].width == circle_x - 12.0, \
+            "the field's rounded cap must not slide under the overflow circle"
+        assert fields[0].width < 460.0, "the circle — not the max width — set the cap"
+
+    def test_a_nav_more_override_still_wins(self, app_ctx):
+        """The persisted spec is the base layout, not a cage: a fresh
+        layout_set still re-points the circle (and persists that)."""
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx)
+        app.mcp_call("layout_set", {
+            "id": "nav_more", "rect": {"x": 600, "y": 300, "width": 44, "height": 44}})
+        _tick(app, ctx, 2)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        assert (overflow.x, overflow.y) == (600.0, 300.0)
