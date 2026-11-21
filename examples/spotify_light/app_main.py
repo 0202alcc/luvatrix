@@ -34,10 +34,13 @@ import sl_art
 import sl_layout
 import sl_models
 import sl_oauth
+import sl_player
 import sl_store
 import sl_ui
 import sl_views
 import sl_worker
+
+from luvatrix_core.core.playback_bridge import PlaybackEventKind
 
 log = logging.getLogger("spotify_light")
 
@@ -85,11 +88,13 @@ CONTROL_KEY_NAMES = frozenset(CONTROL_KEYCODES.values())
 class TokenManager:
     """Thread-safe token access with automatic refresh (worker thread only)."""
 
-    def __init__(self, cfg_dir: Path, client_id: str, tokens: sl_oauth.TokenSet) -> None:
+    def __init__(self, cfg_dir: Path, client_id: str, tokens: sl_oauth.TokenSet,
+                 on_token=None) -> None:
         self._lock = threading.Lock()
         self._cfg_dir = cfg_dir
         self._client_id = client_id
         self._tokens = tokens
+        self._on_token = on_token
 
     def access_token(self) -> str:
         with self._lock:
@@ -99,6 +104,10 @@ class TokenManager:
                 ).with_fallback_refresh(self._tokens)
                 self._tokens = refreshed
                 sl_store.save_tokens(self._cfg_dir, refreshed)
+                if self._on_token is not None:
+                    # The web playback surface needs the fresh token; the SDK
+                    # does not refresh on its own.
+                    self._on_token(refreshed.access_token)
             return self._tokens.access_token
 
     def replace(self, tokens: sl_oauth.TokenSet) -> None:
@@ -190,6 +199,12 @@ class SpotifyLightApp(App):
         self._login_verifier: str | None = None
         self._login_state: str | None = None
         self._login_redirect_uri: str | None = None
+        # In-app playback (Web Playback SDK): surface + device live only while
+        # a streaming-scoped session runs on a scripted-view-capable bridge.
+        self._web_surface = None
+        self._web_device: sl_player.WebPlaybackDevice | None = None
+        self._web_surface_factory = None  # tests inject; default builds the WK surface
+        self._web_auth_failed = False  # toast once, then stay on Connect remote
 
         self.set_continuous_render(False)
 
@@ -199,7 +214,9 @@ class SpotifyLightApp(App):
     # -- session wiring ------------------------------------------------------
 
     def _begin_session(self, tokens: sl_oauth.TokenSet) -> None:
-        self._token_manager = TokenManager(self.cfg_dir, self.client_id, tokens)
+        self._stop_web_playback()
+        self._token_manager = TokenManager(self.cfg_dir, self.client_id, tokens,
+                                           on_token=self._push_web_token)
         self._client = sl_api.SpotifyClient(token_provider=self._token_manager.access_token)
         self.authenticated = True
         self._bootstrap_done = False
@@ -207,8 +224,118 @@ class SpotifyLightApp(App):
         self.worker.submit("bootstrap", self._job_bootstrap)
         self.worker.submit("poll-devices", self._job_poll_devices)
         self._next_player_poll = 0.0  # poll immediately
+        self._start_web_playback(tokens)
+
+    # -- in-app playback (Web Playback SDK) ------------------------------------
+
+    def _start_web_playback(self, tokens: sl_oauth.TokenSet) -> None:
+        """Register the SDK device when the session can host it. Missing scope
+        or bridge keeps today's Connect-remote behavior — no forced re-login."""
+        if not sl_oauth.has_streaming_scope(tokens):
+            log.info("tokens lack the streaming scope; in-app playback off until re-login")
+            return
+        bridge = native_controls()
+        if bridge is None or not bridge.available or not hasattr(bridge, "create_scripted_web_view"):
+            return
+        factory = self._web_surface_factory or self._default_web_surface
+        try:
+            surface = factory(bridge, device_name=sl_player.DEFAULT_DEVICE_NAME,
+                              token=tokens.access_token)
+        except Exception:  # noqa: BLE001 — in-app playback is additive
+            log.exception("web playback surface failed to start")
+            return
+        self._web_surface = surface
+        self._web_device = sl_player.WebPlaybackDevice(surface)
+        self._web_auth_failed = False
+        try:
+            self._web_device.connect()
+        except Exception:  # noqa: BLE001
+            log.exception("web playback connect failed")
+
+    @staticmethod
+    def _default_web_surface(bridge, *, device_name: str, token: str):
+        # Lazy: the WK surface imports WebKit via PyObjC — macos extra only.
+        from luvatrix_core.platform.macos.playback_surface import WKWebPlaybackSurface
+
+        surface = WKWebPlaybackSurface(bridge, device_name=device_name, token=token)
+        surface.start()
+        return surface
+
+    def _stop_web_playback(self) -> None:
+        surface = self._web_surface
+        self._web_surface = None
+        self._web_device = None
+        if surface is not None:
+            try:
+                surface.stop()
+            except Exception:  # noqa: BLE001 — teardown must not raise
+                log.exception("web playback surface stop failed")
+
+    def _push_web_token(self, token: str) -> None:
+        surface = self._web_surface
+        if surface is not None:
+            try:
+                surface.set_token(token)
+            except Exception:  # noqa: BLE001
+                log.exception("web playback token push failed")
+
+    def _web_is_active(self) -> bool:
+        web = self._web_device
+        player = self.player
+        return bool(
+            web is not None and web.device_id
+            and player is not None and player.device is not None
+            and player.device.id == web.device_id
+        )
+
+    def _transport_target(self):
+        """What transport actions run against: the web device when it is
+        registered (routing itself decides local-vs-Connect per verb), else
+        the plain Connect client."""
+        web = self._web_device
+        if web is None or web.device_id is None:
+            return self._client
+        return sl_player.TransportRouter(self._client, web, self._web_is_active)
+
+    def _pump_web_playback(self) -> None:
+        """Drain SDK events each tick: adopt local state when the web device
+        is the active one, surface auth/account problems once, and pick the
+        freshly registered device up in the Connect list."""
+        web = self._web_device
+        if web is None:
+            return
+        try:
+            events = web.drain_events()
+        except Exception:  # noqa: BLE001
+            log.exception("web playback drain failed")
+            return
+        if not events:
+            return
+        state_arrived = False
+        for event in events:
+            kind = event.kind
+            if kind is PlaybackEventKind.READY:
+                log.info("in-app playback device registered: %s", web.device_id)
+                if self._client is not None:
+                    # The SDK device now appears in GET /me/player/devices.
+                    self.worker.submit("poll-devices", self._job_poll_devices)
+            elif kind is PlaybackEventKind.AUTH_ERROR:
+                if not self._web_auth_failed:
+                    self._web_auth_failed = True
+                    self._toast("In-app playback sign-in failed — using Connect remote")
+            elif kind is PlaybackEventKind.ACCOUNT_ERROR:
+                self._toast("Spotify Premium is required for in-app playback")
+            elif kind in (PlaybackEventKind.INIT_ERROR, PlaybackEventKind.PLAYBACK_ERROR):
+                log.info("web playback %s: %s", kind.value, event.payload)
+            elif kind in (PlaybackEventKind.STATE_CHANGED, PlaybackEventKind.STATE_SNAPSHOT):
+                state_arrived = True
+        if state_arrived and web.last_state is not None and self._web_is_active():
+            self.player = web.last_state
+            self._player_synced_at = time.monotonic()
+        self.invalidate()
 
     def _end_session(self) -> None:
+        self._stop_web_playback()
         sl_store.clear_tokens(self.cfg_dir)
         self._tokens = None
         self._token_manager = None
@@ -432,7 +559,7 @@ class SpotifyLightApp(App):
 
     def _job_player_action(self, fn):
         assert self._client is not None
-        fn(self._client)
+        fn(self._transport_target())
         return True
 
     def _job_art(self, url: str, size: int):
@@ -1532,6 +1659,7 @@ class SpotifyLightApp(App):
             self.invalidate()
         self._handle_input(events)
         self._handle_worker_results()
+        self._pump_web_playback()
         self._handle_timers()
 
     def render(self) -> None:
