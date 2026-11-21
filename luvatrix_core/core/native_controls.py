@@ -458,6 +458,11 @@ class _NullScriptedWebView:
     def evaluate_js(self, script: str) -> None:
         self.evaluated.append(script)
 
+    def post_message(self, message) -> None:
+        """Test affordance: deliver a message as the page's JS would."""
+        if self._on_message is not None:
+            self._on_message(message)
+
     def set_frame(self, x: float, y: float, width: float, height: float) -> None:
         self.frame = (x, y, width, height)
 
