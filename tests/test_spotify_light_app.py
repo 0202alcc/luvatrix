@@ -1506,10 +1506,15 @@ class TestGlassSurfaces:
         assert bridge.glass == []  # no native plates for sidebar/player pill
         assert app.glass_active is True
         rects = _nodes(scene_buffer, RectNode)
-        sidebar_tint = [n for n in rects
-                        if n.color_rgba == sl_views.SIDEBAR_PLATE
-                        and n.width == sl_views.SIDEBAR_W and n.height == 800]
-        assert len(sidebar_tint) == 1, "sidebar needs its scene tint plate"
+        # Round 29: the rail is a floating liquid-glass plate — its scene-drawn
+        # border ring + translucent fill ARE the material (TestSidebarLiquidGlass
+        # pins the full construction).
+        m = sl_views.SIDEBAR_GLASS_MARGIN
+        rrects = _nodes(scene_buffer, RoundedRectNode)
+        assert any((n.x, n.y, n.width, n.height) ==
+                   (m, m, sl_views.SIDEBAR_W - 2 * m, 800 - 2 * m)
+                   and n.color_rgba == sl_views.GLASS_BORDER for n in rrects), \
+            "sidebar needs its scene-drawn glass rail"
         # Round 8: the full-width bar is a centered floating capsule — its
         # border ring is a rounded rect at the pill rect, radius 32, with the
         # glass specular highlight just inside its top edge and a soft shadow.
@@ -1524,11 +1529,9 @@ class TestGlassSurfaces:
         assert any(n.color_rgba[0] == 0 and n.color_rgba[3] > 0
                    and n.width == pw and py < n.y <= py + 5 for n in rrects), \
             "player pill needs its soft shadow plates"
-        assert any(n.color_rgba == sl_views.SIDEBAR_EDGE
-                   and n.x == sl_views.SIDEBAR_W - 1 and n.width == 1 for n in rects), \
-            "sidebar glass needs its right-edge hairline"
-        # No opaque or full-width chrome backgrounds under the floating pill.
-        assert [n for n in rects if n.color_rgba == sl_views.SIDEBAR_BG
+        # No opaque or full-width chrome backgrounds under the floating pill,
+        # and no opaque sidebar backing behind the glass rail.
+        assert [n for n in rects if n.color_rgba == (9, 9, 9, 255)
                 and n.width == sl_views.SIDEBAR_W] == []
         assert [n for n in rects if n.width == 1280 and n.y >= 700] == []
 
@@ -1540,7 +1543,7 @@ class TestGlassSurfaces:
         _tick(app, ctx, 2)
 
         rects = _nodes(scene_buffer, RectNode)
-        sidebar_bg = [n for n in rects if n.color_rgba == sl_views.SIDEBAR_BG
+        sidebar_bg = [n for n in rects if n.color_rgba == (9, 9, 9, 255)
                       and n.width == sl_views.SIDEBAR_W and n.height == 800]
         bar_bg = [n for n in rects if n.width == 1280 and n.y >= 700]
         assert sidebar_bg == []
@@ -1557,14 +1560,18 @@ class TestGlassSurfaces:
         _tick(app, ctx, 2)
 
         rects = _nodes(scene_buffer, RectNode)
-        assert any(n.color_rgba == sl_views.SIDEBAR_PLATE and n.width == sl_views.SIDEBAR_W
-                   for n in rects)
+        m = sl_views.SIDEBAR_GLASS_MARGIN
+        assert any((n.x, n.y, n.width, n.height) ==
+                   (m, m, sl_views.SIDEBAR_W - 2 * m, 800 - 2 * m)
+                   and n.color_rgba == sl_views.GLASS_BORDER
+                   for n in _nodes(scene_buffer, RoundedRectNode)), \
+            "bridgeless hosts get the same glass rail"
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         assert any(n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
                    and n.width == pw and n.height == ph
                    for n in _nodes(scene_buffer, RoundedRectNode)), \
             "bridgeless hosts get the same floating pill"
-        assert [n for n in rects if n.color_rgba == sl_views.SIDEBAR_BG
+        assert [n for n in rects if n.color_rgba == (9, 9, 9, 255)
                 and n.width == sl_views.SIDEBAR_W] == []
         assert [n for n in rects if n.width == 1280 and n.y >= 700] == []
         assert app.glass_active is False
@@ -3491,3 +3498,188 @@ class TestEventDrivenSync:
         _s, _t, clock, _tr = self._base(app, ctx, monkeypatch)
         app._player_action(lambda c: None)
         assert abs(app._next_player_poll - (clock.now + app_main.POLL_AFTER_ACTION_SECS)) < 0.01
+
+# ---------------------------------------------------------------------------
+# Sidebar liquid glass (Alec): the left rail becomes one floating liquid-
+# glass component — the dock pill's material turned vertical. Border ring,
+# translucent fill, silhouette-clipped sheen, softened specular top, soft
+# shadow. Hover/selection live inside the idiom as tint/alpha shifts (never
+# opaque slabs), and the scrolling playlist list dissolves at both seams
+# instead of hard-cutting.
+# ---------------------------------------------------------------------------
+
+class TestSidebarLiquidGlass:
+
+    @staticmethod
+    def _rail():
+        m = sl_views.SIDEBAR_GLASS_MARGIN
+        return (m, m, sl_views.SIDEBAR_W - 2 * m, HEIGHT - 2 * m)
+
+    @staticmethod
+    def _base(app, ctx, *, playlists=6, scroll=0.0, view="home"):
+        app.authenticated = True
+        app.view = view
+        app.playlists = tuple(_playlist(f"Mix {i:02d}") for i in range(playlists))
+        app.sidebar_scroll = scroll
+
+    @staticmethod
+    def _raster(scene_buffer):
+        frame = scene_buffer.latest_frame()
+        assert frame is not None
+        return rasterize_scene_frame(frame)
+
+    def test_rail_is_one_floating_glass_plate_not_a_flat_panel(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._base(app, ctx)
+        _tick(app, ctx, 2)
+        x, y, w, h = self._rail()
+        rrects = _nodes(buf, RoundedRectNode)
+        assert any((n.x, n.y, n.width, n.height) == (x, y, w, h)
+                   and n.color_rgba == sl_views.GLASS_BORDER and n.radius >= 12.0
+                   for n in rrects), "the rail needs the glass border ring"
+        assert any(abs(n.x - (x + 1)) < 0.5 and abs(n.y - (y + 1)) < 0.5
+                   and abs(n.width - (w - 2)) < 0.5
+                   and n.color_rgba == sl_views.GLASS_FILL for n in rrects), \
+            "translucent glass fill sits inset inside the ring"
+        assert any(n.color_rgba[0] == 0 and n.color_rgba[3] > 0 and n.width == w
+                   and y < n.y <= y + 5 for n in rrects), \
+            "the rail floats on the dock's soft shadow"
+        rects = _nodes(buf, RectNode)
+        assert [n for n in rects
+                if n.x == 0 and n.width == sl_views.SIDEBAR_W and n.height == HEIGHT] == [], \
+            "the flat square backing panel is gone"
+        assert [n for n in rects
+                if n.width == 1 and n.x == sl_views.SIDEBAR_W - 1 and n.height == HEIGHT] == [], \
+            "the hard right-edge wire is gone — the border ring is the edge"
+
+    def test_rail_specular_top_highlight_fades_like_the_dock(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._base(app, ctx)
+        _tick(app, ctx, 2)
+        x, y, w, _h = self._rail()
+        segs = [n for n in _nodes(buf, RectNode)
+                if n.color_rgba[:3] == (255, 255, 255) and n.height == 1
+                and n.y == y + 1 and x < n.x < x + w]
+        assert len(segs) >= 8, "one uniform full-span line is the round-28 hard wire"
+        segs.sort(key=lambda n: n.x)
+        alphas = [n.color_rgba[3] for n in segs]
+        mid = len(alphas) // 2
+        assert alphas[0] <= 4 and alphas[-1] <= 4, "ends fade to nothing"
+        assert alphas[:mid] == sorted(alphas[:mid])
+        assert alphas[mid:] == sorted(alphas[mid:], reverse=True)
+        assert max(alphas) <= 48, "softened peak, same as the dock"
+
+    def test_rail_sheen_stays_inside_the_rounded_silhouette(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._base(app, ctx)
+        _tick(app, ctx, 2)
+        x, y, w, h = self._rail()
+        rows = [n for n in _nodes(buf, RectNode)
+                if n.color_rgba[:3] == (255, 255, 255)
+                and 0 < n.color_rgba[3] <= sl_views.GLASS_SHEEN[3]
+                and y < n.y < y + h * 0.45 and x < n.x < x + w]
+        assert rows, "the rail carries the sheen band"
+        top_row = min(rows, key=lambda n: n.y)
+        assert top_row.x > x + 1.0, \
+            "the topmost sheen row must be chord-clipped inside the corner arc"
+        for n in rows:
+            assert n.x >= x + 1.0 and n.x + n.width <= x + w - 1.0, \
+                "no sheen row may touch the silhouette edge"
+
+    def test_glass_rail_raster_corner_clean_sheen_present(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._base(app, ctx)
+        _tick(app, ctx, 2)
+        img = self._raster(buf)
+        x, y, w, _h = self._rail()
+        corner = img[int(y + 2), int(x + 2), :3].sum() / 3
+        assert corner < 60, \
+            f"sheen leaking into the corner arc reads as a glitch (lum {corner:.0f})"
+        top_center = img[int(y + 4), int(x + w / 2), :3].sum() / 3
+        backdrop = img[int(y + 4), 2, :3].sum() / 3  # the window margin outside the plate
+        assert top_center > backdrop + 4, "the sheen lights the plate's top edge"
+
+    def test_playlist_hover_is_a_glass_tint_not_an_opaque_slab(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._base(app, ctx)
+        _tick(app, ctx, 1)
+        app.input.state.mouse_x = 30.0
+        app.input.state.mouse_y = sl_views.SIDEBAR_LIST_TOP + 13.0
+        app.invalidate()
+        _tick(app, ctx, 2)
+        hover = [n for n in _nodes(buf, RoundedRectNode)
+                 if n.x == 10 and n.width == sl_views.SIDEBAR_W - 20
+                 and abs(n.y - sl_views.SIDEBAR_LIST_TOP) < 1.0]
+        assert hover, "the hovered row gets a state plate"
+        assert all(n.color_rgba[3] < 60 for n in hover), \
+            f"hover lives inside the glass idiom as a tint, not an opaque slab: {hover[0].color_rgba}"
+
+    def test_nav_hover_and_selection_stay_in_the_glass_idiom(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._base(app, ctx, view="library")
+        _tick(app, ctx, 2)
+        # Selection: the active nav row is a full glass plate (unchanged idiom).
+        assert any(n.color_rgba == sl_views.GLASS_BORDER
+                   and abs(n.y - 58.0) < 1.0 and n.radius >= 6.0
+                   for n in _nodes(buf, RoundedRectNode)), \
+            "the selected nav row keeps its glass plate"
+        # Hover on the row (selection already covers it) must never draw an
+        # opaque slab anywhere in the rail.
+        opaque = [n for n in _nodes(buf, RoundedRectNode)
+                  if n.x < sl_views.SIDEBAR_W and n.color_rgba[3] == 255
+                  and n.color_rgba[:3] != (0, 0, 0)]
+        assert opaque == [], f"no opaque slabs inside the rail: {opaque[:1]}"
+
+    def test_scroll_seams_fade_instead_of_a_hard_cutoff(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._base(app, ctx, playlists=48, scroll=100.0)
+        _tick(app, ctx, 2)
+        x, _y, w, _h = self._rail()
+        top = sl_views.SIDEBAR_LIST_TOP
+        bottom = HEIGHT - 64
+        rects = _nodes(buf, RectNode)
+
+        def seam_strips(region_top, region_bottom):
+            strips = [n for n in rects
+                      if region_top <= n.y < region_bottom
+                      and n.color_rgba[:3] < (40, 40, 40)
+                      and n.width >= w - 6 and n.z_index >= 4]
+            strips.sort(key=lambda n: n.y)
+            return strips
+
+        top_strips = seam_strips(top, top + 22)
+        assert len(top_strips) >= 3, "the top seam dissolves over several strips"
+        top_alphas = [n.color_rgba[3] for n in top_strips]
+        assert top_alphas == sorted(top_alphas, reverse=True) and top_alphas[-1] < top_alphas[0], \
+            f"top seam alpha must ramp down into the list: {top_alphas}"
+        bottom_strips = seam_strips(bottom - 22, bottom)
+        assert len(bottom_strips) >= 3, "the bottom seam dissolves over several strips"
+        bottom_alphas = [n.color_rgba[3] for n in bottom_strips]
+        assert bottom_alphas == sorted(bottom_alphas) and bottom_alphas[0] < bottom_alphas[-1], \
+            f"bottom seam alpha must ramp up toward the chip: {bottom_alphas}"
+
+    def test_account_separator_is_inset_and_quiet(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._base(app, ctx)
+        _tick(app, ctx, 2)
+        x, _y, w, _h = self._rail()
+        dividers = [n for n in _nodes(buf, RectNode)
+                    if n.height == 1 and 730 < n.y < 745 and n.x < sl_views.SIDEBAR_W]
+        assert dividers, "the account row keeps a separator"
+        for n in dividers:
+            assert n.x >= x + 10 and n.width <= w - 20, \
+                "the separator insets like a macOS glass separator, not a full-width wire"
+            assert n.color_rgba[3] <= 60, "quiet alpha on glass, not an opaque line"
+
+    def test_rail_stays_a_dark_glass_so_text_contrast_holds(self, app_ctx):
+        """White/subtext glyphs ride the rail everywhere; the plate composite
+        must stay dark — translucent, but never washing toward white over
+        the window backdrop."""
+        app, ctx, buf = app_ctx
+        self._base(app, ctx)
+        _tick(app, ctx, 2)
+        img = self._raster(buf)
+        region = img[300:500, 20:220, :3]
+        mean_lum = float(region.sum() / 3 / region[:, :, 0].size)
+        assert mean_lum < 100, \
+            f"rail interior lum {mean_lum:.0f} — the glass must stay dark enough for light text"

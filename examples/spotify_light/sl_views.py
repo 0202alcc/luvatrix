@@ -31,7 +31,6 @@ NAV_H = 44.0
 
 # -- theme (Spotify desktop palette) ------------------------------------------
 BG = (18, 18, 18, 255)
-SIDEBAR_BG = (9, 9, 9, 255)
 CARD_BG = (26, 26, 26, 255)
 CARD_HOVER_BG = (42, 42, 42, 255)
 ROW_HOVER_BG = (30, 30, 30, 255)
@@ -59,8 +58,14 @@ GLASS_SHADOW_NEAR = (0, 0, 0, 64)
 GLASS_SHADOW_FAR = (0, 0, 0, 34)
 # Chrome plates (sidebar): dark translucent material so scene text stays
 # readable, with specular edges for depth.
-SIDEBAR_PLATE = (9, 9, 9, 120)
-SIDEBAR_EDGE = (255, 255, 255, 28)
+# The rail is one floating liquid-glass plate — the dock pill's material
+# turned vertical (Alec, round 29). Hover/selection are tint/alpha shifts
+# inside the idiom, and the scrolling list dissolves at both seams.
+SIDEBAR_GLASS_MARGIN = 8.0
+SIDEBAR_GLASS_RADIUS = 16.0
+SIDEBAR_ROW_HOVER = (255, 255, 255, 26)
+SIDEBAR_SEAM_STRIPS = 6
+SIDEBAR_SEAM_FADE_PX = 20.0
 # Floating player pill: a centered capsule (liquid-glass music-pill
 # reference), dark-frosted so scene text stays readable over content,
 # flanked by circular nav buttons; playback extras live in a popup.
@@ -334,11 +339,17 @@ def _cull_bottom(app, height: float) -> float:
 
 
 def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
-    # Simulated-glass chrome plate (native glass here blurred the nav text —
-    # live bug): dark translucent fill + hairline right edge. Scene-drawn, so
-    # bridgeless hosts get the same material.
-    frame.rect(x=0, y=0, width=SIDEBAR_W, height=height, color=SIDEBAR_PLATE, z_index=1)
-    frame.rect(x=SIDEBAR_W - 1, y=0, width=1, height=height, color=SIDEBAR_EDGE, z_index=2)
+    # One floating liquid-glass rail — the dock's `_glass_plate` construction
+    # (border ring, translucent fill, silhouette-clipped sheen, softened
+    # specular, soft shadow) at full height. Scene-drawn: native glass here
+    # blurred the nav text (live bug), and bridgeless hosts get the same
+    # material. Text contrast holds by construction — only the dark window
+    # backdrop sits behind the rail (content starts at SIDEBAR_W).
+    px = SIDEBAR_GLASS_MARGIN
+    py = SIDEBAR_GLASS_MARGIN
+    pw = SIDEBAR_W - SIDEBAR_GLASS_MARGIN * 2
+    ph = height - SIDEBAR_GLASS_MARGIN * 2
+    _glass_plate(frame, px, py, pw, ph, radius=SIDEBAR_GLASS_RADIUS, z=1)
     _text(frame, "Spotify Light", x=22, y=20, size=20, color=ACCENT, z=3)
 
     # Home/Search live on the glass circles flanking the player pill (round
@@ -351,6 +362,9 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
         if active:
             _glass_plate(frame, 10, y - 6, SIDEBAR_W - 20, NAV_H - 8, radius=8.0, z=2,
                          shadow=False)
+        elif hovering:
+            frame.rounded_rect(x=10, y=y - 6, width=SIDEBAR_W - 20, height=NAV_H - 8,
+                               radius=8.0, color=SIDEBAR_ROW_HOVER, z_index=2)
         color = TEXT if (active or hovering) else SUBTEXT
         _text(frame, label, x=22, y=y + 2, size=15, color=color, z=3)
         out.hit(10, y - 6, SIDEBAR_W - 20, NAV_H - 8, "nav", view)
@@ -371,16 +385,29 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
         hovering = _hover(mouse, 10, row_y, SIDEBAR_W - 20, row_h - 4)
         if hovering:
             frame.rounded_rect(x=10, y=row_y, width=SIDEBAR_W - 20, height=row_h - 4,
-                               radius=4.0, color=ROW_HOVER_BG, z_index=2)
+                               radius=6.0, color=SIDEBAR_ROW_HOVER, z_index=2)
         _text(frame, playlist.name, x=22, y=row_y + 4, size=13,
               color=TEXT if hovering else SUBTEXT, z=3, max_chars=26)
         out.hit(10, row_y, SIDEBAR_W - 20, row_h - 4, "open_playlist", playlist.id)
-    _draw_scrollbar(frame, app.scrollbar_sidebar, out, x=SIDEBAR_W - 6, top=list_top,
+
+    # The list scrolls under the glass: dissolve both seams with a short
+    # alpha ramp (the pill scrim's idiom) instead of a hard cutoff line.
+    if row_h * len(app.playlists) > list_bottom - list_top:
+        strip = SIDEBAR_SEAM_FADE_PX / SIDEBAR_SEAM_STRIPS
+        for i in range(SIDEBAR_SEAM_STRIPS):
+            a_top = int(round(210 * (1.0 - i / SIDEBAR_SEAM_STRIPS)))
+            frame.rect(x=px + 2, y=list_top + i * strip, width=pw - 4, height=strip,
+                       color=(14, 14, 14, a_top), z_index=4)
+            a_bottom = int(round(210 * (i + 1) / SIDEBAR_SEAM_STRIPS))
+            frame.rect(x=px + 2, y=list_bottom - SIDEBAR_SEAM_FADE_PX + i * strip,
+                       width=pw - 4, height=strip, color=(14, 14, 14, a_bottom), z_index=4)
+    _draw_scrollbar(frame, app.scrollbar_sidebar, out, x=px + pw - 9, top=list_top,
                     bottom=list_bottom, content=row_h * len(app.playlists), offset=offset,
                     tag="sidebar")
 
     chip_y = height - 52
-    frame.rect(x=0, y=chip_y - 8, width=SIDEBAR_W, height=1, color=(40, 40, 40, 255), z_index=2)
+    frame.rect(x=px + 14, y=chip_y - 8, width=pw - 28, height=1,
+               color=(255, 255, 255, 20), z_index=2)
     name = app.profile.display_name if app.profile and app.profile.display_name else "Account"
     _text(frame, name, x=22, y=chip_y + 4, size=13, color=SUBTEXT, z=3, max_chars=16)
     hovering = _hover(mouse, 150, chip_y, 70, 26)
