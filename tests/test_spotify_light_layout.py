@@ -3,9 +3,11 @@
 Alec's layout-tool loop: nudge chrome positions on the RUNNING app over MCP,
 then export the overrides for baking into the layout constants. Addressable
 components: the playback pill, the nav circles (home/search/more), and the
-sidebar rail. Overrides are session-scoped (fresh on every boot, no
-persistence), win over the app's own per-frame layout recomputation, clamp
-to the window, and refuse unknown ids with a useful error.
+sidebar rail. Overrides persist to the app's declarative layout file (round
+36: layout_set/layout_clear write through; setup() reads it at boot, so a
+nudge survives restart as an ordinary git diff), win over the app's own
+per-frame layout recomputation, clamp to the window, and refuse unknown ids
+with a useful error.
 """
 from __future__ import annotations
 
@@ -40,6 +42,7 @@ from test_spotify_light_app import _album, _artist, _nodes, _runtime, _tick, _tr
 @pytest.fixture
 def app_ctx(tmp_path, monkeypatch):
     monkeypatch.setenv("SPOTIFY_LIGHT_CONFIG_DIR", str(tmp_path))
+    _redirect_layout_file(tmp_path, monkeypatch)
     scene_buffer = SceneGraphBuffer()
     runtime = _runtime(scene_buffer)
     ctx = runtime.build_context({"window.write", "hdi.keyboard", "hdi.mouse", "hdi.trackpad"})
@@ -47,6 +50,16 @@ def app_ctx(tmp_path, monkeypatch):
     app.init(ctx)
     yield app, ctx, scene_buffer
     app.teardown()
+
+
+def _redirect_layout_file(tmp_path, monkeypatch):
+    """Point the persisted-layout file (round 36) at a tmp copy of the
+    shipped one: boots see the baked specs, writes never touch the repo."""
+    layout_file = tmp_path / "layout.toml"
+    shipped = getattr(sl_layout, "APP_LAYOUT_FILE", None)
+    if shipped is not None and Path(shipped).exists():
+        layout_file.write_text(Path(shipped).read_text())
+    monkeypatch.setenv("SPOTIFY_LIGHT_LAYOUT_FILE", str(layout_file))
 
 
 def _with_track(app, ctx):
@@ -315,6 +328,7 @@ class TestLayoutMcpSurface:
     def test_layout_clear_restores_natural_geometry(self, app_ctx):
         app, ctx, buf = app_ctx
         _with_track(app, ctx)
+        app.mcp_call("layout_clear", {})  # isolate from the shipped nav_more entry
         natural = sl_views.pill_rect(1280, 800)
         app.mcp_call("layout_set", {
             "id": "pill", "rect": {"x": 100, "y": 120, "width": 300, "height": 64}})
@@ -329,18 +343,25 @@ class TestLayoutMcpSurface:
         cleared = app.mcp_call("layout_clear", {})
         assert sorted(cleared["cleared"]) == ["nav_home", "pill"], "clear with no id clears all"
 
-    def test_overrides_die_with_the_session(self, app_ctx):
-        """Clear-on-boot: re-initializing the app (a new session) drops every
-        override — there is no persistence file to resurrect them."""
+    def test_overrides_survive_reboot_via_the_layout_file(self, app_ctx):
+        """Round 36 inverts the old session-scoped contract: a nudge persists
+        to the layout file, so re-initializing the app (a reboot) resurrects
+        it — and a persisted clear stays cleared."""
         app, ctx, _ = app_ctx
         app.mcp_call("layout_set", {"id": "pill", "anchor": "top-left", "dx": 5, "dy": 5})
         assert app.mcp_call("layout_list", {})["overrides"], "override registered"
         app.init(ctx)  # reboot
-        assert app.mcp_call("layout_list", {})["overrides"] == []
+        ids = {o["id"] for o in app.mcp_call("layout_list", {})["overrides"]}
+        assert "pill" in ids, "the persisted nudge must survive the reboot"
+        app.mcp_call("layout_clear", {"id": "pill"})
+        app.init(ctx)  # reboot again
+        ids = {o["id"] for o in app.mcp_call("layout_list", {})["overrides"]}
+        assert "pill" not in ids, "a persisted clear must stay cleared"
 
     def test_export_round_trip_over_the_wire(self, app_ctx):
         app, ctx, buf = app_ctx
         _with_track(app, ctx)
+        app.mcp_call("layout_clear", {})  # isolate from the shipped nav_more entry
         app.mcp_call("layout_set", {"id": "pill", "anchor": "top-right", "dx": 40, "dy": 24})
         app.mcp_call("layout_set", {
             "id": "nav_search", "rect": {"x": 900, "y": 700, "width": 44, "height": 44}})
@@ -398,3 +419,137 @@ class TestLayoutMcpSurface:
                 "wire errors must carry the offender and the valid ids"
         _tick(app, ctx, 2)
         assert _pill_ring(buf).x == 1280.0 - 80 - sl_views.PILL_W
+
+
+# ---------------------------------------------------------------------------
+# Round 36 (Alec, SL-20): the nudge itself persists. layout_set/layout_clear
+# write through to a declarative data file (sl_layout.APP_LAYOUT_FILE, TOML —
+# the same file setup() reads at boot), so an MCP-moved component survives
+# restart and shows up as an ordinary git diff. Specs persist in their
+# resize-safe form (anchor + inward dx/dy); a raw rect is only the
+# degenerate fallback. layout_export stays purely for inspection.
+# ---------------------------------------------------------------------------
+
+class TestLayoutPersistence:
+
+    @staticmethod
+    def _boot(tmp_path, monkeypatch, *, file_text: str | None):
+        """Boot the app against a tmp layout file with the given contents
+        (None = seeded from the shipped file, like app_ctx)."""
+        monkeypatch.setenv("SPOTIFY_LIGHT_CONFIG_DIR", str(tmp_path))
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        layout_file = tmp_path / "layout.toml"
+        if file_text is None:
+            shipped = sl_layout.APP_LAYOUT_FILE
+            file_text = Path(shipped).read_text() if Path(shipped).exists() else ""
+        layout_file.write_text(file_text)
+        monkeypatch.setenv("SPOTIFY_LIGHT_LAYOUT_FILE", str(layout_file))
+        scene_buffer = SceneGraphBuffer()
+        ctx = _runtime(scene_buffer).build_context(
+            {"window.write", "hdi.keyboard", "hdi.mouse", "hdi.trackpad"})
+        app = app_main.create()
+        app.init(ctx)
+        return app, ctx, scene_buffer, layout_file
+
+    def test_layout_set_writes_the_spec_to_the_layout_file(self, tmp_path, monkeypatch):
+        app, ctx, _buf, layout_file = self._boot(tmp_path, monkeypatch, file_text=None)
+        result = app.mcp_call("layout_set", {
+            "id": "nav_home", "anchor": "bottom-right", "dx": 30, "dy": 40})
+        assert result["persisted"] is True
+        text = layout_file.read_text()
+        assert "[nav_home]" in text
+        assert 'anchor = "bottom-right"' in text
+        assert "dx = 30.0" in text and "dy = 40.0" in text, \
+            "the spec persists in its resize-safe anchor form, not as pixels"
+
+    def test_persisted_specs_load_at_startup(self, tmp_path, monkeypatch):
+        _, _, _, layout_file = self._boot(tmp_path, monkeypatch, file_text=None)
+        layout_file.write_text(
+            '[nav_home]\nanchor = "bottom-right"\ndx = 30.0\ndy = 40.0\n')
+        app2, ctx2, _buf2, _ = self._boot(tmp_path / "second", monkeypatch,
+                                          file_text=layout_file.read_text())
+        _with_track(app2, ctx2)
+        home = next(r for r in app2._hits if r.action == "nav" and r.payload == "home")
+        assert (home.x, home.y) == (1280.0 - 30 - 44, 800.0 - 40 - 44), \
+            "the rebooted app resolves the persisted spec, not the code natural"
+
+    def test_persisted_anchor_spec_is_resize_safe(self, tmp_path, monkeypatch):
+        app, ctx, _buf, _ = self._boot(
+            tmp_path, monkeypatch,
+            file_text='[nav_home]\nanchor = "bottom-right"\ndx = 30.0\ndy = 40.0\n')
+        _with_track(app, ctx)
+        for w in (1280.0, 1100.0, 940.0):
+            ctx.logical_width_px = w
+            app.invalidate()
+            _tick(app, ctx, 2)
+            home = next(r for r in app._hits if r.action == "nav" and r.payload == "home")
+            assert home.x == w - 30 - 44, f"anchor spec stranded at width {w}"
+
+    def test_absolute_rect_persists_as_degenerate_fallback(self, tmp_path, monkeypatch):
+        app, ctx, _buf, layout_file = self._boot(tmp_path, monkeypatch, file_text=None)
+        app.mcp_call("layout_set", {
+            "id": "nav_home", "rect": {"x": 600, "y": 300, "width": 44, "height": 44}})
+        text = layout_file.read_text()
+        assert "[nav_home.rect]" in text and "x = 600.0" in text
+        app2, ctx2, _b2, _ = self._boot(tmp_path / "second", monkeypatch,
+                                        file_text=layout_file.read_text())
+        _with_track(app2, ctx2)
+        home = next(r for r in app2._hits if r.action == "nav" and r.payload == "home")
+        assert (home.x, home.y, home.w, home.h) == (600.0, 300.0, 44.0, 44.0)
+
+    def test_layout_clear_removes_the_persisted_entry(self, tmp_path, monkeypatch):
+        app, ctx, _buf, layout_file = self._boot(tmp_path, monkeypatch, file_text=None)
+        _with_track(app, ctx)
+        assert "[nav_more]" in layout_file.read_text(), "fixture seeds the shipped entry"
+        cleared = app.mcp_call("layout_clear", {"id": "nav_more"})
+        assert cleared["cleared"] == ["nav_more"]
+        assert "[nav_more]" not in layout_file.read_text()
+        _tick(app, ctx, 2)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        dock_cy = sl_views.dock_cluster_rect(1280, 800)[1] + sl_views.DOCK_SLOT_H / 2
+        assert (overflow.x, overflow.y) == (1280.0 - 16 - 44, dock_cy - 22), \
+            "clearing the persisted entry restores the code natural"
+
+    def test_clear_all_empties_the_file(self, tmp_path, monkeypatch):
+        app, ctx, _buf, layout_file = self._boot(tmp_path, monkeypatch, file_text=None)
+        app.mcp_call("layout_set", {"id": "pill", "anchor": "top-left", "dx": 5, "dy": 5})
+        cleared = app.mcp_call("layout_clear", {})
+        assert sorted(cleared["cleared"]) == ["nav_more", "pill"]
+        assert "[" not in layout_file.read_text(), "no spec tables survive a clear-all"
+
+    def test_roundtrip_preserves_specs(self, tmp_path, monkeypatch):
+        app, ctx, _buf, layout_file = self._boot(tmp_path, monkeypatch, file_text=None)
+        app.mcp_call("layout_set", {"id": "pill", "anchor": "top-right", "dx": 40, "dy": 24})
+        app.mcp_call("layout_set", {
+            "id": "nav_home", "rect": {"x": 300, "y": 700, "width": 44, "height": 44}})
+        app2, ctx2, _b2, _ = self._boot(tmp_path / "second", monkeypatch,
+                                        file_text=layout_file.read_text())
+        before = app.layout_overrides.specs()
+        after = app2.layout_overrides.specs()
+        assert after == before, "a save/load round-trip must not drift the specs"
+
+    def test_malformed_file_fails_soft(self, tmp_path, monkeypatch):
+        app, ctx, _buf, _ = self._boot(tmp_path, monkeypatch,
+                                       file_text="this is [ not toml ===\n")
+        _with_track(app, ctx)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        dock_cy = sl_views.dock_cluster_rect(1280, 800)[1] + sl_views.DOCK_SLOT_H / 2
+        assert (overflow.x, overflow.y) == (1280.0 - 16 - 44, dock_cy - 22), \
+            "a corrupt file must not kill the app — code naturals rule"
+
+    def test_shipped_layout_file_bakes_nav_more_left_of_the_pill(self):
+        """SL-19's end-to-end artifact: the repo's layout.toml — written by
+        the persist path itself — pins the overflow circle 12pt left of the
+        pill, vertically centered (resolves to (688,48,44,44) at 1280x800)."""
+        import tomllib
+        data = tomllib.loads(Path(sl_layout.APP_LAYOUT_FILE).read_text())
+        assert data["nav_more"]["anchor"] == "top-right"
+        assert data["nav_more"]["dx"] == 548.0 and data["nav_more"]["dy"] == 48.0
+        ov = sl_layout.LayoutOverrides()
+        for cid, spec in data.items():
+            ov.set(cid, spec)
+        rect = ov.resolve("nav_more", (0.0, 0.0, 44.0, 44.0), width=1280, height=800)
+        assert rect == (688.0, 48.0, 44.0, 44.0)
+        pill = sl_views.pill_rect(1280, 800)
+        assert pill[0] - (rect[0] + rect[2]) == 12.0, "12pt left of the pill"
+        assert rect[1] + rect[3] / 2 == pill[1] + pill[3] / 2, "vertically centered"

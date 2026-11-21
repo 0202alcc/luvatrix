@@ -42,6 +42,7 @@ from luvatrix_core.core.window_matrix import WindowMatrix  # noqa: E402
 import app_main  # noqa: E402
 import sl_api  # noqa: E402
 import sl_art  # noqa: E402
+import sl_layout  # noqa: E402
 import sl_models  # noqa: E402
 import sl_oauth  # noqa: E402
 import sl_icons  # noqa: E402
@@ -104,6 +105,13 @@ def _playlist(name: str, count: int = 3) -> sl_models.Playlist:
 @pytest.fixture
 def app_ctx(tmp_path, monkeypatch):
     monkeypatch.setenv("SPOTIFY_LIGHT_CONFIG_DIR", str(tmp_path))
+    # Round 36: boots read the persisted layout file — point it at a tmp
+    # copy of the shipped one so specs load but writes never touch the repo.
+    layout_file = tmp_path / "layout.toml"
+    shipped = getattr(sl_layout, "APP_LAYOUT_FILE", None)
+    if shipped is not None and Path(shipped).exists():
+        layout_file.write_text(Path(shipped).read_text())
+    monkeypatch.setenv("SPOTIFY_LIGHT_LAYOUT_FILE", str(layout_file))
     scene_buffer = SceneGraphBuffer()
     runtime = _runtime(scene_buffer)
     ctx = runtime.build_context({"window.write", "hdi.keyboard", "hdi.mouse", "hdi.trackpad"})
@@ -1207,19 +1215,21 @@ class TestFloatingPill:
 
         overflow = [r for r in app._hits if r.action == "open_devices"]
         assert len(overflow) == 1
-        # Round 13: the overflow circle matches the nav circles (44pt).
-        assert (overflow[0].x, overflow[0].y, overflow[0].w, overflow[0].h) == \
-            (1220.0, 730.0, 44.0, 44.0)
+        # Round 36: the circle sits at the shipped layout.toml position (the
+        # pill's left flank, 12pt gap); placement itself is pinned by
+        # TestOverflowPersistsLeftOfPill. This test owns the popup's
+        # contents and its menu-style anchoring to the circle.
         texts = _texts(scene_buffer)
         for expected in ("Volume", "Shuffle", "Repeat", "Connect to a device", "MacBook Pro"):
             assert expected in texts, f"missing popup text: {expected!r}"
         actions = {r.action for r in app._hits}
         assert {"volume_bar", "toggle_shuffle", "cycle_repeat", "pick_device"} <= actions
-        _, dock_top, _, _ = sl_views.dock_cluster_rect(1280, 800)
         plates = [n for n in _nodes(scene_buffer, RoundedRectNode)
                   if n.color_rgba == (18, 18, 18, 234) and n.width == 298]
-        assert plates and all(n.y + n.height == dock_top - 13 for n in plates), \
-            "playback popup still floats just above the bottom dock"
+        assert plates and all(n.y - 1 == overflow[0].y + overflow[0].h + 12
+                              and n.x + n.width + 1 == overflow[0].x + overflow[0].w
+                              for n in plates), \
+            "playback popup drops from the overflow circle, menu-style"
 
     def test_sidebar_keeps_library_and_account(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
@@ -2579,9 +2589,10 @@ class TestDockIconCentering:
     def test_overflow_icon_centers_on_its_circle(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
         img, _ = self._render_idle_dock(app, ctx, scene_buffer)
-        _, dpy, _, dph = sl_views.dock_cluster_rect(1280, 800)
-        cy = dpy + dph / 2
-        ocx = 1280 - sl_views.PILL_FLOAT - sl_views.OVERFLOW_R
+        # Round 36: the circle lives at the shipped layout.toml position —
+        # read its resolved rect rather than recomputing a natural.
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        ocx, cy = overflow.x + overflow.w / 2, overflow.y + overflow.h / 2
         self._assert_centered(img, (int(ocx) - 20, int(cy) - 20, int(ocx) + 20, int(cy) + 20),
                               self._bright, (ocx, cy), "overflow more")
 
@@ -2988,9 +2999,10 @@ class TestPopupPlateSwallow:
 
         popup_w, row_h, head_h = 300.0, 40.0, 148.0
         popup_h = head_h + row_h * 1 + 12  # one device
-        popup_x = 1280 - popup_w - 16
-        _, dock_top, _, _ = sl_views.dock_cluster_rect(1280, 800)
-        popup_y = dock_top - 12 - popup_h
+        # Round 36: the popup drops from the overflow circle, menu-style.
+        circle = next(r for r in app._hits if r.action == "open_devices")
+        popup_x = circle.x + circle.w - popup_w
+        popup_y = circle.y + circle.h + 12.0
 
         # Bottom padding below the last device row: inside the plate, on no control.
         app._dispatch_click(popup_x + popup_w / 2, popup_y + popup_h - 4)
@@ -3013,9 +3025,9 @@ class TestPopupPlateSwallow:
         monkeypatch.setattr(app, "_player_action", lambda fn: actions.append("player"))
 
         # Shuffle row hit: (popup_x+8, y1-5, popup_w-16, 30), y1 = popup_y + 48.
-        popup_x = 1280 - 300.0 - 16
-        _, dock_top, _, _ = sl_views.dock_cluster_rect(1280, 800)
-        popup_y = dock_top - 12 - (148.0 + 40.0 * 1 + 12)
+        circle = next(r for r in app._hits if r.action == "open_devices")
+        popup_x = circle.x + circle.w - 300.0
+        popup_y = circle.y + circle.h + 12.0
         app._dispatch_click(popup_x + 40, popup_y + 48 + 10)
         assert actions == ["player"], "toggling Shuffle must still reach its control"
         assert app.show_devices is True, "toggles never dismiss the popup"
@@ -3033,7 +3045,9 @@ class TestPopupPlateSwallow:
 # ---------------------------------------------------------------------------
 
 class TestOverflowClickSequence:
-    CIRCLE = (1242.0, 730.0)  # overflow circle centre at 1280x800
+    # Overflow circle centre at 1280x800 (round 36: the shipped layout.toml
+    # position on the pill's left flank — (688,48,44,44)).
+    CIRCLE = (710.0, 70.0)
 
     def _with_track(self, app, ctx, monkeypatch, *, devices=1, show_devices=False):
         app.authenticated = True
@@ -4044,24 +4058,19 @@ class TestPillTopRight:
                     if r.action in ("toggle_play", "seek_bar") and r.y > 700]
         assert old_zone == [], "no player hits linger in the old dock zone"
 
-    def test_circles_hold_the_bottom_dock(self, app_ctx):
-        """Home/search/overflow are not part of the move: they keep the exact
-        coordinates the bottom cluster gave them, and the playback popup
-        still opens above the bottom band."""
+    def test_home_and_search_hold_the_bottom_dock(self, app_ctx):
+        """Home/search are not part of the pill's move: they keep the exact
+        coordinates the bottom cluster gave them. The overflow circle held
+        the dock too until round 36, when the shipped layout file moved it
+        to the pill's left flank (TestOverflowPersistsLeftOfPill owns that)."""
         app, ctx, buf = app_ctx
         self._with_track(app, ctx, show_devices=True)
-        hits = {r.action: r for r in app._hits if r.action in ("nav", "open_devices")}
         home = next(r for r in app._hits if r.action == "nav" and r.payload == "home")
         search = next(r for r in app._hits if r.action == "nav" and r.payload == "search")
-        overflow = hits["open_devices"]
         assert (home.x, home.y, home.w, home.h) == (468.0, 730.0, 44.0, 44.0)
         assert (search.x, search.y, search.w, search.h) == (1008.0, 730.0, 44.0, 44.0)
-        assert (overflow.x, overflow.y, overflow.w, overflow.h) == (1220.0, 730.0, 44.0, 44.0)
-        dock_top = sl_views.dock_cluster_rect(1280, 800)[1]
-        plates = [n for n in _nodes(buf, RoundedRectNode)
-                  if n.color_rgba == (18, 18, 18, 234) and n.width == 298]
-        assert plates and all(n.y + n.height == dock_top - 13 for n in plates), \
-            "the popup opens above the bottom dock, not the moved pill"
+        assert [r for r in app._hits if r.action == "open_devices" and r.y > 700] == [], \
+            "the bottom-right no longer hosts the overflow circle"
 
     def test_search_field_clears_the_pill_zone(self, app_ctx):
         app, ctx, buf = app_ctx
@@ -4115,3 +4124,100 @@ class TestPillTopRight:
                      if isinstance(n, RoundedRectNode) and n.width == sl_views.CARD_W]
         assert min(card_tops) < sl_views.PILL_FLOAT + sl_views.PILL_H, \
             "scrolled cards must pass under the top pill zone, not cull at it"
+
+
+# ---------------------------------------------------------------------------
+# Round 36 (Alec, SL-19 via SL-20): the overflow (⋯) circle's position is
+# the PERSISTED spec in the shipped layout.toml — 12pt left of the top-right
+# pill, vertically centered (Alec's live nudge, baked by the persist path
+# itself). The bottom dock keeps just home + search; the popup drops from
+# the moved circle menu-style; the search field caps at the circle.
+class TestOverflowPersistsLeftOfPill:
+
+    def _with_track(self, app, ctx, *, show_devices=False):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.devices = [
+            sl_models.Device(id="d1", name="MacBook Pro", kind="Computer", is_active=True,
+                             is_restricted=False, volume_percent=40),
+        ]
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500,
+                                           track=track, device=app.devices[0],
+                                           shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        app.show_devices = show_devices
+        _tick(app, ctx, 2)
+
+    def test_circle_sits_at_the_shipped_position(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        assert (overflow.x, overflow.y, overflow.w, overflow.h) == (688.0, 48.0, 44.0, 44.0), \
+            "Alec's live nudge, baked: (688,48,44,44) at 1280x800"
+        assert px - (overflow.x + overflow.w) == 12.0, "12pt left of the pill"
+        assert overflow.y + overflow.h / 2 == py + ph / 2, "vertically centered on the pill"
+
+    def test_circle_tracks_the_window_right_edge(self, app_ctx):
+        """The persisted spec is anchor-based: resizes keep the 12pt gap as
+        long as the pill rides its own top-right rule at full width."""
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx)
+        for w in (1280.0, 1100.0, 940.0):
+            ctx.logical_width_px = w
+            app.invalidate()  # stands in for the OS resize event
+            _tick(app, ctx, 2)
+            px = sl_views.pill_rect(w, 800)[0]
+            overflow = next(r for r in app._hits if r.action == "open_devices")
+            assert overflow.x == w - 548.0 - 44.0, f"anchor resolution at width {w}"
+            assert px - (overflow.x + overflow.w) == 12.0, f"gap drifts at width {w}"
+
+    def test_bottom_dock_keeps_only_home_and_search(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx)
+        bottom = [r for r in app._hits
+                  if r.action in ("nav", "open_devices") and r.y > 700]
+        got = {(r.action, r.payload if r.action == "nav" else None): (r.x, r.y)
+               for r in bottom}
+        assert got == {("nav", "home"): (468.0, 730.0),
+                       ("nav", "search"): (1008.0, 730.0)}, \
+            "the bottom-right holds just search; home stays; overflow is gone"
+
+    def test_popup_drops_from_the_shipped_circle(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx, show_devices=True)
+        plates = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                  if n.color_rgba == (18, 18, 18, 234) and n.width == 298]
+        assert plates, "popup missing"
+        for n in plates:
+            assert n.x + n.width + 1 == 688.0 + 44.0, \
+                "popup right edge aligns to the circle's right edge (menu idiom)"
+            assert n.y - 1 == 48.0 + 44.0 + 12.0, "popup drops 12pt below the circle"
+
+    def test_search_field_clears_the_shipped_circle(self, app_ctx):
+        # 1100pt: room for the 180pt field floor AND the circle — the circle
+        # cap binds (the pill cap never did this far right).
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        app.view = "search"
+        ctx.logical_width_px = 1100.0
+        _tick(app, ctx, 2)
+        circle_x = 1100.0 - 548.0 - 44.0
+        fields = [n for n in _nodes(buf, RoundedRectNode)
+                  if n.radius == 20.0 and abs(n.y - 24.0) < 1.0]
+        assert fields, "search field missing"
+        assert fields[0].x + fields[0].width == circle_x - 12.0, \
+            "the field's rounded cap must not slide under the overflow circle"
+        assert fields[0].width < 460.0, "the circle — not the max width — set the cap"
+
+    def test_a_nav_more_override_still_wins(self, app_ctx):
+        """The persisted spec is the base layout, not a cage: a fresh
+        layout_set still re-points the circle (and persists that)."""
+        app, ctx, scene_buffer = app_ctx
+        self._with_track(app, ctx)
+        app.mcp_call("layout_set", {
+            "id": "nav_more", "rect": {"x": 600, "y": 300, "width": 44, "height": 44}})
+        _tick(app, ctx, 2)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        assert (overflow.x, overflow.y) == (600.0, 300.0)
