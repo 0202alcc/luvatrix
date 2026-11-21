@@ -522,7 +522,8 @@ class TestLayoutPersistence:
         app, ctx, _buf, layout_file = self._boot(tmp_path, monkeypatch, file_text=None)
         app.mcp_call("layout_set", {"id": "pill", "anchor": "top-left", "dx": 5, "dy": 5})
         cleared = app.mcp_call("layout_clear", {})
-        assert sorted(cleared["cleared"]) == ["nav_more", "pill"]
+        assert sorted(cleared["cleared"]) == ["nav_more", "pill", "pill.progress"], \
+            "the shipped nav_more + pill.progress entries clear along with the new one"
         assert "[" not in layout_file.read_text(), "no spec tables survive a clear-all"
 
     def test_roundtrip_preserves_specs(self, tmp_path, monkeypatch):
@@ -1055,7 +1056,7 @@ class TestLayoutAlignTool:
             app.mcp_call("layout_align", {
                 "id": "pill.transport", "edge": "left", "to": "pill.art", "ref_edge": "left"})
         assert "cycle" in str(exc.value)
-        assert "pill.transport" not in sl_layout.default_path().read_text(), \
+        assert '["pill.transport".align]' not in sl_layout.default_path().read_text(), \
             "the cycle never persisted"
 
     def test_clear_removes_the_align_entry(self, app_ctx):

@@ -2415,8 +2415,8 @@ class TestMcpHooks:
             state_provider=lambda: {},
             app_call_timeout_s=5.0,
         )
-        assert bridge.register_app_hooks(app) == 6, \
-            "client-id pair plus the round-31 layout_set/list/clear/export tools"
+        assert bridge.register_app_hooks(app) == 7, \
+            "client-id pair plus the layout_set/align/list/clear/export tools (rounds 31+37)"
 
         listing = bridge.dispatcher().handle_payload(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})

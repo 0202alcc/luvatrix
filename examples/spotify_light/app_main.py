@@ -1265,9 +1265,11 @@ class SpotifyLightApp(App):
                     "Valid ids: pill, nav_home, nav_search, nav_more, sidebar — plus the "
                     "pill's interior in PILL-LOCAL space ((0,0) is the pill's top-left, "
                     "rects and anchors clamp into the pill, locals ride whole-pill moves): "
-                    "pill.art (square tile, min(width,height)), pill.progress (x/width; "
-                    "the time labels ride the strip), pill.transport (positions by the "
-                    "rect's center; the 34pt hits are fixed)."
+                    "pill.art (square tile, min(width,height)), pill.title (the "
+                    "title/artist text column — the strip's alignment reference), "
+                    "pill.progress (x/width; the time labels ride above the strip's "
+                    "ends), pill.transport (positions by the rect's center; the 34pt "
+                    "hits are fixed)."
                 ),
                 "inputSchema": {
                     "type": "object",
@@ -1281,6 +1283,36 @@ class SpotifyLightApp(App):
                         "rect": {"type": "object"},
                     },
                     "required": ["id"],
+                },
+            },
+            {
+                "name": "layout_align",
+                "description": (
+                    "Align one edge of a component to an edge of another component's "
+                    "CURRENT rect (natural or overridden) — and persist the "
+                    "RELATIONSHIP: the layout file gains an align spec that re-resolves "
+                    "at layout time, so the edge tracks the reference if the reference "
+                    "later moves, and the geometry stays resize-safe. Params: 'id', "
+                    "'edge' (left/right/top/bottom/center_x/center_y), 'to' (reference "
+                    "id), 'ref_edge' (defaults to edge), 'offset' in points (default "
+                    "0, shifts the aligned edge along its axis). Edge alignment keeps "
+                    "the component's opposite edge fixed (its extent changes); center "
+                    "alignment keeps its size. References stay in one frame: interior "
+                    "ids reference interior ids (or the pill frame itself as 'pill'), "
+                    "window ids reference window ids. Example — SL-21: {id: "
+                    "\"pill.progress\", edge: \"left\", to: \"pill.title\", ref_edge: "
+                    "\"left\"} pins the progress strip's left edge to the text column."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "edge": {"type": "string"},
+                        "to": {"type": "string"},
+                        "ref_edge": {"type": "string"},
+                        "offset": {"type": "number"},
+                    },
+                    "required": ["id", "edge", "to"],
                 },
             },
             {
@@ -1338,6 +1370,22 @@ class SpotifyLightApp(App):
             width, height = self._window_size()
             return {"id": cid, "spec": stored, "persisted": True,
                     "rect": list(self._resolve_layout_rect(cid, width, height))}
+        if name == "layout_align":
+            args = dict(arguments or {})
+            cid = sl_layout._check_id(args.get("id"))
+            spec = {"align": {
+                "edge": args.get("edge"),
+                "to": args.get("to"),
+                "ref_edge": args.get("ref_edge", args.get("edge")),
+                "offset": args.get("offset", 0.0),
+            }}
+            before = self.layout_overrides.specs()
+            stored = self.layout_overrides.set(cid, spec)
+            self._persist_layout(before)
+            self.invalidate()
+            width, height = self._window_size()
+            return {"id": cid, "spec": stored, "persisted": True,
+                    "rect": list(self._resolve_layout_rect(cid, width, height))}
         if name == "layout_list":
             width, height = self._window_size()
             return {
@@ -1389,38 +1437,26 @@ class SpotifyLightApp(App):
     @staticmethod
     def _interior_naturals(pw: float, ph: float) -> dict:
         """Interior natural rects in PILL-LOCAL space at a pill size."""
-        return {
-            "pill.art": sl_views.pill_art_local(pw, ph),
-            "pill.progress": sl_views.pill_progress_local(pw, ph),
-            "pill.transport": sl_views.pill_transport_local(pw, ph),
-        }
+        return sl_views.pill_frame_naturals(pw, ph)
 
     def _resolve_layout_rect(self, cid: str, width: float, height: float) -> tuple:
         """One resolution path for set/list: window ids resolve against the
         window; interior ids resolve in pill-local space against the pill's
-        current (override-aware) rect, and report local coordinates."""
+        current (override-aware) rect, and report local coordinates. The
+        frame's naturals map comes along so align specs can see their
+        reference (round 37)."""
         if cid in sl_layout.INTERIOR_IDS:
             _, _, pw, ph = self._resolved_pill_rect(width, height)
             return self.layout_overrides.resolve(
-                cid, self._interior_naturals(pw, ph)[cid], width=pw, height=ph)
-        natural = self._layout_naturals(width, height)[cid]
-        return self.layout_overrides.resolve(cid, natural, width=width, height=height)
+                cid, self._interior_naturals(pw, ph)[cid], width=pw, height=ph,
+                naturals=self._interior_naturals(pw, ph))
+        naturals = self._layout_naturals(width, height)
+        return self.layout_overrides.resolve(cid, naturals[cid], width=width,
+                                             height=height, naturals=naturals)
 
     def _layout_naturals(self, width: float, height: float) -> dict:
         """Natural chrome rects at a window size — the layout the overrides sit on top of."""
-        dpx, dpy, dpw, dph = sl_views.dock_cluster_rect(width, height)
-        dock_cy = dpy + dph / 2
-        radius, gap, oradius = sl_views.NAV_CIRCLE_R, sl_views.NAV_CIRCLE_GAP, sl_views.OVERFLOW_R
-        return {
-            "pill": sl_views.pill_rect(width, height),
-            "nav_home": (dpx - gap - 2 * radius, dock_cy - radius, 2 * radius, 2 * radius),
-            "nav_search": (dpx + dpw + gap, dock_cy - radius, 2 * radius, 2 * radius),
-            "nav_more": (width - sl_views.PILL_FLOAT - 2 * oradius, dock_cy - oradius,
-                         2 * oradius, 2 * oradius),
-            "sidebar": (sl_views.SIDEBAR_GLASS_MARGIN, sl_views.SIDEBAR_GLASS_MARGIN,
-                        sl_views.SIDEBAR_W - sl_views.SIDEBAR_GLASS_MARGIN * 2,
-                        height - sl_views.SIDEBAR_GLASS_MARGIN * 2),
-        }
+        return sl_views.window_naturals(width, height)
 
     # -- app loop ---------------------------------------------------------------------
 
