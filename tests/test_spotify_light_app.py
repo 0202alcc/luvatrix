@@ -2341,8 +2341,9 @@ class TestMcpHooks:
             state_provider=lambda: {},
             app_call_timeout_s=5.0,
         )
-        assert bridge.register_app_hooks(app) == 8, \
-            "client-id pair plus the layout_set/align/attach/list/clear/export tools (rounds 31+37+41)"
+        assert bridge.register_app_hooks(app) == 11, \
+            "client-id pair, layout_set/align/attach/list/clear/export (rounds 31+37+41), " \
+            "and effect_apply/remove/list (SL-34)"
 
         listing = bridge.dispatcher().handle_payload(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
@@ -4551,3 +4552,214 @@ class TestProgressBarSpansTextColumn:
         assert len(strips) == 1
         assert strips[0].x == px + 110.0 and strips[0].x + strips[0].width == px + 504.0, \
             "idle bar spans the narrowed column too — the geometry is state-invariant"
+
+
+class TestEffectTools:
+    """SL-34 (Alec): visual effects of the old draw_top_scrim/draw_dock_scrim
+    kind are MCP-driven, same loop as the layout nudges — effect_apply adds
+    or tunes a scrim/gradient band (edge, height, alpha, fade) live on the
+    running app and writes the spec through to layout.toml; effect_remove
+    deletes it; effect_list inspects. Purely additive: SL-33/SL-35 removed
+    both stock scrims, so the app boots with ZERO declared effects — the
+    tool brings scrims back only when someone asks, live."""
+
+    def _strips(self, buf, *, top=None, bottom=None, left=None, right=None):
+        out = []
+        for n in _nodes(buf, RectNode):
+            if n.color_rgba[:3] != sl_views.BG[:3] or n.z_index != 6:
+                continue
+            if top is not None and n.y >= top:
+                continue
+            if bottom is not None and n.y < bottom:
+                continue
+            if left is not None and n.x >= left:
+                continue
+            if right is not None and n.x + n.width <= right:
+                continue
+            out.append(n)
+        return out
+
+    def _apply_dock(self, app):
+        """The round-8b dock scrim's exact numbers, as an effect spec."""
+        return app.mcp_call("effect_apply", {
+            "id": "scrim.dock", "edge": "bottom", "height": 148,
+            "fade": 56, "alpha": 240, "margin": 240})
+
+    def test_boots_with_no_effects_and_no_scrims(self, app_ctx):
+        """The SL-33/SL-35 state ships: nothing declared, nothing drawn."""
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        assert app.mcp_call("effect_list", {}) == {"effects": []}
+        assert self._strips(buf) == [], "no scrim strips anywhere at boot"
+
+    def test_effect_apply_adds_a_top_scrim_live(self, app_ctx):
+        """The SL-33 inversion on demand: the same mechanism that deleted
+        the top scrim can bring one back — live, without a code edit."""
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        result = app.mcp_call("effect_apply", {
+            "id": "scrim.top", "edge": "top", "height": 192,
+            "fade": 56, "alpha": 240, "margin": 240})
+        assert result["persisted"] is True
+        assert result["spec"]["edge"] == "top" and result["spec"]["height"] == 192.0
+        assert result["rect"] == [240.0, 0.0, 1040.0, 192.0]
+        _tick(app, ctx, 2)
+        strips = self._strips(buf, top=200.0)
+        assert strips, "the applied top scrim renders on the next frame"
+        band = [n for n in strips if n.y == 0]
+        assert band and band[0].color_rgba[3] == 240 and band[0].height == 136.0
+        fade = sorted((n for n in strips if n.y > 0), key=lambda n: n.y)
+        alphas = [n.color_rgba[3] for n in fade]
+        assert alphas == sorted(alphas, reverse=True), "fade dissolves downward"
+
+    def test_effect_apply_recreates_the_dock_idiom_exactly(self, app_ctx):
+        """The removed dock scrim is fully expressible: the round-8b numbers
+        as an effect spec render the identical band + fade geometry."""
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        result = self._apply_dock(app)
+        assert result["rect"] == [240.0, 652.0, 1040.0, 148.0]
+        _tick(app, ctx, 2)
+        strips = sorted(self._strips(buf, bottom=652.0), key=lambda n: n.y)
+        assert strips, "the recreated dock scrim renders"
+        band = [n for n in strips if n.y == 708.0]
+        assert band and band[0].height == 92.0 and band[0].color_rgba[3] == 240, \
+            "calm band: 92pt of near-opaque to the window edge"
+        fade = [n for n in strips if n.y < 708.0]
+        assert len(fade) == 56, "56 one-pixel fade strips, as round 14 shipped"
+        alphas = [n.color_rgba[3] for n in fade]
+        assert alphas[0] <= 24 and alphas == sorted(alphas), \
+            "transparent at the top, monotonically denser downward"
+
+    def test_effect_apply_persists_and_survives_reboot(self, app_ctx):
+        app, ctx, _ = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 1)
+        app.mcp_call("effect_apply", {
+            "id": "scrim.top", "edge": "top", "height": 192,
+            "fade": 56, "alpha": 240, "margin": 240})
+        text = sl_layout.default_path().read_text()
+        assert '["scrim.top".effect]' in text
+        assert 'edge = "top"' in text and "height = 192.0" in text
+        app.init(ctx)  # reboot: the file is the source of truth
+        listing = app.mcp_call("effect_list", {})
+        assert [e["id"] for e in listing["effects"]] == ["scrim.top"]
+
+    def test_effect_apply_tunes_one_knob_and_keeps_the_rest(self, app_ctx):
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        self._apply_dock(app)
+        result = app.mcp_call("effect_apply", {"id": "scrim.dock", "alpha": 120})
+        assert result["spec"] == {"kind": "scrim", "edge": "bottom",
+                                  "height": 148.0, "fade": 56.0,
+                                  "alpha": 120.0, "margin": 240.0}
+        _tick(app, ctx, 2)
+        strips = self._strips(buf, bottom=652.0)
+        assert strips and max(n.color_rgba[3] for n in strips) == 120, \
+            "the live band retunes on the next frame"
+        assert "alpha = 120.0" in sl_layout.default_path().read_text()
+
+    def test_effect_remove_clears_live_and_persists(self, app_ctx):
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        self._apply_dock(app)
+        _tick(app, ctx, 2)
+        assert self._strips(buf, bottom=652.0), "scrim up before removal"
+        result = app.mcp_call("effect_remove", {"id": "scrim.dock"})
+        assert result == {"cleared": ["scrim.dock"]}
+        _tick(app, ctx, 2)
+        assert self._strips(buf, bottom=652.0) == []
+        assert "scrim.dock" not in sl_layout.default_path().read_text()
+        assert app.mcp_call("effect_remove", {"id": "scrim.dock"}) == {"cleared": []}
+
+    def test_effect_apply_rejects_bad_specs(self, app_ctx):
+        app, ctx, _ = app_ctx
+        _tick(app, ctx, 1)
+        for bad in ({"id": "scrim.x", "edge": "diagonal", "height": 10},
+                    {"id": "scrim.x", "edge": "top"},
+                    {"id": "scrim.x", "edge": "top", "height": 10, "fade": 11},
+                    {"id": "scrim.x", "edge": "top", "height": 10, "alpha": 300},
+                    {"id": "scrim.x", "edge": "top", "height": 10, "margin": -1},
+                    {"id": "scrim.x", "edge": "top", "height": 10, "alph": 1},
+                    {"id": "", "edge": "top", "height": 10}):
+            with pytest.raises(sl_layout.LayoutError):
+                app.mcp_call("effect_apply", bad)
+        assert app.mcp_call("effect_list", {}) == {"effects": []}, \
+            "rejections never partially store"
+
+    def test_left_edge_scrim_renders_vertical_strips(self, app_ctx):
+        """All four edges are expressible: a left scrim bands at x=0 and
+        fades rightward over ~1px vertical strips."""
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        app.mcp_call("effect_apply", {
+            "id": "scrim.left", "edge": "left", "height": 100,
+            "fade": 40, "alpha": 200, "margin": 0})
+        _tick(app, ctx, 2)
+        strips = self._strips(buf, left=100.0)
+        assert strips, "left-edge scrim renders"
+        band = [n for n in strips if n.x == 0]
+        assert band and band[0].width == 60.0 and band[0].color_rgba[3] == 200
+        assert band[0].height == 800.0, "the band spans the window height (margin 0)"
+        fade = sorted((n for n in strips if n.x > 0), key=lambda n: n.x)
+        alphas = [n.color_rgba[3] for n in fade]
+        assert alphas == sorted(alphas, reverse=True), "fade dissolves rightward"
+        assert all(n.width == 1.0 for n in fade), "~1px strips, no scanline banding"
+
+
+class TestDrawScrims:
+    """The generic scrim draw keeps the round-14/round-10 properties the
+    stock scrims had — effect-drawn bands must not reintroduce scanline
+    banding or a hard cutoff above the chrome."""
+
+    class _Frame:
+        def __init__(self):
+            self.rects = []
+
+        def rect(self, **kw):
+            self.rects.append(kw)
+
+    DOCK_SPEC = {"kind": "scrim", "edge": "bottom", "height": 148.0,
+                 "fade": 56.0, "alpha": 240.0, "margin": 240.0}
+
+    def test_fade_has_no_visible_banding(self):
+        capture = self._Frame()
+        sl_views.draw_scrims(capture, [self.DOCK_SPEC], width=1280, height=800)
+        top = 800 - 148.0
+        nodes = [
+            RectNode(
+                x=sl_views.SIDEBAR_W, y=top, width=1280 - sl_views.SIDEBAR_W,
+                height=148.0, color_rgba=(190, 190, 190, 255), z_index=3),
+        ]
+        nodes += [
+            RectNode(
+                x=r["x"], y=r["y"], width=r["width"], height=r["height"],
+                color_rgba=r["color"], z_index=r["z_index"])
+            for r in capture.rects
+        ]
+        frame = SceneFrame(
+            revision=1, logical_width=1280, logical_height=800,
+            display_width=1280, display_height=800, ts_ns=0, nodes=tuple(nodes))
+        img = rasterize_scene_frame(frame)
+        fade = img[int(top):int(top + 56), 700, :3].astype(int)
+        steps = int((fade[:-1] - fade[1:]).max())  # darkens downward → positive jumps
+        assert steps <= 12, f"scrim fade banding: max row-to-row step {steps}"
+
+    def test_fade_completes_into_a_calm_band_at_any_height(self):
+        for h in (800.0, 700.0, 600.0, 520.0):
+            frame = self._Frame()
+            sl_views.draw_scrims(frame, [self.DOCK_SPEC], width=1280, height=h)
+            _, dock_top, _, _ = sl_views.dock_cluster_rect(1280, h)
+            strips = sorted(frame.rects, key=lambda r: r["y"])
+            assert strips[0]["color"][3] <= 24, f"fade starts transparent at h={h}"
+            assert strips[-1]["y"] + strips[-1]["height"] >= h, f"scrim reaches bottom at h={h}"
+            done = [r for r in strips if r["color"][3] >= 230]
+            assert done, f"scrim reaches near-opaque at h={h}"
+            assert done[0]["y"] + done[0]["height"] <= dock_top - 8.0 + 1e-6, \
+                f"fade completes into a calm band above the dock at h={h}"
