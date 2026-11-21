@@ -2983,8 +2983,9 @@ class TestGlassSizeRule:
             "playing pill ring obeys the same rule"
 
     def test_small_plates_do_not_cross(self, app_ctx):
-        """Only the (big) pill's silhouette may change: nav circles and the
-        overflow stay full capsules (r = h/2 = 22), the popup keeps r14."""
+        """Only the (big) pill's silhouette may change: the nav circles stay
+        full capsules (r = h/2 = 22), the popup keeps r14. Round 42 (SL-28):
+        the overflow ⋯ is a BARE glyph now — no capsule on its slot."""
         app, ctx, buf = app_ctx
         app.authenticated = True
         nirvana = _artist("Nirvana")
@@ -3001,7 +3002,9 @@ class TestGlassSizeRule:
         _tick(app, ctx, 2)
         circles = [n for n in _nodes(buf, RoundedRectNode)
                    if n.width == 44.0 and n.height == 44.0 and n.radius == 22.0]
-        assert len(circles) >= 3, "home/search/overflow circles stay capsule (r = h/2)"
+        assert len(circles) >= 2, "home/search circles stay capsule (r = h/2)"
+        assert not any(n.x == 1208.0 and n.y == 28.0 for n in circles), \
+            "SL-28: the overflow slot hosts no capsule — the ⋯ is a bare icon"
         popup = [n for n in _nodes(buf, RoundedRectNode)
                  if n.color_rgba == (18, 18, 18, 234) and n.width == 298]
         assert popup and {n.radius for n in popup} == {13.0}, \
@@ -4309,6 +4312,131 @@ class TestOverflowPersistsLeftOfPill:
         _tick(app, ctx, 2)
         overflow = next(r for r in app._hits if r.action == "open_devices")
         assert (overflow.x, overflow.y) == (600.0, 300.0)
+
+
+# ---------------------------------------------------------------------------
+# Round 42 (Alec, SL-28, on the merged ⋯): "i dont want pill inside pill.
+# it should just be the icon itself." The glass disc behind the ellipsis
+# reads as a capsule nested in the capsule — remove the chrome: bare glyph,
+# no circle background/border/hover-disc. The 44x44 hit rect, the attach
+# spec, the slot reservation (reserve_right=50), and the popup anchor all
+# resolve off the same rect — layout.toml untouched. The play button's
+# white disc is explicitly OUT of scope.
+# ---------------------------------------------------------------------------
+
+class TestBareOverflowIcon:
+    CIRCLE = (1208.0, 28.0, 44.0, 44.0)  # the shipped attach at 1280x800
+    CENTER = (1230.0, 50.0)
+
+    def _playing(self, app, ctx, *, show_devices=False):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.devices = [
+            sl_models.Device(id="d1", name="MacBook Pro", kind="Computer", is_active=True,
+                             is_restricted=False, volume_percent=40),
+        ]
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500,
+                                           track=track, device=app.devices[0],
+                                           shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        app.show_devices = show_devices
+        _tick(app, ctx, 2)
+
+    def test_no_disc_is_drawn_behind_the_glyph(self, app_ctx):
+        """Scene level: no plate node of any layer (shadow, ring, fill,
+        sheen) sits on the icon's rect — the pill's own plate is the only
+        glass there now."""
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        ox, oy, ow, oh = self.CIRCLE
+        frame = scene_buffer.latest_frame()
+        disc = [n for n in frame.nodes
+                if isinstance(n, (RoundedRectNode, RectNode))
+                and n.x >= ox - 2.0 and n.y >= oy - 1.0
+                and n.x + n.width <= ox + ow + 2.0
+                and n.y + n.height <= oy + oh + 8.0  # the plate's y+5 shadow
+                and n.width <= 100.0]  # the pill's own plate/sheen spans through
+        assert disc == [], f"disc chrome still drawn behind the icon: {disc[:3]}"
+
+    def test_the_glyph_still_draws_centered_and_bare(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        frame = scene_buffer.latest_frame()
+        glyphs = [n for n in frame.nodes
+                  if isinstance(n, TextNode) and n.text == sl_icons.MORE]
+        assert len(glyphs) == 1, "exactly one ⋯ glyph"
+        assert glyphs[0].font_family == sl_icons.ICON_FONT
+        assert glyphs[0].color_rgba == sl_views.SUBTEXT, \
+            "idle glyph keeps the quiet ink (hover/popup-open recolor it)"
+        hover = next(r for r in app._hits if r.action == "open_devices")
+        assert (hover.x, hover.y, hover.w, hover.h) == self.CIRCLE
+
+    def test_the_hit_rect_and_popup_anchor_are_unchanged(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx, show_devices=True)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        assert (overflow.x, overflow.y, overflow.w, overflow.h) == self.CIRCLE, \
+            "the 44x44 hit rect is a layout contract — the disc removal must not move it"
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        plates = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                  if n.color_rgba == (18, 18, 18, 234) and n.width == 298]
+        assert plates, "popup missing"
+        for n in plates:
+            assert n.x + n.width + 1 == overflow.x + overflow.w, \
+                "popup right edge still aligns to the icon rect's right edge"
+            assert n.y - 1 == py + ph + 12.0, "popup still drops 12pt below the pill"
+
+    def test_play_disc_is_out_of_scope(self, app_ctx):
+        """The white play disc STAYS — only the overflow chrome goes."""
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        frame = scene_buffer.latest_frame()
+        play = next(r for r in app._hits if r.action == "toggle_play")
+        discs = [n for n in frame.nodes
+                 if isinstance(n, CircleNode)
+                 and abs(n.cx - (play.x + play.w / 2)) < 1.0
+                 and abs(n.cy - (play.y + play.h / 2)) < 1.0
+                 and n.fill_rgba[0] > 200]
+        assert discs, "the white play disc must survive the SL-28 chrome removal"
+
+    # -- the pixel probes (rasterized truth) ----------------------------------
+
+    def _raster(self, app, ctx, scene_buffer):
+        frame = scene_buffer.latest_frame()
+        assert frame is not None
+        return rasterize_scene_frame(frame)
+
+    def test_probe_dots_present_around_the_slot_center(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        img = self._raster(app, ctx, scene_buffer)
+        ocx, ocy = int(self.CENTER[0]), int(self.CENTER[1])
+        xs, ys = [], []
+        for y in range(ocy - 16, ocy + 16):
+            for x in range(ocx - 16, ocx + 16):
+                r, g, b = (int(v) for v in img[y, x, :3])
+                if (r + g + b) / 3 >= 140:  # the SUBTEXT/ACCENT glyph ink
+                    xs.append(x)
+                    ys.append(y)
+        assert xs, "no ⋯ glyph ink found around (1230, 50)"
+        assert abs(sum(xs) / len(xs) - self.CENTER[0]) <= 1.5
+        assert abs(sum(ys) / len(ys) - self.CENTER[1]) <= 1.5
+
+    def test_probe_zero_disc_fill_pixels_around_the_icon(self, app_ctx):
+        """The disc's composited fill reads as (62,62,62) on the pill; the
+        bare icon must leave ZERO such pixels in the whole slot rect."""
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        img = self._raster(app, ctx, scene_buffer)
+        ox, oy, ow, oh = (int(v) for v in self.CIRCLE)
+        hits = 0
+        for y in range(oy, oy + oh):
+            for x in range(ox, ox + ow):
+                r, g, b = (int(v) for v in img[y, x, :3])
+                if (r, g, b) == (62, 62, 62):
+                    hits += 1
+        assert hits == 0, f"{hits} disc-fill (62,62,62) pixels survive in the slot rect"
 
 
 # ---------------------------------------------------------------------------
