@@ -7,6 +7,8 @@ itself only runs on macOS; here we assert it degrades safely elsewhere.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pytest
 
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIEventSource
@@ -15,6 +17,7 @@ from luvatrix_core.core.native_controls import (
     NativeInputGate,
     NullNativeControlBridge,
     active_native_control_bridge,
+    normalize_script_message,
     register_native_control_bridge,
     unregister_native_control_bridge,
 )
@@ -1114,3 +1117,99 @@ class TestGlassEffectViewClassSelection:
 
         with patch.dict("sys.modules", {"objc": _fake_objc_module(with_glass=False)}):
             assert self._mac._glass_effect_view_class() is None
+
+
+class _NsDictLike(Mapping):
+    """PyObjC __NSDictionaryM stand-in: a Mapping that is NOT a dict —
+    isinstance(x, dict) is False, exactly the wire shape that broke live."""
+
+    def __init__(self, data):
+        self._data = dict(data)
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+
+class _NsNumberLike:
+    """PyObjC NSNumber duck-type: answers doubleValue, is not an int."""
+
+    def __init__(self, value):
+        self._value = float(value)
+
+    def doubleValue(self):
+        return self._value
+
+
+class TestNormalizeScriptMessage:
+    """The boundary converter: WKScriptMessage bodies arrive as __NSDictionaryM
+    /__NSArrayM/NSNumber/NSNull — none pass isinstance(dict/list/int), and every
+    consumer gates on those checks (the round-47 live break)."""
+
+    def test_primitives_pass_through(self):
+        assert normalize_script_message("s") == "s"
+        assert normalize_script_message(7) == 7
+        assert normalize_script_message(0.5) == 0.5
+        assert normalize_script_message(True) is True
+        assert normalize_script_message(None) is None
+
+    def test_nsdict_like_deep_converts(self):
+        body = _NsDictLike({
+            "type": "player_state_changed",
+            "payload": _NsDictLike({"paused": 1, "track": _NsDictLike({"name": "T"})}),
+        })
+        out = normalize_script_message(body)
+        assert type(out) is dict
+        assert type(out["payload"]) is dict
+        assert type(out["payload"]["track"]) is dict
+        assert out["payload"]["track"]["name"] == "T"
+
+    def test_nsarray_like_converts_to_list(self):
+        body = _NsDictLike({"items": ("a", "b")})
+        out = normalize_script_message(body)
+        assert out["items"] == ["a", "b"]
+        assert type(out["items"]) is list
+
+    def test_nsnull_maps_to_none(self):
+        nsnull = type("NSNull", (), {})()
+        assert normalize_script_message(_NsDictLike({"track": nsnull}))["track"] is None
+
+    def test_nsnumber_maps_to_int_or_float(self):
+        out = normalize_script_message(_NsDictLike({
+            "position_ms": _NsNumberLike(61000),
+            "volume": _NsNumberLike(0.5),
+        }))
+        assert out["position_ms"] == 61000 and type(out["position_ms"]) is int
+        assert out["volume"] == 0.5 and type(out["volume"]) is float
+
+    def test_plain_dicts_untouched_in_content(self):
+        body = {"type": "ready", "payload": {"device_id": "d1"}}
+        assert normalize_script_message(body) == body
+
+
+class TestReceiveMessageBoundary:
+    """_receive_message is the real boundary: the inverted isinstance guard
+    passed __NSDictionaryM through untouched. Constructed without AppKit —
+    _receive_message only needs _on_message and destroyed."""
+
+    def test_nsdict_like_body_arrives_as_plain_data(self):
+        from luvatrix_core.platform.macos.native_controls import _AppKitScriptedWebView
+
+        view = object.__new__(_AppKitScriptedWebView)
+        received = []
+        view._on_message = received.append
+        view.destroyed = False
+        view._receive_message(_NsDictLike({
+            "type": "host_ready",
+            "payload": _NsDictLike({"n": _NsNumberLike(3)}),
+        }))
+        assert len(received) == 1
+        message = received[0]
+        assert type(message) is dict
+        assert type(message["payload"]) is dict
+        assert message == {"type": "host_ready", "payload": {"n": 3}}
