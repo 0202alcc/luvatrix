@@ -91,13 +91,15 @@ APP_LAYOUT_FILE = Path(__file__).resolve().parent / "layout.toml"
 _FILE_HEADER = """\
 # layout.toml — persisted layout overrides for the spotify_light chrome.
 # Written by the MCP layout tools (layout_set / layout_align / layout_attach /
-# layout_clear); read at startup. Specs stay resize-safe: anchor + inward
-# dx/dy offsets re-resolve against the window size every frame, align specs
-# re-resolve against the reference's current rect, and attach specs
-# re-resolve against the container's current rect. A raw rect table persists
-# only as the degenerate fallback. Table headers quote the id so dotted
-# interior ids stay one literal key. Hand edits are fine — malformed entries
-# are ignored, never fatal.
+# layout_clear) and the effect tools (effect_apply / effect_remove, SL-34);
+# read at startup. Specs stay resize-safe: anchor + inward dx/dy offsets
+# re-resolve against the window size every frame, align specs re-resolve
+# against the reference's current rect, and attach specs re-resolve against
+# the container's current rect. A raw rect table persists only as the
+# degenerate fallback. Effect tables (["<id>".effect]) declare scrim bands:
+# edge, height (band + fade), fade, alpha, margin. Table headers quote the
+# id so dotted interior ids stay one literal key. Hand edits are fine —
+# malformed entries are ignored, never fatal.
 """
 
 Rect = tuple[float, float, float, float]
@@ -536,6 +538,90 @@ class LayoutOverrides:
         }
 
 
+# -- visual effects (SL-34) ---------------------------------------------------
+
+EFFECT_KINDS = ("scrim",)
+EFFECT_EDGES = ("top", "bottom", "left", "right")
+_EFFECT_FIELDS = frozenset({"kind", "edge", "height", "fade", "alpha", "margin"})
+
+
+def _check_effect_id(effect_id: object) -> str:
+    if (not isinstance(effect_id, str) or not effect_id.strip()
+            or '"' in effect_id or "\n" in effect_id):
+        raise LayoutError(
+            f"unknown effect id {effect_id!r}: non-empty text without quotes or newlines")
+    return effect_id
+
+
+class EffectSpecs:
+    """Session-scoped registry of validated visual-effect specs, keyed by
+    effect id (SL-34). A scrim spec is {kind, edge, height, fade, alpha,
+    margin}: a solid band of `height - fade` points in from `edge`, then a
+    smoothstep fade over the remaining `fade` points; `alpha` is the band's
+    opacity (0-255); `margin` insets the band along its long axis (x for
+    top/bottom edges, y for left/right). The effects twin of
+    LayoutOverrides — the MCP effect tools mutate it, and it persists into
+    the same layout.toml."""
+
+    def __init__(self) -> None:
+        self._specs: dict[str, dict] = {}
+
+    def __len__(self) -> int:
+        return len(self._specs)
+
+    def specs(self) -> dict[str, dict]:
+        return {eid: dict(spec) for eid, spec in self._specs.items()}
+
+    def set(self, effect_id: object, spec: object) -> dict:
+        """Validate and store a spec; returns the stored copy. A partial spec
+        on an EXISTING id merges — live tuning keeps the omitted knobs — while
+        a new id needs edge + height. Never partially stores."""
+        eid = _check_effect_id(effect_id)
+        if not isinstance(spec, dict):
+            raise LayoutError(f"spec for {eid} must be an object, got {spec!r}")
+        unknown = set(spec) - _EFFECT_FIELDS
+        if unknown:
+            raise LayoutError(f"spec for {eid} has unknown fields: {sorted(unknown)}")
+        merged = dict(self._specs.get(eid, {}))
+        merged.update(spec)
+        stored = self._validate_effect_spec(eid, merged)
+        self._specs[eid] = stored
+        return dict(stored)
+
+    def clear(self, effect_id: object = None) -> list[str]:
+        if effect_id is None:
+            cleared = sorted(self._specs)
+            self._specs.clear()
+            return cleared
+        eid = _check_effect_id(effect_id)
+        return [eid] if self._specs.pop(eid, None) is not None else []
+
+    @staticmethod
+    def _validate_effect_spec(eid: str, spec: dict) -> dict:
+        kind = spec.get("kind", "scrim")
+        if kind not in EFFECT_KINDS:
+            raise LayoutError(f"kind for {eid} must be one of {EFFECT_KINDS}, got {kind!r}")
+        edge = spec.get("edge")
+        if edge not in EFFECT_EDGES:
+            raise LayoutError(
+                f"edge for {eid} must be one of {EFFECT_EDGES}, got {edge!r}")
+        if "height" not in spec:
+            raise LayoutError(f"height for {eid} is required for a new effect")
+        height = _size(spec["height"], field="height")
+        fade = _num(spec.get("fade", 0.0), field="fade")
+        if not 0.0 <= fade <= height:
+            raise LayoutError(
+                f"fade for {eid} must sit within the height {height}, got {fade}")
+        alpha = _num(spec.get("alpha", 255.0), field="alpha")
+        if not 0.0 <= alpha <= 255.0:
+            raise LayoutError(f"alpha for {eid} must be 0-255, got {alpha}")
+        margin = _num(spec.get("margin", 0.0), field="margin")
+        if margin < 0.0:
+            raise LayoutError(f"margin for {eid} must be >= 0, got {margin}")
+        return {"kind": kind, "edge": edge, "height": height,
+                "fade": fade, "alpha": alpha, "margin": margin}
+
+
 # -- persistence (round 36) ---------------------------------------------------
 
 def default_path() -> Path:
@@ -567,6 +653,29 @@ def load(path: Path) -> LayoutOverrides:
     return registry
 
 
+def load_effects(path: Path) -> EffectSpecs:
+    """Seed the effect registry from the persisted file (SL-34) — the same
+    fail-soft contract as load(): a missing file, malformed TOML, or invalid
+    entries never keep the app from booting."""
+    registry = EffectSpecs()
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return registry
+    try:
+        data = tomllib.loads(raw)
+    except tomllib.TOMLDecodeError:
+        return registry
+    for eid, spec in data.items():
+        if not isinstance(spec, dict) or "effect" not in spec:
+            continue
+        try:
+            registry.set(eid, spec["effect"])
+        except LayoutError:
+            continue
+    return registry
+
+
 def _toml_num(value: float) -> str:
     return repr(float(value))
 
@@ -581,13 +690,28 @@ def _align_toml_lines(rule: dict) -> list[str]:
     return lines
 
 
-def save(specs: dict[str, dict], path: Path) -> None:
-    """Rewrite the persisted file with the registry's specs. Deterministic
+def _effect_toml_lines(spec: dict) -> list[str]:
+    return [f'kind = "{spec["kind"]}"',
+            f'edge = "{spec["edge"]}"',
+            f"height = {_toml_num(spec['height'])}",
+            f"fade = {_toml_num(spec['fade'])}",
+            f"alpha = {_toml_num(spec['alpha'])}",
+            f"margin = {_toml_num(spec['margin'])}"]
+
+
+def save(specs: dict[str, dict], path: Path, *,
+         effects: dict[str, dict] | None = None) -> None:
+    """Rewrite the persisted file with the registries' specs. Deterministic
     (sorted ids, fixed formatting) so the git diff shows only the nudge.
     Written via a sibling temp file + replace so a crash mid-write can't
     tear the file. Table headers always quote the id (round 37): an
     UNQUOTED dotted id like [pill.progress.rect] parses as nested tables
-    and collides with [pill] — quoting keeps every id one literal key."""
+    and collides with [pill] — quoting keeps every id one literal key.
+    effects=None (SL-34) preserves the effect tables the file already
+    carries, so layout-only callers never silently drop declared effects;
+    pass an explicit dict — empty included — to rewrite them."""
+    if effects is None:
+        effects = load_effects(path).specs()
     chunks = [_FILE_HEADER]
     for cid in sorted(specs):
         quoted = f'"{cid}"'
@@ -623,6 +747,9 @@ def save(specs: dict[str, dict], path: Path) -> None:
             if "height" in spec:
                 lines.append(f"height = {_toml_num(spec['height'])}")
             chunks.append(f"[{quoted}]\n" + "\n".join(lines) + "\n")
+    for eid in sorted(effects):
+        quoted = f'"{eid}"'
+        chunks.append(f"[{quoted}.effect]\n" + "\n".join(_effect_toml_lines(effects[eid])) + "\n")
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text("\n".join(chunks), encoding="utf-8")
     os.replace(tmp, path)
