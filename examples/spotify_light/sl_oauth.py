@@ -29,6 +29,7 @@ _SCOPES = (
     "user-read-playback-state",
     "user-modify-playback-state",
     "user-read-currently-playing",
+    "user-read-playback-queue",
     "playlist-read-private",
     "playlist-read-collaborative",
     "user-library-read",
