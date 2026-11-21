@@ -62,7 +62,7 @@ def _with_track(app, ctx):
 
 def _pill_ring(scene_buffer):
     rings = [n for n in _nodes(scene_buffer, RoundedRectNode)
-             if n.color_rgba == sl_views.PILL_BORDER and n.radius == 32.0]
+             if n.color_rgba == sl_views.PILL_BORDER]
     assert len(rings) == 1, "expected exactly one pill ring"
     return rings[0]
 
@@ -105,7 +105,7 @@ class _Drain:
 # ---------------------------------------------------------------------------
 
 class TestLayoutSpecValidation:
-    NATURAL = (804.0, 16.0, 460.0, 64.0)  # the pill at 1280x800
+    NATURAL = (744.0, 16.0, 520.0, 108.0)  # the pill at 1280x800
 
     def test_explicit_rect_resolves_verbatim(self):
         ov = sl_layout.LayoutOverrides()
@@ -115,24 +115,25 @@ class TestLayoutSpecValidation:
 
     def test_anchor_math_all_anchors(self):
         ov = sl_layout.LayoutOverrides()
+        _, _, w, h = self.NATURAL
         cases = {
             "top-left": (40.0, 100.0),
-            "top-right": (1280.0 - 40 - 460, 100.0),
-            "bottom-left": (40.0, 800.0 - 100 - 64),
-            "bottom-right": (1280.0 - 40 - 460, 800.0 - 100 - 64),
-            "center": (1280.0 / 2 - 230 + 40, 800.0 / 2 - 32 + 100),
+            "top-right": (1280.0 - 40 - w, 100.0),
+            "bottom-left": (40.0, 800.0 - 100 - h),
+            "bottom-right": (1280.0 - 40 - w, 800.0 - 100 - h),
+            "center": (1280.0 / 2 - w / 2 + 40, 800.0 / 2 - h / 2 + 100),
         }
         for anchor, (want_x, want_y) in cases.items():
             ov.set("pill", {"anchor": anchor, "dx": 40, "dy": 100})
             got = ov.resolve("pill", self.NATURAL, width=1280, height=800)
-            assert got == pytest.approx((want_x, want_y, 460.0, 64.0)), anchor
+            assert got == pytest.approx((want_x, want_y, w, h)), anchor
 
     def test_anchor_size_override_grows_from_the_anchor(self):
         """A width override under a right anchor grows the rect leftward."""
         ov = sl_layout.LayoutOverrides()
         ov.set("pill", {"anchor": "top-right", "dx": 16, "dy": 16, "width": 300})
         assert ov.resolve("pill", self.NATURAL, width=1280, height=800) == \
-            (964.0, 16.0, 300.0, 64.0)
+            (964.0, 16.0, 300.0, self.NATURAL[3])
 
     def test_unset_component_resolves_natural(self):
         ov = sl_layout.LayoutOverrides()
@@ -176,7 +177,8 @@ class TestLayoutSpecValidation:
             (0.0, 0.0, 460.0, 64.0)
         ov.set("pill", {"anchor": "top-right", "dx": 5000, "dy": 16})
         got = ov.resolve("pill", self.NATURAL, width=1280, height=800)
-        assert got[0] == 0.0 and got[2] == 460.0, "an absurd anchor offset clamps, not crashes"
+        assert got[0] == 0.0 and got[2] == self.NATURAL[2], \
+            "an absurd anchor offset clamps, not crashes"
         ov.set("pill", {"rect": {"x": 100, "y": 0, "width": 5000, "height": 64}})
         got = ov.resolve("pill", self.NATURAL, width=1280, height=800)
         assert got[2] <= 1280.0 and got[0] == 0.0, "oversize width shrinks to the window"
@@ -201,7 +203,7 @@ class TestLayoutSpecValidation:
         ov = sl_layout.LayoutOverrides()
         ov.set("pill", {"anchor": "top-right", "dx": 40, "dy": 24})
         ov.set("nav_home", {"rect": {"x": 300, "y": 700, "width": 44, "height": 44}})
-        naturals = {"pill": (804.0, 16.0, 460.0, 64.0), "nav_home": (468.0, 730.0, 44.0, 44.0)}
+        naturals = {"pill": (744.0, 16.0, 520.0, 108.0), "nav_home": (468.0, 730.0, 44.0, 44.0)}
         before = {cid: ov.resolve(cid, naturals[cid], width=1280, height=800)
                   for cid in naturals}
         dumped = ov.export(width=1280, height=800, naturals=naturals)
@@ -244,7 +246,9 @@ class TestLayoutMcpSurface:
         ring = _pill_ring(buf)
         assert (ring.x, ring.y, ring.width, ring.height) == (100.0, 120.0, 300.0, 64.0)
         hits = {r.action: r for r in app._hits}
-        assert (hits["toggle_play"].x, hits["toggle_play"].y) == (100 + 300 - 72 - 17, 120 + 15), \
+        col_x, col_w, _ = sl_views.pill_column(300.0, 64.0)
+        assert (hits["toggle_play"].x, hits["toggle_play"].y) == \
+            (100 + col_x + col_w / 2 - 18, 120 + 69), \
             "the pill's hit regions ride the override"
 
     def test_overrides_win_over_app_state_recomputation(self, app_ctx):
@@ -272,11 +276,11 @@ class TestLayoutMcpSurface:
         app.authenticated = True
         app.mcp_call("layout_set", {"id": "pill", "anchor": "top-right", "dx": 16, "dy": 16})
         _tick(app, ctx, 2)
-        assert _pill_ring(buf).x == 1280.0 - 16 - 460
+        assert _pill_ring(buf).x == 1280.0 - 16 - sl_views.PILL_W
         ctx.logical_width_px = 1000.0
         app.invalidate()  # stands in for the OS resize event
         _tick(app, ctx, 2)
-        assert _pill_ring(buf).x == 1000.0 - 16 - 460, \
+        assert _pill_ring(buf).x == 1000.0 - 16 - sl_views.PILL_W, \
             "anchored overrides follow the window — the anchor IS the override"
 
     def test_nav_circles_and_sidebar_move(self, app_ctx):
@@ -347,7 +351,7 @@ class TestLayoutMcpSurface:
         assert exported["window"] == {"width": 1280.0, "height": 800.0}
         app.mcp_call("layout_clear", {})
         _tick(app, ctx, 1)
-        assert _pill_ring(buf).x == 804.0, "cleared overrides restore the natural layout"
+        assert _pill_ring(buf).x == 744.0, "cleared overrides restore the natural layout"
         for cid, spec in exported["overrides"].items():
             app.mcp_call("layout_set", {"id": cid, **spec})
         _tick(app, ctx, 2)
@@ -366,7 +370,7 @@ class TestLayoutMcpSurface:
             app.mcp_call("layout_set", {"id": "pill", "anchor": "top-left", "dx": "banana"})
         _tick(app, ctx, 2)
         ring = _pill_ring(buf)
-        assert (ring.x, ring.y) == (804.0, 16.0), \
+        assert (ring.x, ring.y) == (744.0, 16.0), \
             "a rejected spec must not disturb the running scene"
 
     def test_wire_round_trip_through_the_bridge(self, app_ctx):
@@ -383,7 +387,8 @@ class TestLayoutMcpSurface:
                             "arguments": {"id": "pill", "anchor": "top-right",
                                           "dx": 80, "dy": 40}}})
             payload = json.loads(response["result"]["content"][0]["text"])
-            assert payload["rect"] == [1280.0 - 80 - 460, 40.0, 460.0, 64.0]
+            assert payload["rect"] == [1280.0 - 80 - sl_views.PILL_W, 40.0,
+                                       sl_views.PILL_W, sl_views.PILL_H]
             bad = bridge.dispatcher().handle_payload(
                 {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
                  "params": {"name": "layout_set",
@@ -392,4 +397,4 @@ class TestLayoutMcpSurface:
             assert "nope" in blob and "pill" in blob, \
                 "wire errors must carry the offender and the valid ids"
         _tick(app, ctx, 2)
-        assert _pill_ring(buf).x == 1280.0 - 80 - 460
+        assert _pill_ring(buf).x == 1280.0 - 80 - sl_views.PILL_W

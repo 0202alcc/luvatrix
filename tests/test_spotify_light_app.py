@@ -1279,16 +1279,16 @@ class TestFloatingPill:
         assert "Pick a device, or start something from a playlist" in _texts(scene_buffer)
 
     def test_idle_hint_truncates_to_measured_width_when_the_pill_shrinks(self, app_ctx):
-        """Char-count truncation is width-blind: at 700pt the pill shrinks
-        (round 10) and 40 chars (~194pt) overflows the ~134pt metadata
-        budget, colliding with the transport. Truncation must be driven by
-        the measured width, ending in an ellipsis when it cuts."""
+        """Char-count truncation is width-blind: at 560pt the pill sits at its
+        320pt floor and 40 chars (~194pt) overflows the ~192pt column
+        budget. Truncation must be driven by the measured width, ending in
+        an ellipsis when it cuts."""
         app, ctx, scene_buffer = app_ctx
         app.authenticated = True
-        ctx.logical_width_px = 700.0
+        ctx.logical_width_px = 560.0
         _tick(app, ctx, 2)
 
-        px, _, pw, _ = sl_views.pill_rect(700.0, 800.0)
+        px, _, pw, _ = sl_views.pill_rect(560.0, 800.0)
         budget = self._meta_budget(pw)
         hints = [n for n in _nodes(scene_buffer, TextNode)
                  if n.text.startswith("Pick a device")]
@@ -1580,7 +1580,8 @@ class TestDockContentAnchor:
     def test_cluster_centers_on_content_region_at_design_width(self):
         for w in (1280.0, 1440.0):
             px, _, pw, _ = sl_views.dock_cluster_rect(w, 800)
-            assert pw == sl_views.PILL_W
+            assert pw == sl_views.DOCK_SLOT_W, \
+                "the slot keeps the vacated pill's footprint, not the grown pill's"
             cluster_left = px - self._CLUSTER_PAD
             cluster_right = px + pw + self._CLUSTER_PAD
             content_cx = (sl_views.SIDEBAR_W + w) / 2.0
@@ -1596,9 +1597,9 @@ class TestDockContentAnchor:
 
     def test_cluster_shrinks_only_as_last_resort(self):
         _, _, pw_940, _ = sl_views.dock_cluster_rect(940, 800)
-        assert pw_940 == sl_views.PILL_W, "940pt still fits the design-width cluster"
+        assert pw_940 == sl_views.DOCK_SLOT_W, "940pt still fits the design-width cluster"
         px8, _, pw8, _ = sl_views.dock_cluster_rect(800, 800)
-        assert pw8 < sl_views.PILL_W, "800pt is where the cluster starts shrinking"
+        assert pw8 < sl_views.DOCK_SLOT_W, "800pt is where the cluster starts shrinking"
         search_right = px8 + pw8 + self._CLUSTER_PAD
         assert search_right <= 800.0 - sl_views.PILL_FLOAT + 1e-6, \
             "shrunk cluster keeps the right float margin"
@@ -3849,7 +3850,7 @@ class TestPillTopRight:
         _tick(app, ctx, 2)
 
     def test_pill_anchors_top_right_at_design_width(self):
-        assert sl_views.pill_rect(1280, 800) == (804.0, 16.0, 460.0, 64.0), \
+        assert sl_views.pill_rect(1280, 800) == (744.0, 16.0, 520.0, 108.0), \
             "right edge pinned at width - PILL_FLOAT, top at the dock's margin idiom"
 
     def test_right_edge_stays_pinned_across_window_widths(self):
@@ -3868,11 +3869,11 @@ class TestPillTopRight:
         app.authenticated = True
         _tick(app, ctx, 2)
         ring_idle = [n for n in _nodes(buf, RoundedRectNode)
-                     if n.color_rgba == sl_views.PILL_BORDER and n.radius == 32.0]
+                     if n.color_rgba == sl_views.PILL_BORDER and n.radius == 54.0]
         assert len(ring_idle) == 1
         self._with_track(app, ctx)
         ring_playing = [n for n in _nodes(buf, RoundedRectNode)
-                        if n.color_rgba == sl_views.PILL_BORDER and n.radius == 32.0]
+                        if n.color_rgba == sl_views.PILL_BORDER and n.radius == 54.0]
         assert len(ring_playing) == 1
         assert (ring_idle[0].x + ring_idle[0].width) == \
             (ring_playing[0].x + ring_playing[0].width), "right edge must not move"
@@ -3884,8 +3885,8 @@ class TestPillTopRight:
         app, ctx, buf = app_ctx
         self._with_track(app, ctx)
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
-        art = [n for n in _nodes(buf, CpuLayerNode) if n.width == 44]
-        assert art and (art[0].x, art[0].y) == (px + 10, py + 10), "art tile rides along"
+        art = [n for n in _nodes(buf, CpuLayerNode) if n.width == 84]
+        assert art and (art[0].x, art[0].y) == (px + 12, py + 12), "art tile rides along"
         for action in ("toggle_play", "prev", "next", "seek_bar"):
             hits = [r for r in app._hits if r.action == action]
             assert hits and py <= hits[0].y <= py + ph, f"{action} hit left behind at the dock"
@@ -3934,7 +3935,9 @@ class TestPillTopRight:
         _tick(app, ctx, 2)
         strips = [n for n in _nodes(buf, RectNode)
                   if n.x == sl_views.SIDEBAR_W and n.width == 1280 - sl_views.SIDEBAR_W
-                  and n.color_rgba[:3] == sl_views.BG[:3] and n.y < 160]
+                  and n.color_rgba[:3] == sl_views.BG[:3]
+                  and n.y < sl_views.PILL_FLOAT + sl_views.PILL_H + sl_views.SCRIM_GAP
+                  + sl_views.SCRIM_FADE + 10]
         assert strips, "no top scrim"
         strips.sort(key=lambda n: n.y)
         band = [n for n in strips if n.y == 0]
