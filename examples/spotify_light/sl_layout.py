@@ -14,6 +14,12 @@ recomputation: state changes cannot stomp them. They are session-scoped —
 the registry is created in setup(), so a reboot starts clean with no
 persistence file.
 
+Interior ids (pill.art / pill.progress / pill.transport, round 33) work the
+same way in PILL-LOCAL space: naturals and specs are local to the pill's
+top-left, resolution and clamping run against the pill's current rect, and
+the draw offsets the result by the pill position — so interior overrides
+compose with (and survive) whole-pill overrides.
+
 Validation happens at set() time only: resolve() never raises, so a bad
 value can never crash the scene. LayoutError surfaces through mcp_call as a
 tool error naming the offender and the valid ids.
@@ -22,7 +28,11 @@ from __future__ import annotations
 
 import math
 
-COMPONENT_IDS = ("pill", "nav_home", "nav_search", "nav_more", "sidebar")
+# Interior ids (round 33) address the pill's inside in PILL-LOCAL space:
+# (0, 0) is the pill's top-left, specs clamp into the pill's current rect
+# (never the window), and locals compose with whole-pill moves.
+INTERIOR_IDS = ("pill.art", "pill.progress", "pill.transport")
+COMPONENT_IDS = ("pill", "nav_home", "nav_search", "nav_more", "sidebar") + INTERIOR_IDS
 ANCHORS = ("top-left", "top-right", "bottom-left", "bottom-right", "center")
 
 Rect = tuple[float, float, float, float]
@@ -150,18 +160,24 @@ class LayoutOverrides:
         return (x, y, w, h)
 
     def export(self, *, width: float, height: float,
-               naturals: dict[str, Rect] | None = None) -> dict:
+               naturals: dict[str, Rect] | None = None,
+               local_frames: dict[str, tuple[float, float]] | None = None) -> dict:
         """JSON-serializable dump for the bake path: the specs to re-apply,
         plus the resolved rects at the current window size for transcribing
-        into layout constants."""
+        into layout constants. Ids in local_frames resolve against that
+        frame's (width, height) instead of the window's — interior ids
+        export in pill-local coordinates this way."""
         naturals = naturals or {}
+        local_frames = local_frames or {}
         return {
             "version": 1,
             "window": {"width": float(width), "height": float(height)},
             "overrides": self.specs(),
             "resolved": {
                 cid: [round(v, 2) for v in self.resolve(
-                    cid, naturals.get(cid, (0.0, 0.0, 0.0, 0.0)), width=width, height=height)]
+                    cid, naturals.get(cid, (0.0, 0.0, 0.0, 0.0)),
+                    width=local_frames.get(cid, (width, height))[0],
+                    height=local_frames.get(cid, (width, height))[1])]
                 for cid in sorted(self._specs)
             },
         }

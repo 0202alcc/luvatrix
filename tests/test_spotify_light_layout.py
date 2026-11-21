@@ -3,9 +3,11 @@
 Alec's layout-tool loop: nudge chrome positions on the RUNNING app over MCP,
 then export the overrides for baking into the layout constants. Addressable
 components: the playback pill, the nav circles (home/search/more), and the
-sidebar rail. Overrides are session-scoped (fresh on every boot, no
-persistence), win over the app's own per-frame layout recomputation, clamp
-to the window, and refuse unknown ids with a useful error.
+sidebar rail — plus, since round 33, the pill's interior (pill.art,
+pill.progress, pill.transport) in pill-local space. Overrides are
+session-scoped (fresh on every boot, no persistence), win over the app's
+own per-frame layout recomputation, clamp to the window (or the pill, for
+interior ids), and refuse unknown ids with a useful error.
 """
 from __future__ import annotations
 
@@ -23,6 +25,8 @@ if str(APP_DIR) not in sys.path:
 
 from luvatrix_core.core.mcp_runtime import MCP_CAPABILITIES, McpRuntimeBridge  # noqa: E402
 from luvatrix_core.core.scene_graph import (  # noqa: E402
+    CircleNode,
+    CpuLayerNode,
     RectNode,
     RoundedRectNode,
     SceneGraphBuffer,
@@ -398,3 +402,184 @@ class TestLayoutMcpSurface:
                 "wire errors must carry the offender and the valid ids"
         _tick(app, ctx, 2)
         assert _pill_ring(buf).x == 1280.0 - 80 - sl_views.PILL_W
+
+
+class TestPillInteriorOverrides:
+    """Round 33 (Alec): the layout surface extends INWARD — pill.art,
+    pill.progress, and pill.transport are addressable in PILL-LOCAL space:
+    (0, 0) is the pill's top-left, rects and anchors clamp into the pill
+    (never the window), and locals compose with whole-pill moves — a pill
+    override carries the interior, an interior override keeps its local
+    offset across pill moves. Size is a layout input where the geometry has
+    one: the art tile (square, min(w, h)) and the progress strip width; the
+    transport cluster positions by its rect's center with fixed 34pt hits."""
+
+    def test_interior_ids_are_addressable(self):
+        for cid in ("pill.art", "pill.progress", "pill.transport"):
+            assert cid in sl_layout.COMPONENT_IDS
+        with pytest.raises(sl_layout.LayoutError) as exc:
+            sl_layout.LayoutOverrides().set(
+                "pill.nope", {"rect": {"x": 0, "y": 0, "width": 4, "height": 4}})
+        assert "pill.art" in str(exc.value), "the error names the valid interior ids"
+
+    def test_interior_naturals_derive_from_the_pill_column(self):
+        col_x, col_w, art = sl_views.pill_column(520.0, 108.0)
+        assert sl_views.pill_art_local(520.0, 108.0) == (12.0, 12.0, 84.0, 84.0)
+        gx, gy, gw, gh = sl_views.pill_progress_local(520.0, 108.0)
+        assert (gx, gy, gh) == (col_x + 34.0, 59.0, 3.0)
+        assert gw == pytest.approx(col_w - 74.0)
+        tx, ty, tw, th = sl_views.pill_transport_local(520.0, 108.0)
+        assert (tx + tw / 2, ty + th / 2) == pytest.approx((col_x + col_w / 2, 87.0))
+
+    def test_default_scene_matches_the_naturals(self, app_ctx):
+        """No overrides: the drawn art tile, seek hit, and play hit sit at the
+        exported natural locals offset by the pill — the override surface
+        describes the shipping geometry, not a parallel one."""
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        ax, ay, _, _ = sl_views.pill_art_local(pw, ph)
+        art = [n for n in _nodes(buf, CpuLayerNode) if n.width == 84]
+        assert art and (art[0].x, art[0].y) == (px + ax, py + ay)
+        gx, _, gw, _ = sl_views.pill_progress_local(pw, ph)
+        seek = [r for r in app._hits if r.action == "seek_bar"]
+        assert seek and (seek[0].x, seek[0].w) == (px + gx, gw)
+        tx, ty, tw, th = sl_views.pill_transport_local(pw, ph)
+        play = [r for r in app._hits if r.action == "toggle_play"]
+        assert play and (play[0].x, play[0].y) == (px + tx + tw / 2 - 18, py + ty + th / 2 - 18)
+
+    def test_art_override_moves_and_resizes_in_local_space(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        result = app.mcp_call("layout_set", {
+            "id": "pill.art", "rect": {"x": 20, "y": 22, "width": 64, "height": 64}})
+        assert result["rect"] == [20.0, 22.0, 64.0, 64.0], "interior rects report local"
+        _tick(app, ctx, 2)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        art = [n for n in _nodes(buf, CpuLayerNode) if n.width == 64]
+        assert art and (art[0].x, art[0].y) == (px + 20, py + 22)
+
+    def test_interior_clamps_into_the_pill_not_the_window(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        app.mcp_call("layout_set", {
+            "id": "pill.art", "rect": {"x": 500, "y": -30, "width": 84, "height": 84}})
+        _tick(app, ctx, 2)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        art = [n for n in _nodes(buf, CpuLayerNode) if n.width == 84]
+        assert art and (art[0].x, art[0].y) == (px + 436.0, py + 0.0), \
+            "500pt fits the window but not the 520pt pill — the clamp is pill-local"
+
+    def test_art_rides_a_whole_pill_move(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        app.mcp_call("layout_set", {
+            "id": "pill.art", "rect": {"x": 24, "y": 12, "width": 84, "height": 84}})
+        app.mcp_call("layout_set", {
+            "id": "pill", "rect": {"x": 100, "y": 120, "width": 520, "height": 108}})
+        _tick(app, ctx, 2)
+        art = [n for n in _nodes(buf, CpuLayerNode) if n.width == 84]
+        assert art and (art[0].x, art[0].y) == (124.0, 132.0), \
+            "the local override composes with the moved pill"
+
+    def test_progress_override_moves_the_strip_and_times_ride(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        app.mcp_call("layout_set", {
+            "id": "pill.progress", "rect": {"x": 150, "y": 70, "width": 200, "height": 3}})
+        _tick(app, ctx, 2)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        seek = [r for r in app._hits if r.action == "seek_bar"]
+        assert seek and (seek[0].x, seek[0].y, seek[0].w) == (px + 150, py + 64, 200.0)
+        frame = buf.latest_frame()
+        duration = [n for n in frame.nodes if isinstance(n, TextNode) and n.text == "4:17"]
+        assert duration and duration[0].x == pytest.approx(px + 150 + 200 + 6), \
+            "the duration label rides the strip's right edge"
+
+    def test_transport_override_moves_the_cluster(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        app.mcp_call("layout_set", {
+            "id": "pill.transport", "rect": {"x": 150, "y": 20, "width": 130, "height": 36}})
+        _tick(app, ctx, 2)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        cx, cy = px + 150 + 65, py + 20 + 18
+        hits = {r.action: r for r in app._hits if r.action in ("toggle_play", "prev", "next")}
+        assert (hits["toggle_play"].x, hits["toggle_play"].y, hits["toggle_play"].w) == \
+            (cx - 18, cy - 18, 36.0)
+        assert (hits["prev"].x, hits["prev"].w) == (cx - 65, 34.0)
+        assert (hits["next"].x, hits["next"].w) == (cx + 31, 34.0)
+        disc = [n for n in _nodes(buf, CircleNode) if n.radius == 16]
+        assert disc and (disc[0].cx, disc[0].cy) == (cx, cy), "the play disc rides the cluster"
+
+    def test_transport_anchor_resolves_inside_the_pill(self, app_ctx):
+        """Interior anchors measure inward from the PILL's corners."""
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        result = app.mcp_call("layout_set", {
+            "id": "pill.transport", "anchor": "bottom-right", "dx": 10, "dy": 8})
+        assert result["rect"] == [380.0, 64.0, 130.0, 36.0]
+
+    def test_export_round_trip_includes_interior(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        app.mcp_call("layout_set", {
+            "id": "pill.art", "rect": {"x": 24, "y": 12, "width": 72, "height": 72}})
+        app.mcp_call("layout_set", {
+            "id": "pill.transport", "anchor": "bottom-right", "dx": 10, "dy": 8})
+        exported = app.mcp_call("layout_export", {})
+        assert exported["resolved"]["pill.art"] == [24.0, 12.0, 72.0, 72.0]
+        assert exported["resolved"]["pill.transport"] == [380.0, 64.0, 130.0, 36.0]
+        app.mcp_call("layout_clear", {})
+        for cid, spec in exported["overrides"].items():
+            app.mcp_call("layout_set", {"id": cid, **spec})
+        _tick(app, ctx, 2)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        art = [n for n in _nodes(buf, CpuLayerNode) if n.width == 72]
+        assert art and (art[0].x, art[0].y) == (px + 24, py + 12)
+        play = [r for r in app._hits if r.action == "toggle_play"]
+        assert (play[0].x, play[0].y) == (px + 380 + 65 - 18, py + 64), \
+            "cleared and re-imported specs reproduce the scene"
+
+    def test_interior_override_survives_state_changes(self, app_ctx):
+        app, ctx, buf = app_ctx
+        app.mcp_call("layout_set", {
+            "id": "pill.art", "rect": {"x": 30, "y": 12, "width": 60, "height": 60}})
+        app.authenticated = True
+        for view in ("library", "search", "home"):
+            app.view = view
+            _tick(app, ctx, 1)
+        _with_track(app, ctx)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        art = [n for n in _nodes(buf, CpuLayerNode) if n.width == 60]
+        assert art and (art[0].x, art[0].y) == (px + 30, py + 12)
+
+    def test_bad_interior_spec_never_reaches_the_scene(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        with pytest.raises(sl_layout.LayoutError):
+            app.mcp_call("layout_set", {"id": "pill.art", "anchor": "top-left", "dx": "banana"})
+        _tick(app, ctx, 2)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        ax, ay, _, _ = sl_views.pill_art_local(520.0, 108.0)
+        art = [n for n in _nodes(buf, CpuLayerNode) if n.width == 84]
+        assert art and (art[0].x, art[0].y) == (px + ax, py + ay), \
+            "a rejected spec leaves the natural interior untouched"
+
+    def test_wire_round_trip_interior(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        bridge = _bridge(app)
+        bridge.register_app_hooks(app)
+        with _Drain(bridge):
+            response = bridge.dispatcher().handle_payload(
+                {"jsonrpc": "2.0", "id": 9, "method": "tools/call",
+                 "params": {"name": "layout_set",
+                            "arguments": {"id": "pill.art",
+                                          "rect": {"x": 26, "y": 18, "width": 70, "height": 70}}}})
+            payload = json.loads(response["result"]["content"][0]["text"])
+            assert payload["rect"] == [26.0, 18.0, 70.0, 70.0]
+        _tick(app, ctx, 2)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        art = [n for n in _nodes(buf, CpuLayerNode) if n.width == 70]
+        assert art and (art[0].x, art[0].y) == (px + 26, py + 18)
