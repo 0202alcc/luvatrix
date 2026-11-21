@@ -258,6 +258,24 @@ def _hover(mouse, x, y, w, h) -> bool:
     return x <= mx <= x + w and y <= my <= y + h
 
 
+# Apple's Liquid Glass size rule (Alec, round 34, reference: the large-panel
+# corner). Small plates are capsules — radius = h/2, full semicircular ends.
+# Past GLASS_CAPSULE_MAX_H the corner stops growing with the plate and caps
+# at GLASS_RECT_RADIUS: long straight edges with the reference's r24-r32
+# continuous-corner feel. The rule decides the silhouette ONLY where a plate
+# derives its radius from its height (the pill); explicit radii (nav rows,
+# popup r14, sidebar rail r16) already sit on their side of the rule.
+GLASS_CAPSULE_MAX_H = 80.0
+GLASS_RECT_RADIUS = 28.0
+
+
+def glass_silhouette_radius(h: float) -> float:
+    """Capsule below and at the threshold, capped rounded-rect above it."""
+    if h <= GLASS_CAPSULE_MAX_H:
+        return h / 2.0
+    return GLASS_RECT_RADIUS
+
+
 def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
                  fill=None, border=None) -> None:
     """One canonical simulated-glass plate. Composed back-to-front: soft
@@ -710,7 +728,7 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     # (volume, shuffle, repeat, devices). Scene-drawn → same on every host.
     px, py, pw, ph = pill_rect(width, height)
     cy = py + ph / 2
-    _glass_plate(frame, px, py, pw, ph, radius=ph / 2, z=10,
+    _glass_plate(frame, px, py, pw, ph, radius=glass_silhouette_radius(ph), z=10,
                  fill=PILL_FILL, border=PILL_BORDER)
 
     player = app.player

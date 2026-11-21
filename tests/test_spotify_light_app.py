@@ -2674,6 +2674,150 @@ class TestGlassSheenSilhouette:
 
 
 # ---------------------------------------------------------------------------
+# Round 34 (Alec, Apple's Liquid Glass size-rule reference): big plates are
+# NOT capsules. At small sizes the corner radius is h/2 (nav circles, the
+# 64pt pill — full semicircular ends); past a height threshold the radius
+# caps at a fixed value and the plate reads as a rounded rectangle with the
+# reference's continuous-corner feel. The 108pt pill crosses the threshold;
+# the sheen chord-clip and the specular must follow the capped arc (same
+# construction, new radius — the round-24/27 pixel discipline still holds).
+class TestGlassSizeRule:
+
+    class _Capture:
+        def __init__(self):
+            self.rrects = []
+            self.rects = []
+
+        def rounded_rect(self, **kw):
+            self.rrects.append(kw)
+
+        def rect(self, **kw):
+            self.rects.append(kw)
+
+    def _rasterize_plate(self, w, h, radius):
+        cap = self._Capture()
+        sl_views._glass_plate(cap, 100.0, 100.0, w, h, radius=radius, z=2)
+        nodes = [RectNode(x=0, y=0, width=400, height=400,
+                          color_rgba=(16, 16, 16, 255), z_index=0)]
+        nodes += [RoundedRectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                                  radius=n["radius"], color_rgba=n["color"],
+                                  z_index=n["z_index"]) for n in cap.rrects]
+        nodes += [RectNode(x=n["x"], y=n["y"], width=n["width"], height=n["height"],
+                           color_rgba=n["color"], z_index=n["z_index"]) for n in cap.rects]
+        frame = SceneFrame(revision=1, logical_width=400, logical_height=400,
+                           display_width=400, display_height=400, ts_ns=0,
+                           nodes=tuple(nodes))
+        return rasterize_scene_frame(frame)
+
+    def _sheen_rows(self, cap):
+        return [n for n in cap.rects
+                if n["color"][:3] == (255, 255, 255)
+                and 0 < n["color"][3] <= sl_views.GLASS_SHEEN[3]
+                and n["y"] != 101.0]
+
+    def test_rule_constants_come_from_the_reference(self):
+        assert 24.0 <= sl_views.GLASS_RECT_RADIUS <= 32.0, \
+            "the capped corner is the reference's r24-r32 continuous corner"
+        assert 64.0 < sl_views.GLASS_CAPSULE_MAX_H < 108.0, \
+            "the 64pt pill stays capsule; the round-32 108pt pill crosses"
+
+    def test_capsule_at_and_below_the_threshold(self):
+        rule = sl_views.glass_silhouette_radius
+        assert rule(44.0) == 22.0, "nav circles keep r = h/2"
+        assert rule(64.0) == 32.0, "the current pill keeps r = h/2"
+        assert rule(sl_views.GLASS_CAPSULE_MAX_H) == sl_views.GLASS_CAPSULE_MAX_H / 2, \
+            "the boundary itself is still a capsule"
+
+    def test_capped_above_the_threshold(self):
+        rule = sl_views.glass_silhouette_radius
+        assert rule(sl_views.GLASS_CAPSULE_MAX_H + 0.5) == sl_views.GLASS_RECT_RADIUS
+        assert rule(108.0) == sl_views.GLASS_RECT_RADIUS, "the big pill becomes a rect"
+        assert rule(400.0) == sl_views.GLASS_RECT_RADIUS, "the cap never grows"
+
+    def test_pill_silhouette_follows_the_rule_in_both_states(self, app_ctx):
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        _, _, _, ph = sl_views.pill_rect(1280, 800)
+        want = sl_views.glass_silhouette_radius(ph)
+        rings = [n for n in _nodes(buf, RoundedRectNode)
+                 if n.color_rgba == sl_views.PILL_BORDER]
+        assert rings and all(n.radius == want for n in rings), "idle pill ring obeys the rule"
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500,
+                                           track=track, device=None, shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        _tick(app, ctx, 2)
+        rings = [n for n in _nodes(buf, RoundedRectNode)
+                 if n.color_rgba == sl_views.PILL_BORDER]
+        assert rings and all(n.radius == want for n in rings), \
+            "playing pill ring obeys the same rule"
+
+    def test_small_plates_do_not_cross(self, app_ctx):
+        """Only the (big) pill's silhouette may change: nav circles and the
+        overflow stay full capsules (r = h/2 = 22), the popup keeps r14."""
+        app, ctx, buf = app_ctx
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.devices = [
+            sl_models.Device(id="d1", name="MacBook Pro", kind="Computer", is_active=True,
+                             is_restricted=False, volume_percent=40),
+        ]
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500,
+                                           track=track, device=app.devices[0],
+                                           shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        app.show_devices = True
+        _tick(app, ctx, 2)
+        circles = [n for n in _nodes(buf, RoundedRectNode)
+                   if n.width == 44.0 and n.height == 44.0 and n.radius == 22.0]
+        assert len(circles) >= 3, "home/search/overflow circles stay capsule (r = h/2)"
+        popup = [n for n in _nodes(buf, RoundedRectNode)
+                 if n.color_rgba == (18, 18, 18, 234) and n.width == 298]
+        assert popup and {n.radius for n in popup} == {13.0}, \
+            "the popup fill keeps r13 (its explicit r14 ring minus the 1px inset)"
+
+    def test_capped_corner_keeps_the_sheen_discipline(self):
+        """Pixel contract (round-24 discipline) on the capped arc: outside it
+        the backdrop is untouched, and a point the capsule arc would leave
+        empty now carries plate fill — that difference IS the rectangle."""
+        radius = sl_views.glass_silhouette_radius(108.0)
+        img = self._rasterize_plate(200.0, 108.0, radius)
+        for x, y in ((102, 102), (103, 103), (104, 102), (105, 104), (297, 102), (296, 103)):
+            lum = int(img[y, x, :3].sum()) / 3
+            assert lum <= 20, f"sheen leaks past the capped corner at {(x, y)}: lum {lum}"
+        # (114, 106): outside a capsule arc (center (154, 154), distance ~62.5
+        # > 54) but inside the capped arc (center (128, 128), distance ~26.1
+        # < 28) — the plate must be present here, or it is still a capsule.
+        lum = int(img[106, 114, :3].sum()) / 3
+        assert lum > 20, "the capped corner fills where the capsule would not"
+        top = int(img[103, 200, :3].sum()) / 3
+        assert top >= 64, f"sheen band missing at the top edge: lum {top}"
+
+    def test_sheen_and_specular_follow_the_capped_arc(self):
+        """Same chord-clip construction, new arc: rows above the corner clip
+        against the r-cap, and the specular span insets from the r-cap."""
+        radius = sl_views.glass_silhouette_radius(108.0)
+        cap = self._Capture()
+        sl_views._glass_plate(cap, 100.0, 100.0, 200.0, 108.0, radius=radius, z=2)
+        for n in self._sheen_rows(cap):
+            cy = n["y"] + n["height"] / 2 - 100.0
+            if cy >= radius:
+                continue
+            chord = radius - math.sqrt(max(0.0, radius * radius - (radius - cy) ** 2))
+            assert n["x"] >= 100.0 + chord - 0.6, \
+                f"row at depth {cy:.1f} starts at {n['x']}, left of the capped chord"
+            assert n["x"] + n["width"] <= 100.0 + 200.0 - chord + 0.6, \
+                f"row at depth {cy:.1f} ends past the capped chord"
+        specular = [n for n in cap.rects if n["y"] == 101.0 and n["color"][3] > 0]
+        assert specular, "specular missing"
+        assert min(n["x"] for n in specular) == pytest.approx(100.0 + radius * 0.7), \
+            "the specular span insets from the capped arc, not the capsule's"
+
+
+# ---------------------------------------------------------------------------
 # Round 25 (Alec's eyeball pass on 1b71bac): the playback popup "doesn't work
 # properly" — clicking its padding, gaps, or labels dismisses it. Root cause:
 # the popup's glass plate registers no hit region, so clicks on dead space
