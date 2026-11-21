@@ -3649,8 +3649,11 @@ class TestSidebarLiquidGlass:
         rects = _nodes(buf, RectNode)
 
         def seam_strips(region_top, region_bottom):
+            # Scoped to the rail's x range: the round-30 top scrim draws
+            # equally wide dark strips at the same z outside the sidebar.
             strips = [n for n in rects
                       if region_top <= n.y < region_bottom
+                      and n.x < sl_views.SIDEBAR_W
                       and n.color_rgba[:3] < (40, 40, 40)
                       and n.width >= w - 6 and n.z_index >= 4]
             strips.sort(key=lambda n: n.y)
