@@ -1465,6 +1465,74 @@ class TestBigPillTransportRow:
         assert strips, "the idle pill still shows the (empty) bar"
 
 
+class TestProgressAlignsWithText:
+    """Round 37 (Alec, SL-21 on the SL-22 tool): the progress strip's left
+    edge aligns with the title text column, baked via layout_align as a
+    persisted RELATIONSHIP in the shipped layout.toml — not resolved pixels.
+    At 1280x800 the strip sits at pill-local (110, 59, 352, 3): left edge on
+    the text column's left, right edge holding 462 (the runner's acceptance
+    spec). The time labels moved above the strip's ends, so the widened
+    strip never paints them over the art tile."""
+
+    def _playing(self, app, ctx):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500, track=track,
+                                           device=None, shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        _tick(app, ctx, 2)
+
+    def _strip(self, scene_buffer):
+        strips = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                  if n.color_rgba == (70, 70, 70, 255) and n.height == 3]
+        assert len(strips) == 1, "exactly one progress strip"
+        return strips[0]
+
+    def test_strip_left_edge_meets_the_text_column(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        title = [n for n in _nodes(scene_buffer, TextNode) if n.text == "Lithium"]
+        seek = [r for r in app._hits if r.action == "seek_bar"]
+        assert title and seek
+        assert seek[0].x == title[0].x == px + 110.0, \
+            "strip left == text column left — the SL-21 alignment"
+        assert seek[0].w == 352.0 and seek[0].x + seek[0].w == px + 462.0, \
+            "the right edge holds at 462 (the runner's acceptance spec)"
+        strip = self._strip(scene_buffer)
+        assert (strip.x, strip.y, strip.width) == (px + 110.0, py + 59.0, 352.0)
+
+    def test_the_alignment_holds_idle(self, app_ctx):
+        """The strip geometry is identical with or without a track (the
+        no-jump invariant) — so the alignment shows on a fresh idle boot."""
+        app, ctx, scene_buffer = app_ctx
+        app.authenticated = True
+        _tick(app, ctx, 2)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        strip = self._strip(scene_buffer)
+        assert (strip.x, strip.y, strip.width) == (px + 110.0, py + 59.0, 352.0)
+
+    def test_time_labels_sit_above_the_strip_clear_of_the_art(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._playing(app, ctx)
+        px, py, _, _ = sl_views.pill_rect(1280, 800)
+        frame = scene_buffer.latest_frame()
+        elapsed = [n for n in frame.nodes
+                   if isinstance(n, TextNode) and n.text in ("0:30", "0:31")]
+        duration = [n for n in frame.nodes if isinstance(n, TextNode) and n.text == "4:17"]
+        assert elapsed and elapsed[0].x == px + 110.0, \
+            "the elapsed label left-aligns with the strip (and the text column)"
+        assert elapsed[0].x >= px + 12 + 84, \
+            "the label never paints over the art tile (12..96 pill-local)"
+        assert elapsed[0].y == py + 59.0 - 11, "the labels float above the strip"
+        dur_w = ctx.measure_text("4:17", font_size_px=9.0,
+                                 font_family=sl_views.FONT_FAMILY)
+        assert duration and duration[0].x == pytest.approx(px + 462.0 - dur_w), \
+            "the duration's right edge meets the strip's right end"
+        assert duration[0].y == py + 59.0 - 11
+
+
 class TestDockScrim:
     """Round 8b: playlist labels scrolling under the translucent dock chrome
     clashed text-on-text (Alec read it as a z-index bug; the chrome IS
