@@ -178,6 +178,24 @@ class _FakeNativeBridge:
         raise AssertionError("factory should be injected in tests")
 
 
+class _ManualWorker:
+    """Records submissions instead of executing them: session bootstrap jobs
+    would otherwise hit the real Spotify API from the worker thread."""
+
+    def __init__(self):
+        self.submitted: list[tuple[str, object]] = []
+
+    def submit(self, label, fn):
+        self.submitted.append((label, fn))
+
+    def poll(self):
+        out, self.submitted = self.submitted, []
+        return out
+
+    def shutdown(self):
+        pass
+
+
 @pytest.fixture
 def app(tmp_path, monkeypatch):
     monkeypatch.setenv("SPOTIFY_LIGHT_CONFIG_DIR", str(tmp_path))
@@ -201,6 +219,8 @@ def app(tmp_path, monkeypatch):
     ctx = runtime.build_context({"window.write", "hdi.keyboard", "hdi.mouse"})
     instance = app_main.create()
     instance.init(ctx)
+    instance.worker.shutdown()
+    instance.worker = _ManualWorker()
     yield instance
     instance.teardown()
 
