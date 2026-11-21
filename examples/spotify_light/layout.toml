@@ -1,11 +1,17 @@
 # layout.toml — persisted layout overrides for the spotify_light chrome.
-# Written by the MCP layout tools (layout_set / layout_align / layout_clear);
-# read at startup. Specs stay resize-safe: anchor + inward dx/dy offsets
-# re-resolve against the window size every frame, and align specs re-resolve
-# against the reference's current rect. A raw rect table persists only as
-# the degenerate fallback. Table headers quote the id so dotted interior
-# ids stay one literal key. Hand edits are fine — malformed entries are
-# ignored, never fatal.
+# Written by the MCP layout tools (layout_set / layout_align / layout_attach /
+# layout_clear); read at startup. Specs stay resize-safe: anchor + inward
+# dx/dy offsets re-resolve against the window size every frame, align specs
+# re-resolve against the reference's current rect, and attach specs
+# re-resolve against the container's current rect. A raw rect table persists
+# only as the degenerate fallback. Table headers quote the id so dotted
+# interior ids stay one literal key. Hand edits are fine — malformed entries
+# are ignored, never fatal.
+
+["nav_more".attach]
+container = "pill"
+slot = "top-right"
+inset = 12.0
 
 ["pill.progress".align]
 edge = "left"
