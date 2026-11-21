@@ -936,25 +936,6 @@ def draw_dock_scrim(frame, *, width: float, height: float) -> None:
                color=(BG[0], BG[1], BG[2], SCRIM_MAX_ALPHA), z_index=6)
 
 
-def draw_top_scrim(frame, *, width: float, height: float) -> None:
-    """Mirrored dock scrim for the top-right pill (round 30): a calm
-    near-opaque band caps the window top over the pill zone, then the fade
-    dissolves content downward over the same smoothstep ~1px strips, so
-    headers and cards scroll under the top glass exactly like they do at the
-    dock. Same z=6 sandwich: above content (z<=4) and the content scrollbar
-    (z=5), below the pill (z=10+)."""
-    band_h = PILL_FLOAT + PILL_H + SCRIM_GAP
-    frame.rect(x=SIDEBAR_W, y=0, width=width - SIDEBAR_W, height=band_h,
-               color=(BG[0], BG[1], BG[2], SCRIM_MAX_ALPHA), z_index=6)
-    fade_rows = max(1, int(round(SCRIM_FADE / SCRIM_STRIP_PX)))
-    strip_h = SCRIM_FADE / fade_rows
-    for i in range(fade_rows):
-        t = min(1.0, max(0.0, ((i + 1) * strip_h) / SCRIM_FADE))
-        alpha = round(SCRIM_MAX_ALPHA * (1.0 - t * t * (3.0 - 2.0 * t)))  # mirrored smoothstep
-        frame.rect(x=SIDEBAR_W, y=band_h + i * strip_h, width=width - SIDEBAR_W,
-                   height=strip_h, color=(BG[0], BG[1], BG[2], alpha), z_index=6)
-
-
 def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
     # Round 8: floating glass capsule (liquid-glass music-pill reference,
     # dark-adapted); round 30 moved the capsule to the window's top-right;
