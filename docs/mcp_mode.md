@@ -109,36 +109,49 @@ class App:
 ## Spotify Light: live layout overrides
 
 `examples/spotify_light` exposes the layout-tool loop: nudge chrome positions
-on the running app, then export the overrides for baking into the view
-constants.
+on the running app, and the nudge persists — `layout_set`/`layout_clear`
+write through to `examples/spotify_light/layout.toml`, the same declarative
+file the app reads at startup, so a moved component survives restart and
+shows up as an ordinary git diff in the worktree.
 
 Addressable component ids:
 
 - `pill` — the now-playing capsule (art, metadata, progress, transport ride it)
-- `nav_home`, `nav_search`, `nav_more` — the bottom-dock circles
+- `nav_home`, `nav_search` — the bottom-dock circles
+- `nav_more` — the overflow circle (volume, shuffle, repeat, devices popup);
+  the shipped `layout.toml` parks it 12pt left of the pill, vertically
+  centered (`{anchor: "top-right", dx: 548, dy: 48}`)
 - `sidebar` — the left rail plate (its contents shift with it)
 
 Tools:
 
 - `layout_set {id, rect: {x, y, width, height}}` or
-  `layout_set {id, anchor, dx, dy, width?, height?}` — move a component.
-  Anchors are `top-left`, `top-right`, `bottom-left`, `bottom-right`, or
-  `center`; `dx`/`dy` measure inward from that window corner, so
-  `{id: "pill", anchor: "top-right", dx: 16, dy: 16}` reproduces the pill's
-  own layout rule and follows window resizes. Overrides are consulted at draw
-  time: they win over the app's per-frame layout recomputation, and state
-  changes cannot stomp them. Rects clamp into the window; unknown ids fail
-  with an error listing the valid ids, and a rejected spec never reaches the
-  scene.
+  `layout_set {id, anchor, dx, dy, width?, height?}` — move a component and
+  persist the spec. Anchors are `top-left`, `top-right`, `bottom-left`,
+  `bottom-right`, or `center`; `dx`/`dy` measure inward from that window
+  corner, so `{id: "pill", anchor: "top-right", dx: 16, dy: 16}` reproduces
+  the pill's own layout rule and follows window resizes. Prefer the anchor
+  form: it persists resize-safe, while a raw `rect` is only the degenerate
+  fallback. Overrides are consulted at draw time: they win over the app's
+  per-frame layout recomputation, and state changes cannot stomp them. Rects
+  clamp into the window; unknown ids fail with an error listing the valid
+  ids, and a rejected spec never reaches the scene. A failed file write
+  rolls the override back and errors the call — a nudge that cannot persist
+  never pretends it did.
 - `layout_list {}` — valid ids plus every active override with its resolved
   rect at the current window size.
 - `layout_clear {id?}` — clear one override, or all when `id` is omitted.
+  Also persists: the component's code natural returns and survives restart.
 - `layout_export {}` — JSON dump of the current specs plus rects resolved at
-  the current window size; transcribe `resolved` into `sl_views` layout
-  constants to bake a nudge in.
+  the current window size, for inspection.
 
-Overrides are session-scoped: the registry is created in `setup()`, so every
-boot starts clean. There is no persistence file.
+The persisted file is TOML, one table per component, in exactly the spec
+shape `layout_set` accepts (`[nav_more]` with `anchor`/`dx`/`dy`, or
+`[nav_more.rect]` with `x`/`y`/`width`/`height`). It is rewritten
+deterministically (sorted ids) so diffs stay minimal, and written via a
+temp file + replace so a crash can't tear it. Hand edits are fine:
+malformed TOML or invalid entries are ignored at boot, never fatal. Tests
+redirect the path with `SPOTIFY_LIGHT_LAYOUT_FILE`.
 
 ## Notes and limitations
 

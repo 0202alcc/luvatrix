@@ -162,9 +162,10 @@ class SpotifyLightApp(App):
         self.sidebar_scroll = 0.0
         self._content_height = 0.0
 
-        # Live layout overrides (MCP, round 31): created in setup(), so every
-        # boot starts clean — session-scoped by construction, no persistence.
-        self.layout_overrides = sl_layout.LayoutOverrides()
+        # Live layout overrides (MCP, round 31): seeded from the persisted
+        # layout file (round 36, SL-20) — the file is the source of truth the
+        # layout tools write through to, so a nudge survives this reboot.
+        self.layout_overrides = sl_layout.load(sl_layout.default_path())
 
         # Bookkeeping.
         self.now_monotonic = time.monotonic()
@@ -1253,13 +1254,15 @@ class SpotifyLightApp(App):
             {
                 "name": "layout_set",
                 "description": (
-                    "Move a chrome component on the running app. Pass 'id' plus exactly one "
-                    "shape: 'rect' ({x, y, width, height}) or 'anchor' (top-left/top-right/"
-                    "bottom-left/bottom-right/center) with dx/dy offsets and optional "
-                    "width/height. Anchor offsets measure inward from that window corner; "
-                    "right/bottom anchors re-resolve when the window resizes. Rects clamp "
-                    "into the window. Session-scoped: overrides die with the app. Valid ids: "
-                    "pill, nav_home, nav_search, nav_more, sidebar."
+                    "Move a chrome component on the running app — and persist it: the spec "
+                    "is written through to the app's layout.toml, so the position survives "
+                    "restart. Pass 'id' plus exactly one shape: 'rect' ({x, y, width, "
+                    "height}) or 'anchor' (top-left/top-right/bottom-left/bottom-right/"
+                    "center) with dx/dy offsets and optional width/height. Anchor offsets "
+                    "measure inward from that window corner; right/bottom anchors re-resolve "
+                    "when the window resizes, so prefer them over raw rects. Rects clamp "
+                    "into the window. Valid ids: pill, nav_home, nav_search, nav_more, "
+                    "sidebar."
                 ),
                 "inputSchema": {
                     "type": "object",
@@ -1282,7 +1285,11 @@ class SpotifyLightApp(App):
             },
             {
                 "name": "layout_clear",
-                "description": "Clear one override ('id') or, with no id, all of them; returns the cleared ids.",
+                "description": (
+                    "Clear one override ('id') or, with no id, all of them; returns the "
+                    "cleared ids. Also persists: the component's code natural returns and "
+                    "survives restart."
+                ),
                 "inputSchema": {
                     "type": "object",
                     "properties": {"id": {"type": "string"}},
@@ -1292,7 +1299,8 @@ class SpotifyLightApp(App):
                 "name": "layout_export",
                 "description": (
                     "Dump the current overrides as JSON (specs + rects resolved at the "
-                    "current window size) for transcribing into the layout constants."
+                    "current window size) for inspection. Positions already persist via "
+                    "layout_set; this is a read-only view."
                 ),
                 "inputSchema": {"type": "object", "properties": {}},
             },
@@ -1318,11 +1326,13 @@ class SpotifyLightApp(App):
         if name == "layout_set":
             args = dict(arguments or {})
             cid = sl_layout._check_id(args.get("id"))
+            before = self.layout_overrides.specs()
             stored = self.layout_overrides.set(cid, args)
+            self._persist_layout(before)
             self.invalidate()
             width, height = self._window_size()
             natural = self._layout_naturals(width, height)[cid]
-            return {"id": cid, "spec": stored,
+            return {"id": cid, "spec": stored, "persisted": True,
                     "rect": list(self.layout_overrides.resolve(cid, natural,
                                                                width=width, height=height))}
         if name == "layout_list":
@@ -1338,8 +1348,10 @@ class SpotifyLightApp(App):
                 ],
             }
         if name == "layout_clear":
+            before = self.layout_overrides.specs()
             cleared = self.layout_overrides.clear((arguments or {}).get("id"))
             if cleared:
+                self._persist_layout(before)
                 self.invalidate()
             return {"cleared": cleared}
         if name == "layout_export":
@@ -1350,6 +1362,18 @@ class SpotifyLightApp(App):
 
     def _window_size(self) -> tuple[float, float]:
         return float(self.ctx.display_width_px), float(self.ctx.display_height_px)
+
+    def _persist_layout(self, before: dict) -> None:
+        """Write the override registry through to the layout file (round 36).
+        A failed write rolls the registry back and errors the tool call: a
+        nudge that cannot persist must not pretend it did."""
+        try:
+            sl_layout.save(self.layout_overrides.specs(), sl_layout.default_path())
+        except OSError as exc:
+            self.layout_overrides = sl_layout.LayoutOverrides()
+            for cid, spec in before.items():
+                self.layout_overrides.set(cid, spec)
+            raise sl_layout.LayoutError(f"could not persist layout: {exc}") from exc
 
     def _layout_naturals(self, width: float, height: float) -> dict:
         """Natural chrome rects at a window size — the layout the overrides sit on top of."""

@@ -668,9 +668,18 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
     view_w = width - SIDEBAR_W - CONTENT_PAD * 2
 
     # The field's right cap must clear the top-right pill (round 30): at
-    # narrow widths the 460pt field would slide under the glass.
+    # narrow widths the 460pt field would slide under the glass. Round 36:
+    # the shipped layout puts the overflow circle on the pill's left flank,
+    # in the field's band — the resolved circle is the nearer obstacle.
     pill_x = pill_rect(width, height)[0]
-    field_w = max(180.0, min(460.0, view_w, pill_x - 12.0 - x0))
+    obstacle_x = pill_x
+    dpx, dpy, dpw, dph = dock_cluster_rect(width, height)
+    nav_natural = (width - PILL_FLOAT - 2 * OVERFLOW_R, dpy + dph / 2 - OVERFLOW_R,
+                   2 * OVERFLOW_R, 2 * OVERFLOW_R)
+    cx, cy, cw, ch = _layout(app, "nav_more", nav_natural, width, height)
+    if cy < y + 40.0 and y < cy + ch:
+        obstacle_x = min(obstacle_x, cx)
+    field_w = max(180.0, min(460.0, view_w, obstacle_x - 12.0 - x0))
     _glass_plate(frame, x0, y, field_w, 40, radius=20.0, z=2, shadow=False,
                  border=(ACCENT[0], ACCENT[1], ACCENT[2], 200) if app.search_focused else None)
     shown = app.search_query or ("What do you want to listen to?" if not app.search_focused else "")
@@ -914,7 +923,10 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     _nav_circle(frame, app, out, mouse, cx=sx + sw / 2, cy=sy + sh / 2,
                 view="search", glyph=sl_icons.SEARCH)
 
-    # Overflow circle (bottom-right): volume / shuffle / repeat / devices.
+    # Overflow circle: volume / shuffle / repeat / devices. The dock-side
+    # natural below is just the fallback — the shipped layout.toml (round
+    # 36) re-points nav_more to the pill's left flank, and the registry
+    # resolution is what actually places it.
     ox, oy, ow, oh = _layout(app, "nav_more",
                              (width - PILL_FLOAT - 2 * OVERFLOW_R,
                               dock_cy - OVERFLOW_R,
@@ -929,7 +941,8 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     out.hit(ox, oy, ow, oh, "open_devices")
 
     if app.show_devices:
-        _draw_playback_popup(frame, app, out, width=width, pill_top=dpy, mouse=mouse)
+        _draw_playback_popup(frame, app, out, circle=(ox, oy, ow, oh),
+                             width=width, height=height, mouse=mouse)
 
 
 def _nav_circle(frame, app, out: FrameOut, mouse, *, cx: float, cy: float,
@@ -955,15 +968,20 @@ def _transport_button(frame, out: FrameOut, mouse, glyph, cx, y, action, color,
     out.hit(cx - 12, y - 4, 34, 34, action)
 
 
-def _draw_playback_popup(frame, app, out: FrameOut, *, width: float, pill_top: float,
-                         mouse) -> None:
+def _draw_playback_popup(frame, app, out: FrameOut, *,
+                         circle: tuple[float, float, float, float],
+                         width: float, height: float, mouse) -> None:
     popup_w = 300.0
     row_h = 40.0
     rows = max(1, len(app.devices))
     head_h = 148.0  # pad + volume/shuffle/repeat rows + divider + section title
     popup_h = head_h + row_h * rows + 12
-    popup_x = width - popup_w - 16
-    popup_y = pill_top - 12 - popup_h
+    # Round 36: the popup anchors to its button like a menu — right edges
+    # aligned, dropping 12pt below the circle — and clamps into the window
+    # so a low overridden circle can never push it offscreen.
+    cx, cy, cw, ch = circle
+    popup_x = min(max(cx + cw - popup_w, PILL_FLOAT), width - PILL_FLOAT - popup_w)
+    popup_y = min(cy + ch + 12.0, height - PILL_FLOAT - popup_h)
     # Floating panels get the dark variant of the glass plate: mostly-opaque
     # fill for readability over content, same hairline/shadow language.
     _glass_plate(frame, popup_x, popup_y, popup_w, popup_h, radius=14.0, z=20,
