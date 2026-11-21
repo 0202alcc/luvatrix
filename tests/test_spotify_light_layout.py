@@ -244,13 +244,15 @@ class TestLayoutMcpSurface:
     def test_hooks_register_the_layout_tools(self, app_ctx):
         app, _, _ = app_ctx
         bridge = _bridge(app)
-        assert bridge.register_app_hooks(app) == 8, \
-            "two client-id tools plus layout_set/align/attach/list/clear/export"
+        assert bridge.register_app_hooks(app) == 11, \
+            "two client-id tools, layout_set/align/attach/list/clear/export, " \
+            "and effect_apply/remove/list (SL-34)"
         listing = bridge.dispatcher().handle_payload(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
         wire = {tool["name"]: tool for tool in listing["result"]["tools"]}
         for name in ("layout_set", "layout_align", "layout_attach", "layout_list",
-                     "layout_clear", "layout_export"):
+                     "layout_clear", "layout_export",
+                     "effect_apply", "effect_remove", "effect_list"):
             assert name in wire, f"missing MCP tool {name}"
         assert "id" in wire["layout_set"]["inputSchema"]["properties"]
         for param in ("id", "edge", "to", "ref_edge", "offset"):
@@ -581,6 +583,8 @@ class TestLayoutPersistence:
                          "ref_edge": "left", "offset": 0.0}
         ov = sl_layout.LayoutOverrides()
         for cid, spec in data.items():
+            if "effect" in spec:
+                continue  # SL-34 effect tables belong to the effect registry
             ov.set(cid, spec)
         nats = _interior_naturals(pw=572.0)
         rect = ov.resolve("pill.progress", nats["pill.progress"],
@@ -1526,3 +1530,152 @@ class TestAttachSlotGeometry:
         assert "nav_more" in sl_layout.COMPONENT_IDS
         nats = sl_views.window_naturals(1280.0, 800.0)
         assert nats["nav_more"] == (1280.0 - 16 - 44, 730.0, 44.0, 44.0)
+
+
+# ---------------------------------------------------------------------------
+# Visual effects (SL-34): scrim/gradient bands as declared, MCP-tunable specs
+# ---------------------------------------------------------------------------
+
+class TestEffectSpecs:
+    """EffectSpecs is the effects twin of LayoutOverrides: a session-scoped
+    registry of validated effect specs, keyed by effect id. SL-34 makes any
+    scrim/gradient band (edge, height, alpha, fade) data the MCP tools can
+    add, tune, and remove live — purely additive over the SL-33/SL-35 world,
+    where both stock scrims are gone."""
+
+    DOCK = {"kind": "scrim", "edge": "bottom", "height": 148.0,
+            "fade": 56.0, "alpha": 240.0, "margin": 240.0}
+
+    def test_set_validates_and_normalizes(self):
+        fx = sl_layout.EffectSpecs()
+        stored = fx.set("scrim.dock", {"edge": "bottom", "height": 148,
+                                       "fade": 56, "alpha": 240, "margin": 240})
+        assert stored == self.DOCK, "ints normalize to floats; kind defaults to scrim"
+        assert fx.specs() == {"scrim.dock": self.DOCK}
+        assert len(fx) == 1
+
+    def test_defaults_fill_omitted_knobs(self):
+        fx = sl_layout.EffectSpecs()
+        stored = fx.set("scrim.top", {"edge": "top", "height": 192})
+        assert stored == {"kind": "scrim", "edge": "top", "height": 192.0,
+                          "fade": 0.0, "alpha": 255.0, "margin": 0.0}
+
+    def test_tune_merges_with_the_stored_spec(self):
+        """A partial apply on an existing id keeps the omitted knobs — live
+        tuning (alpha only) must not wipe the geometry."""
+        fx = sl_layout.EffectSpecs()
+        fx.set("scrim.dock", dict(self.DOCK))
+        stored = fx.set("scrim.dock", {"alpha": 120})
+        assert stored == {**self.DOCK, "alpha": 120.0}
+
+    def test_validation_rejects_bad_specs(self):
+        fx = sl_layout.EffectSpecs()
+        with pytest.raises(sl_layout.LayoutError):
+            fx.set("", {"edge": "top", "height": 10})
+        with pytest.raises(sl_layout.LayoutError):
+            fx.set('bad "quote"', {"edge": "top", "height": 10})
+        with pytest.raises(sl_layout.LayoutError) as exc:
+            fx.set("scrim.x", {"edge": "diagonal", "height": 10})
+        assert "top" in str(exc.value), "the error names the valid edges"
+        with pytest.raises(sl_layout.LayoutError):
+            fx.set("scrim.x", {"edge": "top"})  # new ids need a height
+        with pytest.raises(sl_layout.LayoutError):
+            fx.set("scrim.x", {"edge": "top", "height": 10, "fade": 11})
+        with pytest.raises(sl_layout.LayoutError):
+            fx.set("scrim.x", {"edge": "top", "height": 10, "alpha": 300})
+        with pytest.raises(sl_layout.LayoutError):
+            fx.set("scrim.x", {"edge": "top", "height": 10, "alpha": -1})
+        with pytest.raises(sl_layout.LayoutError):
+            fx.set("scrim.x", {"edge": "top", "height": 10, "margin": -1})
+        with pytest.raises(sl_layout.LayoutError):
+            fx.set("scrim.x", {"kind": "explosion", "edge": "top", "height": 10})
+        with pytest.raises(sl_layout.LayoutError) as exc:
+            fx.set("scrim.x", {"edge": "top", "height": 10, "alph": 1})
+        assert "unknown fields" in str(exc.value), "a typo'd knob must not silently no-op"
+        assert len(fx) == 0, "never partially stores"
+
+    def test_clear_one_and_all(self):
+        fx = sl_layout.EffectSpecs()
+        fx.set("scrim.dock", dict(self.DOCK))
+        fx.set("scrim.top", {"edge": "top", "height": 192})
+        assert fx.clear("scrim.dock") == ["scrim.dock"]
+        assert fx.clear("scrim.dock") == [], "already gone — nothing cleared"
+        assert fx.clear() == ["scrim.top"], "no id clears the rest"
+        assert len(fx) == 0
+
+
+class TestEffectPersistence:
+    """Effect tables ride the SAME layout.toml as the layout specs (SL-34):
+    `["<id>".effect]` tables written through by the effect tools, seeded at
+    boot — a tuned scrim survives restart as an ordinary git diff."""
+
+    def test_save_load_round_trip(self, tmp_path):
+        fx = sl_layout.EffectSpecs()
+        fx.set("scrim.dock", {"edge": "bottom", "height": 148,
+                              "fade": 56, "alpha": 240, "margin": 240})
+        path = tmp_path / "layout.toml"
+        sl_layout.save({}, path, effects=fx.specs())
+        text = path.read_text()
+        assert '["scrim.dock".effect]' in text
+        assert 'edge = "bottom"' in text and "height = 148.0" in text
+        assert "fade = 56.0" in text and "alpha = 240.0" in text
+        assert "margin = 240.0" in text
+        assert sl_layout.load_effects(path).specs() == fx.specs()
+
+    def test_layout_specs_and_effects_share_the_file(self, tmp_path):
+        """A layout nudge save must not wipe declared effects and vice
+        versa — save() writes the union of both registries."""
+        ov = sl_layout.LayoutOverrides()
+        ov.set("nav_more", {"attach": {"container": "pill",
+                                       "slot": "top-right", "inset": 12}})
+        fx = sl_layout.EffectSpecs()
+        fx.set("scrim.dock", {"edge": "bottom", "height": 148,
+                              "fade": 56, "alpha": 240, "margin": 240})
+        path = tmp_path / "layout.toml"
+        sl_layout.save(ov.specs(), path, effects=fx.specs())
+        assert sl_layout.load(path).specs() == ov.specs()
+        assert sl_layout.load_effects(path).specs() == fx.specs()
+        sl_layout.save(ov.specs(), path, effects={})  # explicit wipe clears only effects
+        assert sl_layout.load(path).specs() == ov.specs()
+        assert sl_layout.load_effects(path).specs() == {}
+
+    def test_save_without_effects_preserves_existing_tables(self, tmp_path):
+        """Legacy two-arg callers (layout-only) never silently drop the
+        declared effects: effects=None preserves what the file carries."""
+        fx = sl_layout.EffectSpecs()
+        fx.set("scrim.dock", {"edge": "bottom", "height": 148,
+                              "fade": 56, "alpha": 240, "margin": 240})
+        path = tmp_path / "layout.toml"
+        sl_layout.save({}, path, effects=fx.specs())
+        ov = sl_layout.LayoutOverrides()
+        ov.set("nav_more", {"attach": {"container": "pill",
+                                       "slot": "top-right", "inset": 12}})
+        sl_layout.save(ov.specs(), path)  # no effects arg — the tables survive
+        assert sl_layout.load_effects(path).specs() == fx.specs()
+
+    def test_load_effects_is_fail_soft(self, tmp_path):
+        path = tmp_path / "layout.toml"
+        assert sl_layout.load_effects(path).specs() == {}, "missing file → no effects"
+        path.write_text("this is not [ toml")
+        assert sl_layout.load_effects(path).specs() == {}, "malformed TOML → no effects"
+        path.write_text(
+            '["scrim.dock".effect]\nedge = "bottom"\nheight = 148.0\n'
+            'fade = 56.0\nalpha = 240.0\nmargin = 240.0\n'
+            '["scrim.bogus".effect]\nedge = "diagonal"\nheight = 10.0\n')
+        specs = sl_layout.load_effects(path).specs()
+        assert list(specs) == ["scrim.dock"], "bad entries skip, good ones boot"
+
+    def test_save_is_deterministic(self, tmp_path):
+        fx = sl_layout.EffectSpecs()
+        fx.set("scrim.zz", {"edge": "top", "height": 10})
+        fx.set("scrim.aa", {"edge": "left", "height": 20})
+        a, b = tmp_path / "a.toml", tmp_path / "b.toml"
+        sl_layout.save({}, a, effects=fx.specs())
+        sl_layout.save({}, b, effects=dict(reversed(list(fx.specs().items()))))
+        assert a.read_text() == b.read_text(), "sorted ids — the diff shows only the tune"
+
+    def test_shipped_file_declares_no_effects(self):
+        """The SL-33/SL-35 state ships: both stock scrims were removed, so
+        the repo's layout.toml declares ZERO effect tables — effects exist
+        only when someone applies one live."""
+        assert sl_layout.load_effects(sl_layout.APP_LAYOUT_FILE).specs() == {}
