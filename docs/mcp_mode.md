@@ -119,8 +119,11 @@ Addressable component ids:
 - `pill` — the now-playing capsule (art, metadata, progress, transport ride it)
 - `nav_home`, `nav_search` — the bottom-dock circles
 - `nav_more` — the overflow circle (volume, shuffle, repeat, devices popup);
-  the shipped `layout.toml` parks it 12pt left of the pill, vertically
-  centered (`{anchor: "top-right", dx: 548, dy: 48}`)
+  the shipped `layout.toml` ATTACHES it into the pill's top-right slot
+  (`["nav_more".attach]` with `container = "pill"`, `slot = "top-right"`,
+  `inset = 12` — round 41, SL-26/27): it rides the pill's corner inside
+  the glass, keeps its 44pt size, and the text column yields its slot.
+  Detached (after `layout_clear`), the dock natural returns.
 - `sidebar` — the left rail plate (its contents shift with it)
 
 Interior ids rearrange the pill's inside in PILL-LOCAL space: `(0, 0)` is
@@ -140,13 +143,14 @@ interior rects in these local coordinates.
   strip's ends. The shipped `layout.toml` aligns its left edge to
   `pill.title`'s left edge (SL-21). Round 40 (SL-25): the strip's natural
   SPANS THE TEXT COLUMN — left edge on the title, right edge on the
-  column's right edge — so at 1280×800 it resolves to pill-local
-  `(110, 59, 444, 3)` (right edge 554: the bar's right inset IS the
-  text's own 18pt inset) and the align relationship no-ops on the natural
-  while still guarding the column edge. The bar's midpoint sits a constant
-  46pt right of the play center (the art tile skews the column) — known
-  and accepted; play itself stays pill-centered (SL-23). This replaces
-  SL-24's centered-on-play derivation.
+  column's right edge — and the align relationship no-ops on the natural
+  while still guarding the column edge. Round 41 (SL-26/27): the column
+  yields the attached ⋯ menu's slot, so at 1280×800 the strip resolves to
+  pill-local `(110, 59, 394, 3)` (right edge 504 == menu.left − 12) and
+  title/artist/bar all follow the narrower column. The bar's midpoint
+  sits a constant 21pt right of the play center (the art tile skews the
+  column) — known and accepted; play itself stays pill-centered (SL-23).
+  This replaces SL-24's centered-on-play derivation.
 - `pill.transport` — the prev/play/next cluster, positioned by the rect's
   center. Cluster size is not a layout input: the buttons keep fixed offsets
   and 34pt hit targets. Round 38 (SL-23): the natural centers on the PILL
@@ -190,12 +194,29 @@ Tools:
   they reach the scene or the file. Example (SL-21's bake):
   `layout_align {id: "pill.progress", edge: "left", to: "pill.title",
   ref_edge: "left"}` pins the strip's left edge to the text column.
-  Example (SL-23's bake): `layout_align {id: "nav_more", edge: "right",
-  to: "pill", ref_edge: "left", offset: -12, keep: "size"}` then
-  `layout_align {id: "nav_more", edge: "center_y", to: "pill"}` parks the
-  overflow circle 12pt left of the pill, pill-centered, riding its left
-  edge forever — the shipped `layout.toml`'s `nav_more` entry is exactly
-  this two-rule relationship (the last window-anchor form retired).
+  (SL-23's two-axis `nav_more` align parked the overflow circle left of
+  the pill; SL-26 cleared those rules with `layout_clear` and replaced
+  them with the `layout_attach` containment below.)
+- `layout_attach {id, container, slot, inset?}` — attach a window-space
+  component INTO a container at a named slot (`top-right`, `top-left`,
+  `bottom-right`, `bottom-left`), `inset` points in from the container's
+  corner (default 0). The component switches to container-local space:
+  it rides the container's CURRENT rect (natural or overridden) like the
+  pill's interior ids, keeps its size, and clamps inside the container.
+  What persists is the RELATIONSHIP — an `["id".attach]` spec (`id`,
+  `container`, `slot`, `inset`) resolved at layout time — resize-safe,
+  never raw pixels. The slot's occupied region is queryable by the
+  container's own layout (`slot_reservations`): the pill's text column
+  yields a top-right attachment, narrowing title/artist/bar left of it.
+  `layout_clear` detaches back to the window-space natural; a rect or
+  anchor spec replaces the attachment. Validation rejects self-attach,
+  attach/align reference cycles, unknown containers or slots, and
+  interior ids on either side — before the scene or the file is touched.
+  Example (SL-26's bake, the tool's first persisted use):
+  `layout_attach {id: "nav_more", container: "pill", slot: "top-right",
+  inset: 12}` merges the overflow button into the pill's top-right
+  corner; the playback popup re-anchors to drop from the pill's bottom,
+  right-aligned to the circle.
 - `layout_list {}` — valid ids plus every active override with its resolved
   rect at the current window size.
 - `layout_clear {id?}` — clear one override, or all when `id` is omitted.
@@ -206,9 +227,10 @@ Tools:
 The persisted file is TOML, one table per component, in exactly the spec
 shape the tools accept (`["nav_more"]` with `anchor`/`dx`/`dy`,
 `["nav_more".rect]` with `x`/`y`/`width`/`height`,
-`["pill.progress".align]` with `edge`/`to`/`ref_edge`/`offset`, or a
+`["pill.progress".align]` with `edge`/`to`/`ref_edge`/`offset`, a
 two-axis relationship as two `[["nav_more".align]]` array entries, the
-x-axis rule first). Table headers quote the id so dotted interior ids stay
+x-axis rule first, or `["nav_more".attach]` with
+`container`/`slot`/`inset`). Table headers quote the id so dotted interior ids stay
 one literal key (an unquoted `[pill.progress.rect]` would parse as nested
 tables and collide with `[pill]`). It is rewritten deterministically
 (sorted ids) so diffs stay minimal, and written via a temp file + replace
