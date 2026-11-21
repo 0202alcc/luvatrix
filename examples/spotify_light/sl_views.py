@@ -20,7 +20,7 @@ import sl_ui
 # -- layout ------------------------------------------------------------------
 SIDEBAR_W = 240.0
 SIDEBAR_LIST_TOP = 142.0  # title + one nav row (Library) + section header
-DOCK_H = 92.0             # bottom reservation for the floating pill zone
+DOCK_H = 136.0            # bottom reservation: 16 float + 108 pill + 12 gap
 CONTENT_PAD = 28.0
 CARD_W = 180.0
 CARD_H = 236.0
@@ -69,14 +69,21 @@ SIDEBAR_SEAM_FADE_PX = 20.0
 # Floating player pill: a centered capsule (liquid-glass music-pill
 # reference), dark-frosted so scene text stays readable over content,
 # flanked by circular nav buttons; playback extras live in a popup.
-PILL_W = 460.0
+# Round 32 (Alec): the capsule grows to a 108pt-tall column layout — bigger
+# album tile, title/artist over the progress bar, transport row under it.
+PILL_W = 520.0
 PILL_MIN_W = 320.0
-PILL_H = 64.0
+PILL_H = 108.0
 PILL_FLOAT = 16.0
 PILL_FILL = (16, 16, 16, 208)
 PILL_BORDER = (255, 255, 255, 40)
 PILL_THUMB_EMPTY = (255, 255, 255, 16)
-PILL_META_RIGHT_PAD = 150.0
+# Interior column: the album tile sits flush at the left cap with the
+# PILL_ART_INSET idiom; title/artist, the progress bar, and the transport
+# row stack in the column to its right.
+PILL_ART_INSET = 12.0
+PILL_ART_GAP = 14.0
+PILL_META_RIGHT_PAD = 18.0
 NAV_CIRCLE_R = 22.0
 NAV_CIRCLE_GAP = 18.0
 OVERFLOW_R = NAV_CIRCLE_R
@@ -111,6 +118,19 @@ def pill_rect(width: float, height: float) -> tuple[float, float, float, float]:
     max_x = width - PILL_FLOAT - cluster_pad - pill_w
     pill_x = min(max(ideal_x, min_x), max(max_x, min_x))
     return (pill_x, height - PILL_FLOAT - PILL_H, pill_w, PILL_H)
+
+
+def pill_column(pw: float, ph: float) -> tuple[float, float, float]:
+    """The pill's interior right column (round 32), a pure function of the
+    pill's external rect so `pill_rect` stays the single source of truth for
+    the capsule itself: the album tile sits at the left cap with the
+    PILL_ART_INSET idiom and grows with the pill height; title/artist, the
+    progress bar, and the transport row stack in the column to its right.
+    Returns (column x offset from the pill's left edge, column width, art
+    tile size)."""
+    art = ph - 2 * PILL_ART_INSET
+    col_x = PILL_ART_INSET + art + PILL_ART_GAP
+    return col_x, pw - col_x - PILL_META_RIGHT_PAD, art
 
 TEXT = (255, 255, 255, 255)
 SUBTEXT = (179, 179, 179, 255)
@@ -718,68 +738,53 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     # confirming poll is still in flight (event-driven sync).
     track = app.displayed_track()
 
-    # Album art thumb with a hairline ring, alpha-clipped to the same r8
+    # Round 32 (Alec): the capsule grows and its interior becomes a column
+    # layout — bigger album tile at the left cap; right of it, top to bottom:
+    # title/artist, the progress bar with times, then the transport row.
+    col_x, col_w, art = pill_column(pw, ph)
+    # Album art thumb with a hairline ring, alpha-clipped to the same rounded
     # tile the idle state draws — a square image sits flush at the pill's
     # left cap and its corners cross the rounded silhouette (Alec, round 28).
-    frame.rounded_rect(x=px + 9, y=py + 9, width=46, height=46, radius=9,
+    frame.rounded_rect(x=px + PILL_ART_INSET - 1, y=py + PILL_ART_INSET - 1,
+                       width=art + 2, height=art + 2, radius=15,
                        color=(255, 255, 255, 24), z_index=11)
-    meta_w = pw - 64 - PILL_META_RIGHT_PAD
     if track is not None:
-        image_url = sl_models.pick_image_url(track.album.images if track.album else (), app._art_pick_target(44))
-        _art(frame, app, image_url, x=px + 10, y=py + 10, size=44, seed=track.name, z=12,
-             corner_radius=8.0)
-        _text(frame, _fit_width(frame._ctx.measure_text, track.name, max_w=meta_w, size=13),
-              x=px + 64, y=py + 11, size=13, z=12)
+        image_url = sl_models.pick_image_url(track.album.images if track.album else (), app._art_pick_target(art))
+        _art(frame, app, image_url, x=px + PILL_ART_INSET, y=py + PILL_ART_INSET,
+             size=art, seed=track.name, z=12, corner_radius=14.0)
+        _text(frame, _fit_width(frame._ctx.measure_text, track.name, max_w=col_w, size=13),
+              x=px + col_x, y=py + 16, size=13, z=12)
         artists = ", ".join(a.name for a in track.artists if a.name)
-        _text(frame, _fit_width(frame._ctx.measure_text, artists, max_w=meta_w, size=11),
-              x=px + 64, y=py + 29, size=11, color=SUBTEXT, z=12)
+        _text(frame, _fit_width(frame._ctx.measure_text, artists, max_w=col_w, size=11),
+              x=px + col_x, y=py + 35, size=11, color=SUBTEXT, z=12)
     else:
         # Idle thumb: a quiet neutral tile with a centered note glyph (Spotify's
         # idle idiom), not a saturated hash-colored placeholder square.
-        frame.rounded_rect(x=px + 10, y=py + 10, width=44, height=44, radius=8,
+        frame.rounded_rect(x=px + PILL_ART_INSET, y=py + PILL_ART_INSET,
+                           width=art, height=art, radius=14,
                            color=PILL_THUMB_EMPTY, z_index=12)
-        _centered_glyph(frame, sl_icons.NOTE, cx=px + 10 + 22, cy=py + 10 + 22,
-                        size=20, color=SUBTEXT, z=12, font=sl_icons.ICON_FONT)
-        _text(frame, "Nothing playing", x=px + 64, y=py + 15, size=13, color=FAINT, z=12)
+        _centered_glyph(frame, sl_icons.NOTE, cx=px + PILL_ART_INSET + art / 2,
+                        cy=py + PILL_ART_INSET + art / 2,
+                        size=36, color=SUBTEXT, z=12, font=sl_icons.ICON_FONT)
+        _text(frame, "Nothing playing", x=px + col_x, y=py + 21, size=13, color=FAINT, z=12)
         if app.authenticated:
             _text(frame, _fit_width(frame._ctx.measure_text, "Pick a device, or start something from a playlist",
-                                    max_w=meta_w, size=11),
-                  x=px + 64, y=py + 34, size=11, color=FAINT, z=12)
+                                    max_w=col_w, size=11),
+                  x=px + col_x, y=py + 40, size=11, color=FAINT, z=12)
 
-    # Transport: prev / play / next on the pill's right.
-    playing = bool(player and player.is_playing)
-    play_cx = px + pw - 72
-    _transport_button(frame, out, mouse, sl_icons.PREV, play_cx - 48, py + 18, "prev",
-                      SUBTEXT, font=sl_icons.ICON_FONT_FILL)
-    play_hover = _hover(mouse, play_cx - 17, py + 15, 34, 34)
-    frame.circle(cx=play_cx, cy=cy, radius=15,
-                 fill=TEXT if play_hover else (225, 225, 225, 255), z_index=12)
-    if playing:
-        # Drawn bars: text pipes ("||") space differently per font and read broken.
-        bar_w, bar_h, bar_gap = 4.0, 13.0, 5.0
-        bar_y = cy - bar_h / 2
-        frame.rect(x=play_cx - bar_gap / 2 - bar_w, y=bar_y, width=bar_w, height=bar_h,
-                   color=(0, 0, 0, 255), z_index=13)
-        frame.rect(x=play_cx + bar_gap / 2, y=bar_y, width=bar_w, height=bar_h,
-                   color=(0, 0, 0, 255), z_index=13)
-    else:
-        _centered_glyph(frame, sl_icons.PLAY, cx=play_cx, cy=cy, size=13,
-                        color=(0, 0, 0, 255), z=13, font=sl_icons.ICON_FONT_FILL)
-    out.hit(play_cx - 17, py + 15, 34, 34, "toggle_play")
-    _transport_button(frame, out, mouse, sl_icons.NEXT, play_cx + 48, py + 18, "next",
-                      SUBTEXT, font=sl_icons.ICON_FONT_FILL)
-
-    # Progress strip along the pill's lower interior, with tiny time labels.
+    # Progress bar with tiny time labels, below the text rows. The strip
+    # geometry is identical with or without a track — the times simply don't
+    # draw when idle — so the bar never jumps between states.
     duration = track.duration_ms if track else 0
     progress = app.progress_ms()
-    strip_x = px + 92
-    strip_w = min(200.0, max(80.0, pw - 240.0))  # narrows with a shrunk pill
-    strip_y = py + ph - 13
+    strip_x = px + col_x + 34.0
+    strip_w = max(80.0, col_w - 34.0 - 40.0)
+    strip_y = py + 59.0
     if track is not None:
-        _text(frame, sl_ui.format_duration_ms(progress), x=px + 64, y=py + ph - 18, size=9,
+        _text(frame, sl_ui.format_duration_ms(progress), x=px + col_x, y=py + 56, size=9,
               color=FAINT, z=12)
         _text(frame, sl_ui.format_duration_ms(duration), x=strip_x + strip_w + 6,
-              y=py + ph - 18, size=9, color=FAINT, z=12)
+              y=py + 56, size=9, color=FAINT, z=12)
     frame.rounded_rect(x=strip_x, y=strip_y, width=strip_w, height=3, radius=1.5,
                        color=(70, 70, 70, 255), z_index=11)
     frac = sl_ui.seek_fraction(progress, duration)
@@ -787,6 +792,31 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
         frame.rounded_rect(x=strip_x, y=strip_y, width=max(3.0, strip_w * frac), height=3,
                            radius=1.5, color=(220, 220, 220, 255), z_index=12)
     out.hit(strip_x, strip_y - 6, strip_w, 15, "seek_bar", (strip_x, strip_w, duration))
+
+    # Transport row UNDER the bar, centered on the column; the white play
+    # disc keeps its prominence and every hit stays at least yesterday's 34pt.
+    playing = bool(player and player.is_playing)
+    row_cx = px + col_x + col_w / 2
+    row_cy = py + 87.0
+    _transport_button(frame, out, mouse, sl_icons.PREV, row_cx - 53, py + 74, "prev",
+                      SUBTEXT, font=sl_icons.ICON_FONT_FILL)
+    play_hover = _hover(mouse, row_cx - 18, py + 69, 36, 36)
+    frame.circle(cx=row_cx, cy=row_cy, radius=16,
+                 fill=TEXT if play_hover else (225, 225, 225, 255), z_index=12)
+    if playing:
+        # Drawn bars: text pipes ("||") space differently per font and read broken.
+        bar_w, bar_h, bar_gap = 4.0, 14.0, 5.0
+        bar_y = row_cy - bar_h / 2
+        frame.rect(x=row_cx - bar_gap / 2 - bar_w, y=bar_y, width=bar_w, height=bar_h,
+                   color=(0, 0, 0, 255), z_index=13)
+        frame.rect(x=row_cx + bar_gap / 2, y=bar_y, width=bar_w, height=bar_h,
+                   color=(0, 0, 0, 255), z_index=13)
+    else:
+        _centered_glyph(frame, sl_icons.PLAY, cx=row_cx, cy=row_cy, size=14,
+                        color=(0, 0, 0, 255), z=13, font=sl_icons.ICON_FONT_FILL)
+    out.hit(row_cx - 18, py + 69, 36, 36, "toggle_play")
+    _transport_button(frame, out, mouse, sl_icons.NEXT, row_cx + 43, py + 74, "next",
+                      SUBTEXT, font=sl_icons.ICON_FONT_FILL)
 
     # Circular Home/Search nav buttons flanking the pill (reference layout).
     _nav_circle(frame, app, out, mouse, cx=px - NAV_CIRCLE_GAP - NAV_CIRCLE_R, cy=cy,
