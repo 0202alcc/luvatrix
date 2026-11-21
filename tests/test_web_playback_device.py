@@ -6,13 +6,20 @@ and adapts SDK state JSON into sl_models.PlayerState.
 """
 from __future__ import annotations
 
+import sys
 import time
+from pathlib import Path
 
 import pytest
 
-from examples.spotify_light import sl_models, sl_oauth
-from examples.spotify_light.sl_player import WebPlaybackDevice
-from luvatrix_core.core.playback_bridge import InMemoryPlaybackBridge, PlaybackEventKind
+APP_DIR = Path(__file__).resolve().parents[1] / "examples" / "spotify_light"
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
+
+import sl_models  # noqa: E402
+import sl_oauth  # noqa: E402
+from sl_player import WebPlaybackDevice  # noqa: E402
+from luvatrix_core.core.playback_bridge import InMemoryPlaybackBridge, PlaybackEventKind  # noqa: E402
 
 
 def _tokens(scope: str) -> sl_oauth.TokenSet:

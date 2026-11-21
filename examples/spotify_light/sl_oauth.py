@@ -34,8 +34,10 @@ _SCOPES = (
     "playlist-read-collaborative",
     "user-library-read",
     "user-top-read",
+    "streaming",
 )
 SCOPES = _SCOPES
+STREAMING_SCOPE = "streaming"
 
 _VERIFIER_ALPHABET = string.ascii_letters + string.digits + "-._~"
 
@@ -102,6 +104,18 @@ class TokenSet:
             scope=str(payload.get("scope", "")),
             token_type=str(payload.get("token_type", "Bearer")),
         )
+
+
+def has_streaming_scope(tokens: TokenSet | None) -> bool:
+    """True when the granted scopes include Web Playback SDK streaming.
+
+    Tokens minted before the scope was added keep working for the Connect
+    remote path; callers use this to gate SDK features instead of forcing
+    a re-login.
+    """
+    if tokens is None or not tokens.scope:
+        return False
+    return STREAMING_SCOPE in tokens.scope.split()
 
 
 def generate_verifier() -> str:
