@@ -138,12 +138,15 @@ interior rects in these local coordinates.
 - `pill.progress` — the progress strip; `x`/`y`/`width` are layout inputs
   (height stays 3pt) and the elapsed/remaining labels ride above the
   strip's ends. The shipped `layout.toml` aligns its left edge to
-  `pill.title`'s left edge (SL-21): at 1280×800 the strip resolves to
-  pill-local `(110, 59, 352, 3)` — left edge on the text column, right
-  edge holding 462.
+  `pill.title`'s left edge (SL-21): at 1280×800 on the round-38 plate the
+  strip resolves to pill-local `(110, 59, 404, 3)` — left edge on the text
+  column, right edge holding 514.
 - `pill.transport` — the prev/play/next cluster, positioned by the rect's
   center. Cluster size is not a layout input: the buttons keep fixed offsets
-  and 34pt hit targets.
+  and 34pt hit targets. Round 38 (SL-23): the natural centers on the PILL
+  itself — `PILL_W` is 2 × the transport center (572), so the play button
+  is the plate's geometric center by construction at any width, and the
+  empty right half after "next" mirrors the left half.
 
 Tools:
 
@@ -160,20 +163,33 @@ Tools:
   ids, and a rejected spec never reaches the scene. A failed file write
   rolls the override back and errors the call — a nudge that cannot persist
   never pretends it did.
-- `layout_align {id, edge, to, ref_edge?, offset?}` — align one edge of a
-  component (`edge`: `left`/`right`/`top`/`bottom`/`center_x`/`center_y`)
-  to an edge of another component's CURRENT rect (`to` + `ref_edge`,
-  defaulting to `edge`), plus `offset` points (default 0). Edge alignment
-  keeps the component's opposite edge fixed (its extent changes); center
-  alignment keeps its size. What persists is the RELATIONSHIP — an
-  `[id.align]` spec resolved at layout time — so the edge tracks the
-  reference if the reference later moves, and the result stays resize-safe.
-  References stay in one frame: interior ids reference interior ids (or the
-  pill frame itself as `pill`), window ids reference window ids; self-
+- `layout_align {id, edge, to, ref_edge?, offset?, keep?}` — align one edge
+  of a component (`edge`: `left`/`right`/`top`/`bottom`/`center_x`/
+  `center_y`) to an edge of another component's CURRENT rect (`to` +
+  `ref_edge`, defaulting to `edge`), plus `offset` points (default 0).
+  Edge alignment keeps the component's opposite edge fixed (its extent
+  changes); center alignment keeps its size; `keep: "size"` (round 38)
+  makes an EDGE rule a position move instead — the named edge meets the
+  reference line and the extent holds (for a component whose natural sits
+  past the reference, which the default would collapse). What persists is
+  the RELATIONSHIP — an `[id.align]` spec resolved at layout time — so the
+  edge tracks the reference if the reference later moves, and the result
+  stays resize-safe. Calls upsert one rule per axis: a second call on the
+  other axis adds to the relationship (two rules max, persisted as an
+  array of tables), a same-axis call replaces its rule, and any
+  rect/anchor spec on the id is replaced by the align form. References
+  stay in one frame: interior ids reference interior ids (or the pill
+  frame itself as `pill`), window ids reference window ids; self-
   references, cross-axis pairs, and reference cycles are rejected before
   they reach the scene or the file. Example (SL-21's bake):
   `layout_align {id: "pill.progress", edge: "left", to: "pill.title",
   ref_edge: "left"}` pins the strip's left edge to the text column.
+  Example (SL-23's bake): `layout_align {id: "nav_more", edge: "right",
+  to: "pill", ref_edge: "left", offset: -12, keep: "size"}` then
+  `layout_align {id: "nav_more", edge: "center_y", to: "pill"}` parks the
+  overflow circle 12pt left of the pill, pill-centered, riding its left
+  edge forever — the shipped `layout.toml`'s `nav_more` entry is exactly
+  this two-rule relationship (the last window-anchor form retired).
 - `layout_list {}` — valid ids plus every active override with its resolved
   rect at the current window size.
 - `layout_clear {id?}` — clear one override, or all when `id` is omitted.
@@ -183,14 +199,15 @@ Tools:
 
 The persisted file is TOML, one table per component, in exactly the spec
 shape the tools accept (`["nav_more"]` with `anchor`/`dx`/`dy`,
-`["nav_more".rect]` with `x`/`y`/`width`/`height`, or
-`["pill.progress".align]` with `edge`/`to`/`ref_edge`/`offset`). Table
-headers quote the id so dotted interior ids stay one literal key (an
-unquoted `[pill.progress.rect]` would parse as nested tables and collide
-with `[pill]`). It is rewritten deterministically (sorted ids) so diffs
-stay minimal, and written via a temp file + replace so a crash can't tear
-it. Hand edits are fine: malformed TOML or invalid entries are ignored at
-boot, never fatal. Tests redirect the path with
+`["nav_more".rect]` with `x`/`y`/`width`/`height`,
+`["pill.progress".align]` with `edge`/`to`/`ref_edge`/`offset`, or a
+two-axis relationship as two `[["nav_more".align]]` array entries, the
+x-axis rule first). Table headers quote the id so dotted interior ids stay
+one literal key (an unquoted `[pill.progress.rect]` would parse as nested
+tables and collide with `[pill]`). It is rewritten deterministically
+(sorted ids) so diffs stay minimal, and written via a temp file + replace
+so a crash can't tear it. Hand edits are fine: malformed TOML or invalid
+entries are ignored at boot, never fatal. Tests redirect the path with
 `SPOTIFY_LIGHT_LAYOUT_FILE`.
 
 ## Notes and limitations

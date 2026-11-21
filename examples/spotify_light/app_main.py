@@ -1295,13 +1295,22 @@ class SpotifyLightApp(App):
                     "later moves, and the geometry stays resize-safe. Params: 'id', "
                     "'edge' (left/right/top/bottom/center_x/center_y), 'to' (reference "
                     "id), 'ref_edge' (defaults to edge), 'offset' in points (default "
-                    "0, shifts the aligned edge along its axis). Edge alignment keeps "
-                    "the component's opposite edge fixed (its extent changes); center "
-                    "alignment keeps its size. References stay in one frame: interior "
-                    "ids reference interior ids (or the pill frame itself as 'pill'), "
-                    "window ids reference window ids. Example — SL-21: {id: "
-                    "\"pill.progress\", edge: \"left\", to: \"pill.title\", ref_edge: "
-                    "\"left\"} pins the progress strip's left edge to the text column."
+                    "0, shifts the aligned edge along its axis), 'keep' ('size' makes "
+                    "an edge rule a POSITION move — the named edge meets the reference "
+                    "line and the extent holds — instead of the default, which keeps "
+                    "the opposite edge fixed and changes the extent; center rules "
+                    "always keep the size). Calls UPSERT one rule per axis: a second "
+                    "call on the other axis adds to the relationship (two rules max), "
+                    "a same-axis call replaces its rule, and any rect/anchor spec on "
+                    "the id is replaced by the align form. References stay in one "
+                    "frame: interior ids reference interior ids (or the pill frame "
+                    "itself as 'pill'), window ids reference window ids. Examples — "
+                    "SL-21: {id: \"pill.progress\", edge: \"left\", to: \"pill.title\", "
+                    "ref_edge: \"left\"} pins the progress strip to the text column. "
+                    "SL-23: {id: \"nav_more\", edge: \"right\", to: \"pill\", ref_edge: "
+                    "\"left\", offset: -12, keep: \"size\"} then {id: \"nav_more\", "
+                    "edge: \"center_y\", to: \"pill\"} parks the overflow circle 12pt "
+                    "left of the pill, pill-centered, riding it forever."
                 ),
                 "inputSchema": {
                     "type": "object",
@@ -1311,6 +1320,7 @@ class SpotifyLightApp(App):
                         "to": {"type": "string"},
                         "ref_edge": {"type": "string"},
                         "offset": {"type": "number"},
+                        "keep": {"type": "string"},
                     },
                     "required": ["id", "edge", "to"],
                 },
@@ -1373,14 +1383,16 @@ class SpotifyLightApp(App):
         if name == "layout_align":
             args = dict(arguments or {})
             cid = sl_layout._check_id(args.get("id"))
-            spec = {"align": {
+            rule = {
                 "edge": args.get("edge"),
                 "to": args.get("to"),
                 "ref_edge": args.get("ref_edge", args.get("edge")),
                 "offset": args.get("offset", 0.0),
-            }}
+            }
+            if "keep" in args:
+                rule["keep"] = args["keep"]
             before = self.layout_overrides.specs()
-            stored = self.layout_overrides.set(cid, spec)
+            stored = self.layout_overrides.set_align(cid, rule)
             self._persist_layout(before)
             self.invalidate()
             width, height = self._window_size()

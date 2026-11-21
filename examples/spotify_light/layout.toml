@@ -7,10 +7,18 @@
 # ids stay one literal key. Hand edits are fine — malformed entries are
 # ignored, never fatal.
 
-["nav_more"]
-anchor = "top-right"
-dx = 548.0
-dy = 48.0
+[["nav_more".align]]
+edge = "right"
+to = "pill"
+ref_edge = "left"
+offset = -12.0
+keep = "size"
+
+[["nav_more".align]]
+edge = "center_y"
+to = "pill"
+ref_edge = "center_y"
+offset = 0.0
 
 ["pill.progress".align]
 edge = "left"
