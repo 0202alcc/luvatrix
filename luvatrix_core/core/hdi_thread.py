@@ -133,10 +133,17 @@ class HDIThread:
         Thread-safe: serialized with source collection on ``_poll_lock`` so
         keyboard/touch state machines stay consistent. Returns the number of
         events enqueued (normalization can fan one event out to several).
+
+        Position payloads on injected events are SCENE coordinates (the
+        target extent the app lays out against) — the same space
+        ``app_screenshot`` / ``app_scene_tree`` / ``app_state`` report — so
+        MCP-driven input stays correct across window resizes. Injected
+        ``screen_x``/``screen_y`` keep raw screen semantics and route through
+        the window-geometry path exactly like OS-delivered events.
         """
         with self._poll_lock:
             active = bool(self._window_active_provider())
-            normalized = self._normalize_events(event, active)
+            normalized = self._normalize_events(event, active, injected=True)
             enqueued = 0
             for item in normalized:
                 self._enqueue(item)
@@ -201,18 +208,18 @@ class HDIThread:
                     self._enqueue(event)
             self._last_window_active = active
 
-    def _normalize_events(self, event: HDIEvent, active: bool) -> list[HDIEvent]:
+    def _normalize_events(self, event: HDIEvent, active: bool, injected: bool = False) -> list[HDIEvent]:
         if event.device == "keyboard":
             return self._normalize_keyboard_events(event, active)
         if event.device in ("mouse", "trackpad"):
-            return [self._normalize_pointer_event(event, active)]
+            return [self._normalize_pointer_event(event, active, injected=injected)]
         if event.device == "touch":
-            return self._normalize_touch_events(event, active)
+            return self._normalize_touch_events(event, active, injected=injected)
         if active:
             return [event]
         return [replace(event, status="NOT_DETECTED", payload=None)]
 
-    def _normalize_touch_events(self, event: HDIEvent, active: bool) -> list[HDIEvent]:
+    def _normalize_touch_events(self, event: HDIEvent, active: bool, injected: bool = False) -> list[HDIEvent]:
         if not active:
             return [replace(event, status="NOT_DETECTED", payload=None)]
         if event.payload is None or not isinstance(event.payload, dict):
@@ -225,7 +232,7 @@ class HDIThread:
             touch_id = int(payload.get("touch_id", 0))
         except (TypeError, ValueError):
             return [replace(event, status="NOT_DETECTED", payload=None)]
-        normalized = self._normalize_position_payload(event, payload, requires_position=True)
+        normalized = self._normalize_position_payload(event, payload, requires_position=True, injected=injected)
         if normalized.status != "OK" or not isinstance(normalized.payload, dict):
             if phase in ("up", "cancel"):
                 self._touch_state.pop(touch_id, None)
@@ -312,7 +319,7 @@ class HDIThread:
         )
         return out
 
-    def _normalize_pointer_event(self, event: HDIEvent, active: bool) -> HDIEvent:
+    def _normalize_pointer_event(self, event: HDIEvent, active: bool, injected: bool = False) -> HDIEvent:
         if not active:
             return replace(event, status="NOT_DETECTED", payload=None)
         requires_position = _requires_pointer_position(event.event_type)
@@ -323,7 +330,7 @@ class HDIThread:
                 event, payload=None
             )
         payload = dict(event.payload)
-        return self._normalize_position_payload(event, payload, requires_position=requires_position)
+        return self._normalize_position_payload(event, payload, requires_position=requires_position, injected=injected)
 
     def _normalize_position_payload(
         self,
@@ -331,16 +338,19 @@ class HDIThread:
         payload: dict[str, object],
         *,
         requires_position: bool,
+        injected: bool = False,
     ) -> HDIEvent:
         left, top, width, height = self._window_geometry_provider()
         if width <= 0 or height <= 0:
             return replace(event, status="NOT_DETECTED", payload=None)
         x: float | None = None
         y: float | None = None
+        from_screen = False
         if "screen_x" in payload and "screen_y" in payload:
             try:
                 x = float(payload["screen_x"]) - float(left)
                 y = float(payload["screen_y"]) - float(top)
+                from_screen = True
             except (TypeError, ValueError):
                 if requires_position:
                     return replace(event, status="NOT_DETECTED", payload=None)
@@ -354,18 +364,30 @@ class HDIThread:
         if requires_position and (x is None or y is None):
             return replace(event, status="NOT_DETECTED", payload=None)
         if x is not None and y is not None:
-            if x < 0 or y < 0 or x >= float(width) or y >= float(height):
-                return replace(event, status="NOT_DETECTED", payload=None)
-            content_left, content_top, content_w, content_h = self._resolve_content_rect(width, height)
-            if content_w <= 0 or content_h <= 0:
-                return replace(event, status="NOT_DETECTED", payload=None)
-            rel_x = x - content_left
-            rel_y = y - content_top
-            if rel_x < 0 or rel_y < 0 or rel_x >= content_w or rel_y >= content_h:
-                return replace(event, status="NOT_DETECTED", payload=None)
-            tx, ty = self._project_to_target(rel_x, rel_y, content_w, content_h)
-            x = tx
-            y = ty
+            if injected and not from_screen:
+                # Injected x/y are SCENE coordinates (the target extent the
+                # app lays out against) — the same space app_screenshot /
+                # app_scene_tree / app_state report. Validate against that
+                # extent and deliver unprojected, so MCP-driven input keeps
+                # landing on the intended scene point across window resizes
+                # (SL-37: edge chrome fell outside a shrunken live window and
+                # was dropped; survivors were reprojected off their targets).
+                bound_w, bound_h = self._injected_position_bounds(width, height)
+                if x < 0 or y < 0 or x >= bound_w or y >= bound_h:
+                    return replace(event, status="NOT_DETECTED", payload=None)
+            else:
+                if x < 0 or y < 0 or x >= float(width) or y >= float(height):
+                    return replace(event, status="NOT_DETECTED", payload=None)
+                content_left, content_top, content_w, content_h = self._resolve_content_rect(width, height)
+                if content_w <= 0 or content_h <= 0:
+                    return replace(event, status="NOT_DETECTED", payload=None)
+                rel_x = x - content_left
+                rel_y = y - content_top
+                if rel_x < 0 or rel_y < 0 or rel_x >= content_w or rel_y >= content_h:
+                    return replace(event, status="NOT_DETECTED", payload=None)
+                tx, ty = self._project_to_target(rel_x, rel_y, content_w, content_h)
+                x = tx
+                y = ty
         safe_payload: dict[str, object] = {}
         if x is not None and y is not None:
             safe_payload["x"] = x
@@ -475,6 +497,15 @@ class HDIThread:
             return (0.0, 0.0, float(width), float(height))
         left, top, rect_w, rect_h = self._source_content_rect_provider()
         return (float(left), float(top), float(rect_w), float(rect_h))
+
+    def _injected_position_bounds(self, width: float, height: float) -> tuple[float, float]:
+        """Bounds for injected scene coordinates: the target (scene) extent
+        when one is provided — the space every MCP inspection surface reports
+        — else the live window size (legacy fallback when no scene exists)."""
+        if self._target_extent_provider is None:
+            return (float(width), float(height))
+        tw, th = self._target_extent_provider()
+        return (max(1.0, float(tw)), max(1.0, float(th)))
 
     def _emit_hold_events(self, ts_ns: int) -> list[HDIEvent]:
         out: list[HDIEvent] = []
