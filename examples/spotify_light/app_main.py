@@ -1307,10 +1307,9 @@ class SpotifyLightApp(App):
                     "itself as 'pill'), window ids reference window ids. Examples — "
                     "SL-21: {id: \"pill.progress\", edge: \"left\", to: \"pill.title\", "
                     "ref_edge: \"left\"} pins the progress strip to the text column. "
-                    "SL-23: {id: \"nav_more\", edge: \"right\", to: \"pill\", ref_edge: "
-                    "\"left\", offset: -12, keep: \"size\"} then {id: \"nav_more\", "
-                    "edge: \"center_y\", to: \"pill\"} parks the overflow circle 12pt "
-                    "left of the pill, pill-centered, riding it forever."
+                    "To move a component INSIDE another (SL-26 merged the overflow "
+                    "circle into the pill), use layout_attach instead — containment "
+                    "is its own relationship form."
                 ),
                 "inputSchema": {
                     "type": "object",
@@ -1323,6 +1322,40 @@ class SpotifyLightApp(App):
                         "keep": {"type": "string"},
                     },
                     "required": ["id", "edge", "to"],
+                },
+            },
+            {
+                "name": "layout_attach",
+                "description": (
+                    "Attach a window-space component INTO a container at a named "
+                    "slot — and persist the RELATIONSHIP: the layout file gains an "
+                    "attach spec (id, container, slot, inset) that re-resolves at "
+                    "layout time, so the component switches to container-local "
+                    "space, rides the container like the pill's interior ids, "
+                    "keeps its size, and stays resize-safe (never raw pixels). "
+                    "Params: 'id', 'container', 'slot' (top-right/top-left/"
+                    "bottom-right/bottom-left), 'inset' in points (default 0, "
+                    "measured inward from the container's corner). The slot's "
+                    "occupied region is queryable by the container's own layout: "
+                    "the pill's text column yields a top-right attachment "
+                    "(title/artist/bar narrow left of it). layout_clear detaches "
+                    "back to the window-space natural; a rect/anchor spec "
+                    "replaces the attachment. Validation rejects self-attach, "
+                    "cycles, unknown containers, and unknown slots; the rect "
+                    "clamps inside the container. Example — SL-26: {id: "
+                    "\"nav_more\", container: \"pill\", slot: \"top-right\", "
+                    "inset: 12} merges the overflow button into the pill's "
+                    "top-right corner."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "container": {"type": "string"},
+                        "slot": {"type": "string"},
+                        "inset": {"type": "number"},
+                    },
+                    "required": ["id", "container", "slot"],
                 },
             },
             {
@@ -1398,6 +1431,21 @@ class SpotifyLightApp(App):
             width, height = self._window_size()
             return {"id": cid, "spec": stored, "persisted": True,
                     "rect": list(self._resolve_layout_rect(cid, width, height))}
+        if name == "layout_attach":
+            args = dict(arguments or {})
+            cid = sl_layout._check_id(args.get("id"))
+            spec = {"attach": {
+                "container": args.get("container"),
+                "slot": args.get("slot"),
+                "inset": args.get("inset", 0.0),
+            }}
+            before = self.layout_overrides.specs()
+            stored = self.layout_overrides.set(cid, spec)
+            self._persist_layout(before)
+            self.invalidate()
+            width, height = self._window_size()
+            return {"id": cid, "spec": stored, "persisted": True,
+                    "rect": list(self._resolve_layout_rect(cid, width, height))}
         if name == "layout_list":
             width, height = self._window_size()
             return {
@@ -1419,7 +1467,7 @@ class SpotifyLightApp(App):
             width, height = self._window_size()
             _, _, pw, ph = self._resolved_pill_rect(width, height)
             naturals = self._layout_naturals(width, height)
-            naturals.update(self._interior_naturals(pw, ph))
+            naturals.update(self._interior_naturals(pw, ph, width, height))
             frames = {iid: (pw, ph) for iid in sl_layout.INTERIOR_IDS}
             return self.layout_overrides.export(width=width, height=height,
                                                 naturals=naturals, local_frames=frames)
@@ -1446,10 +1494,13 @@ class SpotifyLightApp(App):
         return self.layout_overrides.resolve("pill", sl_views.pill_rect(width, height),
                                              width=width, height=height)
 
-    @staticmethod
-    def _interior_naturals(pw: float, ph: float) -> dict:
-        """Interior natural rects in PILL-LOCAL space at a pill size."""
-        return sl_views.pill_frame_naturals(pw, ph)
+    def _interior_naturals(self, pw: float, ph: float,
+                           width: float, height: float) -> dict:
+        """Interior natural rects in PILL-LOCAL space at a pill size — the
+        text column narrowed when an attachment occupies the pill's
+        top-right slot (round 41, SL-27)."""
+        reserve = sl_views.pill_slot_reserve_right(self, pw, ph, width, height)
+        return sl_views.pill_frame_naturals(pw, ph, reserve_right=reserve)
 
     def _resolve_layout_rect(self, cid: str, width: float, height: float) -> tuple:
         """One resolution path for set/list: window ids resolve against the
@@ -1460,8 +1511,9 @@ class SpotifyLightApp(App):
         if cid in sl_layout.INTERIOR_IDS:
             _, _, pw, ph = self._resolved_pill_rect(width, height)
             return self.layout_overrides.resolve(
-                cid, self._interior_naturals(pw, ph)[cid], width=pw, height=ph,
-                naturals=self._interior_naturals(pw, ph))
+                cid, self._interior_naturals(pw, ph, width, height)[cid],
+                width=pw, height=ph,
+                naturals=self._interior_naturals(pw, ph, width, height))
         naturals = self._layout_naturals(width, height)
         return self.layout_overrides.resolve(cid, naturals[cid], width=width,
                                              height=height, naturals=naturals)

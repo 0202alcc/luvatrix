@@ -244,18 +244,21 @@ class TestLayoutMcpSurface:
     def test_hooks_register_the_layout_tools(self, app_ctx):
         app, _, _ = app_ctx
         bridge = _bridge(app)
-        assert bridge.register_app_hooks(app) == 7, \
-            "two client-id tools plus layout_set/align/list/clear/export"
+        assert bridge.register_app_hooks(app) == 8, \
+            "two client-id tools plus layout_set/align/attach/list/clear/export"
         listing = bridge.dispatcher().handle_payload(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
         wire = {tool["name"]: tool for tool in listing["result"]["tools"]}
-        for name in ("layout_set", "layout_align", "layout_list", "layout_clear",
-                     "layout_export"):
+        for name in ("layout_set", "layout_align", "layout_attach", "layout_list",
+                     "layout_clear", "layout_export"):
             assert name in wire, f"missing MCP tool {name}"
         assert "id" in wire["layout_set"]["inputSchema"]["properties"]
         for param in ("id", "edge", "to", "ref_edge", "offset"):
             assert param in wire["layout_align"]["inputSchema"]["properties"], \
                 f"layout_align is missing the {param} param"
+        for param in ("id", "container", "slot", "inset"):
+            assert param in wire["layout_attach"]["inputSchema"]["properties"], \
+                f"layout_attach is missing the {param} param"
 
     def test_layout_set_moves_the_pill_live(self, app_ctx):
         app, ctx, buf = app_ctx
@@ -316,7 +319,8 @@ class TestLayoutMcpSurface:
         home = next(r for r in app._hits if r.action == "nav" and r.payload == "home")
         assert (home.x, home.y) == (600.0, 300.0)
         overflow = next(r for r in app._hits if r.action == "open_devices")
-        assert (overflow.x, overflow.y) == (660.0, 300.0)
+        assert (overflow.x, overflow.y) == (660.0, 300.0), \
+            "a rect spec REPLACES the shipped attach spec — window-space raw rect wins"
         rings = [n for n in _nodes(buf, RoundedRectNode)
                  if n.color_rgba == sl_views.GLASS_BORDER
                  and (n.x, n.y, n.width, n.height) == (30.0, 24.0, 240.0, 752.0)]
@@ -335,7 +339,7 @@ class TestLayoutMcpSurface:
     def test_layout_clear_restores_natural_geometry(self, app_ctx):
         app, ctx, buf = app_ctx
         _with_track(app, ctx)
-        app.mcp_call("layout_clear", {})  # isolate from the shipped nav_more entry
+        app.mcp_call("layout_clear", {})  # isolate from the shipped pill.progress entry
         natural = sl_views.pill_rect(1280, 800)
         app.mcp_call("layout_set", {
             "id": "pill", "rect": {"x": 100, "y": 120, "width": 300, "height": 64}})
@@ -368,7 +372,7 @@ class TestLayoutMcpSurface:
     def test_export_round_trip_over_the_wire(self, app_ctx):
         app, ctx, buf = app_ctx
         _with_track(app, ctx)
-        app.mcp_call("layout_clear", {})  # isolate from the shipped nav_more entry
+        app.mcp_call("layout_clear", {})  # isolate from the shipped pill.progress entry
         app.mcp_call("layout_set", {"id": "pill", "anchor": "top-right", "dx": 40, "dy": 24})
         app.mcp_call("layout_set", {
             "id": "nav_search", "rect": {"x": 900, "y": 700, "width": 44, "height": 44}})
@@ -507,15 +511,15 @@ class TestLayoutPersistence:
     def test_layout_clear_removes_the_persisted_entry(self, tmp_path, monkeypatch):
         app, ctx, _buf, layout_file = self._boot(tmp_path, monkeypatch, file_text=None)
         _with_track(app, ctx)
-        assert '[["nav_more".align]]' in layout_file.read_text(), \
-            "fixture seeds the shipped entry (round 38: the align form)"
-        cleared = app.mcp_call("layout_clear", {"id": "nav_more"})
-        assert cleared["cleared"] == ["nav_more"]
-        assert "nav_more" not in layout_file.read_text()
+        assert '["pill.progress".align]' in layout_file.read_text(), \
+            "fixture seeds the shipped entry (round 37: the SL-21 relationship)"
+        cleared = app.mcp_call("layout_clear", {"id": "pill.progress"})
+        assert cleared["cleared"] == ["pill.progress"]
+        assert "pill.progress" not in layout_file.read_text()
         _tick(app, ctx, 2)
-        overflow = next(r for r in app._hits if r.action == "open_devices")
-        dock_cy = sl_views.dock_cluster_rect(1280, 800)[1] + sl_views.DOCK_SLOT_H / 2
-        assert (overflow.x, overflow.y) == (1280.0 - 16 - 44, dock_cy - 22), \
+        px, _, _, _ = sl_views.pill_rect(1280, 800)
+        seek = [r for r in app._hits if r.action == "seek_bar"]
+        assert seek and (seek[0].x, seek[0].w) == (px + 110.0, 394.0), \
             "clearing the persisted entry restores the code natural"
 
     def test_clear_all_empties_the_file(self, tmp_path, monkeypatch):
@@ -523,7 +527,7 @@ class TestLayoutPersistence:
         app.mcp_call("layout_set", {"id": "pill", "anchor": "top-left", "dx": 5, "dy": 5})
         cleared = app.mcp_call("layout_clear", {})
         assert sorted(cleared["cleared"]) == ["nav_more", "pill", "pill.progress"], \
-            "the shipped nav_more + pill.progress entries clear along with the new one"
+            "the shipped attach + progress entries clear along with the new one"
         assert "[" not in layout_file.read_text(), "no spec tables survive a clear-all"
 
     def test_roundtrip_preserves_specs(self, tmp_path, monkeypatch):
@@ -544,35 +548,32 @@ class TestLayoutPersistence:
         overflow = next(r for r in app._hits if r.action == "open_devices")
         dock_cy = sl_views.dock_cluster_rect(1280, 800)[1] + sl_views.DOCK_SLOT_H / 2
         assert (overflow.x, overflow.y) == (1280.0 - 16 - 44, dock_cy - 22), \
-            "a corrupt file must not kill the app — code naturals rule"
+            "a corrupt file must not kill the app — code naturals rule (unattached dock fallback)"
 
-    def test_shipped_layout_file_bakes_nav_more_left_of_the_pill(self):
-        """SL-19's end-to-end artifact, RE-SPEC'D in round 38 (SL-23): the
-        window-anchor form retired — nav_more persists as a two-rule align
-        RELATIONSHIP (right → pill.left −12 keep-size, center_y →
-        pill.center_y), so the circle rides the pill's left edge at 12pt
-        forever, however wide the pill grows. Geometry pins live in
-        TestPlayCenteredPillGeometry."""
+    def test_shipped_layout_file_attaches_nav_more_to_the_pill(self):
+        """SL-26/27's end-to-end artifact (round 41): the ⋯ merged INTO the
+        pill via the layout_attach tool — nav_more persists as an ATTACH
+        RELATIONSHIP (container pill, slot top-right, inset 12), its two
+        SL-23 align rules cleared by layout_clear first. Both entries were
+        written BY the tools on headless boots — the file holds the SL-21
+        progress relationship plus the attach spec, nothing else."""
         import tomllib
         data = tomllib.loads(Path(sl_layout.APP_LAYOUT_FILE).read_text())
-        rules = data["nav_more"]["align"]
-        assert isinstance(rules, list) and len(rules) == 2, \
-            "one array-of-tables entry per axis — no anchor form survives"
-        by_edge = {rule["edge"]: rule for rule in rules}
-        assert by_edge["right"]["to"] == "pill" and by_edge["right"]["ref_edge"] == "left"
-        assert by_edge["right"]["offset"] == -12.0 and by_edge["right"]["keep"] == "size"
-        assert by_edge["center_y"] == {"edge": "center_y", "to": "pill",
-                                       "ref_edge": "center_y", "offset": 0.0}
-        assert "anchor" not in data["nav_more"], "the last window-anchor form retired"
+        assert sorted(data) == ["nav_more", "pill.progress"]
+        assert data["nav_more"] == {"attach": {"container": "pill",
+                                               "slot": "top-right", "inset": 12.0}}, \
+            "the attachment persists as a relationship — never resolved pixels"
+        assert "align" not in data["nav_more"], "the SL-23 align rules are gone"
 
     def test_shipped_layout_file_bakes_the_progress_alignment(self):
         """SL-21's end-to-end artifact (round 37): the repo's layout.toml —
         written by layout_align itself — pins the strip's left edge to the
-        text         column's left as a RELATIONSHIP, resolving to (110, 59, 444, 3)
-        pill-local (right edge 554 — the text column's own right edge) at
-        the round-40 shipping pill size (PILL_W 572): the SL-25 natural
-        spans the column, the relationship no-ops on it and keeps guarding
-        the left edge. The runner cross-checks exactly this."""
+        text column's left as a RELATIONSHIP, resolving to (110, 59, 394, 3)
+        pill-local (right edge 504 — the narrowed column's right edge,
+        12pt clear of the merged ⋯ menu) at the round-41 shipping pill
+        size (PILL_W 572): the natural spans the column, the relationship
+        no-ops on it and keeps guarding the left edge. The runner
+        cross-checks exactly this."""
         import tomllib
         data = tomllib.loads(Path(sl_layout.APP_LAYOUT_FILE).read_text())
         align = data["pill.progress"]["align"]
@@ -584,8 +585,8 @@ class TestLayoutPersistence:
         nats = _interior_naturals(pw=572.0)
         rect = ov.resolve("pill.progress", nats["pill.progress"],
                           width=572, height=108, naturals=nats)
-        assert rect == (110.0, 59.0, 444.0, 3.0)
-        assert rect[0] + rect[2] == 554.0, "right edge == the column's right edge"
+        assert rect == (110.0, 59.0, 394.0, 3.0)
+        assert rect[0] + rect[2] == 504.0, "right edge == the narrowed column's right edge"
 
 
 class TestPillInteriorOverrides:
@@ -612,7 +613,11 @@ class TestPillInteriorOverrides:
         gx, gy, gw, gh = sl_views.pill_progress_local(520.0, 108.0)
         assert (gx, gy, gh) == (col_x, 59.0, 3.0), "left edge IS the column left"
         assert gw == pytest.approx(col_w), \
-            "SL-25: the strip spans exactly the text column (right inset == the column's)"
+            "the strip spans exactly the text column (right edge == the column's)"
+        mx, my, mw, mh = sl_views.attach_slot_rect(
+            (0.0, 0.0, 520.0, 108.0), "top-right", 12.0, (44.0, 44.0))
+        assert (mx, my, mw, mh) == (520.0 - 12.0 - 44.0, 12.0, 44.0, 44.0), \
+            "SL-27: the attached ⋯ menu slots into the plate's top-right, 12pt insets"
         tx, ty, tw, th = sl_views.pill_transport_local(520.0, 108.0)
         assert (tx + tw / 2, ty + th / 2) == pytest.approx((260.0, 87.0)), \
             "SL-23: the transport centers on the PILL, not the text column"
@@ -791,11 +796,14 @@ class TestPillInteriorOverrides:
 
 def _interior_naturals(pw=520.0, ph=108.0):
     """The pill-local natural rects for a given pill frame (round-37 tests
-    exercise a 520pt frame; pass pw=572.0 for the SL-23 shipping size)."""
+    exercise a 520pt frame; pass pw=572.0 for the SL-23 shipping size).
+    Round 41: the shipped attach occupies the top-right slot, so the
+    column carries its 50pt reservation (44 menu + 12 inset + 12 gap −
+    18 pad)."""
     return {
         "pill.art": sl_views.pill_art_local(pw, ph),
-        "pill.progress": sl_views.pill_progress_local(pw, ph),
-        "pill.title": sl_views.pill_title_local(pw, ph),
+        "pill.progress": sl_views.pill_progress_local(pw, ph, reserve_right=50.0),
+        "pill.title": sl_views.pill_title_local(pw, ph, reserve_right=50.0),
         "pill.transport": sl_views.pill_transport_local(pw, ph),
     }
 
@@ -815,18 +823,18 @@ class TestLayoutAlignSpec:
             "the title/artist column: right of the art + gap, above the strip"
 
     def test_left_align_keeps_the_right_edge_fixed(self):
-        """The SL-21 geometry, post-SL-25: the natural already sits on the
+        """The SL-21 geometry, post-SL-26: the natural already sits on the
         column left, so the relationship no-ops on position — and still
-        guards it (the right edge holds at the natural 502, the column's
-        own right edge)."""
+        guards it (the right edge holds at the natural 452, the narrowed
+        column's right edge)."""
         ov = sl_layout.LayoutOverrides()
         ov.set("pill.progress", {"align": {
             "edge": "left", "to": "pill.title", "ref_edge": "left", "offset": 0}})
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (110.0, 59.0, 392.0, 3.0)
-        assert got[0] + got[2] == 502.0, "right edge unmoved — the column's right"
+        assert got == (110.0, 59.0, 342.0, 3.0)
+        assert got[0] + got[2] == 452.0, "right edge unmoved — the column's right"
 
     def test_right_align_keeps_the_left_edge_fixed(self):
         ov = sl_layout.LayoutOverrides()
@@ -835,8 +843,8 @@ class TestLayoutAlignSpec:
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (110.0, 59.0, 392.0, 3.0), \
-            "left holds at 110; the right edge grows to the column's right (502)"
+        assert got == (110.0, 59.0, 342.0, 3.0), \
+            "left holds at 110; the right edge grows to the narrowed column's right (452)"
 
     def test_center_alignment_keeps_the_size(self):
         nats = _interior_naturals()
@@ -845,14 +853,14 @@ class TestLayoutAlignSpec:
             "edge": "center_x", "to": "pill.title", "ref_edge": "center_x"}})
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == pytest.approx((306.0 - 196.0, 59.0, 392.0, 3.0)), \
+        assert got == pytest.approx((281.0 - 171.0, 59.0, 342.0, 3.0)), \
             "only the position moves; the strip keeps its width"
         ov2 = sl_layout.LayoutOverrides()
         ov2.set("pill.progress", {"align": {
             "edge": "center_y", "to": "pill.art", "ref_edge": "center_y"}})
         got2 = ov2.resolve("pill.progress", nats["pill.progress"],
                            width=520, height=108, naturals=nats)
-        assert got2 == pytest.approx((110.0, 54.0 - 1.5, 392.0, 3.0))
+        assert got2 == pytest.approx((110.0, 54.0 - 1.5, 342.0, 3.0))
 
     def test_top_and_bottom_align_keep_the_vertical_extent(self):
         nats = _interior_naturals()
@@ -861,13 +869,13 @@ class TestLayoutAlignSpec:
             "edge": "top", "to": "pill.art", "ref_edge": "top"}})
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (110.0, 12.0, 392.0, 50.0), "bottom edge (62) fixed; the top moves"
+        assert got == (110.0, 12.0, 342.0, 50.0), "bottom edge (62) fixed; the top moves"
         ov2 = sl_layout.LayoutOverrides()
         ov2.set("pill.progress", {"align": {
             "edge": "bottom", "to": "pill.art", "ref_edge": "bottom"}})
         got2 = ov2.resolve("pill.progress", nats["pill.progress"],
                            width=520, height=108, naturals=nats)
-        assert got2 == (110.0, 59.0, 392.0, 37.0), \
+        assert got2 == (110.0, 59.0, 342.0, 37.0), \
             "top fixed; the bottom edge moves to the art's bottom (96)"
 
     def test_offset_shifts_the_aligned_edge(self):
@@ -877,7 +885,7 @@ class TestLayoutAlignSpec:
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (116.0, 59.0, 386.0, 3.0)
+        assert got == (116.0, 59.0, 336.0, 3.0)
 
     def test_resolution_uses_the_references_current_rect(self):
         """The relationship tracks the reference: an override on pill.title
@@ -888,8 +896,8 @@ class TestLayoutAlignSpec:
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (130.0, 59.0, 372.0, 3.0), \
-            "the reference's override wins the resolution; the right edge still holds 502"
+        assert got == (130.0, 59.0, 322.0, 3.0), \
+            "the reference's override wins the resolution; the right edge still holds 452"
         ov2 = sl_layout.LayoutOverrides()
         ov2.set("pill.progress", {"align": {"edge": "left", "to": "pill.title"}})
         assert ov2.resolve("pill.progress", nats["pill.progress"],
@@ -908,11 +916,11 @@ class TestLayoutAlignSpec:
     def test_a_collapsed_extent_guards_to_one_point(self):
         ov = sl_layout.LayoutOverrides()
         ov.set("pill.progress", {"align": {
-            "edge": "left", "to": "pill.title", "ref_edge": "right"}})  # 502 == right 502
+            "edge": "left", "to": "pill.title", "ref_edge": "right"}})  # 452 == right 452
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (501.0, 59.0, 1.0, 3.0), "the extent collapses to 1pt, never negative"
+        assert got == (451.0, 59.0, 1.0, 3.0), "the extent collapses to 1pt, never negative"
 
     def test_window_ids_align_in_window_space(self):
         ov = sl_layout.LayoutOverrides()
@@ -978,14 +986,14 @@ class TestLayoutAlignTool:
 
     def test_align_applies_immediately_and_persists_the_relationship(self, app_ctx):
         """SL-21 through the tool: pin the strip's left edge to the text
-        column's left. The runner's acceptance on 1280x800: (110, 59, 444, 3)
-        pill-local on the round-40 plate, right edge 554 (SL-25)."""
+        column's left. The runner's acceptance on 1280x800: (110, 59, 394, 3)
+        pill-local on the round-41 plate, right edge 504 (menu slot clear)."""
         app, ctx, buf = app_ctx
         _with_track(app, ctx)
         result = app.mcp_call("layout_align", {
             "id": "pill.progress", "edge": "left",
             "to": "pill.title", "ref_edge": "left"})
-        assert result["rect"] == [110.0, 59.0, 444.0, 3.0]
+        assert result["rect"] == [110.0, 59.0, 394.0, 3.0]
         assert result["persisted"] is True
         text = sl_layout.default_path().read_text()
         assert '["pill.progress".align]' in text
@@ -995,12 +1003,12 @@ class TestLayoutAlignTool:
         _tick(app, ctx, 2)
         px, _, _, _ = sl_views.pill_rect(1280, 800)
         seek = [r for r in app._hits if r.action == "seek_bar"]
-        assert seek and (seek[0].x, seek[0].w) == (px + 110, 444.0)
+        assert seek and (seek[0].x, seek[0].w) == (px + 110, 394.0)
         app.init(ctx)  # reboot: the file is the source of truth
         _with_track(app, ctx)
         px, _, _, _ = sl_views.pill_rect(1280, 800)
         seek = [r for r in app._hits if r.action == "seek_bar"]
-        assert seek and (seek[0].x, seek[0].w) == (px + 110, 444.0), \
+        assert seek and (seek[0].x, seek[0].w) == (px + 110, 394.0), \
             "the persisted relationship survives the reboot"
 
     def test_align_tracks_a_later_reference_move(self, app_ctx):
@@ -1013,8 +1021,8 @@ class TestLayoutAlignTool:
         _tick(app, ctx, 2)
         px, _, _, _ = sl_views.pill_rect(1280, 800)
         seek = [r for r in app._hits if r.action == "seek_bar"]
-        assert seek and (seek[0].x, seek[0].w) == (px + 130, 424.0), \
-            "the aligned edge tracks the reference's current rect (right edge still 554)"
+        assert seek and (seek[0].x, seek[0].w) == (px + 130, 374.0), \
+            "the aligned edge tracks the reference's current rect (right edge still 504)"
 
     def test_align_is_resize_safe(self, app_ctx):
         app, ctx, buf = app_ctx
@@ -1026,7 +1034,7 @@ class TestLayoutAlignTool:
         _tick(app, ctx, 2)
         px, _, _, _ = sl_views.pill_rect(1000, 800)
         seek = [r for r in app._hits if r.action == "seek_bar"]
-        assert seek and seek[0].x - px == 110.0 and seek[0].w == 444.0, \
+        assert seek and seek[0].x - px == 110.0 and seek[0].w == 394.0, \
             "pill-local alignment is indifferent to the window size"
 
     def test_align_errors_never_touch_scene_or_file(self, app_ctx):
@@ -1078,10 +1086,151 @@ class TestLayoutAlignTool:
         assert "pill.progress" not in sl_layout.default_path().read_text()
         _tick(app, ctx, 2)
         px, _, _, _ = sl_views.pill_rect(1280, 800)
-        gx, _, gw, _ = sl_views.pill_progress_local(572.0, 108.0)
+        gx, _, gw, _ = sl_views.pill_progress_local(572.0, 108.0, reserve_right=50.0)
         seek = [r for r in app._hits if r.action == "seek_bar"]
         assert seek and (seek[0].x, seek[0].w) == (px + gx, gw), \
-            "clearing the align entry restores the code natural"
+            "clearing the align entry restores the (attach-reserved) code natural"
+
+
+class TestAttachSpecForm:
+    """The fourth spec form (round 41, SL-27): {attach: {container, slot,
+    inset}} moves a WINDOW-space component INTO a container at a named
+    slot — it switches to container-local space, rides the container,
+    keeps its size, and persists as a relationship resolved at layout
+    time (resize-safe, never raw pixels)."""
+
+    def test_attach_resolves_the_slot_and_keeps_the_size(self):
+        ov = sl_layout.LayoutOverrides()
+        ov.set("nav_more", {"attach": {"container": "pill",
+                                       "slot": "top-right", "inset": 12}})
+        nats = sl_views.window_naturals(1280.0, 800.0)
+        got = ov.resolve("nav_more", nats["nav_more"],
+                         width=1280, height=800, naturals=nats)
+        assert got == (1208.0, 28.0, 44.0, 44.0), \
+            "pill (692,16,572,108) + top-right inset 12, the 44pt size held"
+
+    def test_attach_follows_an_overridden_container(self):
+        ov = sl_layout.LayoutOverrides()
+        ov.set("pill", {"rect": {"x": 100, "y": 120, "width": 300, "height": 64}})
+        ov.set("nav_more", {"attach": {"container": "pill",
+                                       "slot": "top-right", "inset": 12}})
+        nats = sl_views.window_naturals(1280.0, 800.0)
+        got = ov.resolve("nav_more", nats["nav_more"],
+                         width=1280, height=800, naturals=nats)
+        assert got == (100.0 + 300.0 - 12.0 - 44.0, 120.0 + 12.0, 44.0, 44.0), \
+            "the slot resolves against the container's CURRENT rect"
+
+    def test_attach_validation(self):
+        ov = sl_layout.LayoutOverrides()
+        with pytest.raises(sl_layout.LayoutError):
+            ov.set("pill", {"attach": {"container": "pill", "slot": "top-right"}})  # self
+        with pytest.raises(sl_layout.LayoutError) as exc:
+            ov.set("nav_more", {"attach": {"container": "pill", "slot": "middle"}})
+        assert "top-right" in str(exc.value), "the error names the valid slots"
+        with pytest.raises(sl_layout.LayoutError):
+            ov.set("nav_more", {"attach": {"container": "pill.nope", "slot": "top-right"}})
+        with pytest.raises(sl_layout.LayoutError):
+            ov.set("nav_more", {"attach": {"container": "pill", "slot": "top-right",
+                                           "inset": "banana"}})
+        assert len(ov) == 0
+
+    def test_attach_cycles_are_rejected(self):
+        ov = sl_layout.LayoutOverrides()
+        ov.set("nav_more", {"attach": {"container": "pill", "slot": "top-right"}})
+        with pytest.raises(sl_layout.LayoutError) as exc:
+            ov.set("pill", {"attach": {"container": "nav_more", "slot": "top-right"}})
+        assert "cycle" in str(exc.value)
+
+    def test_attach_persists_and_round_trips(self, tmp_path):
+        ov = sl_layout.LayoutOverrides()
+        ov.set("nav_more", {"attach": {"container": "pill",
+                                       "slot": "top-right", "inset": 12}})
+        path = tmp_path / "layout.toml"
+        sl_layout.save(ov.specs(), path)
+        text = path.read_text()
+        assert '["nav_more".attach]' in text and 'container = "pill"' in text
+        assert 'slot = "top-right"' in text and "inset = 12.0" in text
+        assert sl_layout.load(path).specs() == ov.specs()
+
+    def test_slot_reservations_are_queryable(self):
+        ov = sl_layout.LayoutOverrides()
+        ov.set("nav_more", {"attach": {"container": "pill",
+                                       "slot": "top-right", "inset": 12}})
+        nats = sl_views.window_naturals(1280.0, 800.0)
+        got = ov.slot_reservations("pill", (692.0, 16.0, 572.0, 108.0), naturals=nats)
+        assert got == {"top-right": (516.0, 12.0, 44.0, 44.0)}, \
+            "container-LOCAL occupied rects — the column's yield input"
+
+
+class TestLayoutAttachTool:
+    """MCP surface: layout_attach applies through the same override
+    machinery as layout_set/layout_align — visual immediately, persisted
+    via the layout.toml write-through, as a RELATIONSHIP. SL-26 is its
+    first persisted use: the ⋯ menu merges into the pill."""
+
+    def test_attach_applies_immediately_and_persists_the_relationship(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        app.mcp_call("layout_clear", {"id": "nav_more"})  # fixture ships the attach; build from scratch
+        result = app.mcp_call("layout_attach", {
+            "id": "nav_more", "container": "pill", "slot": "top-right", "inset": 12})
+        assert result["rect"] == [1208.0, 28.0, 44.0, 44.0]
+        assert result["persisted"] is True
+        text = sl_layout.default_path().read_text()
+        assert '["nav_more".attach]' in text
+        assert 'container = "pill"' in text and 'slot = "top-right"' in text
+        assert "inset = 12.0" in text
+        assert "1208.0" not in text, "the relationship persists, never resolved pixels"
+        _tick(app, ctx, 2)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        assert (overflow.x, overflow.y) == (1208.0, 28.0)
+        app.init(ctx)  # reboot: the file is the source of truth
+        _with_track(app, ctx)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        assert (overflow.x, overflow.y) == (1208.0, 28.0), "the attach survives the reboot"
+
+    def test_attach_rides_the_container_across_resizes(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)  # shipped attach active from the fixture's file copy
+        for w in (1280.0, 1100.0, 940.0):
+            ctx.logical_width_px = w
+            app.invalidate()
+            _tick(app, ctx, 2)
+            px, py, pw, _ = sl_views.pill_rect(w, 800)
+            overflow = next(r for r in app._hits if r.action == "open_devices")
+            assert (overflow.x, overflow.y) == (px + pw - 56.0, py + 12.0), \
+                f"the menu rides the pill's top-right corner at width {w}"
+
+    def test_clear_detaches_back_to_window_space(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        cleared = app.mcp_call("layout_clear", {"id": "nav_more"})
+        assert cleared["cleared"] == ["nav_more"]
+        assert "nav_more" not in sl_layout.default_path().read_text()
+        _tick(app, ctx, 2)
+        overflow = next(r for r in app._hits if r.action == "open_devices")
+        assert (overflow.x, overflow.y) == (1280.0 - 16 - 44, 730.0), \
+            "the dock natural returns"
+        px, _, _, _ = sl_views.pill_rect(1280, 800)
+        seek = [r for r in app._hits if r.action == "seek_bar"]
+        assert seek and (seek[0].x, seek[0].w) == (px + 110.0, 444.0), \
+            "and the column relaxes to the SL-25 span (no slot to yield)"
+
+    def test_attach_errors_never_touch_scene_or_file(self, app_ctx):
+        app, ctx, buf = app_ctx
+        _with_track(app, ctx)
+        before_text = sl_layout.default_path().read_text()
+        overflow_before = next(r for r in app._hits if r.action == "open_devices")
+        for args in ({"id": "pill", "container": "pill", "slot": "top-right"},
+                     {"id": "nav_more", "container": "pill", "slot": "diagonal"},
+                     {"id": "nav_more", "container": "pill.nope", "slot": "top-right"},
+                     {"id": "nav_nope", "container": "pill", "slot": "top-right"}):
+            with pytest.raises(sl_layout.LayoutError):
+                app.mcp_call("layout_attach", args)
+        assert sl_layout.default_path().read_text() == before_text
+        _tick(app, ctx, 2)
+        overflow_after = next(r for r in app._hits if r.action == "open_devices")
+        assert (overflow_after.x, overflow_after.y) == (overflow_before.x, overflow_before.y)
 
 
 class TestPillTitleInterior:
@@ -1208,42 +1357,41 @@ class TestAlignKeepSizeAndMultiAxis:
         replace their rule."""
         app, ctx, buf = app_ctx
         _with_track(app, ctx)
-        app.mcp_call("layout_clear", {"id": "nav_more"})  # the fixture ships the SL-23 relationship; build it from scratch here
         r1 = app.mcp_call("layout_align", {
-            "id": "nav_more", "edge": "right", "to": "pill",
+            "id": "nav_home", "edge": "right", "to": "pill",
             "ref_edge": "left", "offset": -12, "keep": "size"})
         assert r1["rect"] == [636.0, 730.0, 44.0, 44.0], \
             "x rides the pill's left edge; y untouched until a y rule exists"
         r2 = app.mcp_call("layout_align", {
-            "id": "nav_more", "edge": "center_y", "to": "pill",
+            "id": "nav_home", "edge": "center_y", "to": "pill",
             "ref_edge": "center_y"})
         assert r2["rect"] == [636.0, 48.0, 44.0, 44.0], \
-            "the SL-23 target: 12pt left of the pill, pill-centered"
-        spec = app.layout_overrides.specs()["nav_more"]["align"]
+            "the round-38 shape: 12pt left of the pill, pill-centered"
+        spec = app.layout_overrides.specs()["nav_home"]["align"]
         assert isinstance(spec, list) and len(spec) == 2, \
             "two axis rules persist as one relationship"
         r3 = app.mcp_call("layout_align", {
-            "id": "nav_more", "edge": "right", "to": "pill",
+            "id": "nav_home", "edge": "right", "to": "pill",
             "ref_edge": "left", "offset": -20, "keep": "size"})
         assert r3["rect"][0] == 692.0 - 20 - 44, "the same-axis rule replaced, not stacked"
-        assert len(app.layout_overrides.specs()["nav_more"]["align"]) == 2
+        assert len(app.layout_overrides.specs()["nav_home"]["align"]) == 2
 
     def test_multi_axis_persists_as_an_array_of_tables(self, app_ctx):
         app, ctx, buf = app_ctx
         _with_track(app, ctx)
         app.mcp_call("layout_align", {
-            "id": "nav_more", "edge": "right", "to": "pill",
+            "id": "nav_home", "edge": "right", "to": "pill",
             "ref_edge": "left", "offset": -12, "keep": "size"})
         app.mcp_call("layout_align", {
-            "id": "nav_more", "edge": "center_y", "to": "pill", "ref_edge": "center_y"})
+            "id": "nav_home", "edge": "center_y", "to": "pill", "ref_edge": "center_y"})
         text = sl_layout.default_path().read_text()
-        assert text.count('[["nav_more".align]]') == 2, \
+        assert text.count('[["nav_home".align]]') == 2, \
             "each axis rule is one array-of-tables entry"
         assert 'keep = "size"' in text
         app.init(ctx)  # reboot: the relationship reloads
         _with_track(app, ctx)
-        overflow = next(r for r in app._hits if r.action == "open_devices")
-        assert (overflow.x, overflow.y) == (636.0, 48.0)
+        home = next(r for r in app._hits if r.action == "nav" and r.payload == "home")
+        assert (home.x, home.y) == (636.0, 48.0)
 
 
 class TestPlayCenteredPillGeometry:
@@ -1268,45 +1416,9 @@ class TestPlayCenteredPillGeometry:
         tx2, _, tw2, _ = sl_views.pill_transport_local(400.0, 108.0)
         assert tx2 + tw2 / 2 == 200.0, "centering holds at any pill width"
 
-    def test_shipped_nav_more_is_a_relationship_riding_the_pill(self):
-        """The last window-anchor form retires: nav_more persists as TWO
-        align rules (right → pill.left −12 keep-size, center_y →
-        pill.center_y) and resolves to (636, 48, 44, 44) at 1280x800."""
-        import tomllib
-        data = tomllib.loads(Path(sl_layout.APP_LAYOUT_FILE).read_text())
-        rules = data["nav_more"]["align"]
-        assert isinstance(rules, list) and len(rules) == 2
-        by_edge = {rule["edge"]: rule for rule in rules}
-        assert by_edge["right"] == {"edge": "right", "to": "pill",
-                                    "ref_edge": "left", "offset": -12.0, "keep": "size"}
-        assert by_edge["center_y"] == {"edge": "center_y", "to": "pill",
-                                       "ref_edge": "center_y", "offset": 0.0}
-        ov = sl_layout.LayoutOverrides()
-        for cid, spec in data.items():
-            ov.set(cid, spec)
-        nats = sl_views.window_naturals(1280.0, 800.0)
-        rect = ov.resolve("nav_more", nats["nav_more"], width=1280, height=800,
-                          naturals=nats)
-        assert rect == (636.0, 48.0, 44.0, 44.0)
-        pill = sl_views.pill_rect(1280, 800)
-        assert pill[0] - (rect[0] + rect[2]) == 12.0, "12pt left of the pill"
-        assert rect[1] + rect[3] / 2 == pill[1] + pill[3] / 2, "vertically centered"
-
-    def test_nav_more_relationship_rides_window_resizes(self, app_ctx):
-        app, ctx, buf = app_ctx
-        _with_track(app, ctx)  # shipped entry is active from the fixture's file copy
-        for w in (1280.0, 1100.0, 940.0):
-            ctx.logical_width_px = w
-            app.invalidate()
-            _tick(app, ctx, 2)
-            px, _, _, _ = sl_views.pill_rect(w, 800)
-            overflow = next(r for r in app._hits if r.action == "open_devices")
-            assert (overflow.x, overflow.y) == (px - 12 - 44, 48.0), \
-                f"the circle rides the pill's left edge at width {w}"
-
     def test_a_degenerate_one_point_circle_never_crashes(self, app_ctx):
-        """Probe-found bug (round 38): an override collapsing nav_more to
-        1pt crashed the glass plate draw (radius-derived rects went
+        """Probe-found bug (round 38): an override collapsing the ⋯ circle
+        to 1pt crashed the glass plate draw (radius-derived rects went
         non-positive). Degenerate geometry must render, not raise."""
         app, ctx, buf = app_ctx
         _with_track(app, ctx)
@@ -1321,34 +1433,96 @@ class TestPlayCenteredPillGeometry:
 # Round 40 (Alec, SL-25): "the actual progress bar needs to go further to
 # the right. but keep consistent x-distance spacing." The strip's NATURAL
 # spans EXACTLY the text column — left edge on the title (the SL-21
-# relationship keeps guarding it), right edge on the column's right edge,
-# so the bar's right inset IS the text's own right inset. This replaces
-# SL-24's centered-on-play derivation: the midpoint sits a constant 46pt
-# right of the play center (the art tile skews the column) — known and
-# accepted, play itself stays pill-centered (SL-23).
+# relationship keeps guarding it), right edge on the column's right edge.
+# Round 41 (SL-26) narrows the column itself for the merged ⋯ menu: the
+# column's right edge stops 12pt short of the menu's left, and the bar
+# keeps spanning the narrower column (consistent spacing preserved).
 # ---------------------------------------------------------------------------
 
 class TestProgressNaturalSpansTextColumn:
     """pill_progress_local spans the full pill_column span at ANY pill
-    width: left edge == column left, right edge == column right."""
+    width: left edge == column left, right edge == column right. Round 41
+    (SL-26): the column yields the ⋯ menu's slot — right edge == menu.left
+    − 12 — so the bar narrows with it and keeps the consistent spacing."""
 
     def test_strip_natural_spans_the_column(self):
         for pw in (572.0, 520.0, 508.0, 400.0, 320.0):
-            col_x, col_w, _ = sl_views.pill_column(pw, 108.0)
-            gx, _, gw, _ = sl_views.pill_progress_local(pw, 108.0)
+            col_x, col_w, _ = sl_views.pill_column(pw, 108.0, reserve_right=50.0)
+            gx, _, gw, _ = sl_views.pill_progress_local(pw, 108.0, reserve_right=50.0)
             assert (gx, gw) == (col_x, col_w), \
                 f"strip drifts from the text column's span at pw={pw}"
-            assert gx + gw == pw - sl_views.PILL_META_RIGHT_PAD, \
-                "the bar's right inset IS the column's right inset"
+            mx = sl_views.attach_slot_rect(
+                (0.0, 0.0, pw, 108.0), "top-right", 12.0, (44.0, 44.0))[0]
+            assert gx + gw == mx - sl_views.PILL_MENU_GAP, \
+                "the bar's right edge stops a consistent gap short of the menu"
 
-    def test_midpoint_sits_a_constant_46_right_of_the_play_center(self):
+    def test_midpoint_sits_a_constant_21_right_of_the_play_center(self):
         """The accepted skew: col_x is fixed (110) while the transport
-        centers on pw/2, so bar center - play center == 46 at any width."""
+        centers on pw/2, so bar center - play center == 21 at any width
+        (110 − (110+68)/2 = 21 once the column yields the menu slot)."""
         for pw in (572.0, 520.0, 508.0, 400.0, 320.0):
-            gx, _, gw, _ = sl_views.pill_progress_local(pw, 108.0)
+            gx, _, gw, _ = sl_views.pill_progress_local(pw, 108.0, reserve_right=50.0)
             tx, _, tw, _ = sl_views.pill_transport_local(pw, 108.0)
-            assert (gx + gw / 2) - (tx + tw / 2) == pytest.approx(46.0), \
+            assert (gx + gw / 2) - (tx + tw / 2) == pytest.approx(21.0), \
                 f"the accepted art-tile skew drifts at pw={pw}"
 
     def test_572_numbers(self):
-        assert sl_views.pill_progress_local(572.0, 108.0) == (110.0, 59.0, 444.0, 3.0)
+        assert sl_views.pill_progress_local(572.0, 108.0, reserve_right=50.0) == \
+            (110.0, 59.0, 394.0, 3.0)
+
+
+# ---------------------------------------------------------------------------
+# Round 41 (Alec, SL-26/27): "merge the ... button with the pill and put it
+# at the top right" — as an MCP FEATURE: layout_attach moves the ⋯ overflow
+# INTO the pill's top-right slot (12pt inset, the established 44pt target)
+# as a persisted relationship. The text column yields its slot (right edge
+# == menu.left − 12); nav_more stays a valid window id whose attach spec
+# transforms where it resolves (unattached fallback: the dock natural).
+# ---------------------------------------------------------------------------
+
+class TestAttachSlotGeometry:
+    """The layout_attach slot machinery (SL-27): named anchors inside a
+    container, the attached component keeps its size, and the pill's text
+    column yields the occupied slot via the reserve derivation."""
+
+    def test_slot_rect_named_anchors(self):
+        frame = (100.0, 40.0, 200.0, 80.0)
+        assert sl_views.attach_slot_rect(frame, "top-right", 12.0, (44.0, 44.0)) == \
+            (100.0 + 200.0 - 12.0 - 44.0, 40.0 + 12.0, 44.0, 44.0)
+        assert sl_views.attach_slot_rect(frame, "top-left", 12.0, (44.0, 44.0)) == \
+            (100.0 + 12.0, 40.0 + 12.0, 44.0, 44.0)
+        assert sl_views.attach_slot_rect(frame, "bottom-right", 12.0, (44.0, 44.0)) == \
+            (100.0 + 200.0 - 12.0 - 44.0, 40.0 + 80.0 - 12.0 - 44.0, 44.0, 44.0)
+        assert sl_views.attach_slot_rect(frame, "bottom-left", 12.0, (44.0, 44.0)) == \
+            (100.0 + 12.0, 40.0 + 80.0 - 12.0 - 44.0, 44.0, 44.0)
+
+    def test_slot_rect_clamps_inside_a_tiny_container(self):
+        got = sl_views.attach_slot_rect((0.0, 0.0, 30.0, 20.0), "top-right", 12.0, (44.0, 44.0))
+        assert got[0] >= 0.0 and got[1] >= 0.0, "never pushed outside the container"
+
+    def test_572_numbers(self):
+        assert sl_views.attach_slot_rect(
+            (0.0, 0.0, 572.0, 108.0), "top-right", 12.0, (44.0, 44.0)) == \
+            (516.0, 12.0, 44.0, 44.0)
+
+    def test_the_column_yields_the_menu_slot(self):
+        """The reserve rule: attached at top-right, the column's right edge
+        stops PILL_MENU_GAP short of the menu; unattached, the SL-25 span
+        returns (the clear-restores-window-space semantic)."""
+        for pw in (572.0, 520.0, 508.0, 400.0, 320.0):
+            col_x, col_w, _ = sl_views.pill_column(pw, 108.0, reserve_right=50.0)
+            mx = sl_views.attach_slot_rect(
+                (0.0, 0.0, pw, 108.0), "top-right", 12.0, (44.0, 44.0))[0]
+            assert col_x + col_w == mx - sl_views.PILL_MENU_GAP, \
+                f"column right edge != menu.left - gap at pw={pw}"
+        assert sl_views.pill_column(572.0, 108.0, reserve_right=50.0)[:2] == (110.0, 394.0)
+        assert sl_views.pill_column(572.0, 108.0)[:2] == (110.0, 444.0), \
+            "no attachment, no reservation — the SL-25 span is the fallback"
+
+    def test_nav_more_stays_a_window_component(self):
+        """Attach transforms WHERE a component resolves; it does not retire
+        the id. Window-space naturals keep the dock fallback for the
+        unattached world (layout_clear restores it)."""
+        assert "nav_more" in sl_layout.COMPONENT_IDS
+        nats = sl_views.window_naturals(1280.0, 800.0)
+        assert nats["nav_more"] == (1280.0 - 16 - 44, 730.0, 44.0, 44.0)
