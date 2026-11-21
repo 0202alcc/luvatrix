@@ -3942,8 +3942,8 @@ class TestSidebarLiquidGlass:
         rects = _nodes(buf, RectNode)
 
         def seam_strips(region_top, region_bottom):
-            # Scoped to the rail's x range: the round-30 top scrim draws
-            # equally wide dark strips at the same z outside the sidebar.
+            # Scoped to the rail's x range: the round-30 top scrim used to
+            # draw equally wide dark strips at the same z outside the sidebar.
             strips = [n for n in rects
                       if region_top <= n.y < region_bottom
                       and n.x < sl_views.SIDEBAR_W
@@ -3993,8 +3993,7 @@ class TestSidebarLiquidGlass:
 # Pill to the top-right (Alec, round 30): the now-playing pill leaves the
 # bottom dock for the window's top-right corner, right edge pinned so any
 # width change grows leftward. The nav/overflow circles are NOT part of the
-# move — they hold the bottom dock exactly where the cluster put them, and
-# content scrolls under the top glass behind a mirrored scrim.
+# move — they hold the bottom dock exactly where the cluster put them.
 # ---------------------------------------------------------------------------
 
 class TestPillTopRight:
