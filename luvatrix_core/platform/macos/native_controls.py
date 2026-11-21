@@ -876,6 +876,7 @@ class _AppKitScriptedWebView:
             pass
         self._wk = WKWebView.alloc().initWithFrame_configuration_(
             NSMakeRect(0.0, 0.0, float(width), float(height)), config)
+        _pin_dark_appearance(self._wk)
         # Same compositing lesson as the OAuth view: WKWebView can obscure
         # siblings regardless of add order, so it always goes in at the back.
         bridge._content_view().addSubview_positioned_relativeTo_(
