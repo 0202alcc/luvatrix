@@ -33,6 +33,16 @@ from luvatrix_core.core.playback_bridge import (
 DEFAULT_DEVICE_NAME = "Luvatrix Player"
 _SECURE_BASE_URL = "https://localhost/"  # EME requires a secure origin
 
+# Page-lifecycle signals (not playback events, so not PlaybackEventKinds):
+# the inline script's last statement posts HOST_READY once LuvatrixPlayerHost
+# exists; onSpotifyWebPlaybackSDKReady posts SDK_READY once the Spotify
+# global exists. evaluateJavaScript before loadHTMLString finishes is
+# silently dropped — everything outbound queues behind these gates.
+_HOST_READY = "host_ready"
+_SDK_READY = "sdk_ready"
+_HOST_GATE = "host"
+_SDK_GATE = "sdk"
+
 # The host page. Contract halves: posts into messageHandlers.<handler name>,
 # receives LuvatrixPlayerHost.invoke(verb, args). Keep every verb of
 # playback_bridge.VERBS dispatchable and every PlaybackEventKind postable —
@@ -144,6 +154,7 @@ window.LuvatrixPlayerHost = {
 window.onSpotifyWebPlaybackSDKReady = function() {
   // Player construction is deferred to the first invoke (connect) so the
   // native side controls when the device registers.
+  window.LuvatrixPlayerHost._post("sdk_ready", {});
 };
 
 (function() {
@@ -155,6 +166,12 @@ window.onSpotifyWebPlaybackSDKReady = function() {
   };
   document.head.appendChild(s);
 })();
+
+// loadHTMLString is async: the native side queues every evaluation until
+// these signals prove what exists. host_ready = LuvatrixPlayerHost is live
+// (token pushes may land); sdk_ready = the Spotify global exists (verbs may
+// run). Both are page-lifecycle signals, never playback events.
+window.LuvatrixPlayerHost._post("host_ready", {});
 </script></head><body></body></html>
 """
 
@@ -183,6 +200,9 @@ class WKWebPlaybackSurface:
         self._view = None
         self._started = False
         self._stopped = False
+        self._host_ready = False
+        self._sdk_ready = False
+        self._pending_js: list[tuple[str, str]] = []  # (gate, script), FIFO
         self.device_id: str | None = None
 
     @property
@@ -220,7 +240,10 @@ class WKWebPlaybackSurface:
             self._push_token()
 
     def _push_token(self) -> None:
-        self._view.evaluate_js(
+        # Host-gated: setToken only touches LuvatrixPlayerHost._token, which
+        # exists once the inline script has run.
+        self._eval_or_queue(
+            _HOST_GATE,
             f"window.LuvatrixPlayerHost.setToken({json.dumps(self._token)})")
 
     def send(self, verb: str, **args: Any) -> None:
@@ -228,7 +251,30 @@ class WKWebPlaybackSurface:
             raise RuntimeError("playback surface is stopped")
         if not self._started:
             raise RuntimeError("playback surface not started")
-        self._view.evaluate_js(encode_command(verb, args))
+        # SDK-gated: invoke() touches the Spotify global via _ensurePlayer.
+        self._eval_or_queue(_SDK_GATE, encode_command(verb, args))
+
+    def _eval_or_queue(self, gate: str, script: str) -> None:
+        if self._gate_open(gate):
+            self._view.evaluate_js(script)
+        else:
+            self._pending_js.append((gate, script))
+
+    def _gate_open(self, gate: str) -> bool:
+        if self._view is None:
+            return False
+        return self._host_ready if gate == _HOST_GATE else self._sdk_ready
+
+    def _flush_pending(self) -> None:
+        if self._view is None:
+            return
+        still_pending: list[tuple[str, str]] = []
+        for gate, script in self._pending_js:
+            if self._gate_open(gate):
+                self._view.evaluate_js(script)
+            else:
+                still_pending.append((gate, script))
+        self._pending_js = still_pending
 
     def drain_events(self) -> list[PlaybackEvent]:
         out: list[PlaybackEvent] = []
@@ -243,6 +289,9 @@ class WKWebPlaybackSurface:
             return
         self._stopped = True
         self.device_id = None
+        self._host_ready = False
+        self._sdk_ready = False
+        self._pending_js = []
         if self._view is not None:
             try:
                 self._view.destroy()
@@ -251,6 +300,16 @@ class WKWebPlaybackSurface:
             self._view = None
 
     def _on_message(self, message: object) -> None:
+        if isinstance(message, dict):
+            signal = message.get("type")
+            if signal == _HOST_READY:
+                self._host_ready = True
+                self._flush_pending()
+                return
+            if signal == _SDK_READY:
+                self._sdk_ready = True
+                self._flush_pending()
+                return
         event = parse_event(message)
         if event is None:
             return
