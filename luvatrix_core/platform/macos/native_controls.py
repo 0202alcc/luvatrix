@@ -71,6 +71,25 @@ def _glass_effect_view_class():
     return _GLASS_EFFECT_VIEW_CLASS or None
 
 
+def _pin_dark_appearance(view) -> None:
+    """Pin dark Aqua on a native view so its material follows the app's dark
+    scene, not the host's default (light) appearance.
+
+    SL-36 eyeball: an unpinned NSGlassEffectView renders WHITE/light-gray
+    over the near-black UI — live glass, wrong material. Best-effort: a pin
+    failure never breaks surface creation (the window pin in window_system
+    still lets the view inherit dark).
+    """
+    try:
+        from AppKit import NSAppearance, NSAppearanceNameDarkAqua  # type: ignore
+
+        appearance = NSAppearance.appearanceNamed_(NSAppearanceNameDarkAqua)
+        if appearance is not None:
+            view.setAppearance_(appearance)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[luvatrix] dark appearance pin failed: {exc!r}", file=sys.stderr, flush=True)
+
+
 class AppKitNativeControlBridge:
     """Native controls over one AppKit window's content view."""
 
@@ -482,6 +501,9 @@ class _AppKitGlassSurface:
                     layer.setCornerRadius_(float(corner_radius))
                     layer.setMasksToBounds_(True)
             self._host = self._view
+        # The material follows the view's appearance — pin dark before the
+        # view is parented so it never flashes light (SL-36 eyeball).
+        _pin_dark_appearance(self._view)
         if placement == "under":
             from AppKit import NSWindowBelow  # type: ignore
 
@@ -601,6 +623,7 @@ class _AppKitWebView:
         self.destroyed = False
         self._wk = WKWebView.alloc().initWithFrame_(
             NSMakeRect(0.0, 0.0, float(width), float(height)))
+        _pin_dark_appearance(self._wk)
         self._owner_key: int | None = None
         self._delegate = self._make_delegate()
         self._wk.setNavigationDelegate_(self._delegate)

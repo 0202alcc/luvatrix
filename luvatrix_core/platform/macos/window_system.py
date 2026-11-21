@@ -38,6 +38,23 @@ def _install_render_host(content_view, layer, ns):
     return host
 
 
+def _pin_window_appearance(window, ns) -> None:
+    """Pin dark Aqua on the window so every native descendant inherits it.
+
+    SL-36 eyeball: an unpinned NSGlassEffectView follows the default light
+    appearance and renders WHITE over the near-black scene. The window pin
+    covers the whole class — glass plates, web views, buttons, fields,
+    popovers — and individual surfaces pin themselves as well. Best-effort:
+    a missing NSAppearance symbol never breaks window creation.
+    """
+    try:
+        appearance = ns["NSAppearance"].appearanceNamed_(ns["NSAppearanceNameDarkAqua"])
+        if appearance is not None:
+            window.setAppearance_(appearance)
+    except Exception:
+        pass
+
+
 @dataclass(frozen=True)
 class MacOSDebugMenuAction:
     action_id: str
@@ -100,6 +117,8 @@ class AppKitWindowSystem:
         try:
             from AppKit import (  # type: ignore
                 NSApp,
+                NSAppearance,
+                NSAppearanceNameDarkAqua,
                 NSApplication,
                 NSApplicationActivationPolicyRegular,
                 NSBackingStoreBuffered,
@@ -130,6 +149,8 @@ class AppKitWindowSystem:
 
         return {
             "NSApp": NSApp,
+            "NSAppearance": NSAppearance,
+            "NSAppearanceNameDarkAqua": NSAppearanceNameDarkAqua,
             "NSApplication": NSApplication,
             "NSApplicationActivationPolicyRegular": NSApplicationActivationPolicyRegular,
             "NSBackingStoreBuffered": NSBackingStoreBuffered,
@@ -178,6 +199,7 @@ class AppKitWindowSystem:
             frame, style, ns["NSBackingStoreBuffered"], False
         )
         window.setTitle_(title)
+        _pin_window_appearance(window, ns)
         layer_cls = ns["CAMetalLayer"] if use_metal_layer else ns["CALayer"]
         layer = layer_cls.layer()
         if mode != PresentationMode.STRETCH:
