@@ -530,7 +530,10 @@ class TestLayoutPersistence:
         cleared = app.mcp_call("layout_clear", {})
         assert sorted(cleared["cleared"]) == ["nav_more", "pill", "pill.progress"], \
             "the shipped attach + progress entries clear along with the new one"
-        assert "[" not in layout_file.read_text(), "no spec tables survive a clear-all"
+        import tomllib
+        assert tomllib.loads(layout_file.read_text()) == {}, \
+            "no spec tables survive a clear-all (the header comment's literal " \
+            "brackets are why this parses instead of grepping)"
 
     def test_roundtrip_preserves_specs(self, tmp_path, monkeypatch):
         app, ctx, _buf, layout_file = self._boot(tmp_path, monkeypatch, file_text=None)

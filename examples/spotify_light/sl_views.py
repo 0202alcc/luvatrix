@@ -903,6 +903,69 @@ def draw_library(frame, app, out: FrameOut, *, width: float, height: float, mous
 # -- now playing bar ---------------------------------------------------------------
 
 
+# Effect-drawn scrims (SL-34): the fade renders as ~1px strips — coarse
+# strips read as scanlines over album art (round 14), and exact heights with
+# no overlap matter because a fractional tail double-composites a row.
+_SCRIM_STRIP_PX = 1.0
+
+
+def draw_scrims(frame, specs, *, width: float, height: float) -> None:
+    """Declared scrim bands (SL-34): each spec draws a solid band of
+    `height - fade` points in from its edge, then a smoothstep fade over the
+    remaining `fade` points. The removed stock scrims are the archetypes
+    (round 8b's dock dissolve, round 30's top mirror, both gone since
+    SL-33/SL-35): a transparent -> near-opaque backdrop gradient dissolves
+    content before it reaches translucent chrome, completing into a calm
+    near-opaque band (round 10) that holds to the window edge. Color is the
+    backdrop BG at the declared max alpha; z=6 sits above content (z<=4) and
+    the content scrollbar (z=5), below player chrome (z=10+) and the
+    playback popup (z=20+). `margin` insets the band's long axis (240 keeps
+    top/bottom scrims off the sidebar's own plate and rows)."""
+    for spec in specs:
+        if spec.get("kind") != "scrim":
+            continue
+        edge = spec["edge"]
+        total, fade, amax, margin = (
+            spec["height"], spec["fade"], spec["alpha"], spec["margin"])
+        band = total - fade
+        color = (BG[0], BG[1], BG[2], round(amax))
+        # Band: the solid run adjacent to the edge.
+        if band > 0:
+            if edge == "bottom":
+                rect = dict(x=margin, y=height - band, width=width - margin, height=band)
+            elif edge == "top":
+                rect = dict(x=margin, y=0.0, width=width - margin, height=band)
+            elif edge == "left":
+                rect = dict(x=0.0, y=margin, width=band, height=height - margin)
+            else:
+                rect = dict(x=width - band, y=margin, width=band, height=height - margin)
+            frame.rect(**rect, color=color, z_index=6)
+        if fade <= 0:
+            continue
+        fade_rows = max(1, int(round(fade / _SCRIM_STRIP_PX)))
+        strip = fade / fade_rows
+        for i in range(fade_rows):
+            t = min(1.0, max(0.0, ((i + 1) * strip) / fade))
+            smooth = t * t * (3.0 - 2.0 * t)
+            # bottom/left dissolve content approaching the edge (alpha ramps
+            # toward it); top/right mirror that falloff away from the band.
+            rising = edge in ("bottom", "right")
+            alpha = round(amax * (smooth if rising else 1.0 - smooth))
+            if edge == "bottom":
+                rect = dict(x=margin, y=height - total + i * strip,
+                            width=width - margin, height=strip)
+            elif edge == "top":
+                rect = dict(x=margin, y=band + i * strip,
+                            width=width - margin, height=strip)
+            elif edge == "left":
+                rect = dict(x=band + i * strip, y=margin,
+                            width=strip, height=height - margin)
+            else:
+                rect = dict(x=width - total + i * strip, y=margin,
+                            width=strip, height=height - margin)
+            frame.rect(**rect, color=(BG[0], BG[1], BG[2], alpha), z_index=6)
+
+
 def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
     # Round 8: floating glass capsule (liquid-glass music-pill reference,
     # dark-adapted); round 30 moved the capsule to the window's top-right;

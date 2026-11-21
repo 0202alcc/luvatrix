@@ -166,6 +166,11 @@ class SpotifyLightApp(App):
         # layout file (round 36, SL-20) — the file is the source of truth the
         # layout tools write through to, so a nudge survives this reboot.
         self.layout_overrides = sl_layout.load(sl_layout.default_path())
+        # Declared visual effects (SL-34): scrim/gradient bands ride the same
+        # file — the effect tools tune them live and persist the same way.
+        # Purely additive: SL-33/SL-35 removed both stock scrims, so a fresh
+        # boot declares none and draws none.
+        self.effect_specs = sl_layout.load_effects(sl_layout.default_path())
 
         # Bookkeeping.
         self.now_monotonic = time.monotonic()
@@ -1384,6 +1389,59 @@ class SpotifyLightApp(App):
                 ),
                 "inputSchema": {"type": "object", "properties": {}},
             },
+            {
+                "name": "effect_apply",
+                "description": (
+                    "Add or tune a visual effect on the running app — and persist it: the "
+                    "spec writes through to the app's layout.toml as an effect table, so the "
+                    "band survives restart. The one kind today is 'scrim' (default): a solid "
+                    "backdrop band in from an 'edge' (top/bottom/left/right), then a smoothstep "
+                    "fade. 'height' is the total thickness in points (band + fade), 'fade' the "
+                    "gradient length (0 to height), 'alpha' the band opacity (0-255), 'margin' "
+                    "an inset along the band's long axis (x for top/bottom edges, y for "
+                    "left/right; 240 keeps a top/bottom scrim off the sidebar). A partial call "
+                    "on an existing id TUNES — omitted knobs keep their stored values, e.g. "
+                    "{id: \"scrim.dock\", alpha: 120} dims a dock dissolve. New ids need "
+                    "edge + height. Nothing ships declared: both stock scrims were removed "
+                    "(SL-33/SL-35), so effects exist only when applied live — recreate the old "
+                    "dock idiom with {id: \"scrim.dock\", edge: \"bottom\", height: 148, "
+                    "fade: 56, alpha: 240, margin: 240}. effect_remove deletes; "
+                    "effect_list inspects."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "kind": {"type": "string"},
+                        "edge": {"type": "string"},
+                        "height": {"type": "number"},
+                        "fade": {"type": "number"},
+                        "alpha": {"type": "number"},
+                        "margin": {"type": "number"},
+                    },
+                    "required": ["id"],
+                },
+            },
+            {
+                "name": "effect_remove",
+                "description": (
+                    "Remove a declared effect by id (all effects when id is omitted) and "
+                    "persist the removal — the band disappears on the next frame and the "
+                    "layout file drops the table."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"id": {"type": "string"}},
+                },
+            },
+            {
+                "name": "effect_list",
+                "description": (
+                    "List the declared effects with their stored specs and each scrim's "
+                    "region resolved at the current window size. Read-only."
+                ),
+                "inputSchema": {"type": "object", "properties": {}},
+            },
         ]
 
     def mcp_call(self, name: str, arguments: dict) -> dict:
@@ -1408,7 +1466,7 @@ class SpotifyLightApp(App):
             cid = sl_layout._check_id(args.get("id"))
             before = self.layout_overrides.specs()
             stored = self.layout_overrides.set(cid, args)
-            self._persist_layout(before)
+            self._persist_specs(before, self.effect_specs.specs())
             self.invalidate()
             width, height = self._window_size()
             return {"id": cid, "spec": stored, "persisted": True,
@@ -1426,7 +1484,7 @@ class SpotifyLightApp(App):
                 rule["keep"] = args["keep"]
             before = self.layout_overrides.specs()
             stored = self.layout_overrides.set_align(cid, rule)
-            self._persist_layout(before)
+            self._persist_specs(before, self.effect_specs.specs())
             self.invalidate()
             width, height = self._window_size()
             return {"id": cid, "spec": stored, "persisted": True,
@@ -1441,7 +1499,7 @@ class SpotifyLightApp(App):
             }}
             before = self.layout_overrides.specs()
             stored = self.layout_overrides.set(cid, spec)
-            self._persist_layout(before)
+            self._persist_specs(before, self.effect_specs.specs())
             self.invalidate()
             width, height = self._window_size()
             return {"id": cid, "spec": stored, "persisted": True,
@@ -1460,7 +1518,7 @@ class SpotifyLightApp(App):
             before = self.layout_overrides.specs()
             cleared = self.layout_overrides.clear((arguments or {}).get("id"))
             if cleared:
-                self._persist_layout(before)
+                self._persist_specs(before, self.effect_specs.specs())
                 self.invalidate()
             return {"cleared": cleared}
         if name == "layout_export":
@@ -1471,22 +1529,69 @@ class SpotifyLightApp(App):
             frames = {iid: (pw, ph) for iid in sl_layout.INTERIOR_IDS}
             return self.layout_overrides.export(width=width, height=height,
                                                 naturals=naturals, local_frames=frames)
+        if name == "effect_apply":
+            args = dict(arguments or {})
+            eid = sl_layout._check_effect_id(args.pop("id", None))
+            before = self.layout_overrides.specs()
+            before_fx = self.effect_specs.specs()
+            stored = self.effect_specs.set(eid, args)
+            self._persist_specs(before, before_fx)
+            self.invalidate()
+            width, height = self._window_size()
+            return {"id": eid, "spec": stored, "persisted": True,
+                    "rect": list(self._resolve_effect_rect(stored, width, height))}
+        if name == "effect_remove":
+            before = self.layout_overrides.specs()
+            before_fx = self.effect_specs.specs()
+            cleared = self.effect_specs.clear((arguments or {}).get("id"))
+            if cleared:
+                self._persist_specs(before, before_fx)
+                self.invalidate()
+            return {"cleared": cleared}
+        if name == "effect_list":
+            width, height = self._window_size()
+            specs = self.effect_specs.specs()
+            return {
+                "effects": [
+                    {"id": eid, "spec": specs[eid],
+                     "rect": list(self._resolve_effect_rect(specs[eid], width, height))}
+                    for eid in sorted(specs)
+                ],
+            }
         raise KeyError(name)
 
     def _window_size(self) -> tuple[float, float]:
         return float(self.ctx.display_width_px), float(self.ctx.display_height_px)
 
-    def _persist_layout(self, before: dict) -> None:
-        """Write the override registry through to the layout file (round 36).
-        A failed write rolls the registry back and errors the tool call: a
-        nudge that cannot persist must not pretend it did."""
+    def _persist_specs(self, before_layout: dict, before_effects: dict) -> None:
+        """Write BOTH registries through to the layout file (round 36, SL-34)
+        — layout specs and effect tables share it. A failed write rolls both
+        back and errors the tool call: a change that cannot persist must not
+        pretend it did."""
         try:
-            sl_layout.save(self.layout_overrides.specs(), sl_layout.default_path())
+            sl_layout.save(self.layout_overrides.specs(), sl_layout.default_path(),
+                           effects=self.effect_specs.specs())
         except OSError as exc:
             self.layout_overrides = sl_layout.LayoutOverrides()
-            for cid, spec in before.items():
+            for cid, spec in before_layout.items():
                 self.layout_overrides.set(cid, spec)
+            self.effect_specs = sl_layout.EffectSpecs()
+            for eid, spec in before_effects.items():
+                self.effect_specs.set(eid, spec)
             raise sl_layout.LayoutError(f"could not persist layout: {exc}") from exc
+
+    @staticmethod
+    def _resolve_effect_rect(spec: dict, width: float, height: float) -> tuple:
+        """The window-space region a scrim spec covers at this window size."""
+        total, margin = spec["height"], spec["margin"]
+        edge = spec["edge"]
+        if edge == "bottom":
+            return (margin, height - total, width - margin, total)
+        if edge == "top":
+            return (margin, 0.0, width - margin, total)
+        if edge == "left":
+            return (0.0, margin, total, height - margin)
+        return (width - total, margin, total, height - margin)
 
     def _resolved_pill_rect(self, width: float, height: float) -> tuple[float, float, float, float]:
         """The pill's rect with its own override applied — the frame the
@@ -1595,6 +1700,9 @@ class SpotifyLightApp(App):
                         height=metrics.thumb_extent, radius=2.5, color=(90, 90, 90, 255), z_index=5,
                     )
 
+            effects = self.effect_specs.specs()
+            sl_views.draw_scrims(frame, [effects[eid] for eid in sorted(effects)],
+                                 width=width, height=height)
             sl_views.draw_sidebar(frame, self, out, width=width, height=height, mouse=mouse)
             sl_views.draw_player_bar(frame, self, out, width=width, height=height, mouse=mouse)
 
