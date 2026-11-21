@@ -57,6 +57,23 @@ GLASS_HIGHLIGHT = (255, 255, 255, 44)
 GLASS_SHEEN = (255, 255, 255, 12)
 GLASS_SHADOW_NEAR = (0, 0, 0, 64)
 GLASS_SHADOW_FAR = (0, 0, 0, 34)
+# SL-38 whole-window material: while the behind-window backdrop is live,
+# default plates switch from the near-invisible white tint (designed to read
+# on an opaque near-black base) to alpha'd dark fills, so the blur material
+# reads through as "glass app" rather than "transparent terminal". Text,
+# icons, and borders keep their opaque colors — legibility is the
+# constraint; only fills alpha down. Bridgeless/incapable hosts keep the
+# white-tint language byte-for-byte.
+MATERIAL_PLATE_FILL = (16, 16, 16, 166)        # ~0.65 over the backdrop
+MATERIAL_PLATE_FILL_HOVER = (16, 16, 16, 140)  # hover lifts toward the material
+MATERIAL_POPUP_FILL = (16, 16, 16, 191)        # ~0.75 — the popup keeps the most body
+
+
+def _plate_fill(app, hovering: bool):
+    """Default plate fill for the current backdrop state (SL-38)."""
+    if app is not None and getattr(app, "_window_material_live", False):
+        return MATERIAL_PLATE_FILL_HOVER if hovering else MATERIAL_PLATE_FILL
+    return GLASS_FILL_HOVER if hovering else GLASS_FILL
 # Chrome plates (sidebar): dark translucent material so scene text stays
 # readable, with specular edges for depth.
 # The rail is one floating liquid-glass plate — the dock pill's material
@@ -478,7 +495,7 @@ def draw_window_backdrop(frame, *, width: float, height: float, bg=BG,
 
 
 def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
-                 fill=None, border=None) -> None:
+                 fill=None, border=None, app=None) -> None:
     """One canonical simulated-glass plate. Composed back-to-front: soft
     shadow (two stacked dark plates), hairline border ring, translucent fill
     inset 1px so the ring reads as the edge, a sheen band, and the specular
@@ -501,7 +518,7 @@ def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
     if w > 2.0 and h > 2.0:
         frame.rounded_rect(x=x + 1, y=y + 1, width=w - 2, height=h - 2,
                            radius=max(0.0, radius - 1),
-                           color=fill or (GLASS_FILL_HOVER if hovering else GLASS_FILL), z_index=z)
+                           color=fill or _plate_fill(app, hovering), z_index=z)
     # The sheen is a silhouette-clipped falloff, not a square band: thin rows
     # chord-clipped inside the top corner arc (so they can never poke past
     # the rounded silhouette) with alpha ramping to zero at the bottom. One
@@ -580,7 +597,7 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
     m = SIDEBAR_GLASS_MARGIN
     rx, ry, rw, rh = _layout(
         app, "sidebar", (m, m, SIDEBAR_W - m * 2, height - m * 2), width, height)
-    _glass_plate(frame, rx, ry, rw, rh, radius=SIDEBAR_GLASS_RADIUS, z=1)
+    _glass_plate(frame, rx, ry, rw, rh, radius=SIDEBAR_GLASS_RADIUS, z=1, app=app)
     ox, oy = rx - m, ry - m
     _text(frame, "Spotify Light", x=22 + ox, y=20 + oy, size=20, color=ACCENT, z=3)
 
@@ -593,7 +610,7 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
         hovering = _hover(mouse, 10 + ox, y - 6, SIDEBAR_W - 20, NAV_H - 8)
         if active:
             _glass_plate(frame, 10 + ox, y - 6, SIDEBAR_W - 20, NAV_H - 8, radius=8.0, z=2,
-                         shadow=False)
+                         shadow=False, app=app)
         elif hovering:
             frame.rounded_rect(x=10 + ox, y=y - 6, width=SIDEBAR_W - 20, height=NAV_H - 8,
                                radius=8.0, color=SIDEBAR_ROW_HOVER, z_index=2)
@@ -666,7 +683,8 @@ def _draw_scrollbar(frame, controller, out: FrameOut, *, x, top, bottom, content
 
 def _draw_card(frame, app, out: FrameOut, card: sl_ui.CardView, *, x, y, mouse) -> None:
     hovering = _hover(mouse, x, y, CARD_W, CARD_H)
-    _glass_plate(frame, x, y, CARD_W, CARD_H, radius=CARD_RADIUS, z=2, hovering=hovering)
+    _glass_plate(frame, x, y, CARD_W, CARD_H, radius=CARD_RADIUS, z=2, hovering=hovering,
+                 app=app)
     _art(frame, app, card.image_url, x=x + 12, y=y + 12, size=CARD_ART - 24, seed=card.title)
     _text(frame, card.title, x=x + 12, y=y + CARD_ART + 8, size=14, z=3, max_chars=22)
     _text(frame, card.subtitle, x=x + 12, y=y + CARD_ART + 28, size=12, color=SUBTEXT, z=3,
@@ -845,7 +863,8 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
     else:
         field_w = max(60.0, min(460.0, view_w, gap_cap))
     _glass_plate(frame, x0, y, field_w, 40, radius=20.0, z=2, shadow=False,
-                 border=(ACCENT[0], ACCENT[1], ACCENT[2], 200) if app.search_focused else None)
+                 border=(ACCENT[0], ACCENT[1], ACCENT[2], 200) if app.search_focused else None,
+                 app=app)
     shown = app.search_query or ("What do you want to listen to?" if not app.search_focused else "")
     if app.search_query:
         # Overflow clips the head (text-field idiom): the tail being typed
@@ -1166,7 +1185,7 @@ def _nav_circle(frame, app, out: FrameOut, mouse, *, cx: float, cy: float,
     active = app.view == view
     _glass_plate(frame, cx - NAV_CIRCLE_R, cy - NAV_CIRCLE_R,
                  NAV_CIRCLE_R * 2, NAV_CIRCLE_R * 2, radius=NAV_CIRCLE_R, z=10,
-                 hovering=hovering or active)
+                 hovering=hovering or active, app=app)
     color = ACCENT if active else (TEXT if hovering else SUBTEXT)
     _centered_glyph(frame, glyph, cx=cx, cy=cy, size=17, color=color, z=12,
                     font=sl_icons.ICON_FONT)
@@ -1200,8 +1219,12 @@ def _draw_playback_popup(frame, app, out: FrameOut, *,
     popup_y = min(pill[1] + pill[3] + 12.0, height - PILL_FLOAT - popup_h)
     # Floating panels get the dark variant of the glass plate: mostly-opaque
     # fill for readability over content, same hairline/shadow language.
+    # SL-38: over the live window material the panel alphas down to the top
+    # of the tasteful window — most body of any component, still glass.
+    popup_fill = (MATERIAL_POPUP_FILL if getattr(app, "_window_material_live", False)
+                  else (18, 18, 18, 234))
     _glass_plate(frame, popup_x, popup_y, popup_w, popup_h, radius=14.0, z=20,
-                 fill=(18, 18, 18, 234), border=(255, 255, 255, 30))
+                 fill=popup_fill, border=(255, 255, 255, 30), app=app)
     # Swallow clicks that land on the panel but on no control: registered
     # first so the popup's own controls (later) win the reversed hit walk,
     # while dead space no longer falls through to dismiss the popup (or bleed
