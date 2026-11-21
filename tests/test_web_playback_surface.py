@@ -8,6 +8,8 @@ pinned here; the live channel is the Mac probe's job (PR B).
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pytest
 
 from luvatrix_core.core import playback_bridge as pb
@@ -307,3 +309,50 @@ class TestSurfaceEvents:
         surface._view.post_message({"type": "ready", "payload": {"device_id": "d1"}})
         surface.stop()
         assert surface.device_id is None
+
+
+class _NsDictLike(Mapping):
+    """PyObjC __NSDictionaryM stand-in (Mapping, not dict) — the exact wire
+    shape from the runner's diag: on_message type=__NSDictionaryM."""
+
+    def __init__(self, data):
+        self._data = dict(data)
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+
+class TestPyObjCWireShapes:
+    """End-to-end through the null boundary: post_message now runs the same
+    normalizer as the real _receive_message, so fakes reproduce the wire."""
+
+    def test_ready_signals_open_gates_when_sent_as_nsdict(self):
+        bridge = NullNativeControlBridge()
+        surface = WKWebPlaybackSurface(bridge, token="tok-1")
+        surface.start()
+        surface.send("connect")
+        surface._view.post_message(_NsDictLike({"type": "host_ready"}))
+        surface._view.post_message(_NsDictLike({"type": "sdk_ready"}))
+        assert surface._view.evaluated == [
+            'window.LuvatrixPlayerHost.setToken("tok-1")',
+            pb.encode_command("connect", {}),
+        ]
+
+    def test_playback_event_as_nsdict_drains_with_plain_payload(self):
+        bridge = NullNativeControlBridge()
+        surface = WKWebPlaybackSurface(bridge)
+        surface.start()
+        surface._view.post_message(_NsDictLike({
+            "type": "player_state_changed",
+            "payload": _NsDictLike({"paused": 0, "position_ms": 123}),
+        }))
+        events = surface.drain_events()
+        assert [e.kind for e in events] == [pb.PlaybackEventKind.STATE_CHANGED]
+        assert type(events[0].payload) is dict
+        assert events[0].payload["position_ms"] == 123

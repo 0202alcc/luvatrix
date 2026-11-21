@@ -22,6 +22,7 @@ import threading
 from luvatrix_core.core.native_controls import (
     GatedHDIEventSource,
     NativeInputGate,
+    normalize_script_message,
     register_native_control_bridge,
     unregister_native_control_bridge,
 )
@@ -859,7 +860,9 @@ class _AppKitScriptedWebView:
         if self._on_message is None or self.destroyed:
             return
         try:
-            self._on_message(dict(body) if isinstance(body, dict) else body)
+            # PyObjC bodies arrive as __NSDictionaryM — normalize at the
+            # boundary or every downstream isinstance(dict) gate drops them.
+            self._on_message(normalize_script_message(body))
         except Exception:  # noqa: BLE001 — a bad app callback must not kill the page
             pass
 

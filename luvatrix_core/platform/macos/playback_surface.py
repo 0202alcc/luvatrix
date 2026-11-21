@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import queue
+from collections.abc import Mapping
 from typing import Any, Callable
 
 from luvatrix_core.core.playback_bridge import (
@@ -300,7 +301,7 @@ class WKWebPlaybackSurface:
             self._view = None
 
     def _on_message(self, message: object) -> None:
-        if isinstance(message, dict):
+        if isinstance(message, Mapping):
             signal = message.get("type")
             if signal == _HOST_READY:
                 self._host_ready = True

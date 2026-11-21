@@ -10,6 +10,7 @@ router) and every app consumer speaks the same vocabulary.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 
 import pytest
 
@@ -140,3 +141,44 @@ class TestContractAnchors:
             "togglePlay", "nextTrack", "previousTrack", "seek", "setVolume",
             "getCurrentState",
         })
+
+
+class _NsDictLike(Mapping):
+    """PyObjC __NSDictionaryM stand-in: a Mapping that is NOT a dict."""
+
+    def __init__(self, data):
+        self._data = dict(data)
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+
+class TestParseEventPyObjCShapes:
+    """parse_event gated on isinstance(dict) — real WebKit bodies are
+    __NSDictionaryM, so every real playback event would have dropped next
+    (the ready-gate signals were just the first to die)."""
+
+    def test_accepts_non_dict_mapping(self):
+        event = pb.parse_event(_NsDictLike({"type": "ready", "payload": {"device_id": "d1"}}))
+        assert event is not None
+        assert event.kind is pb.PlaybackEventKind.READY
+        assert event.payload["device_id"] == "d1"
+
+    def test_mapping_payload_becomes_a_real_dict(self):
+        event = pb.parse_event(_NsDictLike({
+            "type": "player_state_changed",
+            "payload": _NsDictLike({"paused": 1}),
+        }))
+        assert event is not None
+        assert type(event.payload) is dict
+        assert event.payload["paused"] == 1
+
+    def test_non_mapping_still_drops(self):
+        assert pb.parse_event("not-even-a-dict") is None
+        assert pb.parse_event(42) is None

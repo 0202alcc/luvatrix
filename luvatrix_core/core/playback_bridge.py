@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import queue
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
@@ -53,7 +54,7 @@ def parse_event(message: object) -> PlaybackEvent | None:
     Drops (never raises): non-dicts, missing/non-string ``type``, non-dict
     ``payload``, and types this app version doesn't know.
     """
-    if not isinstance(message, dict):
+    if not isinstance(message, Mapping):
         return None
     kind_raw = message.get("type")
     if not isinstance(kind_raw, str):
@@ -65,9 +66,9 @@ def parse_event(message: object) -> PlaybackEvent | None:
     payload = message.get("payload", {})
     if payload is None:
         payload = {}
-    if not isinstance(payload, dict):
+    if not isinstance(payload, Mapping):
         return None
-    return PlaybackEvent(kind=kind, payload=payload)
+    return PlaybackEvent(kind=kind, payload=dict(payload))
 
 
 class PlaybackVerb(str, Enum):
