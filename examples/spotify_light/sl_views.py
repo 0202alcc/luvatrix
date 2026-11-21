@@ -1094,20 +1094,22 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     _nav_circle(frame, app, out, mouse, cx=sx + sw / 2, cy=sy + sh / 2,
                 view="search", glyph=sl_icons.SEARCH)
 
-    # Overflow circle: volume / shuffle / repeat / devices. The dock-side
+    # Overflow icon: volume / shuffle / repeat / devices. The dock-side
     # natural below is just the fallback — the shipped layout.toml (round
     # 41, SL-26/27) ATTACHES nav_more into the pill's top-right slot, and
-    # the registry resolution is what actually places it: the circle rides
+    # the registry resolution is what actually places it: the icon rides
     # the pill's corner, inside the glass, and the text column above has
-    # already yielded its slot.
+    # already yielded its slot. Round 42 (SL-28, Alec: "i dont want pill
+    # inside pill"): the glass disc behind the glyph is gone — the bare
+    # ⋯ sits directly on the pill's own plate. The 44x44 hit rect, the
+    # slot reservation, and the popup anchor are untouched: they resolve
+    # off this same rect.
     ox, oy, ow, oh = _layout(app, "nav_more",
                              (width - PILL_FLOAT - 2 * OVERFLOW_R,
                               dock_cy - OVERFLOW_R,
                               2 * OVERFLOW_R, 2 * OVERFLOW_R), width, height)
     ocx, ocy = ox + ow / 2, oy + oh / 2
     open_hover = _hover(mouse, ox, oy, ow, oh)
-    _glass_plate(frame, ox, oy, ow, oh,
-                 radius=ow / 2, z=10, hovering=open_hover or app.show_devices)
     _centered_glyph(frame, sl_icons.MORE, cx=ocx, cy=ocy, size=16,
                     color=ACCENT if app.show_devices else (TEXT if open_hover else SUBTEXT),
                     z=12, font=sl_icons.ICON_FONT)
