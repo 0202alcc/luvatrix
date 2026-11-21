@@ -106,6 +106,55 @@ class App:
 - `mcp_state()` snapshots refresh per tick and merge into `app_state` under
   the `"app"` key.
 
+## Spotify Light: live layout overrides
+
+`examples/spotify_light` exposes the layout-tool loop: nudge chrome positions
+on the running app, then export the overrides for baking into the view
+constants.
+
+Addressable component ids:
+
+- `pill` — the now-playing capsule (art, metadata, progress, transport ride it)
+- `nav_home`, `nav_search`, `nav_more` — the bottom-dock circles
+- `sidebar` — the left rail plate (its contents shift with it)
+
+Interior ids rearrange the pill's inside in PILL-LOCAL space: `(0, 0)` is
+the pill's top-left, rects and anchors clamp into the pill's current rect
+(never the window), and locals compose with whole-pill moves — overriding
+`pill` carries the interior, and an interior override keeps its local offset
+when the pill moves. `layout_set`, `layout_list`, and `layout_export` report
+interior rects in these local coordinates.
+
+- `pill.art` — the album tile (also the idle thumb). Square: the drawn side
+  is `min(width, height)`.
+- `pill.progress` — the progress strip; `x`/`y`/`width` are layout inputs
+  (height stays 3pt) and the elapsed/remaining labels ride the strip's edges.
+- `pill.transport` — the prev/play/next cluster, positioned by the rect's
+  center. Cluster size is not a layout input: the buttons keep fixed offsets
+  and 34pt hit targets.
+
+Tools:
+
+- `layout_set {id, rect: {x, y, width, height}}` or
+  `layout_set {id, anchor, dx, dy, width?, height?}` — move a component.
+  Anchors are `top-left`, `top-right`, `bottom-left`, `bottom-right`, or
+  `center`; `dx`/`dy` measure inward from that window corner, so
+  `{id: "pill", anchor: "top-right", dx: 16, dy: 16}` reproduces the pill's
+  own layout rule and follows window resizes. Overrides are consulted at draw
+  time: they win over the app's per-frame layout recomputation, and state
+  changes cannot stomp them. Rects clamp into the window; unknown ids fail
+  with an error listing the valid ids, and a rejected spec never reaches the
+  scene.
+- `layout_list {}` — valid ids plus every active override with its resolved
+  rect at the current window size.
+- `layout_clear {id?}` — clear one override, or all when `id` is omitted.
+- `layout_export {}` — JSON dump of the current specs plus rects resolved at
+  the current window size; transcribe `resolved` into `sl_views` layout
+  constants to bake a nudge in.
+
+Overrides are session-scoped: the registry is created in `setup()`, so every
+boot starts clean. There is no persistence file.
+
 ## Notes and limitations
 
 - Bind address is loopback only; the bearer token and the 0600 discovery file
