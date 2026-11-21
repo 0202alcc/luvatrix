@@ -97,24 +97,17 @@ PILL_MENU_GAP = 12.0
 NAV_CIRCLE_R = 22.0
 NAV_CIRCLE_GAP = 18.0
 OVERFLOW_R = NAV_CIRCLE_R
-# Bottom scrim (round 8b): content scrolled under the translucent pill read
-# as text-on-text clashes (reported as a z-index bug; the pill was already
-# topmost). Apple Music idiom: a gradient scrim behind the dock zone
-# dissolves content before it reaches the pill; the pill keeps its material.
-# Round 10: the fade completes SCRIM_GAP above the pill top, leaving a calm
-# near-opaque band between dissolved content and the chrome.
-SCRIM_FADE = 56.0
-SCRIM_GAP = 12.0
+# Scrims: GONE. Round 8b added a bottom gradient scrim behind the dock zone
+# (content under the translucent pill read text-on-text), round 30 mirrored
+# it at the top for the pill's move; SL-33 and SL-35 removed both (Alec:
+# "i wanna get rid of the bottom one too") — content renders at natural
+# brightness to every window edge, and the glass chrome keeps its own
+# material. TestDockScrimRemoved / the SL-33 top guard pin the absence.
 # The vacated dock slot keeps the OLD pill's footprint (round 32): the nav
-# circles, playback popup, and bottom scrim stay pixel-identical to round 30
-# even though the top-right pill grew — the slot does not inherit PILL_W/H.
+# circles and playback popup stay pixel-identical to round 30 even though
+# the top-right pill grew — the slot does not inherit PILL_W/H.
 DOCK_SLOT_W = 460.0
 DOCK_SLOT_H = 64.0
-SCRIM_H = PILL_FLOAT + DOCK_SLOT_H + SCRIM_GAP + SCRIM_FADE
-SCRIM_MAX_ALPHA = 240
-# Round 14: the fade renders as ~1px strips (coarse strips read as scanlines
-# over album art), and the calm band below the fade is one solid rect.
-SCRIM_STRIP_PX = 1.0
 
 
 def pill_rect(width: float, height: float) -> tuple[float, float, float, float]:
@@ -215,7 +208,7 @@ def dock_cluster_rect(width: float, height: float) -> tuple[float, float, float,
     pill — they still anchor to this slot, centered on the CONTENT REGION
     (round 10): the cluster (circles + slot) centers between SIDEBAR_W and
     the window's right edge — never the full window, so it can never cross
-    the sidebar (the scrim anchors the same way). When the cluster at design
+    the sidebar. When the cluster at design
     width can't fit, the left circle pins to SIDEBAR_W + PILL_FLOAT and the
     right edge floats; only then does the slot shrink below DOCK_SLOT_W (floor
     PILL_MIN_W). Below ~716pt the search circle may clip the window edge —
@@ -606,7 +599,7 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
         out.hit(10 + ox, row_y, SIDEBAR_W - 20, row_h - 4, "open_playlist", playlist.id)
 
     # The list scrolls under the glass: dissolve both seams with a short
-    # alpha ramp (the pill scrim's idiom) instead of a hard cutoff line.
+    # alpha ramp instead of a hard cutoff line.
     if row_h * len(app.playlists) > list_bottom - list_top:
         strip = SIDEBAR_SEAM_FADE_PX / SIDEBAR_SEAM_STRIPS
         for i in range(SIDEBAR_SEAM_STRIPS):
@@ -908,32 +901,6 @@ def draw_library(frame, app, out: FrameOut, *, width: float, height: float, mous
 
 
 # -- now playing bar ---------------------------------------------------------------
-
-
-def draw_dock_scrim(frame, *, width: float, height: float) -> None:
-    """Vertical gradient (transparent -> near-opaque backdrop) behind the
-    floating pill, flanking nav circles, and overflow circle. The fade
-    completes SCRIM_GAP above the pill top (round 10), so content has fully
-    dissolved before reaching the chrome and a calm near-opaque band sits
-    between content and pill; below that the scrim holds to the window edge.
-    z=6 sits above content (z<=4) and the content scrollbar (z=5), below
-    player chrome (z=10+) and the playback popup (z=20+). Starts at
-    SIDEBAR_W so the sidebar's own plate and rows stay untouched."""
-    top = height - SCRIM_H
-    fade_span = SCRIM_FADE  # fade completes at the pill top
-    fade_rows = max(1, int(round(SCRIM_FADE / SCRIM_STRIP_PX)))
-    strip_h = SCRIM_FADE / fade_rows
-    for i in range(fade_rows):
-        strip_bottom = top + (i + 1) * strip_h
-        t = min(1.0, max(0.0, (strip_bottom - top) / fade_span))
-        alpha = round(SCRIM_MAX_ALPHA * t * t * (3.0 - 2.0 * t))  # smoothstep
-        # Exact 1px heights, no overlap: at this pitch a fractional tail
-        # double-composites a row and reads as a darker scanline.
-        frame.rect(x=SIDEBAR_W, y=top + i * strip_h, width=width - SIDEBAR_W,
-                   height=strip_h, color=(BG[0], BG[1], BG[2], alpha), z_index=6)
-    frame.rect(x=SIDEBAR_W, y=top + SCRIM_FADE, width=width - SIDEBAR_W,
-               height=SCRIM_H - SCRIM_FADE,
-               color=(BG[0], BG[1], BG[2], SCRIM_MAX_ALPHA), z_index=6)
 
 
 def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
