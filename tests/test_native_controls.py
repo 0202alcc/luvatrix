@@ -555,7 +555,9 @@ def _fake_appkit_module(glass_view_cls=_FakeGlassEffectView):
         "NSVisualEffectView": _FakeVisualEffectView,
         "NSVisualEffectMaterialSidebar": 7,
         "NSVisualEffectMaterialHUD": 10,
+        "NSVisualEffectMaterialUnderWindowBackground": 5,
         "NSVisualEffectBlendingModeWithinWindow": 0,
+        "NSVisualEffectBlendingModeBehindWindow": 1,
         "NSVisualEffectStateActive": 0,
         "NSAppearance": _FakeNSAppearance,
         "NSAppearanceNameDarkAqua": "NSAppearanceNameDarkAqua",
@@ -1010,6 +1012,106 @@ class TestAppKitUnderGlassPlacement:
         assert surface._view.layer().masks_to_bounds is True
 
 
+class TestAppKitWindowBackdrop:
+    """SL-38: one window-spanning behind-window material — the whole window is
+    glass, not just the pill. Always an NSVisualEffectView (the
+    NSGlassEffectView idiom is a foreground effect, not a window backdrop)
+    with under-window blending, dark-pinned, at the very back of the content
+    view so scene content and the pill's own glass composite above it."""
+
+    def setup_method(self):
+        import luvatrix_core.platform.macos.native_controls as mac_native
+
+        self._mac = mac_native
+        self._patchers = []
+        mac_native._GLASS_EFFECT_VIEW_CLASS = None
+        from unittest.mock import patch
+
+        version = patch.object(self._mac, "_macos_major_version", lambda: 26)
+        version.start()
+        self._patchers.append(version)
+
+    def teardown_method(self):
+        for patcher in self._patchers:
+            patcher.stop()
+        self._mac._GLASS_EFFECT_VIEW_CLASS = None
+        unregister_native_control_bridge()
+
+    def _bridge(self, *, capable: bool):
+        from unittest.mock import patch
+
+        handle = _FakeWindowHandle()
+        handle.render_view = _FakeNSView() if capable else None
+        handle.under_glass_capable = capable
+        if capable:
+            handle.content.addSubview_(handle.render_view)
+        modules = {
+            "AppKit": _fake_appkit_module(),
+            "objc": _fake_objc_module(with_glass=True),
+            "Foundation": type("Foundation", (), {"NSObject": _FakeNSObject}),
+        }
+        patcher = patch.dict("sys.modules", modules)
+        patcher.start()
+        self._patchers.append(patcher)
+        bridge = self._mac.AppKitNativeControlBridge(handle)
+        return bridge, handle
+
+    def test_backdrop_is_visual_effect_view_even_on_tahoe(self):
+        bridge, _ = self._bridge(capable=True)
+        surface = bridge.create_glass_surface(x=0, y=0, width=1280, height=800,
+                                              placement="backdrop")
+        assert isinstance(surface._view, _FakeVisualEffectView)
+        assert not isinstance(surface._view, _FakeGlassEffectView)
+
+    def test_backdrop_material_blending_state(self):
+        bridge, _ = self._bridge(capable=True)
+        surface = bridge.create_glass_surface(x=0, y=0, width=1280, height=800,
+                                              placement="backdrop")
+        view = surface._view
+        assert view.material == 5  # NSVisualEffectMaterialUnderWindowBackground
+        assert view.blending_mode == 1  # NSVisualEffectBlendingModeBehindWindow
+        assert view.state == 0  # NSVisualEffectStateActive
+
+    def test_backdrop_inserts_at_very_back(self):
+        bridge, handle = self._bridge(capable=True)
+        surface = bridge.create_glass_surface(x=0, y=0, width=1280, height=800,
+                                              placement="backdrop")
+        view = surface._view
+        below_nil = [p for p in handle.content.positioned
+                     if p[0] is view and p[1] == 2 and p[2] is None]
+        assert below_nil, "window backdrop must insert NSWindowBelow nil (very back)"
+        assert handle.content.subviews.index(view) == 0
+        assert (handle.content.subviews.index(view)
+                < handle.content.subviews.index(handle.render_view))
+
+    def test_backdrop_pins_dark_appearance(self):
+        bridge, _ = self._bridge(capable=True)
+        surface = bridge.create_glass_surface(x=0, y=0, width=1280, height=800,
+                                              placement="backdrop")
+        assert surface._view.appearance is not None
+        assert surface._view.appearance.name == "NSAppearanceNameDarkAqua"
+
+    def test_backdrop_tracks_frame_and_destroys(self):
+        bridge, _ = self._bridge(capable=True)
+        surface = bridge.create_glass_surface(x=0, y=0, width=1280, height=800,
+                                              placement="backdrop")
+        assert surface._view.frame == (0, 0, 1280, 800)
+        surface.set_frame(0, 0, 1000, 700)
+        # Y-flip at 1:1 scale against the fake content view's 800pt bounds.
+        assert surface._view.frame == (0, 100, 1000, 700)
+        assert surface.frame == (0.0, 0.0, 1000.0, 700.0)
+        surface.destroy()
+        assert surface._view.removed is True
+
+    def test_backdrop_requires_under_glass_capability(self):
+        """The backdrop only reads through a see-through window — same gate
+        as the pill's under-glass placement."""
+        bridge, _ = self._bridge(capable=False)
+        with pytest.raises(RuntimeError, match="backdrop"):
+            bridge.create_glass_surface(x=0, y=0, width=100, height=40,
+                                        placement="backdrop")
+
+
 class TestUnderGlassContract:
     """Platform-neutral under-glass contract: the null bridge carries the
     knobs so headless apps can exercise the same code paths."""
@@ -1028,6 +1130,16 @@ class TestUnderGlassContract:
         surface = bridge.create_glass_surface(x=0, y=0, width=100, height=40)
         assert surface.placement == "above"
         assert surface.corner_radius == 0.0
+
+    def test_null_bridge_records_backdrop_placement(self):
+        """Headless hosts carry the SL-38 window-backdrop knob so app code
+        exercises the same sync path without a native window."""
+        bridge = NullNativeControlBridge()
+        surface = bridge.create_glass_surface(x=0, y=0, width=1280, height=800,
+                                              placement="backdrop")
+        assert surface.placement == "backdrop"
+        surface.set_frame(0, 0, 1000, 700)
+        assert surface.frame == (0, 0, 1000, 700)
 
     def test_protocol_exposes_corner_radius_and_capability(self):
         assert hasattr(NativeGlassSurface, "set_corner_radius")
