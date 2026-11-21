@@ -77,6 +77,20 @@ class TestAuthorizeUrl:
     def test_redirect_uri_uses_loopback_callback(self):
         assert sl_oauth.redirect_uri_for_port(8888) == "http://127.0.0.1:8888/callback"
 
+    def test_queue_scope_is_not_requested(self):
+        """SL-32: Spotify rejects user-read-playback-queue at authorize time
+        for this client id (invalid_scope bounces every fresh auth), so the
+        scope must leave the request; the queue endpoint degrades instead."""
+        assert "user-read-playback-queue" not in sl_oauth.SCOPES
+        url = sl_oauth.authorize_url(
+            client_id="cid",
+            redirect_uri="http://127.0.0.1:8888/callback",
+            challenge="chal",
+            state="st",
+        )
+        assert "user-read-playback-queue" not in url
+        assert "user-read-playback-state" in url, "the rest of the scopes stay"
+
 
 class TestCallbackParsing:
     def test_returns_code_on_state_match(self):

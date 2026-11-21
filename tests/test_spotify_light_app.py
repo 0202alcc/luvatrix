@@ -3793,12 +3793,67 @@ class TestEventDrivenSync:
         assert "devices" not in calls, "devices are decoupled from the player tick"
         assert "player_state" in calls
 
-    def test_queue_failure_degrades_the_poll_never_sinks_it(self, app_ctx, monkeypatch):
-        """Tokens minted before the queue scope existed 403 on /me/player/
-        queue; the player snapshot must still land, pre-staging just stays
-        off until re-login."""
+    def test_queue_fetch_is_skipped_without_the_queue_scope(self, app_ctx, monkeypatch):
+        """SL-32: the queue scope is no longer requested, so every fresh
+        token lacks it — calling /me/player/queue would be a guaranteed 403
+        on every poll. The fetch is gated on the granted scope instead."""
         app, ctx, _buffer = app_ctx
         self._base(app, ctx, monkeypatch)
+        app._tokens = sl_oauth.TokenSet(
+            access_token="t", refresh_token=None,
+            expires_at=time.time() + 3600,
+            scope="user-read-private user-read-playback-state")
+        calls: list = []
+
+        class _Client:
+            def player_state(self):
+                return app.player
+
+            def up_next(self):
+                calls.append("up_next")
+                return None
+
+        app._client = _Client()
+        player, up_next = app._job_poll_player()
+        assert player is app.player
+        assert up_next is None, "no queue scope granted: pre-staging quietly off"
+        assert calls == [], "no wasted guaranteed-403 request per poll"
+
+    def test_queue_fetch_runs_for_legacy_tokens_holding_the_scope(self, app_ctx, monkeypatch):
+        """SL-32: tokens minted while the scope was still accepted keep their
+        pre-staging — the gate keys on the granted scope, not a flat removal."""
+        app, ctx, _buffer = app_ctx
+        self._base(app, ctx, monkeypatch)
+        app._tokens = sl_oauth.TokenSet(
+            access_token="t", refresh_token=None,
+            expires_at=time.time() + 3600,
+            scope="user-read-private user-read-playback-queue")
+        head = self._track("Queued Song")
+        calls: list = []
+
+        class _Client:
+            def player_state(self):
+                return app.player
+
+            def up_next(self):
+                calls.append("up_next")
+                return head
+
+        app._client = _Client()
+        player, up_next = app._job_poll_player()
+        assert up_next is head and calls == ["up_next"], \
+            "scope-bearing legacy token: queue head still pre-staged"
+
+    def test_queue_failure_degrades_the_poll_never_sinks_it(self, app_ctx, monkeypatch):
+        """Legacy scope-holding tokens can still 403 on /me/player/queue
+        (revoked server-side); the player snapshot must still land,
+        pre-staging just stays off."""
+        app, ctx, _buffer = app_ctx
+        self._base(app, ctx, monkeypatch)
+        app._tokens = sl_oauth.TokenSet(
+            access_token="t", refresh_token=None,
+            expires_at=time.time() + 3600,
+            scope="user-read-private user-read-playback-queue")
 
         class _Client:
             def player_state(self):
@@ -3811,7 +3866,7 @@ class TestEventDrivenSync:
         app._client = _Client()
         player, up_next = app._job_poll_player()
         assert player is app.player, "the playback snapshot survives a queue 403"
-        assert up_next is None, "no queue scope: pre-staging quietly off"
+        assert up_next is None, "endpoint 403: pre-staging quietly off"
 
     def test_devices_fetched_on_popup_open_action_and_session(self, app_ctx, monkeypatch):
         """CORE 4: the three on-demand device triggers."""
