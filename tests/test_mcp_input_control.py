@@ -199,6 +199,168 @@ class InjectSyntheticEventTests(unittest.TestCase):
         phases = [event.payload["phase"] for event in events if event.event_type == "press"]
         self.assertEqual(phases, ["down", "up", "single"])
 
+    def test_injected_scene_coords_survive_shrunken_window(self) -> None:
+        # The regression the dogfood runner hit on nav_more: the app scene is
+        # frozen at its launch extent (1280x800) while the window has since
+        # been resized smaller (1200x750). Every MCP inspection surface —
+        # app_screenshot, app_scene_tree, app_state, layout rects — reports
+        # scene coordinates, so injected x/y must be interpreted in that same
+        # space. A click at the right-edge chrome (1230, 50) is outside the
+        # live window bounds but inside the scene: it must be delivered, not
+        # dropped, and not remapped.
+        hdi = HDIThread(
+            source=None,
+            window_geometry_provider=lambda: (0.0, 0.0, 1200.0, 750.0),
+            target_extent_provider=lambda: (1280.0, 800.0),
+        )
+        click = coerce_hdi_event(
+            {
+                "device": "mouse",
+                "event_type": "click",
+                "payload": {"x": 1230.0, "y": 50.0, "button": 0, "phase": "down"},
+            },
+            event_id=1,
+            window_id="w",
+        )
+        enqueued = hdi.inject_synthetic_event(click)
+        self.assertGreaterEqual(enqueued, 1)
+        events = hdi.poll_events(8)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].status, "OK")
+        assert isinstance(events[0].payload, dict)
+        self.assertEqual(events[0].payload["x"], 1230.0)
+        self.assertEqual(events[0].payload["y"], 50.0)
+        self.assertEqual(events[0].payload["button"], 0)
+        self.assertEqual(events[0].payload["phase"], "down")
+
+    def test_injected_scene_coords_are_not_reprojected(self) -> None:
+        # Same contract with the window LARGER than the frozen scene: the
+        # point is inside the live window bounds, but scene coordinates must
+        # pass through untouched — a window-space projection would silently
+        # shift the delivery point (1230, 50) -> (1093, 44) and miss a 44pt
+        # glyph while still landing on fat targets like cards.
+        hdi = HDIThread(
+            source=None,
+            window_geometry_provider=lambda: (0.0, 0.0, 1440.0, 900.0),
+            target_extent_provider=lambda: (1280.0, 800.0),
+        )
+        move = coerce_hdi_event(
+            {
+                "device": "mouse",
+                "event_type": "pointer_move",
+                "payload": {"x": 1230.0, "y": 50.0},
+            },
+            event_id=1,
+            window_id="w",
+        )
+        hdi.inject_synthetic_event(move)
+        events = hdi.poll_events(8)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].status, "OK")
+        assert isinstance(events[0].payload, dict)
+        self.assertEqual(events[0].payload["x"], 1230.0)
+        self.assertEqual(events[0].payload["y"], 50.0)
+
+    def test_injected_scene_coords_outside_target_extent_not_detected(self) -> None:
+        # Bounds are still enforced — against the scene (target) extent, so a
+        # click beyond the scene's right edge is dropped even when the live
+        # window is wider and would geometrically contain the point.
+        hdi = HDIThread(
+            source=None,
+            window_geometry_provider=lambda: (0.0, 0.0, 1440.0, 900.0),
+            target_extent_provider=lambda: (1280.0, 800.0),
+        )
+        click = coerce_hdi_event(
+            {
+                "device": "mouse",
+                "event_type": "click",
+                "payload": {"x": 1300.0, "y": 50.0, "button": 0, "phase": "down"},
+            },
+            event_id=1,
+            window_id="w",
+        )
+        hdi.inject_synthetic_event(click)
+        events = hdi.poll_events(8)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].status, "NOT_DETECTED")
+        self.assertIsNone(events[0].payload)
+
+    def test_injected_touch_scene_coords_survive_shrunken_window(self) -> None:
+        # The touch path shares position normalization: injected touch x/y is
+        # scene space too.
+        hdi = HDIThread(
+            source=None,
+            window_geometry_provider=lambda: (0.0, 0.0, 1200.0, 750.0),
+            target_extent_provider=lambda: (1280.0, 800.0),
+        )
+        down = coerce_hdi_event(
+            {
+                "device": "touch",
+                "event_type": "touch",
+                "payload": {"x": 1230.0, "y": 50.0, "phase": "down", "touch_id": 1},
+            },
+            event_id=1,
+            window_id="w",
+        )
+        hdi.inject_synthetic_event(down)
+        events = hdi.poll_events(8)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].status, "OK")
+        assert isinstance(events[0].payload, dict)
+        self.assertEqual(events[0].payload["x"], 1230.0)
+        self.assertEqual(events[0].payload["y"], 50.0)
+
+    def test_injected_screen_coords_keep_window_space(self) -> None:
+        # screen_x/screen_y name RAW SCREEN points, not scene coordinates:
+        # they keep the window-relative path (origin subtraction, window
+        # bounds, content projection) so an injector with true screen
+        # coordinates can still drive a resized window exactly like the OS.
+        hdi = HDIThread(
+            source=None,
+            window_geometry_provider=lambda: (100.0, 200.0, 300.0, 200.0),
+            target_extent_provider=lambda: (150.0, 100.0),
+        )
+        click = coerce_hdi_event(
+            {
+                "device": "mouse",
+                "event_type": "click",
+                "payload": {"screen_x": 250.0, "screen_y": 300.0, "button": 0, "phase": "down"},
+            },
+            event_id=1,
+            window_id="w",
+        )
+        hdi.inject_synthetic_event(click)
+        events = hdi.poll_events(8)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].status, "OK")
+        assert isinstance(events[0].payload, dict)
+        # Window-relative (150, 100) projected through the remap convention
+        # (extent-1 pixel edges): 150/299*149 and 100/199*99.
+        self.assertAlmostEqual(events[0].payload["x"], 74.7492, places=4)
+        self.assertAlmostEqual(events[0].payload["y"], 49.7487, places=4)
+
+    def test_injected_xy_without_target_extent_keeps_window_bounds(self) -> None:
+        # Legacy fallback: with no target extent provider there is no scene
+        # space to validate against, so x/y keeps window-geometry semantics.
+        hdi = HDIThread(
+            source=None,
+            window_geometry_provider=lambda: (0.0, 0.0, 100.0, 100.0),
+        )
+        click = coerce_hdi_event(
+            {
+                "device": "mouse",
+                "event_type": "click",
+                "payload": {"x": 150.0, "y": 50.0, "button": 0, "phase": "down"},
+            },
+            event_id=1,
+            window_id="w",
+        )
+        hdi.inject_synthetic_event(click)
+        events = hdi.poll_events(8)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].status, "NOT_DETECTED")
+        self.assertIsNone(events[0].payload)
+
 
 class InputAndGateToolTests(unittest.TestCase):
     def _bridge(
