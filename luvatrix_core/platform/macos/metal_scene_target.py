@@ -436,7 +436,11 @@ class MacOSMetalSceneBackend:
         plate is live (SL-36); restore opaque compositing when it goes away.
 
         Idempotent per frame — AppKit is touched only on an actual state
-        change. Windows without the render-host split are never modified.
+        change, and every NSWindow/NSView mutation hops to the main thread:
+        present_scene runs on the render thread, where AppKit raises
+        NSInternalInconsistencyException ("modifying the autolayout engine
+        from a background thread"). Windows without the render-host split
+        are never modified.
         """
         if not getattr(window_handle, "under_glass_capable", False):
             return
@@ -444,27 +448,32 @@ class MacOSMetalSceneBackend:
         if getattr(self, "_under_glass_enabled", False) == enabled:
             return
         self._under_glass_enabled = enabled
-        try:
-            window_handle.layer.setOpaque_(not enabled)
-            window = window_handle.window
-            if enabled:
-                from AppKit import NSColor  # type: ignore
+        window = window_handle.window
+        layer = window_handle.layer
 
-                if getattr(self, "_under_glass_bg", None) is None:
-                    self._under_glass_bg = window.backgroundColor()
-                window.setOpaque_(False)
-                window.setBackgroundColor_(NSColor.clearColor())
-            else:
-                window.setOpaque_(True)
-                original = getattr(self, "_under_glass_bg", None)
-                if original is not None:
-                    window.setBackgroundColor_(original)
-                self._under_glass_bg = None
-            print(f"[macos-metal-scene] under-glass transparency {'on' if enabled else 'off'}",
-                  file=sys.stderr, flush=True)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[macos-metal-scene] under-glass transparency apply failed: {exc!r}",
-                  file=sys.stderr, flush=True)
+        def _apply() -> None:
+            try:
+                layer.setOpaque_(not enabled)
+                if enabled:
+                    from AppKit import NSColor  # type: ignore
+
+                    if getattr(self, "_under_glass_bg", None) is None:
+                        self._under_glass_bg = window.backgroundColor()
+                    window.setOpaque_(False)
+                    window.setBackgroundColor_(NSColor.clearColor())
+                else:
+                    window.setOpaque_(True)
+                    original = getattr(self, "_under_glass_bg", None)
+                    if original is not None:
+                        window.setBackgroundColor_(original)
+                    self._under_glass_bg = None
+                print(f"[macos-metal-scene] under-glass transparency {'on' if enabled else 'off'}",
+                      file=sys.stderr, flush=True)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[macos-metal-scene] under-glass transparency apply failed: {exc!r}",
+                      file=sys.stderr, flush=True)
+
+        _run_on_main_thread(_apply)
 
     @property
     def last_backing_scale(self) -> float:
@@ -1140,6 +1149,23 @@ def _clear_color(frame: SceneFrame, fallback: tuple[int, int, int, int]) -> tupl
         if isinstance(node, ClearNode):
             return node.color_rgba
     return fallback
+
+
+def _run_on_main_thread(block) -> None:
+    """Run an AppKit mutation on the main thread.
+
+    The Metal presenter renders on its own thread; AppKit (NSWindow/NSView)
+    raises NSInternalInconsistencyException when mutated off-main. Inline
+    when already main, otherwise enqueue on the main operation queue
+    (serial, runloop-driven). Fire-and-forget: the caller's state cache is
+    already updated, and queue ordering preserves on/off sequences.
+    """
+    from AppKit import NSOperationQueue, NSThread  # type: ignore
+
+    if NSThread.isMainThread():
+        block()
+    else:
+        NSOperationQueue.mainQueue().addOperationWithBlock_(block)
 
 
 def _under_glass_transparency(clear_rgba: tuple[int, int, int, int]) -> bool:
