@@ -244,18 +244,21 @@ class TestLayoutMcpSurface:
     def test_hooks_register_the_layout_tools(self, app_ctx):
         app, _, _ = app_ctx
         bridge = _bridge(app)
-        assert bridge.register_app_hooks(app) == 7, \
-            "two client-id tools plus layout_set/align/list/clear/export"
+        assert bridge.register_app_hooks(app) == 8, \
+            "two client-id tools plus layout_set/align/attach/list/clear/export"
         listing = bridge.dispatcher().handle_payload(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
         wire = {tool["name"]: tool for tool in listing["result"]["tools"]}
-        for name in ("layout_set", "layout_align", "layout_list", "layout_clear",
-                     "layout_export"):
+        for name in ("layout_set", "layout_align", "layout_attach", "layout_list",
+                     "layout_clear", "layout_export"):
             assert name in wire, f"missing MCP tool {name}"
         assert "id" in wire["layout_set"]["inputSchema"]["properties"]
         for param in ("id", "edge", "to", "ref_edge", "offset"):
             assert param in wire["layout_align"]["inputSchema"]["properties"], \
                 f"layout_align is missing the {param} param"
+        for param in ("id", "container", "slot", "inset"):
+            assert param in wire["layout_attach"]["inputSchema"]["properties"], \
+                f"layout_attach is missing the {param} param"
 
     def test_layout_set_moves_the_pill_live(self, app_ctx):
         app, ctx, buf = app_ctx
@@ -793,11 +796,14 @@ class TestPillInteriorOverrides:
 
 def _interior_naturals(pw=520.0, ph=108.0):
     """The pill-local natural rects for a given pill frame (round-37 tests
-    exercise a 520pt frame; pass pw=572.0 for the SL-23 shipping size)."""
+    exercise a 520pt frame; pass pw=572.0 for the SL-23 shipping size).
+    Round 41: the shipped attach occupies the top-right slot, so the
+    column carries its 50pt reservation (44 menu + 12 inset + 12 gap −
+    18 pad)."""
     return {
         "pill.art": sl_views.pill_art_local(pw, ph),
-        "pill.progress": sl_views.pill_progress_local(pw, ph),
-        "pill.title": sl_views.pill_title_local(pw, ph),
+        "pill.progress": sl_views.pill_progress_local(pw, ph, reserve_right=50.0),
+        "pill.title": sl_views.pill_title_local(pw, ph, reserve_right=50.0),
         "pill.transport": sl_views.pill_transport_local(pw, ph),
     }
 
@@ -837,8 +843,8 @@ class TestLayoutAlignSpec:
         nats = _interior_naturals()
         got = ov.resolve("pill.progress", nats["pill.progress"],
                          width=520, height=108, naturals=nats)
-        assert got == (110.0, 59.0, 392.0, 3.0), \
-            "left holds at 110; the right edge grows to the column's right (502)"
+        assert got == (110.0, 59.0, 342.0, 3.0), \
+            "left holds at 110; the right edge grows to the narrowed column's right (452)"
 
     def test_center_alignment_keeps_the_size(self):
         nats = _interior_naturals()
@@ -1441,8 +1447,8 @@ class TestProgressNaturalSpansTextColumn:
 
     def test_strip_natural_spans_the_column(self):
         for pw in (572.0, 520.0, 508.0, 400.0, 320.0):
-            col_x, col_w, _ = sl_views.pill_column(pw, 108.0)
-            gx, _, gw, _ = sl_views.pill_progress_local(pw, 108.0)
+            col_x, col_w, _ = sl_views.pill_column(pw, 108.0, reserve_right=50.0)
+            gx, _, gw, _ = sl_views.pill_progress_local(pw, 108.0, reserve_right=50.0)
             assert (gx, gw) == (col_x, col_w), \
                 f"strip drifts from the text column's span at pw={pw}"
             mx = sl_views.attach_slot_rect(
@@ -1455,13 +1461,14 @@ class TestProgressNaturalSpansTextColumn:
         centers on pw/2, so bar center - play center == 21 at any width
         (110 − (110+68)/2 = 21 once the column yields the menu slot)."""
         for pw in (572.0, 520.0, 508.0, 400.0, 320.0):
-            gx, _, gw, _ = sl_views.pill_progress_local(pw, 108.0)
+            gx, _, gw, _ = sl_views.pill_progress_local(pw, 108.0, reserve_right=50.0)
             tx, _, tw, _ = sl_views.pill_transport_local(pw, 108.0)
             assert (gx + gw / 2) - (tx + tw / 2) == pytest.approx(21.0), \
                 f"the accepted art-tile skew drifts at pw={pw}"
 
     def test_572_numbers(self):
-        assert sl_views.pill_progress_local(572.0, 108.0) == (110.0, 59.0, 394.0, 3.0)
+        assert sl_views.pill_progress_local(572.0, 108.0, reserve_right=50.0) == \
+            (110.0, 59.0, 394.0, 3.0)
 
 
 # ---------------------------------------------------------------------------

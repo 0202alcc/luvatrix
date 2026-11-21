@@ -33,6 +33,18 @@ CURRENT rect (natural or overridden), keeping the opposite edge fixed
 the layout file records "progress aligns to the text column" — resize-safe,
 and it tracks the reference if the reference later moves.
 
+The fourth spec form (round 41, SL-27) is CONTAINMENT: {attach: {container,
+slot, inset}} moves a window-space component INTO a container at a named
+slot (top-right/top-left/bottom-right/bottom-left, inset points in from the
+corner). The component switches to container-local space: it rides the
+container's current rect (natural or overridden) like the interior ids do,
+keeps its size, and clamps inside the container. The attachment persists as
+a relationship — never resolved pixels — and slot_reservations() exposes
+each slot's occupied rect (container-local) so the container's own layout
+can yield the region (the pill's text column narrows left of an attached
+top-right button). layout_clear restores the component's window-space
+natural; a rect/anchor/align spec replaces the attachment.
+
 Round 38 (SL-23) extends the relationship form in two ways. keep="size" on
 an EDGE rule turns it into a position move — the named edge meets the
 reference line and the extent holds (the default extent-changing behavior
@@ -70,18 +82,22 @@ ANCHORS = ("top-left", "top-right", "bottom-left", "bottom-right", "center")
 # reference edge on the same axis.
 EDGES = ("left", "right", "top", "bottom", "center_x", "center_y")
 _X_EDGES = ("left", "right", "center_x")
+# Attach spec slots (round 41, SL-27): named anchors inside a container —
+# the four corners, inset points inward.
+ATTACH_SLOTS = ("top-right", "top-left", "bottom-right", "bottom-left")
 
 APP_LAYOUT_FILE = Path(__file__).resolve().parent / "layout.toml"
 
 _FILE_HEADER = """\
 # layout.toml — persisted layout overrides for the spotify_light chrome.
-# Written by the MCP layout tools (layout_set / layout_align / layout_clear);
-# read at startup. Specs stay resize-safe: anchor + inward dx/dy offsets
-# re-resolve against the window size every frame, and align specs re-resolve
-# against the reference's current rect. A raw rect table persists only as
-# the degenerate fallback. Table headers quote the id so dotted interior
-# ids stay one literal key. Hand edits are fine — malformed entries are
-# ignored, never fatal.
+# Written by the MCP layout tools (layout_set / layout_align / layout_attach /
+# layout_clear); read at startup. Specs stay resize-safe: anchor + inward
+# dx/dy offsets re-resolve against the window size every frame, align specs
+# re-resolve against the reference's current rect, and attach specs
+# re-resolve against the container's current rect. A raw rect table persists
+# only as the degenerate fallback. Table headers quote the id so dotted
+# interior ids stay one literal key. Hand edits are fine — malformed entries
+# are ignored, never fatal.
 """
 
 Rect = tuple[float, float, float, float]
@@ -121,6 +137,29 @@ def _edge_point(rect: Rect, edge: str) -> float:
             "top": y, "bottom": y + h, "center_y": y + h / 2.0}[edge]
 
 
+def attach_slot_rect(frame: Rect, slot: str, inset: float,
+                     size: tuple[float, float]) -> Rect:
+    """The rect a `size` component occupies when attached at `slot` inside
+    `frame`, `inset` points in from the frame's corner (round 41, SL-27).
+    The component keeps its size; the position clamps inside the frame so
+    a degenerate (tiny) container can never push it outside. Works in any
+    coordinate space — pass a container-local frame for a local rect, the
+    window-space frame for a window rect."""
+    fx, fy, fw, fh = frame
+    sw, sh = size
+    if slot in ("top-right", "bottom-right"):
+        x = fx + fw - inset - sw
+    else:
+        x = fx + inset
+    if slot in ("bottom-right", "bottom-left"):
+        y = fy + fh - inset - sh
+    else:
+        y = fy + inset
+    x = min(max(x, fx), max(fx, fx + fw - sw))
+    y = min(max(y, fy), max(fy, fy + fh - sh))
+    return (x, y, sw, sh)
+
+
 class LayoutOverrides:
     """Session-scoped registry of validated layout specs, keyed by component id."""
 
@@ -135,12 +174,14 @@ class LayoutOverrides:
         cid = _check_id(component_id)
         if not isinstance(spec, dict):
             raise LayoutError(f"spec for {cid} must be an object, got {spec!r}")
-        forms = [form for form in ("rect", "anchor", "align") if form in spec]
+        forms = [form for form in ("rect", "anchor", "align", "attach") if form in spec]
         if len(forms) != 1:
             raise LayoutError(
-                f"spec for {cid} needs exactly one of 'rect', 'anchor', or 'align', "
-                f"got {sorted(spec)}")
-        if "align" in spec:
+                f"spec for {cid} needs exactly one of 'rect', 'anchor', 'align', "
+                f"or 'attach', got {sorted(spec)}")
+        if "attach" in spec:
+            stored = {"attach": self._validate_attach_spec(cid, spec["attach"])}
+        elif "align" in spec:
             stored = {"align": self._validate_align_spec(cid, spec["align"])}
         elif "rect" in spec:
             raw = spec["rect"]
@@ -171,10 +212,39 @@ class LayoutOverrides:
                 stored["width"] = _size(spec["width"], field="width")
             if "height" in spec:
                 stored["height"] = _size(spec["height"], field="height")
-        if "align" in stored:
+        if "align" in stored or "attach" in stored:
             self._check_align_cycle(cid, stored)
         self._specs[cid] = stored
         return dict(stored)
+
+    def _validate_attach_spec(self, cid: str, raw: object) -> dict:
+        """Validate an attach spec (round 41, SL-27): containment of a
+        window-space component in a window-space container at a named slot.
+        No self-attach, no interior ids on either side (they already live
+        in the pill's local frame), and the inset is a finite number.
+        Cycles are rejected separately (staged, like align)."""
+        if cid in INTERIOR_IDS:
+            raise LayoutError(
+                f"interior id {cid} already lives in the pill's local frame; "
+                "attach is a window-space relationship")
+        if not isinstance(raw, dict):
+            raise LayoutError(f"attach spec for {cid} must be an object, got {raw!r}")
+        container = _check_id(raw.get("container"))
+        if container == cid:
+            raise LayoutError(f"{cid} cannot attach to itself")
+        if container in INTERIOR_IDS:
+            raise LayoutError(
+                f"{cid} cannot attach to interior id {container!r}; "
+                "attach containers are window-space components")
+        slot = raw.get("slot")
+        if slot not in ATTACH_SLOTS:
+            raise LayoutError(
+                f"unknown attach slot {slot!r}; valid slots: {', '.join(ATTACH_SLOTS)}")
+        return {
+            "container": container,
+            "slot": slot,
+            "inset": _num(raw.get("inset", 0.0), field="inset"),
+        }
 
     @staticmethod
     def _validate_align_rule(cid: str, raw: object) -> dict:
@@ -269,10 +339,12 @@ class LayoutOverrides:
         return dict(staged)
 
     def _check_align_cycle(self, cid: str, staged: dict) -> None:
-        """Walk the align reference graph with the new spec staged; reaching
-        cid again means the specs would resolve each other forever. Checked
-        at set() time so resolve() never loops. From an interior id, the
-        "pill" reference is the local FRAME (terminal), not the window pill."""
+        """Walk the reference graph (align 'to' edges plus attach 'container'
+        edges — a rect can depend on another rect through either form) with
+        the new spec staged; reaching cid again means the specs would
+        resolve each other forever. Checked at set() time so resolve()
+        never loops. From an interior id, the "pill" reference is the local
+        FRAME (terminal), not the window pill."""
         specs = dict(self._specs)
         specs[cid] = staged
         stack = [cid]
@@ -280,17 +352,21 @@ class LayoutOverrides:
         while stack:
             current = stack.pop()
             spec = specs.get(current)
-            if spec is None or "align" not in spec:
+            if spec is None:
                 continue
-            align = spec["align"]
-            rules = align if isinstance(align, list) else [align]
-            for rule in rules:
-                nxt = rule["to"]
+            refs: list[str] = []
+            if "align" in spec:
+                align = spec["align"]
+                rules = align if isinstance(align, list) else [align]
+                refs.extend(rule["to"] for rule in rules)
+            if "attach" in spec:
+                refs.append(spec["attach"]["container"])
+            for nxt in refs:
                 if current in INTERIOR_IDS and nxt == "pill":
                     continue  # the local frame, not the window pill spec
                 if nxt == cid:
                     raise LayoutError(
-                        f"align cycle through {nxt!r}: {cid} would resolve against itself")
+                        f"layout cycle through {nxt!r}: {cid} would resolve against itself")
                 if nxt not in seen:
                     seen.add(nxt)
                     stack.append(nxt)
@@ -319,7 +395,13 @@ class LayoutOverrides:
         if spec is None:
             return natural
         nx, ny, nw, nh = natural
-        if "align" in spec:
+        if "attach" in spec:
+            attach = spec["attach"]
+            container = self._attach_container_rect(
+                component_id, attach, width=width, height=height, naturals=naturals)
+            x, y, w, h = attach_slot_rect(container, attach["slot"], attach["inset"],
+                                          (nw, nh))
+        elif "align" in spec:
             align = spec["align"]
             rules = align if isinstance(align, list) else [align]
             x, y, w, h = nx, ny, nw, nh
@@ -378,6 +460,40 @@ class LayoutOverrides:
         x = min(max(x, 0.0), width - w)
         y = min(max(y, 0.0), height - h)
         return (x, y, w, h)
+
+    def _attach_container_rect(self, cid: str, attach: dict, *, width: float,
+                               height: float,
+                               naturals: dict[str, Rect] | None) -> Rect:
+        """The container's CURRENT rect in window space — natural or
+        overridden — so the attachment rides the container like the
+        interior ids do. Containers are window ids (validated at set()),
+        and cycles were rejected at set() time, so the recursion is safe."""
+        container = attach["container"]
+        if naturals is None or container not in naturals:
+            raise LayoutError(
+                f"attach container {container!r} for {cid} has no natural rect in "
+                "this frame; pass the frame's naturals map to resolve()")
+        return self.resolve(container, naturals[container], width=width, height=height,
+                            naturals=naturals)
+
+    def slot_reservations(self, container: str, container_rect: Rect, *,
+                          naturals: dict[str, Rect] | None) -> dict[str, Rect]:
+        """Every slot of `container` occupied by an attached component,
+        mapped to its CONTAINER-LOCAL rect (round 41, SL-27). This is the
+        container's yield input: the pill's text column reads the top-right
+        reservation to stop its right edge short of the attached button."""
+        reserved: dict[str, Rect] = {}
+        if naturals is None:
+            return reserved
+        for cid, spec in self._specs.items():
+            attach = spec.get("attach")
+            if attach is None or attach["container"] != container or cid not in naturals:
+                continue
+            _, _, nw, nh = naturals[cid]
+            wx, wy, w, h = attach_slot_rect(container_rect, attach["slot"],
+                                            attach["inset"], (nw, nh))
+            reserved[attach["slot"]] = (wx - container_rect[0], wy - container_rect[1], w, h)
+        return reserved
 
     def _align_reference_rect(self, cid: str, align: dict, *, width: float,
                               height: float,
@@ -476,7 +592,13 @@ def save(specs: dict[str, dict], path: Path) -> None:
     for cid in sorted(specs):
         quoted = f'"{cid}"'
         spec = specs[cid]
-        if "align" in spec:
+        if "attach" in spec:
+            attach = spec["attach"]
+            body = "\n".join([f'container = "{attach["container"]}"',
+                              f'slot = "{attach["slot"]}"',
+                              f"inset = {_toml_num(attach['inset'])}"])
+            chunks.append(f"[{quoted}.attach]\n{body}\n")
+        elif "align" in spec:
             align = spec["align"]
             rules = align if isinstance(align, list) else [align]
             if len(rules) == 1:

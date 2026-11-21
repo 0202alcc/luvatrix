@@ -2422,8 +2422,8 @@ class TestMcpHooks:
             state_provider=lambda: {},
             app_call_timeout_s=5.0,
         )
-        assert bridge.register_app_hooks(app) == 7, \
-            "client-id pair plus the layout_set/align/list/clear/export tools (rounds 31+37)"
+        assert bridge.register_app_hooks(app) == 8, \
+            "client-id pair plus the layout_set/align/attach/list/clear/export tools (rounds 31+37+41)"
 
         listing = bridge.dispatcher().handle_payload(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
@@ -4295,8 +4295,8 @@ class TestOverflowPersistsLeftOfPill:
         assert fields, "search field missing"
         assert fields[0].x + fields[0].width == pill_x - 12.0, \
             "the field's rounded cap stops 12pt short of the pill"
-        assert fields[0].width == pytest.approx(460.0), \
-            "with the ⋯ merged, the max width — not the circle — sets the cap again"
+        assert fields[0].width == pytest.approx(pill_x - 12.0 - (240.0 + 28.0)), \
+            "the pill — not the merged circle, not the 460pt max — sets the cap again"
 
     def test_a_nav_more_override_still_wins(self, app_ctx):
         """The persisted attach is the base layout, not a cage: a fresh

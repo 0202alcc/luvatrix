@@ -16,6 +16,7 @@ from luvatrix_core.core.scene_graph import CpuLayerNode
 import sl_icons
 import sl_models
 import sl_ui
+from sl_layout import attach_slot_rect  # noqa: F401 — re-exported slot geometry (round 41)
 
 # -- layout ------------------------------------------------------------------
 SIDEBAR_W = 240.0
@@ -90,6 +91,9 @@ PILL_THUMB_EMPTY = (255, 255, 255, 16)
 PILL_ART_INSET = 12.0
 PILL_ART_GAP = 14.0
 PILL_META_RIGHT_PAD = 18.0
+# Gap between the text column's right edge and a component attached at the
+# pill's top-right slot (round 41, SL-26/27): the column yields the slot.
+PILL_MENU_GAP = 12.0
 NAV_CIRCLE_R = 22.0
 NAV_CIRCLE_GAP = 18.0
 OVERFLOW_R = NAV_CIRCLE_R
@@ -145,15 +149,34 @@ def window_naturals(width: float, height: float) -> dict:
     }
 
 
-def pill_frame_naturals(pw: float, ph: float) -> dict:
+def pill_frame_naturals(pw: float, ph: float, *, reserve_right: float = 0.0) -> dict:
     """The interior natural rects in PILL-LOCAL space at a pill size — the
-    reference map for pill-local align specs (round 37)."""
+    reference map for pill-local align specs (round 37). reserve_right
+    (round 41) narrows the text column when a component occupies the
+    pill's top-right slot."""
     return {
         "pill.art": pill_art_local(pw, ph),
-        "pill.progress": pill_progress_local(pw, ph),
-        "pill.title": pill_title_local(pw, ph),
+        "pill.progress": pill_progress_local(pw, ph, reserve_right=reserve_right),
+        "pill.title": pill_title_local(pw, ph, reserve_right=reserve_right),
         "pill.transport": pill_transport_local(pw, ph),
     }
+
+
+def pill_slot_reserve_right(app, pw: float, ph: float,
+                            width: float, height: float) -> float:
+    """The width the text column yields to a component attached at the
+    pill's top-right slot (round 41, SL-27): the column's right edge stops
+    PILL_MENU_GAP short of the attached component. Zero when nothing
+    occupies the slot — the SL-25 full-column span is the fallback."""
+    overrides = getattr(app, "layout_overrides", None)
+    if overrides is None:
+        return 0.0
+    pill = _layout(app, "pill", pill_rect(width, height), width, height)
+    reserved = overrides.slot_reservations(
+        "pill", pill, naturals=window_naturals(width, height)).get("top-right")
+    if reserved is None:
+        return 0.0
+    return max(0.0, (pw - PILL_META_RIGHT_PAD) - (reserved[0] - PILL_MENU_GAP))
 
 
 def _layout(app, component_id: str, natural: tuple[float, float, float, float],
@@ -169,17 +192,21 @@ def _layout(app, component_id: str, natural: tuple[float, float, float, float],
 
 
 def _layout_local(app, component_id: str, natural_local: tuple[float, float, float, float],
-                  frame_w: float, frame_h: float) -> tuple[float, float, float, float]:
+                  frame_w: float, frame_h: float, *,
+                  reserve_right: float = 0.0) -> tuple[float, float, float, float]:
     """Resolve an interior override in its component's LOCAL frame (round 33):
     the natural and the spec both live in local coordinates, so resolution
     and clamping run against the frame's size (the pill), not the window's.
     The caller offsets the result by the frame's position. Apps without the
-    registry (tests, older hosts) get the natural local rect."""
+    registry (tests, older hosts) get the natural local rect. reserve_right
+    (round 41) keeps the align-reference map consistent with the narrowed
+    text column."""
     overrides = getattr(app, "layout_overrides", None)
     if overrides is None:
         return natural_local
     return overrides.resolve(component_id, natural_local, width=frame_w, height=frame_h,
-                             naturals=pill_frame_naturals(frame_w, frame_h))
+                             naturals=pill_frame_naturals(frame_w, frame_h,
+                                                          reserve_right=reserve_right))
 
 
 def dock_cluster_rect(width: float, height: float) -> tuple[float, float, float, float]:
@@ -204,17 +231,19 @@ def dock_cluster_rect(width: float, height: float) -> tuple[float, float, float,
     return (pill_x, height - PILL_FLOAT - DOCK_SLOT_H, pill_w, DOCK_SLOT_H)
 
 
-def pill_column(pw: float, ph: float) -> tuple[float, float, float]:
+def pill_column(pw: float, ph: float, *, reserve_right: float = 0.0) -> tuple[float, float, float]:
     """The pill's interior right column (round 32), a pure function of the
     pill's external rect so `pill_rect` stays the single source of truth for
     the capsule itself: the album tile sits at the left cap with the
     PILL_ART_INSET idiom and grows with the pill height; title/artist, the
     progress bar, and the transport row stack in the column to its right.
-    Returns (column x offset from the pill's left edge, column width, art
-    tile size)."""
+    reserve_right (round 41, SL-27) narrows the column from the right when
+    a component is attached at the pill's top-right slot — title, subtitle,
+    and the bar follow the narrower column. Returns (column x offset from
+    the pill's left edge, column width, art tile size)."""
     art = ph - 2 * PILL_ART_INSET
     col_x = PILL_ART_INSET + art + PILL_ART_GAP
-    return col_x, pw - col_x - PILL_META_RIGHT_PAD, art
+    return col_x, pw - col_x - PILL_META_RIGHT_PAD - reserve_right, art
 
 
 def pill_art_local(pw: float, ph: float) -> tuple[float, float, float, float]:
@@ -225,7 +254,8 @@ def pill_art_local(pw: float, ph: float) -> tuple[float, float, float, float]:
     return (PILL_ART_INSET, PILL_ART_INSET, art, art)
 
 
-def pill_progress_local(pw: float, ph: float) -> tuple[float, float, float, float]:
+def pill_progress_local(pw: float, ph: float, *,
+                        reserve_right: float = 0.0) -> tuple[float, float, float, float]:
     """The progress strip's natural rect in PILL-LOCAL space (round 33), the
     pill.progress override's geometry: x/width are layout inputs, the strip
     height stays 3pt, and the time labels ride the strip's ends (round 37:
@@ -234,21 +264,25 @@ def pill_progress_local(pw: float, ph: float) -> tuple[float, float, float, floa
     x-distance spacing"): the strip spans EXACTLY the text column — left
     edge on the title (the SL-21 relationship keeps guarding it), right
     edge on the column's right edge, so the bar's right inset IS the
-    text's own right inset at any width. The midpoint sits a constant
-    46pt right of the play center (the art tile skews the column) — known
-    and accepted: play stays pill-centered (SL-23), the bar owns the
-    column. Replaces SL-24's centered-on-play derivation."""
-    col_x, col_w, _ = pill_column(pw, ph)
+    text's own right inset at any width. Round 41 (SL-26/27): the column
+    yields the attached ⋯ menu's slot via reserve_right, and the strip
+    follows — right edge == menu.left − PILL_MENU_GAP. The midpoint sits a
+    constant 21pt right of the play center (the art tile skews the
+    column) — known and accepted: play stays pill-centered (SL-23), the
+    bar owns the column. Replaces SL-24's centered-on-play derivation."""
+    col_x, col_w, _ = pill_column(pw, ph, reserve_right=reserve_right)
     return (col_x, 59.0, max(80.0, col_w), 3.0)
 
 
-def pill_title_local(pw: float, ph: float) -> tuple[float, float, float, float]:
+def pill_title_local(pw: float, ph: float, *,
+                     reserve_right: float = 0.0) -> tuple[float, float, float, float]:
     """The title/artist text column's natural rect in PILL-LOCAL space
     (round 37, SL-22), the pill.title override's geometry — and, above all,
     the alignment REFERENCE for the progress strip (SL-21). The rect spans
     both text rows: title at its top, artist 14pt below (idle: "Nothing
-    playing" at the top, the subtitle 19pt below)."""
-    col_x, col_w, _ = pill_column(pw, ph)
+    playing" at the top, the subtitle 19pt below). Round 41: reserve_right
+    narrows the column when the top-right slot is occupied."""
+    col_x, col_w, _ = pill_column(pw, ph, reserve_right=reserve_right)
     return (col_x, 21.0, col_w, 32.0)
 
 
@@ -775,13 +809,11 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
     view_w = width - SIDEBAR_W - CONTENT_PAD * 2
 
     # The field's right cap must clear the top-right pill (round 30): at
-    # narrow widths the 460pt field would slide under the glass. Round 36:
-    # the shipped layout puts the overflow circle on the pill's left flank,
-    # in the field's band — the resolved circle is the nearer obstacle.
-    # Round 38 (SL-23): the circle rides 52pt further left, and the 12pt
-    # clearance is now a HARD constraint — the 180pt floor only applies when
-    # it fits; below that the field shrinks (60pt floor) rather than slide
-    # under the chrome.
+    # narrow widths the 460pt field would slide under the glass. Round 41
+    # (SL-26/27): the overflow circle merged INTO the pill's top-right
+    # slot, so the pill is again the only obstacle — the resolved circle
+    # still feeds the min() below, so a detached/overridden nav_more in
+    # the field's band keeps capping the field exactly like round 38.
     pill_x = pill_rect(width, height)[0]
     obstacle_x = pill_x
     dpx, dpy, dpw, dph = dock_cluster_rect(width, height)
@@ -948,12 +980,18 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     # clamp into the pill and ride whole-pill moves. Round 37: the text
     # column is an interior id too (pill.title) — the strip's alignment
     # reference — and the playing title row moved to the idle row's y, so
-    # the first text line no longer jumps 5pt when a track starts.
-    tx, ty, tw_, _ = _layout_local(app, "pill.title", pill_title_local(pw, ph), pw, ph)
+    # the first text line no longer jumps 5pt when a track starts. Round 41
+    # (SL-26/27): a component attached at the pill's top-right slot narrows
+    # the column from the right — title, artist, and the bar follow.
+    reserve_right = pill_slot_reserve_right(app, pw, ph, width, height)
+    tx, ty, tw_, _ = _layout_local(app, "pill.title",
+                                   pill_title_local(pw, ph, reserve_right=reserve_right),
+                                   pw, ph, reserve_right=reserve_right)
     # Album art thumb with a hairline ring, alpha-clipped to the same rounded
     # tile the idle state draws — a square image sits flush at the pill's
     # left cap and its corners cross the rounded silhouette (Alec, round 28).
-    ax, ay, aw, ah = _layout_local(app, "pill.art", pill_art_local(pw, ph), pw, ph)
+    ax, ay, aw, ah = _layout_local(app, "pill.art", pill_art_local(pw, ph),
+                                   pw, ph, reserve_right=reserve_right)
     art = min(aw, ah)
     frame.rounded_rect(x=px + ax - 1, y=py + ay - 1,
                        width=art + 2, height=art + 2, radius=15,
@@ -992,7 +1030,9 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     # simply don't draw when idle — so the bar never jumps between states.
     duration = track.duration_ms if track else 0
     progress = app.progress_ms()
-    gx, gy, gw, _ = _layout_local(app, "pill.progress", pill_progress_local(pw, ph), pw, ph)
+    gx, gy, gw, _ = _layout_local(app, "pill.progress",
+                                  pill_progress_local(pw, ph, reserve_right=reserve_right),
+                                  pw, ph, reserve_right=reserve_right)
     strip_x, strip_y, strip_w = px + gx, py + gy, gw
     if track is not None:
         _text(frame, sl_ui.format_duration_ms(progress), x=strip_x, y=strip_y - 11,
@@ -1012,7 +1052,8 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     # Transport row UNDER the bar, centered on the column; the white play
     # disc keeps its prominence and every hit stays at least yesterday's 34pt.
     playing = bool(player and player.is_playing)
-    tx, ty, tw, th = _layout_local(app, "pill.transport", pill_transport_local(pw, ph), pw, ph)
+    tx, ty, tw, th = _layout_local(app, "pill.transport", pill_transport_local(pw, ph),
+                                   pw, ph, reserve_right=reserve_right)
     row_cx = px + tx + tw / 2
     row_cy = py + ty + th / 2
     _transport_button(frame, out, mouse, sl_icons.PREV, row_cx - 53, row_cy - 13, "prev",
@@ -1055,8 +1096,10 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
 
     # Overflow circle: volume / shuffle / repeat / devices. The dock-side
     # natural below is just the fallback — the shipped layout.toml (round
-    # 36) re-points nav_more to the pill's left flank, and the registry
-    # resolution is what actually places it.
+    # 41, SL-26/27) ATTACHES nav_more into the pill's top-right slot, and
+    # the registry resolution is what actually places it: the circle rides
+    # the pill's corner, inside the glass, and the text column above has
+    # already yielded its slot.
     ox, oy, ow, oh = _layout(app, "nav_more",
                              (width - PILL_FLOAT - 2 * OVERFLOW_R,
                               dock_cy - OVERFLOW_R,
@@ -1072,6 +1115,7 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
 
     if app.show_devices:
         _draw_playback_popup(frame, app, out, circle=(ox, oy, ow, oh),
+                             pill=(px, py, pw, ph),
                              width=width, height=height, mouse=mouse)
 
 
@@ -1100,18 +1144,20 @@ def _transport_button(frame, out: FrameOut, mouse, glyph, cx, y, action, color,
 
 def _draw_playback_popup(frame, app, out: FrameOut, *,
                          circle: tuple[float, float, float, float],
+                         pill: tuple[float, float, float, float],
                          width: float, height: float, mouse) -> None:
     popup_w = 300.0
     row_h = 40.0
     rows = max(1, len(app.devices))
     head_h = 148.0  # pad + volume/shuffle/repeat rows + divider + section title
     popup_h = head_h + row_h * rows + 12
-    # Round 36: the popup anchors to its button like a menu — right edges
-    # aligned, dropping 12pt below the circle — and clamps into the window
-    # so a low overridden circle can never push it offscreen.
+    # Round 41 (SL-26/27): with the ⋯ attached inside the pill's top-right,
+    # the popup drops from the PILL's bottom corner like a menu — right
+    # edges still aligned to the circle — 12pt below the plate, and clamps
+    # into the window so an overridden circle can never push it offscreen.
     cx, cy, cw, ch = circle
     popup_x = min(max(cx + cw - popup_w, PILL_FLOAT), width - PILL_FLOAT - popup_w)
-    popup_y = min(cy + ch + 12.0, height - PILL_FLOAT - popup_h)
+    popup_y = min(pill[1] + pill[3] + 12.0, height - PILL_FLOAT - popup_h)
     # Floating panels get the dark variant of the glass plate: mostly-opaque
     # fill for readability over content, same hairline/shadow language.
     _glass_plate(frame, popup_x, popup_y, popup_w, popup_h, radius=14.0, z=20,
