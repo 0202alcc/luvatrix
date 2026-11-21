@@ -96,13 +96,29 @@ SCRIM_STRIP_PX = 1.0
 
 
 def pill_rect(width: float, height: float) -> tuple[float, float, float, float]:
-    """Floating capsule geometry, anchored to the CONTENT REGION (round 10):
-    the cluster (circles + pill) centers between SIDEBAR_W and the window's
-    right edge — never the full window, so it can never cross the sidebar
-    (the scrim anchors the same way). When the cluster at design width can't
-    fit, the left circle pins to SIDEBAR_W + PILL_FLOAT and the right edge
-    floats; only then does the pill shrink below PILL_W (floor PILL_MIN_W).
-    Below ~716pt the search circle may clip the window edge — pathological."""
+    """Now-playing capsule, pinned to the window's TOP-RIGHT corner (Alec,
+    round 30): right edge at width - PILL_FLOAT, top at the same float
+    margin the dock used. Anchoring the RIGHT edge means any width change
+    (window resize, or the pill shrinking below PILL_W when the content
+    region can't fit it) grows the pill leftward — never a jump. The left
+    edge can never cross the sidebar."""
+    fit_w = width - SIDEBAR_W - 2 * PILL_FLOAT
+    pill_w = min(PILL_W, max(PILL_MIN_W, fit_w))
+    pill_x = max(SIDEBAR_W + PILL_FLOAT, width - PILL_FLOAT - pill_w)
+    return (pill_x, PILL_FLOAT, pill_w, PILL_H)
+
+
+def dock_cluster_rect(width: float, height: float) -> tuple[float, float, float, float]:
+    """The bottom-center cluster slot the pill vacated in round 30. The
+    Home/Search nav circles and the playback popup did NOT move with the
+    pill — they still anchor to this slot, centered on the CONTENT REGION
+    (round 10): the cluster (circles + slot) centers between SIDEBAR_W and
+    the window's right edge — never the full window, so it can never cross
+    the sidebar (the scrim anchors the same way). When the cluster at design
+    width can't fit, the left circle pins to SIDEBAR_W + PILL_FLOAT and the
+    right edge floats; only then does the slot shrink below PILL_W (floor
+    PILL_MIN_W). Below ~716pt the search circle may clip the window edge —
+    pathological."""
     cluster_pad = NAV_CIRCLE_GAP + 2 * NAV_CIRCLE_R
     min_x = SIDEBAR_W + PILL_FLOAT + cluster_pad
     fit_w = width - PILL_FLOAT - cluster_pad - min_x
@@ -593,7 +609,10 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
     y = 24.0 - app.content_scroll
     view_w = width - SIDEBAR_W - CONTENT_PAD * 2
 
-    field_w = min(460.0, view_w)
+    # The field's right cap must clear the top-right pill (round 30): at
+    # narrow widths the 460pt field would slide under the glass.
+    pill_x = pill_rect(width, height)[0]
+    field_w = max(180.0, min(460.0, view_w, pill_x - 12.0 - x0))
     _glass_plate(frame, x0, y, field_w, 40, radius=20.0, z=2, shadow=False,
                  border=(ACCENT[0], ACCENT[1], ACCENT[2], 200) if app.search_focused else None)
     shown = app.search_query or ("What do you want to listen to?" if not app.search_focused else "")
@@ -703,11 +722,31 @@ def draw_dock_scrim(frame, *, width: float, height: float) -> None:
                color=(BG[0], BG[1], BG[2], SCRIM_MAX_ALPHA), z_index=6)
 
 
+def draw_top_scrim(frame, *, width: float, height: float) -> None:
+    """Mirrored dock scrim for the top-right pill (round 30): a calm
+    near-opaque band caps the window top over the pill zone, then the fade
+    dissolves content downward over the same smoothstep ~1px strips, so
+    headers and cards scroll under the top glass exactly like they do at the
+    dock. Same z=6 sandwich: above content (z<=4) and the content scrollbar
+    (z=5), below the pill (z=10+)."""
+    band_h = PILL_FLOAT + PILL_H + SCRIM_GAP
+    frame.rect(x=SIDEBAR_W, y=0, width=width - SIDEBAR_W, height=band_h,
+               color=(BG[0], BG[1], BG[2], SCRIM_MAX_ALPHA), z_index=6)
+    fade_rows = max(1, int(round(SCRIM_FADE / SCRIM_STRIP_PX)))
+    strip_h = SCRIM_FADE / fade_rows
+    for i in range(fade_rows):
+        t = min(1.0, max(0.0, ((i + 1) * strip_h) / SCRIM_FADE))
+        alpha = round(SCRIM_MAX_ALPHA * (1.0 - t * t * (3.0 - 2.0 * t)))  # mirrored smoothstep
+        frame.rect(x=SIDEBAR_W, y=band_h + i * strip_h, width=width - SIDEBAR_W,
+                   height=strip_h, color=(BG[0], BG[1], BG[2], alpha), z_index=6)
+
+
 def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
-    # Round 8: centered floating glass capsule (liquid-glass music-pill
-    # reference, dark-adapted), flanked by circular Home/Search nav buttons;
-    # an overflow circle at the bottom-right opens the playback popup
-    # (volume, shuffle, repeat, devices). Scene-drawn → same on every host.
+    # Round 8: floating glass capsule (liquid-glass music-pill reference,
+    # dark-adapted); round 30 moved the capsule to the window's top-right.
+    # The circular Home/Search nav buttons and the overflow circle (volume,
+    # shuffle, repeat, devices popup) stayed on the bottom dock, anchored to
+    # the slot the pill vacated. Scene-drawn → same on every host.
     px, py, pw, ph = pill_rect(width, height)
     cy = py + ph / 2
     _glass_plate(frame, px, py, pw, ph, radius=ph / 2, z=10,
@@ -788,24 +827,28 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
                            radius=1.5, color=(220, 220, 220, 255), z_index=12)
     out.hit(strip_x, strip_y - 6, strip_w, 15, "seek_bar", (strip_x, strip_w, duration))
 
-    # Circular Home/Search nav buttons flanking the pill (reference layout).
-    _nav_circle(frame, app, out, mouse, cx=px - NAV_CIRCLE_GAP - NAV_CIRCLE_R, cy=cy,
+    # Circular Home/Search nav buttons: unchanged on the bottom dock (Alec,
+    # round 30), flanking the slot the pill vacated.
+    dpx, dpy, dpw, dph = dock_cluster_rect(width, height)
+    dock_cy = dpy + dph / 2
+    _nav_circle(frame, app, out, mouse, cx=dpx - NAV_CIRCLE_GAP - NAV_CIRCLE_R, cy=dock_cy,
                 view="home", glyph=sl_icons.HOME)
-    _nav_circle(frame, app, out, mouse, cx=px + pw + NAV_CIRCLE_GAP + NAV_CIRCLE_R, cy=cy,
+    _nav_circle(frame, app, out, mouse, cx=dpx + dpw + NAV_CIRCLE_GAP + NAV_CIRCLE_R, cy=dock_cy,
                 view="search", glyph=sl_icons.SEARCH)
 
     # Overflow circle (bottom-right): volume / shuffle / repeat / devices.
     ocx = width - PILL_FLOAT - OVERFLOW_R
-    open_hover = _hover(mouse, ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2)
-    _glass_plate(frame, ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2,
+    open_hover = _hover(mouse, ocx - OVERFLOW_R, dock_cy - OVERFLOW_R,
+                        OVERFLOW_R * 2, OVERFLOW_R * 2)
+    _glass_plate(frame, ocx - OVERFLOW_R, dock_cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2,
                  radius=OVERFLOW_R, z=10, hovering=open_hover or app.show_devices)
-    _centered_glyph(frame, sl_icons.MORE, cx=ocx, cy=cy, size=16,
+    _centered_glyph(frame, sl_icons.MORE, cx=ocx, cy=dock_cy, size=16,
                     color=ACCENT if app.show_devices else (TEXT if open_hover else SUBTEXT),
                     z=12, font=sl_icons.ICON_FONT)
-    out.hit(ocx - OVERFLOW_R, cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2, "open_devices")
+    out.hit(ocx - OVERFLOW_R, dock_cy - OVERFLOW_R, OVERFLOW_R * 2, OVERFLOW_R * 2, "open_devices")
 
     if app.show_devices:
-        _draw_playback_popup(frame, app, out, width=width, pill_top=py, mouse=mouse)
+        _draw_playback_popup(frame, app, out, width=width, pill_top=dpy, mouse=mouse)
 
 
 def _nav_circle(frame, app, out: FrameOut, mouse, *, cx: float, cy: float,
