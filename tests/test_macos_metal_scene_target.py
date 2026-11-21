@@ -552,3 +552,171 @@ class MacOSMetalBackingScaleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestUnderGlassTransparency(unittest.TestCase):
+    """SL-36: the presenter flips the window + CAMetalLayer to transparent
+    only while the app clears fully transparent (under-glass live); any
+    alpha keeps today's opaque compositing."""
+
+    def test_only_fully_transparent_clear_enables_it(self):
+        assert mst._under_glass_transparency((0, 0, 0, 0)) is True
+        assert mst._under_glass_transparency((255, 255, 255, 0)) is True
+        assert mst._under_glass_transparency((18, 18, 18, 255)) is False
+        assert mst._under_glass_transparency((0, 0, 0, 1)) is False
+
+
+class _FakeMainQueue:
+    """Stands in for NSOperationQueue.mainQueue(): captures blocks and runs
+    them under a flipped is-main flag, the way the real main queue executes
+    operations on the main thread."""
+
+    def __init__(self, thread_state: dict) -> None:
+        self._thread_state = thread_state
+        self.blocks: list = []
+
+    def addOperationWithBlock_(self, block) -> None:
+        self.blocks.append(block)
+
+    def drain(self) -> None:
+        while self.blocks:
+            block = self.blocks.pop(0)
+            self._thread_state["is_main"] = True
+            try:
+                block()
+            finally:
+                self._thread_state["is_main"] = False
+
+
+class TestUnderGlassTransparencyMainThread(unittest.TestCase):
+    """SL-36 Mac verify defect: present_scene runs on the render thread, and
+    AppKit raised NSInternalInconsistencyException when the transparency flip
+    mutated the NSWindow there ("modifying the autolayout engine from a
+    background thread": setBackgroundColor -> NSThemeFrame _updateBackdropView).
+    Every NSWindow/NSView mutation in the apply must run on the main thread —
+    inline when already main, enqueued on the main queue otherwise."""
+
+    def _fake_appkit(self, thread_state: dict, queue: _FakeMainQueue):
+        appkit = types.ModuleType("AppKit")
+
+        class NSThread:
+            @staticmethod
+            def isMainThread() -> bool:
+                return bool(thread_state["is_main"])
+
+        class NSOperationQueue:
+            @staticmethod
+            def mainQueue():
+                return queue
+
+        class NSColor:
+            @staticmethod
+            def clearColor():
+                return ("clear-color",)
+
+        appkit.NSThread = NSThread
+        appkit.NSOperationQueue = NSOperationQueue
+        appkit.NSColor = NSColor
+        return appkit
+
+    def _handle(self, thread_state: dict):
+        class _Window:
+            def __init__(self) -> None:
+                self.calls: list = []
+                self.original_bg = ("window-bg",)
+
+            def backgroundColor(self):
+                self.calls.append(("backgroundColor", bool(thread_state["is_main"])))
+                return self.original_bg
+
+            def setOpaque_(self, flag) -> None:
+                self.calls.append(("setOpaque_", bool(thread_state["is_main"]), flag))
+
+            def setBackgroundColor_(self, color) -> None:
+                self.calls.append(("setBackgroundColor_", bool(thread_state["is_main"]), color))
+
+        class _Layer:
+            def __init__(self) -> None:
+                self.calls: list = []
+
+            def setOpaque_(self, flag) -> None:
+                self.calls.append(("setOpaque_", bool(thread_state["is_main"]), flag))
+
+        window = _Window()
+        layer = _Layer()
+        handle = types.SimpleNamespace(under_glass_capable=True, window=window, layer=layer)
+        return handle, window, layer
+
+    def _backend(self):
+        return object.__new__(mst.MacOSMetalSceneBackend)
+
+    def test_apply_from_render_thread_hops_to_main(self) -> None:
+        thread_state = {"is_main": False}  # the render thread
+        queue = _FakeMainQueue(thread_state)
+        appkit = self._fake_appkit(thread_state, queue)
+        handle, window, layer = self._handle(thread_state)
+        backend = self._backend()
+        buf = io.StringIO()
+        with unittest.mock.patch.dict("sys.modules", {"AppKit": appkit}):
+            with contextlib.redirect_stderr(buf):
+                backend._apply_under_glass_transparency(handle, (0, 0, 0, 0))
+                # Nothing may touch AppKit inline on the render thread.
+                self.assertEqual(window.calls, [])
+                self.assertEqual(layer.calls, [])
+                self.assertEqual(len(queue.blocks), 1)
+                queue.drain()
+        selectors = [call[0] for call in window.calls]
+        self.assertEqual(
+            selectors,
+            ["backgroundColor", "setOpaque_", "setBackgroundColor_"],
+        )
+        # Every mutation observed itself on the main thread.
+        self.assertTrue(all(call[1] for call in window.calls))
+        self.assertEqual(layer.calls, [("setOpaque_", True, False)])
+        self.assertIn(("setOpaque_", True, False), window.calls)
+        self.assertIn(("setBackgroundColor_", True, ("clear-color",)), window.calls)
+        self.assertTrue(backend._under_glass_enabled)
+        self.assertIn("under-glass transparency on", buf.getvalue())
+
+    def test_apply_on_main_thread_runs_inline(self) -> None:
+        thread_state = {"is_main": True}
+        queue = _FakeMainQueue(thread_state)
+        appkit = self._fake_appkit(thread_state, queue)
+        handle, window, layer = self._handle(thread_state)
+        backend = self._backend()
+        buf = io.StringIO()
+        with unittest.mock.patch.dict("sys.modules", {"AppKit": appkit}):
+            with contextlib.redirect_stderr(buf):
+                backend._apply_under_glass_transparency(handle, (0, 0, 0, 0))
+        self.assertEqual(queue.blocks, [])
+        self.assertEqual(
+            [call[0] for call in window.calls],
+            ["backgroundColor", "setOpaque_", "setBackgroundColor_"],
+        )
+        self.assertTrue(all(call[1] for call in window.calls))
+        self.assertIn("under-glass transparency on", buf.getvalue())
+
+    def test_restore_from_render_thread_hops_and_restores_original_bg(self) -> None:
+        thread_state = {"is_main": False}
+        queue = _FakeMainQueue(thread_state)
+        appkit = self._fake_appkit(thread_state, queue)
+        handle, window, layer = self._handle(thread_state)
+        backend = self._backend()
+        buf = io.StringIO()
+        with unittest.mock.patch.dict("sys.modules", {"AppKit": appkit}):
+            with contextlib.redirect_stderr(buf):
+                backend._apply_under_glass_transparency(handle, (0, 0, 0, 0))
+                queue.drain()
+                self.assertTrue(backend._under_glass_enabled)
+                # Glass goes away (opaque clear) from the render thread.
+                backend._apply_under_glass_transparency(handle, (18, 18, 18, 255))
+                self.assertEqual(len(queue.blocks), 1)
+                queue.drain()
+        on_calls = [call for call in window.calls if call[0] == "setOpaque_" and call[2] is False]
+        off_calls = [call for call in window.calls if call[0] == "setOpaque_" and call[2] is True]
+        self.assertEqual(len(on_calls), 1)
+        self.assertEqual(off_calls, [("setOpaque_", True, True)])
+        self.assertIn(("setBackgroundColor_", True, window.original_bg), window.calls)
+        self.assertTrue(all(call[1] for call in window.calls))
+        self.assertFalse(backend._under_glass_enabled)
+        self.assertIn("under-glass transparency off", buf.getvalue())

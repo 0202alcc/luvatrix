@@ -162,6 +162,17 @@ class SpotifyLightApp(App):
         self.sidebar_scroll = 0.0
         self._content_height = 0.0
 
+        # Under-glass pill (SL-36): a real NSGlassEffectView below the render
+        # surface replaces the pill's simulated plate on capable hosts.
+        # _pill_glass_active — window should clear transparent this frame;
+        # _pill_glass_live — the native plate exists (drawn plate + backdrop
+        # key off this); _pill_glass_disabled — creation failed, stop trying.
+        self._pill_glass_active = False
+        self._pill_glass_live = False
+        self._pill_glass_disabled = False
+        self._pill_glass_rect: tuple[float, float, float, float] | None = None
+        self._glass_specs: dict[str, dict] = {}
+
         # Live layout overrides (MCP, round 31): seeded from the persisted
         # layout file (round 36, SL-20) — the file is the source of truth the
         # layout tools write through to, so a nudge survives this reboot.
@@ -1064,12 +1075,14 @@ class SpotifyLightApp(App):
     def _sync_glass_surfaces(self, width: float, height: float, *,
                              want_login_field: bool,
                              want_save_button: bool = False,
-                             want_connect_button: bool = False) -> None:
+                             want_connect_button: bool = False,
+                             want_pill: bool = False) -> None:
         """Create/update/destroy app-declared glass regions to match the layout.
 
-        Native glass is kept ONLY behind native content (login-wall capsules);
-        text-bearing authed chrome draws scene tint plates instead, because an
-        AppKit plate above the Metal layer blurs every scene glyph beneath it.
+        Login-wall capsules sit ABOVE the Metal layer behind native content.
+        The pill plate (SL-36) sits UNDER it — scene glyphs stay crisp — and
+        tracks the resolved pill rect and silhouette radius every frame,
+        since layout nudges and the big-pill size rule move both.
         """
         bridge = native_controls()
         available = bool(bridge is not None and bridge.available)
@@ -1087,19 +1100,41 @@ class SpotifyLightApp(App):
                 x, y, w, h = sl_views.login_connect_button_rect(width, height)
                 wanted["login_connect_button"] = dict(x=x, y=y, width=w, height=h,
                                                       corner_radius=24.0, style="regular")
+            if want_pill:
+                px, py, pw, ph = sl_views._layout(
+                    self, "pill", sl_views.pill_rect(width, height), width, height)
+                wanted["pill"] = dict(x=px, y=py, width=pw, height=ph,
+                                      corner_radius=sl_views.glass_silhouette_radius(ph),
+                                      style="regular", placement="under")
+                self._pill_glass_rect = (px, py, pw, ph)
         for key in list(self._glass_surfaces):
             if key not in wanted:
                 self._glass_surfaces.pop(key).destroy()
+                self._glass_specs.pop(key, None)
         for key, spec in wanted.items():
             surface = self._glass_surfaces.get(key)
             if surface is None:
-                self._glass_surfaces[key] = bridge.create_glass_surface(**spec)
+                try:
+                    self._glass_surfaces[key] = bridge.create_glass_surface(**spec)
+                except RuntimeError as exc:
+                    # Never let a native-plate failure hole the frame: latch
+                    # off and fall back to the drawn plate next frame.
+                    print(f"[spotify-light] glass surface {key!r} failed: {exc}",
+                          file=sys.stderr, flush=True)
+                    if key == "pill":
+                        self._pill_glass_disabled = True
+                    continue
             else:
                 # Always re-apply: the bridge derives the AppKit frame from the
                 # content view's current bounds, which can change under an
                 # unchanged logical frame (window resize). Early-outing here
                 # baked a stale offset into the native plate.
                 surface.set_frame(spec["x"], spec["y"], spec["width"], spec["height"])
+                prev = self._glass_specs.get(key) or {}
+                if (spec.get("corner_radius") != prev.get("corner_radius")
+                        and hasattr(surface, "set_corner_radius")):
+                    surface.set_corner_radius(spec["corner_radius"])
+            self._glass_specs[key] = spec
 
     def _sync_native_login_buttons(self, width: float, height: float) -> None:
         """Create/update/destroy the native glass buttons on the auth wall."""
@@ -1639,12 +1674,28 @@ class SpotifyLightApp(App):
         self._handle_worker_results()
         self._handle_timers()
 
+    def _pill_glass_supported(self) -> bool:
+        """Under-glass pill prerequisites: authed chrome on a window whose
+        presenter can composite see-through (SL-36). Anything less — logged
+        out, bridgeless, Vulkan, pre-Tahoe, or a failed creation — keeps the
+        simulated plate and the opaque clear."""
+        if not self.authenticated or self._pill_glass_disabled:
+            return False
+        bridge = native_controls()
+        return bool(bridge is not None and bridge.available
+                    and getattr(bridge, "supports_under_glass", False))
+
     def render(self) -> None:
+        self._pill_glass_active = self._pill_glass_supported()
+        # Fully transparent clear is the presenter's cue to make the window
+        # see-through for the under-glass pill zone; the opaque backdrop in
+        # _render_scene covers everything else.
+        clear = (0, 0, 0, 0) if self._pill_glass_active else sl_views.BG
         if self.ctx.supports_scene_graph:
-            with self.scene_frame(clear=sl_views.BG) as frame:
+            with self.scene_frame(clear=clear) as frame:
                 self._render_scene(frame)
         else:
-            with self.matrix_frame(clear=sl_views.BG) as frame:
+            with self.matrix_frame(clear=clear) as frame:
                 self._render_matrix(frame)
 
     def _render_scene(self, frame) -> None:
@@ -1657,6 +1708,7 @@ class SpotifyLightApp(App):
             bridge = native_controls()
             bridge_up = bridge is not None and bridge.available
             self.glass_active = False  # chrome glass is an authed-only concern
+            self._pill_glass_live = False
             want_field = bool(bridge_up and not self.client_id and not self.auth_working)
             want_connect = bool(bridge_up and self.client_id and not self.auth_working)
             self._sync_glass_surfaces(width, height,
@@ -1677,7 +1729,15 @@ class SpotifyLightApp(App):
             # construction); glass_active keeps the translucent treatment and
             # content-under-bar flow while the bridge is up.
             self.glass_active = bridge is not None and bridge.available
-            self._sync_glass_surfaces(width, height, want_login_field=False)
+            self._sync_glass_surfaces(width, height, want_login_field=False,
+                                      want_pill=self._pill_glass_active)
+            self._pill_glass_live = "pill" in self._glass_surfaces
+            if self._pill_glass_live and self._pill_glass_rect is not None:
+                # Opaque base everywhere but the glass zone: the clear is
+                # transparent now, so the window's near-black must come from
+                # the scene — content still floats over the real material.
+                sl_views.draw_window_backdrop(frame, width=width, height=height,
+                                              skip=self._pill_glass_rect)
             if self.view == "search":
                 sl_views.draw_search(frame, self, out, width=width, height=height, mouse=mouse)
             elif self.view.startswith("playlist:"):
@@ -1768,7 +1828,10 @@ class SpotifyLightApp(App):
         for surface in self._glass_surfaces.values():
             surface.destroy()
         self._glass_surfaces.clear()
+        self._glass_specs.clear()
         self.glass_active = False
+        self._pill_glass_active = False
+        self._pill_glass_live = False
         if self._login_receiver is not None:
             self._login_receiver.close()
         self.worker.shutdown()

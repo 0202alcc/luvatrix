@@ -12,6 +12,8 @@ import pytest
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIEventSource
 from luvatrix_core.core.native_controls import (
     GatedHDIEventSource,
+    NativeControlBridge,
+    NativeGlassSurface,
     NativeInputGate,
     NullNativeControlBridge,
     active_native_control_bridge,
@@ -261,6 +263,7 @@ class _FakeNSView:
         self._layer = None
         self.bounds_width = 1280.0
         self.bounds_height = 800.0
+        self.appearance = None
 
     @classmethod
     def alloc(cls):
@@ -278,7 +281,10 @@ class _FakeNSView:
 
     def addSubview_positioned_relativeTo_(self, view, mode, relative):
         self.positioned.append((view, mode, relative))
-        if relative is None and mode == 2:  # NSWindowBelow: bottom of z-order
+        if mode == 2 and relative is not None and relative in self.subviews:
+            # NSWindowBelow a sibling: land directly beneath it.
+            self.subviews.insert(self.subviews.index(relative), view)
+        elif relative is None and mode == 2:  # NSWindowBelow: bottom of z-order
             self.subviews.insert(0, view)
         else:
             self.subviews.append(view)
@@ -310,6 +316,22 @@ class _FakeNSView:
     def bounds(self):
         size = type("S", (), {"width": self.bounds_width, "height": self.bounds_height})()
         return type("B", (), {"size": size})()
+
+    def setAppearance_(self, appearance):
+        self.appearance = appearance
+
+
+class _FakeNSAppearance:
+    """Mirrors AppKit: appearanceNamed: returns nil for unknown names."""
+
+    def __init__(self, name) -> None:
+        self.name = name
+
+    @classmethod
+    def appearanceNamed_(cls, name):
+        if name == "NSAppearanceNameDarkAqua":
+            return cls(name)
+        return None
 
 
 class _FakeGlassEffectView(_FakeNSView):
@@ -513,6 +535,8 @@ def _fake_appkit_module(glass_view_cls=_FakeGlassEffectView):
         "NSVisualEffectMaterialHUD": 10,
         "NSVisualEffectBlendingModeWithinWindow": 0,
         "NSVisualEffectStateActive": 0,
+        "NSAppearance": _FakeNSAppearance,
+        "NSAppearanceNameDarkAqua": "NSAppearanceNameDarkAqua",
     })
 
 
@@ -613,6 +637,13 @@ class TestAppKitGlassSurfaces:
         self._mac = mac_native
         self._patchers = []
         mac_native._GLASS_EFFECT_VIEW_CLASS = None
+        # The fake AppKit/objc environment simulates a macOS 26 host — the
+        # resolver's version gate must see it as one.
+        from unittest.mock import patch
+
+        version = patch.object(self._mac, "_macos_major_version", lambda: 26)
+        version.start()
+        self._patchers.append(version)
 
     def teardown_method(self):
         for patcher in self._patchers:
@@ -753,6 +784,234 @@ class TestAppKitGlassSurfaces:
         assert bridge.available is False
 
 
+class TestNativeDarkAppearance:
+    """SL-36 eyeball follow-up: native surfaces must pin the dark Aqua
+    appearance at creation. Unpinned, NSGlassEffectView follows the default
+    light appearance and renders WHITE over the near-black scene (Alec's
+    screen captures: glass live, correct shape, wrong material). Every
+    native view the bridge adds pins dark so the bug class cannot recur."""
+
+    def setup_method(self):
+        import luvatrix_core.platform.macos.native_controls as mac_native
+
+        self._mac = mac_native
+        self._patchers = []
+        mac_native._GLASS_EFFECT_VIEW_CLASS = None
+        # The fake AppKit/objc environment simulates a macOS 26 host — the
+        # resolver's version gate must see it as one.
+        from unittest.mock import patch
+
+        version = patch.object(self._mac, "_macos_major_version", lambda: 26)
+        version.start()
+        self._patchers.append(version)
+
+    def teardown_method(self):
+        for patcher in self._patchers:
+            patcher.stop()
+        self._mac._GLASS_EFFECT_VIEW_CLASS = None
+        unregister_native_control_bridge()
+
+    def _bridge(self, *, with_glass: bool, with_webkit: bool = False):
+        from unittest.mock import patch
+
+        handle = _FakeWindowHandle()
+        modules = {
+            "AppKit": _fake_appkit_module(),
+            "objc": _fake_objc_module(with_glass=with_glass),
+            "Foundation": _fake_foundation_module(),
+        }
+        if with_webkit:
+            modules["WebKit"] = type("WebKit", (), {"WKWebView": _FakeWKWebView})
+        patcher = patch.dict("sys.modules", modules)
+        patcher.start()
+        self._patchers.append(patcher)
+        bridge = self._mac.AppKitNativeControlBridge(handle)
+        return bridge, handle
+
+    def test_glass_effect_view_pins_dark_appearance(self):
+        bridge, _ = self._bridge(with_glass=True)
+        surface = bridge.create_glass_surface(x=0, y=704, width=1280, height=96,
+                                              corner_radius=0.0, style="regular")
+        appearance = surface._view.appearance
+        assert appearance is not None
+        assert appearance.name == "NSAppearanceNameDarkAqua"
+
+    def test_visual_effect_fallback_pins_dark_appearance(self):
+        bridge, _ = self._bridge(with_glass=False)
+        surface = bridge.create_glass_surface(x=0, y=0, width=240, height=800,
+                                              corner_radius=0.0, style="sidebar")
+        assert isinstance(surface._view, _FakeVisualEffectView)
+        appearance = surface._view.appearance
+        assert appearance is not None
+        assert appearance.name == "NSAppearanceNameDarkAqua"
+
+    def test_oauth_web_view_pins_dark_appearance(self):
+        bridge, _ = self._bridge(with_glass=True, with_webkit=True)
+        view = bridge.create_web_view(x=0, y=0, width=1280, height=800)
+        appearance = view.ns_web_view.appearance
+        assert appearance is not None
+        assert appearance.name == "NSAppearanceNameDarkAqua"
+
+
+class TestGlassEffectResolverGate:
+    """SL-36: the NSGlassEffectView runtime gate — import AppKit first, then
+    resolve the class, and only on macOS 26+. The 26.6 compat probe showed a
+    bare ``objc.lookUpClass`` raises nosuchclass_error because it searches
+    only already-loaded classes; the gate must own the AppKit import itself
+    instead of piggybacking on some earlier import, and older hosts keep the
+    NSVisualEffectView fallback."""
+
+    def setup_method(self):
+        import luvatrix_core.platform.macos.native_controls as mac_native
+
+        self._mac = mac_native
+        mac_native._GLASS_EFFECT_VIEW_CLASS = None
+
+    def teardown_method(self):
+        self._mac._GLASS_EFFECT_VIEW_CLASS = None
+
+    def _resolve(self, *, with_appkit: bool, with_glass: bool, major):
+        from unittest.mock import patch
+
+        modules = {"objc": _fake_objc_module(with_glass=with_glass)}
+        # None in sys.modules forces ImportError on `import AppKit` — the
+        # off-mac / missing-extra path — even if something imported it earlier.
+        modules["AppKit"] = _fake_appkit_module() if with_appkit else None
+        with patch.dict("sys.modules", modules):
+            with patch.object(self._mac, "_macos_major_version", lambda: major):
+                return self._mac._glass_effect_view_class()
+
+    def test_resolves_on_macos_26_with_appkit(self):
+        assert self._resolve(with_appkit=True, with_glass=True, major=26) is _FakeGlassEffectView
+
+    def test_appkit_import_is_mandatory(self):
+        """A bare lookUpClass must never count as resolution: without an
+        AppKit import the class may simply not be loaded yet."""
+        assert self._resolve(with_appkit=False, with_glass=True, major=26) is None
+
+    def test_macos_version_gate(self):
+        assert self._resolve(with_appkit=True, with_glass=True, major=15) is None
+        assert self._resolve(with_appkit=True, with_glass=True, major=None) is None
+
+    def test_missing_class_stays_fallback(self):
+        assert self._resolve(with_appkit=True, with_glass=False, major=26) is None
+
+    def test_macos_major_version_parsing(self):
+        from unittest.mock import patch
+
+        with patch("platform.mac_ver", return_value=("26.6", ("", "", ""), "25G72")):
+            assert self._mac._macos_major_version() == 26
+        with patch("platform.mac_ver", return_value=("15.7.1", ("", "", ""), "24G90")):
+            assert self._mac._macos_major_version() == 15
+        with patch("platform.mac_ver", return_value=("", ("", "", ""), "")):
+            assert self._mac._macos_major_version() is None
+
+
+class TestAppKitUnderGlassPlacement:
+    """SL-36: glass BELOW the render surface — the pill's Liquid Glass plate
+    sits under the Metal-drawn content so scene glyphs stay crisp on top."""
+
+    def setup_method(self):
+        import luvatrix_core.platform.macos.native_controls as mac_native
+
+        self._mac = mac_native
+        self._patchers = []
+        mac_native._GLASS_EFFECT_VIEW_CLASS = None
+        # Fake AppKit/objc environment == macOS 26 host for the version gate.
+        from unittest.mock import patch
+
+        version = patch.object(self._mac, "_macos_major_version", lambda: 26)
+        version.start()
+        self._patchers.append(version)
+
+    def teardown_method(self):
+        for patcher in self._patchers:
+            patcher.stop()
+        self._mac._GLASS_EFFECT_VIEW_CLASS = None
+        unregister_native_control_bridge()
+
+    def _bridge(self, *, capable: bool):
+        from unittest.mock import patch
+
+        handle = _FakeWindowHandle()
+        handle.render_view = _FakeNSView() if capable else None
+        handle.under_glass_capable = capable
+        if capable:
+            handle.content.addSubview_(handle.render_view)
+        modules = {
+            "AppKit": _fake_appkit_module(),
+            "objc": _fake_objc_module(with_glass=True),
+            "Foundation": type("Foundation", (), {"NSObject": _FakeNSObject}),
+        }
+        patcher = patch.dict("sys.modules", modules)
+        patcher.start()
+        self._patchers.append(patcher)
+        bridge = self._mac.AppKitNativeControlBridge(handle)
+        return bridge, handle
+
+    def test_supports_under_glass_reflects_handle_capability(self):
+        bridge, _ = self._bridge(capable=True)
+        assert bridge.supports_under_glass is True
+        bridge2, _ = self._bridge(capable=False)
+        assert bridge2.supports_under_glass is False
+
+    def test_under_placement_inserts_below_render_view(self):
+        bridge, handle = self._bridge(capable=True)
+        surface = bridge.create_glass_surface(x=100, y=20, width=400, height=84,
+                                              corner_radius=18.0, placement="under")
+        view = surface._view
+        below = [p for p in handle.content.positioned
+                 if p[0] is view and p[1] == 2 and p[2] is handle.render_view]
+        assert below, "under-glass must insert NSWindowBelow the render view"
+        assert (handle.content.subviews.index(view)
+                < handle.content.subviews.index(handle.render_view))
+
+    def test_above_placement_remains_default(self):
+        bridge, handle = self._bridge(capable=True)
+        surface = bridge.create_glass_surface(x=0, y=0, width=100, height=40)
+        assert handle.content.subviews[-1] is surface._view
+        assert [p for p in handle.content.positioned if p[0] is surface._view] == []
+
+    def test_under_placement_requires_capable_handle(self):
+        bridge, _ = self._bridge(capable=False)
+        with pytest.raises(RuntimeError, match="under"):
+            bridge.create_glass_surface(x=0, y=0, width=100, height=40,
+                                        placement="under")
+
+    def test_glass_surface_corner_radius_updates(self):
+        bridge, _ = self._bridge(capable=True)
+        surface = bridge.create_glass_surface(x=0, y=0, width=100, height=40,
+                                              corner_radius=0.0, placement="under")
+        surface.set_corner_radius(21.0)
+        assert surface._view.corner_radius == 21.0
+        assert surface._view.layer().corner_radius == 21.0
+        assert surface._view.layer().masks_to_bounds is True
+
+
+class TestUnderGlassContract:
+    """Platform-neutral under-glass contract: the null bridge carries the
+    knobs so headless apps can exercise the same code paths."""
+
+    def test_null_bridge_records_placement_and_radius(self):
+        bridge = NullNativeControlBridge()
+        assert bridge.supports_under_glass is False
+        surface = bridge.create_glass_surface(x=0, y=0, width=100, height=40,
+                                              placement="under")
+        assert surface.placement == "under"
+        surface.set_corner_radius(12.0)
+        assert surface.corner_radius == 12.0
+
+    def test_null_glass_defaults_to_above(self):
+        bridge = NullNativeControlBridge()
+        surface = bridge.create_glass_surface(x=0, y=0, width=100, height=40)
+        assert surface.placement == "above"
+        assert surface.corner_radius == 0.0
+
+    def test_protocol_exposes_corner_radius_and_capability(self):
+        assert hasattr(NativeGlassSurface, "set_corner_radius")
+        assert hasattr(NativeControlBridge, "supports_under_glass")
+
+
 class TestAppKitNativeButtons:
     """Borderless NSButton on a glass capsule — the auth-wall CTA pattern."""
 
@@ -771,6 +1030,12 @@ class TestAppKitNativeButtons:
         self._mac = mac_native
         self._patchers = []
         mac_native._GLASS_EFFECT_VIEW_CLASS = None
+        # Fake AppKit/objc environment == macOS 26 host for the version gate.
+        from unittest.mock import patch
+
+        version = patch.object(self._mac, "_macos_major_version", lambda: 26)
+        version.start()
+        self._patchers.append(version)
 
     def teardown_method(self):
         for patcher in self._patchers:
@@ -1087,11 +1352,19 @@ class TestGlassEffectViewClassSelection:
     def test_prefers_ns_glass_effect_view(self):
         from unittest.mock import patch
 
-        with patch.dict("sys.modules", {"objc": _fake_objc_module(with_glass=True)}):
-            assert self._mac._glass_effect_view_class() is _FakeGlassEffectView
+        modules = {"objc": _fake_objc_module(with_glass=True),
+                   "AppKit": _fake_appkit_module()}
+        with patch.dict("sys.modules", modules):
+            with patch.object(self._mac, "_macos_major_version", lambda: 26):
+                assert self._mac._glass_effect_view_class() is _FakeGlassEffectView
 
     def test_returns_none_below_tahoe(self):
         from unittest.mock import patch
 
-        with patch.dict("sys.modules", {"objc": _fake_objc_module(with_glass=False)}):
-            assert self._mac._glass_effect_view_class() is None
+        # Pre-Tahoe host: the version gate holds the fallback even when the
+        # class symbol happens to resolve.
+        modules = {"objc": _fake_objc_module(with_glass=True),
+                   "AppKit": _fake_appkit_module()}
+        with patch.dict("sys.modules", modules):
+            with patch.object(self._mac, "_macos_major_version", lambda: 15):
+                assert self._mac._glass_effect_view_class() is None

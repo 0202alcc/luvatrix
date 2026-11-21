@@ -32,12 +32,35 @@ _ROUNDED_BEZEL = 1  # NSTextFieldRoundedBezel
 _GLASS_EFFECT_VIEW_CLASS = None
 
 
+def _macos_major_version() -> int | None:
+    """Marketing major of the host macOS (26 for Tahoe), None off-mac."""
+    try:
+        import platform
+
+        release = (platform.mac_ver()[0] or "").strip()
+        if not release:
+            return None
+        return int(release.split(".", 1)[0])
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _glass_effect_view_class():
-    """Return NSGlassEffectView when the host has it (macOS 26+), else None."""
+    """Return NSGlassEffectView when the host has it (macOS 26+), else None.
+
+    Resolution order matters: ``objc.lookUpClass`` searches only
+    already-loaded classes, so AppKit must be imported FIRST (the 26.6
+    compat probe resolved the class only after ``import AppKit``), and the
+    OS version gate keeps older hosts on the NSVisualEffectView fallback
+    even if some other import made the symbol visible.
+    """
     global _GLASS_EFFECT_VIEW_CLASS
     if _GLASS_EFFECT_VIEW_CLASS is not None:
         return _GLASS_EFFECT_VIEW_CLASS or None
     try:
+        if _macos_major_version() is None or _macos_major_version() < 26:
+            raise RuntimeError("NSGlassEffectView requires macOS 26+")
+        import AppKit  # type: ignore  # noqa: F401 — loads AppKit classes into the runtime
         import objc  # type: ignore
 
         _GLASS_EFFECT_VIEW_CLASS = objc.lookUpClass("NSGlassEffectView")
@@ -46,6 +69,25 @@ def _glass_effect_view_class():
     resolved = "NSGlassEffectView" if _GLASS_EFFECT_VIEW_CLASS else "NSVisualEffectView (fallback)"
     print(f"[luvatrix] native glass path: {resolved}", file=sys.stderr, flush=True)
     return _GLASS_EFFECT_VIEW_CLASS or None
+
+
+def _pin_dark_appearance(view) -> None:
+    """Pin dark Aqua on a native view so its material follows the app's dark
+    scene, not the host's default (light) appearance.
+
+    SL-36 eyeball: an unpinned NSGlassEffectView renders WHITE/light-gray
+    over the near-black UI — live glass, wrong material. Best-effort: a pin
+    failure never breaks surface creation (the window pin in window_system
+    still lets the view inherit dark).
+    """
+    try:
+        from AppKit import NSAppearance, NSAppearanceNameDarkAqua  # type: ignore
+
+        appearance = NSAppearance.appearanceNamed_(NSAppearanceNameDarkAqua)
+        if appearance is not None:
+            view.setAppearance_(appearance)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[luvatrix] dark appearance pin failed: {exc!r}", file=sys.stderr, flush=True)
 
 
 class AppKitNativeControlBridge:
@@ -78,6 +120,14 @@ class AppKitNativeControlBridge:
             return bool(self._window_handle.window.isVisible())
         except Exception:  # noqa: BLE001
             return False
+
+    @property
+    def supports_under_glass(self) -> bool:
+        """True when the window has the render-host split AND a Metal layer
+        the presenter can make see-through — only then does glass placed
+        below the render view actually show."""
+        return bool(getattr(self._window_handle, "under_glass_capable", False)
+                    and getattr(self._window_handle, "render_view", None) is not None)
 
     def create_text_field(
         self,
@@ -187,10 +237,15 @@ class AppKitNativeControlBridge:
         height: float,
         corner_radius: float = 0.0,
         style: str = "regular",
+        placement: str = "above",
     ) -> "_AppKitGlassSurface":
         self._require_main_thread()
         if not self.available:
             raise RuntimeError("native-control bridge is not available (no live window)")
+        if placement == "under" and not self.supports_under_glass:
+            raise RuntimeError(
+                'placement="under" requires an under-glass-capable window '
+                "(render-host split + Metal presenter transparency)")
         surface = _AppKitGlassSurface(
             self,
             x=x,
@@ -199,6 +254,7 @@ class AppKitNativeControlBridge:
             height=height,
             corner_radius=corner_radius,
             style=style,
+            placement=placement,
         )
         self._glass.append(surface)
         return surface
@@ -399,12 +455,14 @@ class _AppKitGlassSurface:
     """
 
     def __init__(self, bridge: AppKitNativeControlBridge, *, x, y, width, height,
-                 corner_radius=0.0, style="regular") -> None:
+                 corner_radius=0.0, style="regular", placement="above") -> None:
         from AppKit import NSMakeRect  # type: ignore
 
         self._bridge = bridge
+        self._placement = placement
         self.destroyed = False
         glass_cls = _glass_effect_view_class()
+        self._is_glass_effect = glass_cls is not None
         if glass_cls is not None:
             from AppKit import NSView  # type: ignore
 
@@ -443,7 +501,18 @@ class _AppKitGlassSurface:
                     layer.setCornerRadius_(float(corner_radius))
                     layer.setMasksToBounds_(True)
             self._host = self._view
-        bridge._content_view().addSubview_(self._view)
+        # The material follows the view's appearance — pin dark before the
+        # view is parented so it never flashes light (SL-36 eyeball).
+        _pin_dark_appearance(self._view)
+        if placement == "under":
+            from AppKit import NSWindowBelow  # type: ignore
+
+            # Under the render surface: scene content composites crisply on
+            # top while the real material shows through the transparent zone.
+            bridge._content_view().addSubview_positioned_relativeTo_(
+                self._view, NSWindowBelow, bridge._window_handle.render_view)
+        else:
+            bridge._content_view().addSubview_(self._view)
         self._logical_frame = (float(x), float(y), float(width), float(height))
         self.set_frame(x, y, width, height)
 
@@ -496,6 +565,21 @@ class _AppKitGlassSurface:
         self._logical_frame = (float(x), float(y), float(width), float(height))
         self._bridge._set_view_frame(self._view, x, y, width, height)
 
+    def set_corner_radius(self, radius: float) -> None:
+        radius = float(radius)
+        if self._is_glass_effect:
+            self._apply_corner_radius(radius)
+            return
+        # NSVisualEffectView fallback: the layer carries the rounding.
+        try:
+            self._view.setWantsLayer_(True)
+            layer = self._view.layer()
+            if layer is not None:
+                layer.setCornerRadius_(radius)
+                layer.setMasksToBounds_(True)
+        except Exception:  # noqa: BLE001
+            pass
+
     def show(self) -> None:
         self._view.setHidden_(False)
 
@@ -539,6 +623,7 @@ class _AppKitWebView:
         self.destroyed = False
         self._wk = WKWebView.alloc().initWithFrame_(
             NSMakeRect(0.0, 0.0, float(width), float(height)))
+        _pin_dark_appearance(self._wk)
         self._owner_key: int | None = None
         self._delegate = self._make_delegate()
         self._wk.setNavigationDelegate_(self._delegate)

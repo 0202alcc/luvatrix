@@ -835,17 +835,24 @@ class _FakeNativeField:
 
 
 class _FakeGlassSurface:
-    def __init__(self, *, x, y, width, height, corner_radius=0.0, style="regular"):
+    def __init__(self, *, x, y, width, height, corner_radius=0.0, style="regular",
+                 placement="above"):
         self.frame = (x, y, width, height)
         self.set_frame_calls = 0
         self.corner_radius = corner_radius
+        self.corner_radius_calls: list[float] = []
         self.style = style
+        self.placement = placement
         self.is_visible = True
         self.destroyed = False
 
     def set_frame(self, x, y, width, height):
         self.frame = (x, y, width, height)
         self.set_frame_calls += 1
+
+    def set_corner_radius(self, radius):
+        self.corner_radius = radius
+        self.corner_radius_calls.append(radius)
 
     def show(self):
         self.is_visible = True
@@ -920,6 +927,7 @@ class _FakeWebView:
 class _FakeNativeBridge:
     def __init__(self):
         self.available = True
+        self.supports_under_glass = False
         self.created: list[_FakeNativeField] = []
         self.buttons: list[_FakeNativeButton] = []
         self.web_views: list[_FakeWebView] = []
@@ -4708,3 +4716,146 @@ class TestDrawScrims:
             assert done, f"scrim reaches near-opaque at h={h}"
             assert done[0]["y"] + done[0]["height"] <= dock_top - 8.0 + 1e-6, \
                 f"fade completes into a calm band above the dock at h={h}"
+
+
+# ---------------------------------------------------------------------------
+# SL-36: real Liquid Glass (NSGlassEffectView) BELOW the Metal-drawn pill.
+# The scene keeps drawing art/text/controls crisply on top; the pill's own
+# simulated plate (fill, border, sheen, highlight, shadow) yields, the window
+# clear goes transparent, and an opaque backdrop covers everything but the
+# pill zone. Hosts without under-glass capability keep today's drawn plate.
+# ---------------------------------------------------------------------------
+
+
+class TestPillNativeGlass:
+    def _bridge(self, monkeypatch, *, capable=True):
+        bridge = _FakeNativeBridge()
+        bridge.supports_under_glass = capable
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+        return bridge
+
+    def _playing(self, app, ctx):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500, track=track,
+                                           device=None, shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        _tick(app, ctx, 2)
+
+    def _pill_surface(self, bridge):
+        under = [s for s in bridge.glass if s.placement == "under"]
+        assert len(under) == 1, "exactly one under-glass surface (the pill)"
+        return under[0]
+
+    def test_pill_glass_surface_created_under_render_view(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        bridge = self._bridge(monkeypatch)
+        self._playing(app, ctx)
+
+        pill = self._pill_surface(bridge)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        assert pill.frame == (px, py, pw, ph)
+        assert pill.corner_radius == sl_views.glass_silhouette_radius(ph)
+        assert pill.style == "regular"
+        assert pill.is_visible is True
+
+    def test_pill_glass_absent_without_capability(self, app_ctx, monkeypatch):
+        """Vulkan/older-macOS/headless hosts keep the drawn plate exactly as
+        today — no native surface, opaque clear, plate nodes present."""
+        app, ctx, scene_buffer = app_ctx
+        bridge = self._bridge(monkeypatch, capable=False)
+        self._playing(app, ctx)
+
+        assert bridge.glass == []
+        clears = _nodes(scene_buffer, ClearNode)
+        assert clears and clears[-1].color_rgba == sl_views.BG
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        rrects = _nodes(scene_buffer, RoundedRectNode)
+        assert any(n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
+                   and n.width == pw and n.height == ph for n in rrects), \
+            "incapable hosts keep the drawn pill plate"
+
+    def test_pill_glass_tracks_layout_moves_and_radius(self, app_ctx, monkeypatch):
+        """The pill rect is dynamic (layout nudges, big-pill rounded-rect
+        rule): the native plate must follow frame and corner radius."""
+        app, ctx, _ = app_ctx
+        bridge = self._bridge(monkeypatch)
+        self._playing(app, ctx)
+        pill = self._pill_surface(bridge)
+
+        app.mcp_call("layout_set", {
+            "id": "pill", "rect": {"x": 700, "y": 40, "width": 560, "height": 72}})
+        _tick(app, ctx, 2)
+
+        assert pill.frame == (700.0, 40.0, 560.0, 72.0)
+        assert pill.destroyed is False
+        expected_radius = sl_views.glass_silhouette_radius(72.0)
+        assert pill.corner_radius == expected_radius
+        assert expected_radius in pill.corner_radius_calls
+
+    def test_drawn_plate_yields_under_native_glass(self, app_ctx, monkeypatch):
+        """With real glass beneath, the simulated plate is gone — fill,
+        border ring, sheen rows, specular highlight, and shadow plates —
+        while the pill's content (art, title, transport) keeps drawing."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch)
+        self._playing(app, ctx)
+
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        rrects = _nodes(scene_buffer, RoundedRectNode)
+        rects = _nodes(scene_buffer, RectNode)
+        plate_colors = {sl_views.PILL_FILL, sl_views.PILL_BORDER,
+                        sl_views.GLASS_SHADOW_FAR, sl_views.GLASS_SHADOW_NEAR}
+        assert [n for n in rrects if n.color_rgba in plate_colors
+                and n.x <= px + 2 and n.y <= py + 6
+                and n.x + n.width >= px + pw - 2] == [], \
+            "no simulated plate pieces at the pill silhouette"
+        assert [n for n in rects if n.color_rgba == sl_views.GLASS_HIGHLIGHT
+                and n.y == py + 1] == [], "no specular highlight under real glass"
+        texts = _texts(scene_buffer)
+        assert "Lithium" in texts, "pill content keeps drawing on top"
+
+    def test_clear_transparent_and_backdrop_surrounds_pill(self, app_ctx, monkeypatch):
+        """Under-glass needs a see-through window at the pill zone only: the
+        clear goes fully transparent and an opaque backdrop covers the rest,
+        so content scrolling under the pill floats over the real material."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch)
+        self._playing(app, ctx)
+
+        clears = _nodes(scene_buffer, ClearNode)
+        assert clears and all(c.color_rgba == (0, 0, 0, 0) for c in clears), \
+            "window clear must be fully transparent while under-glass is live"
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        bg_rects = [n for n in _nodes(scene_buffer, RectNode)
+                    if n.color_rgba == sl_views.BG and n.z_index == 0]
+        for n in bg_rects:
+            overlap_x = n.x < px + pw and n.x + n.width > px
+            overlap_y = n.y < py + ph and n.y + n.height > py
+            assert not (overlap_x and overlap_y), \
+                f"backdrop rect {n} must not cover the pill zone"
+        expected = [
+            (0.0, 0.0, 1280.0, py),
+            (0.0, py + ph, 1280.0, 800.0 - py - ph),
+            (0.0, py, px, ph),
+            (px + pw, py, 1280.0 - px - pw, ph),
+        ]
+        got = sorted((n.x, n.y, n.width, n.height) for n in bg_rects)
+        assert got == sorted(expected), "backdrop tiles the frame around the pill"
+
+    def test_pill_glass_destroyed_on_logout(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        bridge = self._bridge(monkeypatch)
+        self._playing(app, ctx)
+        pill = self._pill_surface(bridge)
+
+        # _end_session invalidates; a direct flag flip must do the same or
+        # the render-on-invalidation loop never re-syncs the surfaces.
+        app.authenticated = False
+        app.invalidate()
+        _tick(app, ctx, 2)
+
+        assert pill.destroyed is True
+        assert [s for s in bridge.glass if s.placement == "under"
+                and not s.destroyed] == []

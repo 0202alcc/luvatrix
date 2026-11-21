@@ -177,5 +177,126 @@ class MacOSWindowSystemTargetClassTests(unittest.TestCase):
         self.assertIsInstance(target, window_system._MenuActionTarget)
 
 
+class _FakeRenderContentView:
+    def __init__(self) -> None:
+        self.subviews: list = []
+        self.wants_layer = False
+
+    def addSubview_(self, view):
+        self.subviews.append(view)
+
+    def bounds(self):
+        size = type("S", (), {"width": 1280.0, "height": 800.0})()
+        return type("B", (), {"size": size})()
+
+
+class _FakeRenderHostView:
+    def __init__(self) -> None:
+        self.frame = None
+        self.wants_layer = False
+        self.layer = None
+        self.autoresizing_mask = None
+
+    @classmethod
+    def alloc(cls):
+        return cls()
+
+    def initWithFrame_(self, frame):
+        self.frame = frame
+        return self
+
+    def setWantsLayer_(self, wants):
+        self.wants_layer = wants
+
+    def setLayer_(self, layer):
+        self.layer = layer
+
+    def setAutoresizingMask_(self, mask):
+        self.autoresizing_mask = mask
+
+
+class TestRenderHostInstall(unittest.TestCase):
+    """SL-36: every macOS window gets a render-host view covering the content
+    view; the Metal/Quartz layer lives on the host so a glass plate can slot
+    in UNDER it while native controls attach above. With no glass installed
+    the host is the content view's only subview and the structure renders
+    pixel-identically to the pre-split hierarchy."""
+
+    def _ns(self):
+        return {
+            "NSView": _FakeRenderHostView,
+            "NSMakeRect": lambda x, y, w, h: (x, y, w, h),
+            "NSViewWidthSizable": 2,
+            "NSViewHeightSizable": 16,
+        }
+
+    def test_host_covers_content_and_owns_layer(self):
+        content = _FakeRenderContentView()
+        layer = object()
+        host = window_system._install_render_host(content, layer, self._ns())
+        assert host in content.subviews
+        assert host.frame == (0.0, 0.0, 1280.0, 800.0)
+        assert host.autoresizing_mask == 2 | 16
+        assert host.wants_layer is True
+        assert host.layer is layer
+
+    def test_handle_carries_render_view_fields(self):
+        handle = window_system.MacOSWindowHandle(window=object(), layer=object())
+        assert handle.render_view is None
+        assert handle.under_glass_capable is False
+        capable = window_system.MacOSWindowHandle(
+            window=object(), layer=object(), render_view=object(),
+            under_glass_capable=True)
+        assert capable.render_view is not None
+        assert capable.under_glass_capable is True
+
+
+class _FakeAppearanceWindow:
+    def __init__(self) -> None:
+        self.appearance = None
+
+    def setAppearance_(self, appearance):
+        self.appearance = appearance
+
+
+class _FakeWSAppearance:
+    """Mirrors AppKit: appearanceNamed: returns nil for unknown names."""
+
+    def __init__(self, name) -> None:
+        self.name = name
+
+    @classmethod
+    def appearanceNamed_(cls, name):
+        if name == "NSAppearanceNameDarkAqua":
+            return cls(name)
+        return None
+
+
+class TestWindowDarkAppearance(unittest.TestCase):
+    """SL-36 eyeball follow-up: the window itself pins dark Aqua so EVERY
+    native descendant — glass plates, web views, buttons, fields, popovers —
+    inherits the dark material instead of the default light appearance that
+    rendered the pill glass white over the near-black scene."""
+
+    def _ns(self):
+        return {
+            "NSAppearance": _FakeWSAppearance,
+            "NSAppearanceNameDarkAqua": "NSAppearanceNameDarkAqua",
+        }
+
+    def test_window_pins_dark_appearance(self):
+        window = _FakeAppearanceWindow()
+        window_system._pin_window_appearance(window, self._ns())
+        assert window.appearance is not None
+        assert window.appearance.name == "NSAppearanceNameDarkAqua"
+
+    def test_missing_appearance_class_is_tolerated(self):
+        # A stripped-down AppKit must not break window creation — the pin is
+        # best-effort and the scene renders identically without it.
+        window = _FakeAppearanceWindow()
+        window_system._pin_window_appearance(window, {})
+        assert window.appearance is None
+
+
 if __name__ == "__main__":
     unittest.main()
