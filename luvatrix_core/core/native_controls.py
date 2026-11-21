@@ -135,6 +135,11 @@ class NativeGlassSurface(Protocol):
     @property
     def is_visible(self) -> bool: ...
 
+    def set_corner_radius(self, radius: float) -> None:
+        """Update the plate's corner radius (dynamic silhouettes, e.g. the
+        Liquid Glass size rule flipping a tall pill to a rounded rect)."""
+        ...
+
     def destroy(self) -> None: ...
 
 
@@ -241,6 +246,17 @@ class NativeControlBridge(Protocol):
         """False when the host cannot embed native controls right now."""
         ...
 
+    @property
+    def supports_under_glass(self) -> bool:
+        """True when a glass surface can sit BELOW the render surface.
+
+        Requires the window's render-host split (the Metal layer lives on a
+        host view) plus a presenter that honors a fully transparent clear by
+        making the layer and window see-through. Only then does
+        ``placement="under"`` show real material instead of hiding behind an
+        opaque render layer."""
+        ...
+
     def create_web_view(
         self,
         *,
@@ -290,7 +306,13 @@ class NativeControlBridge(Protocol):
         height: float,
         corner_radius: float = 0.0,
         style: str = "regular",
-    ) -> NativeGlassSurface: ...
+        placement: str = "above",
+    ) -> NativeGlassSurface:
+        """``placement="above"`` composites the plate over the render surface
+        (it blurs scene content beneath — fine behind native controls).
+        ``placement="under"`` slots it below the render surface so scene
+        content draws crisply on top; requires ``supports_under_glass``."""
+        ...
 
     def create_scripted_web_view(
         self,
@@ -351,15 +373,20 @@ class _NullTextField:
 class _NullGlassSurface:
     """In-memory stand-in for a glass surface on unsupported hosts."""
 
-    def __init__(self, *, x, y, width, height, corner_radius=0.0, style="regular") -> None:
+    def __init__(self, *, x, y, width, height, corner_radius=0.0, style="regular",
+                 placement="above") -> None:
         self.frame = (x, y, width, height)
         self.corner_radius = corner_radius
         self.style = style
+        self.placement = placement
         self.is_visible = True
         self.destroyed = False
 
     def set_frame(self, x: float, y: float, width: float, height: float) -> None:
         self.frame = (x, y, width, height)
+
+    def set_corner_radius(self, radius: float) -> None:
+        self.corner_radius = radius
 
     def show(self) -> None:
         self.is_visible = True
@@ -518,6 +545,10 @@ class NullNativeControlBridge:
     def available(self) -> bool:
         return False
 
+    @property
+    def supports_under_glass(self) -> bool:
+        return False
+
     def create_web_view(self, **kwargs) -> _NullWebView:
         return _NullWebView(
             x=kwargs.get("x", 0.0),
@@ -559,6 +590,7 @@ class NullNativeControlBridge:
             height=kwargs.get("height", 0.0),
             corner_radius=kwargs.get("corner_radius", 0.0),
             style=kwargs.get("style", "regular"),
+            placement=kwargs.get("placement", "above"),
         )
 
     def create_scripted_web_view(self, **kwargs) -> _NullScriptedWebView:

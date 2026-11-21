@@ -431,6 +431,41 @@ class MacOSMetalSceneBackend:
         state = self._state
         return state.window_handle if state is not None else None
 
+    def _apply_under_glass_transparency(self, window_handle, clear) -> None:
+        """Flip the window + CAMetalLayer see-through while an under-glass
+        plate is live (SL-36); restore opaque compositing when it goes away.
+
+        Idempotent per frame — AppKit is touched only on an actual state
+        change. Windows without the render-host split are never modified.
+        """
+        if not getattr(window_handle, "under_glass_capable", False):
+            return
+        enabled = _under_glass_transparency(clear)
+        if getattr(self, "_under_glass_enabled", False) == enabled:
+            return
+        self._under_glass_enabled = enabled
+        try:
+            window_handle.layer.setOpaque_(not enabled)
+            window = window_handle.window
+            if enabled:
+                from AppKit import NSColor  # type: ignore
+
+                if getattr(self, "_under_glass_bg", None) is None:
+                    self._under_glass_bg = window.backgroundColor()
+                window.setOpaque_(False)
+                window.setBackgroundColor_(NSColor.clearColor())
+            else:
+                window.setOpaque_(True)
+                original = getattr(self, "_under_glass_bg", None)
+                if original is not None:
+                    window.setBackgroundColor_(original)
+                self._under_glass_bg = None
+            print(f"[macos-metal-scene] under-glass transparency {'on' if enabled else 'off'}",
+                  file=sys.stderr, flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[macos-metal-scene] under-glass transparency apply failed: {exc!r}",
+                  file=sys.stderr, flush=True)
+
     @property
     def last_backing_scale(self) -> float:
         """Most recent window backingScaleFactor seen while sizing the layer.
@@ -464,6 +499,7 @@ class MacOSMetalSceneBackend:
             return
 
         clear = _clear_color(frame, self.bar_color_rgba)
+        self._apply_under_glass_transparency(state.window_handle, clear)
         pass_desc = Metal.MTLRenderPassDescriptor.renderPassDescriptor()
         color_attach = pass_desc.colorAttachments().objectAtIndexedSubscript_(0)
         color_attach.setTexture_(drawable.texture())
@@ -1104,6 +1140,14 @@ def _clear_color(frame: SceneFrame, fallback: tuple[int, int, int, int]) -> tupl
         if isinstance(node, ClearNode):
             return node.color_rgba
     return fallback
+
+
+def _under_glass_transparency(clear_rgba: tuple[int, int, int, int]) -> bool:
+    """True only when the frame clears fully transparent — the app's signal
+    that an under-glass plate is live and the window must composite
+    see-through in the zones the scene leaves unpainted. Any alpha keeps the
+    window opaque (under-glass never half-applies)."""
+    return bool(len(clear_rgba) == 4 and int(clear_rgba[3]) == 0)
 
 
 _PASS_INDEX = {"rect": 0, "circle": 1, "rounded": 2, "texture": 3}

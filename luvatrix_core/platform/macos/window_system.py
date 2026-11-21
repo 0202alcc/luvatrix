@@ -11,6 +11,31 @@ from ..frame_pipeline import PresentationMode, normalize_presentation_mode
 class MacOSWindowHandle:
     window: object
     layer: object
+    # Render-host split (SL-36): the drawing layer lives on ``render_view``,
+    # a host view covering the content view, so a native glass plate can slot
+    # in UNDER the rendered pixels while native controls attach above.
+    # ``under_glass_capable`` is True only when the layer is a CAMetalLayer
+    # the presenter can make see-through (Metal path).
+    render_view: object | None = None
+    under_glass_capable: bool = False
+
+
+def _install_render_host(content_view, layer, ns):
+    """Parent ``layer``'s host view to cover ``content_view``; return the host.
+
+    The content view keeps a plain backing layer; the host (autoresized with
+    the window) owns the render layer. Siblings added after the host — native
+    controls, glass above — composite over the rendered pixels, and glass
+    placed NSWindowBelow the host slots under them.
+    """
+    bounds = content_view.bounds().size
+    host = ns["NSView"].alloc().initWithFrame_(
+        ns["NSMakeRect"](0.0, 0.0, float(bounds.width), float(bounds.height)))
+    host.setAutoresizingMask_(ns["NSViewWidthSizable"] | ns["NSViewHeightSizable"])
+    host.setWantsLayer_(True)
+    host.setLayer_(layer)
+    content_view.addSubview_(host)
+    return host
 
 
 @dataclass(frozen=True)
@@ -82,6 +107,9 @@ class AppKitWindowSystem:
                 NSColor,
                 NSImage,
                 NSMakeRect,
+                NSView,
+                NSViewHeightSizable,
+                NSViewWidthSizable,
                 NSWindow,
                 NSWindowStyleMaskClosable,
                 NSWindowStyleMaskMiniaturizable,
@@ -109,6 +137,9 @@ class AppKitWindowSystem:
             "NSColor": NSColor,
             "NSImage": NSImage,
             "NSMakeRect": NSMakeRect,
+            "NSView": NSView,
+            "NSViewWidthSizable": NSViewWidthSizable,
+            "NSViewHeightSizable": NSViewHeightSizable,
             "NSWindow": NSWindow,
             "NSWindowStyleMaskClosable": NSWindowStyleMaskClosable,
             "NSWindowStyleMaskMiniaturizable": NSWindowStyleMaskMiniaturizable,
@@ -161,7 +192,12 @@ class AppKitWindowSystem:
             layer.setContentsGravity_("resize")
         content_view = window.contentView()
         content_view.setWantsLayer_(True)
-        content_view.setLayer_(layer)
+        # Render-host split (SL-36): the drawing layer lives on an autoresized
+        # host view rather than the content view itself, so under-glass plates
+        # can slot below the rendered pixels. With no glass installed the host
+        # is the content view's only subview and the hierarchy renders
+        # pixel-identically to the pre-split structure.
+        render_host = _install_render_host(content_view, layer, ns)
         if lock_window_size:
             try:
                 window.setContentMinSize_(frame.size)
@@ -171,7 +207,8 @@ class AppKitWindowSystem:
         window.makeKeyAndOrderFront_(None)
         self._install_main_menu(app=app, menu_config=menu_config)
         app.activateIgnoringOtherApps_(True)
-        return MacOSWindowHandle(window=window, layer=layer)
+        return MacOSWindowHandle(window=window, layer=layer, render_view=render_host,
+                                 under_glass_capable=use_metal_layer)
 
     def _set_application_icon(
         self,
