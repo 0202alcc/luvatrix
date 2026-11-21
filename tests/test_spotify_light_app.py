@@ -4785,12 +4785,12 @@ class TestPillNativeGlass:
         pill = self._pill_surface(bridge)
 
         app.mcp_call("layout_set", {
-            "id": "pill", "rect": {"x": 700, "y": 40, "width": 560, "height": 96}})
+            "id": "pill", "rect": {"x": 700, "y": 40, "width": 560, "height": 72}})
         _tick(app, ctx, 2)
 
-        assert pill.frame == (700.0, 40.0, 560.0, 96.0)
+        assert pill.frame == (700.0, 40.0, 560.0, 72.0)
         assert pill.destroyed is False
-        expected_radius = sl_views.glass_silhouette_radius(96.0)
+        expected_radius = sl_views.glass_silhouette_radius(72.0)
         assert pill.corner_radius == expected_radius
         assert expected_radius in pill.corner_radius_calls
 
@@ -4850,7 +4850,10 @@ class TestPillNativeGlass:
         self._playing(app, ctx)
         pill = self._pill_surface(bridge)
 
+        # _end_session invalidates; a direct flag flip must do the same or
+        # the render-on-invalidation loop never re-syncs the surfaces.
         app.authenticated = False
+        app.invalidate()
         _tick(app, ctx, 2)
 
         assert pill.destroyed is True

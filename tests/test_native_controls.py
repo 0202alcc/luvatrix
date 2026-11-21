@@ -618,6 +618,13 @@ class TestAppKitGlassSurfaces:
         self._mac = mac_native
         self._patchers = []
         mac_native._GLASS_EFFECT_VIEW_CLASS = None
+        # The fake AppKit/objc environment simulates a macOS 26 host — the
+        # resolver's version gate must see it as one.
+        from unittest.mock import patch
+
+        version = patch.object(self._mac, "_macos_major_version", lambda: 26)
+        version.start()
+        self._patchers.append(version)
 
     def teardown_method(self):
         for patcher in self._patchers:
@@ -822,6 +829,12 @@ class TestAppKitUnderGlassPlacement:
         self._mac = mac_native
         self._patchers = []
         mac_native._GLASS_EFFECT_VIEW_CLASS = None
+        # Fake AppKit/objc environment == macOS 26 host for the version gate.
+        from unittest.mock import patch
+
+        version = patch.object(self._mac, "_macos_major_version", lambda: 26)
+        version.start()
+        self._patchers.append(version)
 
     def teardown_method(self):
         for patcher in self._patchers:
@@ -929,6 +942,12 @@ class TestAppKitNativeButtons:
         self._mac = mac_native
         self._patchers = []
         mac_native._GLASS_EFFECT_VIEW_CLASS = None
+        # Fake AppKit/objc environment == macOS 26 host for the version gate.
+        from unittest.mock import patch
+
+        version = patch.object(self._mac, "_macos_major_version", lambda: 26)
+        version.start()
+        self._patchers.append(version)
 
     def teardown_method(self):
         for patcher in self._patchers:
@@ -1245,11 +1264,19 @@ class TestGlassEffectViewClassSelection:
     def test_prefers_ns_glass_effect_view(self):
         from unittest.mock import patch
 
-        with patch.dict("sys.modules", {"objc": _fake_objc_module(with_glass=True)}):
-            assert self._mac._glass_effect_view_class() is _FakeGlassEffectView
+        modules = {"objc": _fake_objc_module(with_glass=True),
+                   "AppKit": _fake_appkit_module()}
+        with patch.dict("sys.modules", modules):
+            with patch.object(self._mac, "_macos_major_version", lambda: 26):
+                assert self._mac._glass_effect_view_class() is _FakeGlassEffectView
 
     def test_returns_none_below_tahoe(self):
         from unittest.mock import patch
 
-        with patch.dict("sys.modules", {"objc": _fake_objc_module(with_glass=False)}):
-            assert self._mac._glass_effect_view_class() is None
+        # Pre-Tahoe host: the version gate holds the fallback even when the
+        # class symbol happens to resolve.
+        modules = {"objc": _fake_objc_module(with_glass=True),
+                   "AppKit": _fake_appkit_module()}
+        with patch.dict("sys.modules", modules):
+            with patch.object(self._mac, "_macos_major_version", lambda: 15):
+                assert self._mac._glass_effect_view_class() is None

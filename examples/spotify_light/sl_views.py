@@ -453,6 +453,30 @@ def glass_silhouette_radius(h: float) -> float:
     return GLASS_RECT_RADIUS
 
 
+def draw_window_backdrop(frame, *, width: float, height: float, bg=BG,
+                         skip: tuple[float, float, float, float] | None = None) -> None:
+    """Opaque window base for the under-glass path (SL-36).
+
+    The Metal clear goes fully transparent while a native glass plate lives
+    under the render surface, so the window's base color must come from scene
+    rects — tiled AROUND ``skip`` (the glass zone) to leave exactly that
+    region see-through. Content scrolling into the zone still draws over the
+    real material; ``skip=None`` covers the whole frame (no glass)."""
+    if skip is None:
+        frame.rect(x=0.0, y=0.0, width=width, height=height, color=bg, z_index=0)
+        return
+    sx, sy, sw, sh = skip
+    tiles = (
+        (0.0, 0.0, width, sy),                       # above the zone
+        (0.0, sy + sh, width, height - (sy + sh)),   # below the zone
+        (0.0, sy, sx, sh),                           # left of the zone
+        (sx + sw, sy, width - (sx + sw), sh),        # right of the zone
+    )
+    for x, y, w, h in tiles:
+        if w > 0.0 and h > 0.0:
+            frame.rect(x=x, y=y, width=w, height=h, color=bg, z_index=0)
+
+
 def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
                  fill=None, border=None) -> None:
     """One canonical simulated-glass plate. Composed back-to-front: soft
@@ -975,8 +999,11 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     # popup) stayed on the bottom dock, anchored to the slot the pill
     # vacated. Scene-drawn → same on every host.
     px, py, pw, ph = _layout(app, "pill", pill_rect(width, height), width, height)
-    _glass_plate(frame, px, py, pw, ph, radius=glass_silhouette_radius(ph), z=10,
-                 fill=PILL_FILL, border=PILL_BORDER)
+    if not getattr(app, "_pill_glass_live", False):
+        # Simulated plate only while no REAL glass plate lives under the
+        # render surface (SL-36); art/text/controls below draw either way.
+        _glass_plate(frame, px, py, pw, ph, radius=glass_silhouette_radius(ph), z=10,
+                     fill=PILL_FILL, border=PILL_BORDER)
 
     player = app.player
     # Pre-staged at the wall-clock boundary: the queue head shows while the
