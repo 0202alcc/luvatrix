@@ -1377,7 +1377,7 @@ class TestFloatingPill:
         assert (px, py, pw, ph) == (692.0, 16.0, 572.0, 108.0)
         rrects = _nodes(scene_buffer, RoundedRectNode)
         rings = [n for n in rrects
-                 if n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
+                 if n.color_rgba == sl_views.GLASS_BORDER and n.x == px and n.y == py
                  and n.width == pw and n.height == ph
                  and n.radius == sl_views.glass_silhouette_radius(ph)]
         assert len(rings) == 1, \
@@ -1886,7 +1886,7 @@ class TestGlassSurfaces:
         # just inside its top edge and a soft shadow.
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         rrects = _nodes(scene_buffer, RoundedRectNode)
-        assert any(n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
+        assert any(n.color_rgba == sl_views.GLASS_BORDER and n.x == px and n.y == py
                    and n.width == pw and n.height == ph
                    and n.radius == sl_views.glass_silhouette_radius(ph)
                    for n in rrects), "player pill needs its silhouette border ring"
@@ -1934,7 +1934,7 @@ class TestGlassSurfaces:
                    for n in _nodes(scene_buffer, RoundedRectNode)), \
             "bridgeless hosts get the same glass rail"
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
-        assert any(n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
+        assert any(n.color_rgba == sl_views.GLASS_BORDER and n.x == px and n.y == py
                    and n.width == pw and n.height == ph
                    for n in _nodes(scene_buffer, RoundedRectNode)), \
             "bridgeless hosts get the same floating pill"
@@ -3110,10 +3110,11 @@ class TestGlassSizeRule:
         app, ctx, buf = app_ctx
         app.authenticated = True
         _tick(app, ctx, 2)
-        _, _, _, ph = sl_views.pill_rect(1280, 800)
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
         want = sl_views.glass_silhouette_radius(ph)
         rings = [n for n in _nodes(buf, RoundedRectNode)
-                 if n.color_rgba == sl_views.PILL_BORDER]
+                 if n.color_rgba == sl_views.GLASS_BORDER
+                 and (n.x, n.y, n.width, n.height) == (px, py, pw, ph)]
         assert rings and all(n.radius == want for n in rings), "idle pill ring obeys the rule"
         nirvana = _artist("Nirvana")
         track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
@@ -3122,7 +3123,8 @@ class TestGlassSizeRule:
         app._player_synced_at = app.now_monotonic
         _tick(app, ctx, 2)
         rings = [n for n in _nodes(buf, RoundedRectNode)
-                 if n.color_rgba == sl_views.PILL_BORDER]
+                 if n.color_rgba == sl_views.GLASS_BORDER
+                 and (n.x, n.y, n.width, n.height) == (px, py, pw, ph)]
         assert rings and all(n.radius == want for n in rings), \
             "playing pill ring obeys the same rule"
 
@@ -4312,12 +4314,12 @@ class TestPillTopRight:
         app.authenticated = True
         _tick(app, ctx, 2)
         ring_idle = [n for n in _nodes(buf, RoundedRectNode)
-                     if n.color_rgba == sl_views.PILL_BORDER
+                     if n.color_rgba == sl_views.GLASS_BORDER
                      and n.radius == sl_views.GLASS_RECT_RADIUS]
         assert len(ring_idle) == 1
         self._with_track(app, ctx)
         ring_playing = [n for n in _nodes(buf, RoundedRectNode)
-                        if n.color_rgba == sl_views.PILL_BORDER
+                        if n.color_rgba == sl_views.GLASS_BORDER
                         and n.radius == sl_views.GLASS_RECT_RADIUS]
         assert len(ring_playing) == 1
         assert (ring_idle[0].x + ring_idle[0].width) == \
@@ -4611,20 +4613,40 @@ class TestBareOverflowIcon:
         assert abs(sum(xs) / len(xs) - self.CENTER[0]) <= 1.5
         assert abs(sum(ys) / len(ys) - self.CENTER[1]) <= 1.5
 
-    def test_probe_zero_disc_fill_pixels_around_the_icon(self, app_ctx):
-        """The disc's composited fill reads as (62,62,62) on the pill; the
-        bare icon must leave ZERO such pixels in the whole slot rect."""
+    def test_probe_no_disc_signature_around_the_icon(self, app_ctx):
+        """A disc plate would stamp values the pill body never produces at
+        those rows: its shadow pair darkens below the body's floor, its
+        fill/ring bump above the sheen's ceiling. Compare each slot row
+        against the same-y pill-body strip just left of the slot —
+        construction-relative, so the probe survives plate-fill retunes
+        (round 66 moved the body's absolute read). Glyph ink and its AA
+        halo (which hugs bright pixels) are excluded: the body tops out
+        near 65 and the glyph ramps toward the ~190 ink, so 80 sits in
+        the gap."""
+        import numpy as np
         app, ctx, scene_buffer = app_ctx
         self._playing(app, ctx)
         img = self._raster(app, ctx, scene_buffer)
         ox, oy, ow, oh = (int(v) for v in self.CIRCLE)
-        hits = 0
-        for y in range(oy, oy + oh):
+        lum = img[..., :3].astype(int).sum(axis=2) / 3.0
+        ink = lum >= 80
+        padded = np.pad(ink, 1)
+        inkish = np.zeros_like(ink)
+        for dy in range(3):
+            for dx in range(3):
+                inkish |= padded[dy:dy + ink.shape[0], dx:dx + ink.shape[1]]
+        rx0, rx1 = ox - 60, ox - 16
+        hits = []
+        for yy in range(oh):
+            y = oy + yy
+            ref = lum[y, rx0:rx1][~inkish[y, rx0:rx1]]
+            if ref.size == 0:
+                continue
+            lo, hi = ref.min() - 1.0, ref.max() + 1.0
             for x in range(ox, ox + ow):
-                r, g, b = (int(v) for v in img[y, x, :3])
-                if (r, g, b) == (62, 62, 62):
-                    hits += 1
-        assert hits == 0, f"{hits} disc-fill (62,62,62) pixels survive in the slot rect"
+                if not inkish[y, x] and not (lo <= lum[y, x] <= hi):
+                    hits.append((x, y, round(float(lum[y, x]), 1)))
+        assert hits == [], f"{len(hits)} disc-signature pixels in the slot: {hits[:5]}"
 
 
 # ---------------------------------------------------------------------------
@@ -5043,7 +5065,7 @@ class TestPillNativeGlass:
         assert clears and clears[-1].color_rgba == sl_views.BG
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         rrects = _nodes(scene_buffer, RoundedRectNode)
-        assert any(n.color_rgba == sl_views.PILL_BORDER and n.x == px and n.y == py
+        assert any(n.color_rgba == sl_views.GLASS_BORDER and n.x == px and n.y == py
                    and n.width == pw and n.height == ph for n in rrects), \
             "incapable hosts keep the drawn pill plate"
 
@@ -5076,7 +5098,7 @@ class TestPillNativeGlass:
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         rrects = _nodes(scene_buffer, RoundedRectNode)
         rects = _nodes(scene_buffer, RectNode)
-        plate_colors = {sl_views.PILL_FILL, sl_views.PILL_BORDER,
+        plate_colors = {(16, 16, 16, 208), (255, 255, 255, 40),
                         sl_views.GLASS_SHADOW_FAR, sl_views.GLASS_SHADOW_NEAR}
         assert [n for n in rrects if n.color_rgba in plate_colors
                 and n.x <= px + 2 and n.y <= py + 6
@@ -5125,32 +5147,30 @@ class TestPillNativeGlass:
     def test_scene_plate_fills_the_pill_silhouette_under_native_glass(
             self, app_ctx, monkeypatch):
         """SL-40: under the native glass the scene carries its own alpha'd
-        dark plate. The glass blurs whatever scrolls behind it, and when that
-        backdrop changes mid-pill (dark gap vs card grid) the capsule stops
-        reading as one surface — Alec's fragmented-pill screenshot. The plate
-        is the material-fill family carrying the card-body composite in the
-        bare fill (the native glass already owns the edge/blur): one readable
-        capsule over gap and cards alike."""
+        plate so the capsule reads as one surface over any backdrop. Round
+        66 (Alec): the plate fill IS the nav circles' family — "i want them
+        all to be like the home and search buttons" — MATERIAL_PLATE_FILL
+        while the window material is live, the exact fill the home/search
+        circle plates carry; the native glass already owns the edge/blur."""
         app, ctx, scene_buffer = app_ctx
         self._bridge(monkeypatch)
         self._playing(app, ctx)
 
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         plates = [n for n in _nodes(scene_buffer, RoundedRectNode)
-                  if n.color_rgba == sl_views.PILL_PLATE_FILL]
+                  if n.color_rgba == sl_views.MATERIAL_PLATE_FILL
+                  and (n.x, n.y, n.width, n.height) == (px, py, pw, ph)]
         assert len(plates) == 1, "exactly one scene plate under the pill contents"
         plate = plates[0]
-        assert (plate.x, plate.y, plate.width, plate.height) == (px, py, pw, ph), \
-            "the plate rect IS the native glass frame contract"
         assert plate.radius == sl_views.glass_silhouette_radius(ph), \
             "the plate silhouette matches the native glass corner"
         assert plate.z_index == 10, "the plate sits below the pill contents"
-        assert sl_views.PILL_PLATE_FILL[:3] == sl_views.MATERIAL_PLATE_FILL[:3], \
-            "the plate is the material-fill family"
-        assert (sl_views.MATERIAL_PLATE_FILL[3]
-                <= sl_views.PILL_PLATE_FILL[3]
-                <= sl_views.MATERIAL_POPUP_FILL[3] + 40), \
-            "the plate alpha sits in the material-fill family band"
+        circle_fills = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                        if n.width == 42 and n.height == 42
+                        and n.color_rgba == sl_views.MATERIAL_PLATE_FILL]
+        assert circle_fills and all(n.color_rgba == plate.color_rgba
+                                    for n in circle_fills), \
+            "the pill plate IS the nav circles' plate fill (the active circle retints)"
         discs = [n for n in _nodes(scene_buffer, CircleNode) if n.radius == 16]
         assert discs and all(n.z_index > plate.z_index for n in discs), \
             "the play disc stays above the plate"
@@ -5160,10 +5180,9 @@ class TestPillNativeGlass:
         """Rasterizer histogram: the pill region's alpha floor lands in the
         frost window across the whole capsule — over the dark gap and the
         card backdrop alike — and nothing bleeds outside the glass frame.
-        SL-40 follow-up: the nav-family halo beneath the plate deepens the
-        interior composite (plate 130 over the shadow pair ≈ 46 → 152 over
-        clear, the same fill-over-shadow read the nav circles carry), so the
-        window centers on 152 instead of the bare plate's 130."""
+        Round 66: the plate is the nav circles' own fill, so the interior
+        composite IS the circles' fill-over-halo stack — fill 90 over the
+        halo pair (near 32 over far 17) over clear ≈ 119."""
         app, ctx, scene_buffer = app_ctx
         self._bridge(monkeypatch)
         self._playing(app, ctx)
@@ -5180,25 +5199,32 @@ class TestPillNativeGlass:
         inset = int(sl_views.glass_silhouette_radius(ph)) + 6
         region = img[py + 6:py + ph - 6, px + inset:px + pw - inset, 3]
         floor = int(region.min())
-        assert 145 <= floor <= 165, \
-            f"pill-region alpha floor {floor} outside the halo frost window"
+        assert 112 <= floor <= 126, \
+            f"pill-region alpha floor {floor} outside the nav-circle frost window"
         # Nothing bleeds outside the glass frame: above the card grid, the
         # column just left of the pill stays fully transparent.
         assert int(img[py + ph // 2, px - 8, 3]) == 0
 
     def test_scene_plate_only_draws_under_native_glass(self, app_ctx, monkeypatch):
-        """Bridgeless/incapable hosts keep the simulated plate — the scene
-        plate never doubles up with it."""
+        """Bridgeless/incapable hosts keep the simulated plate — built from
+        the same family fill the nav circles use (round 66) — and the bare
+        full-rect scene plate stays a native-glass-only companion."""
         app, ctx, scene_buffer = app_ctx
         self._bridge(monkeypatch, capable=False)
         self._playing(app, ctx)
 
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
         rrects = _nodes(scene_buffer, RoundedRectNode)
-        assert any(n.color_rgba == sl_views.PILL_FILL for n in rrects), \
-            "the simulated plate stays on incapable hosts"
+        assert any(n.color_rgba == sl_views.GLASS_FILL
+                   and (n.x, n.y, n.width, n.height) == (px + 1, py + 1, pw - 2, ph - 2)
+                   for n in rrects), \
+            "the fallback plate is the nav circles' family fill, inset like theirs"
+        assert [n for n in rrects if n.color_rgba[:3] == (16, 16, 16)] == [], \
+            "the dark pill fills are gone everywhere"
         assert [n for n in rrects
-                if n.color_rgba == getattr(sl_views, "PILL_PLATE_FILL", None)] == [], \
-            "the scene plate is a native-glass-only companion"
+                if (n.x, n.y, n.width, n.height) == (px, py, pw, ph)
+                and n.color_rgba == sl_views.GLASS_FILL] == [], \
+            "the bare full-rect plate is a native-glass-only companion"
 
     def test_pill_plate_carries_the_nav_halo_family(self, app_ctx, monkeypatch):
         """SL-40 follow-up: the bare plate read flush against content —
@@ -5230,7 +5256,8 @@ class TestPillNativeGlass:
             "the pill halo shares the nav buttons' shadow family"
         nodes = list(scene_buffer.latest_frame().nodes)
         plate_idx = next(i for i, n in enumerate(nodes)
-                         if getattr(n, "color_rgba", None) == sl_views.PILL_PLATE_FILL)
+                         if getattr(n, "color_rgba", None) == sl_views.MATERIAL_PLATE_FILL
+                         and (n.x, n.y, n.width, n.height) == (px, py, pw, ph))
         assert nodes.index(far[0]) < plate_idx, "the far halo draws beneath the plate"
         assert nodes.index(near[0]) < plate_idx, "the near halo draws beneath the plate"
 
@@ -5458,9 +5485,14 @@ class TestWindowMaterial:
         """Material plate fills that sit on the clear (cards, rail, dock
         circles) — NOT plates nested on another material plate (the active
         nav row, the account chip), whose floor legitimately composites over
-        the host plate's ~130 body instead of over the clear."""
+        the host plate's ~130 body instead of over the clear. Round 66: the
+        pill's native-glass plate also carries the family fill, but it skips
+        the scene border ring (the glass owns the edge), so its floor stacks
+        one ring shallower than the card-body band — out of scope here."""
+        pill = sl_views.pill_rect(frame.logical_width, frame.logical_height)
         fills = [n for n in frame.nodes if isinstance(n, RoundedRectNode)
-                 and n.color_rgba == sl_views.MATERIAL_PLATE_FILL]
+                 and n.color_rgba == sl_views.MATERIAL_PLATE_FILL
+                 and (n.x, n.y, n.width, n.height) != pill]
         base = []
         for i, n in enumerate(fills):
             cx, cy = n.x + n.width / 2.0, n.y + n.height / 2.0

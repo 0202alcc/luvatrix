@@ -78,8 +78,11 @@ def _with_track(app, ctx):
 
 
 def _pill_ring(scene_buffer):
+    # Round 66: the pill ring joined the family border color, so the lookup
+    # disambiguates by shape — pill-ring z, wider than a nav circle.
     rings = [n for n in _nodes(scene_buffer, RoundedRectNode)
-             if n.color_rgba == sl_views.PILL_BORDER]
+             if n.color_rgba == sl_views.GLASS_BORDER and n.z_index == 10
+             and n.width > 2 * sl_views.NAV_CIRCLE_R]
     assert len(rings) == 1, "expected exactly one pill ring"
     return rings[0]
 

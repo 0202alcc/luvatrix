@@ -99,32 +99,25 @@ SIDEBAR_ROW_HOVER = (255, 255, 255, 26)
 SIDEBAR_SEAM_STRIPS = 6
 SIDEBAR_SEAM_FADE_PX = 20.0
 # Floating player pill: a centered capsule (liquid-glass music-pill
-# reference), dark-frosted so scene text stays readable over content,
-# flanked by circular nav buttons; playback extras live in a popup.
-# Round 32 (Alec): the capsule grows to a 108pt-tall column layout — bigger
-# album tile, title/artist over the progress bar, transport row under it.
-# Round 38 (Alec, SL-23): the width DERIVES from the transport center —
-# 2 x 286, where 286 was the transport's center on the round-32 plate
-# (column-left 110 + half the SL-21 strip 176) — so the play button is the
-# plate's geometric center and the empty right half after "next" mirrors
-# the left half. The right edge stays pinned at PILL_FLOAT: all growth
-# lands on the left edge.
+# reference), flanked by circular nav buttons; playback extras live in a
+# popup. Round 32 (Alec): the capsule grows to a 108pt-tall column layout —
+# bigger album tile, title/artist over the progress bar, transport row
+# under it. Round 38 (Alec, SL-23): the width DERIVES from the transport
+# center — 2 x 286, where 286 was the transport's center on the round-32
+# plate (column-left 110 + half the SL-21 strip 176) — so the play button
+# is the plate's geometric center and the empty right half after "next"
+# mirrors the left half. The right edge stays pinned at PILL_FLOAT: all
+# growth lands on the left edge.
 PILL_W = 572.0
 PILL_MIN_W = 320.0
 PILL_H = 108.0
 PILL_FLOAT = 16.0
-PILL_FILL = (16, 16, 16, 208)
-PILL_BORDER = (255, 255, 255, 40)
-# SL-40: under the NATIVE pill glass the scene still carries its own plate
-# fill. The glass blurs whatever scrolls behind it, and when that backdrop
-# changes mid-pill (dark gap above the card grid vs the cards themselves)
-# the capsule stops reading as one surface — Alec's fragmented-pill
-# screenshot: bar and transport read as floating on the cards. The plate is
-# the material-fill family carrying the card-body composite value in the
-# BARE fill (the native glass already owns the edge/blur, so no shadow,
-# border ring, or sheen stack): one readable capsule over gap and cards
-# alike. Contents stay opaque above it (z 11+).
-PILL_PLATE_FILL = (16, 16, 16, 130)
+# Round 66 (Alec): the pill plate dropped its dark custom fills for the
+# _plate_fill() family the home/search circles use — "i want them all to be
+# like the home and search buttons". MATERIAL_PLATE_FILL under the window
+# material, GLASS_FILL otherwise, in BOTH the native-glass branch and the
+# simulated _glass_plate fallback (which also takes the family border
+# ring). The drop-shadow halo was already shared with the circles.
 PILL_THUMB_EMPTY = (255, 255, 255, 16)
 # Interior column: the album tile sits flush at the left cap with the
 # PILL_ART_INSET idiom; title/artist, the progress bar, and the transport
@@ -1192,15 +1185,18 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
     if not getattr(app, "_pill_glass_live", False):
         # Simulated plate only while no REAL glass plate lives under the
         # render surface (SL-36); art/text/controls below draw either way.
+        # Round 66: default family fill/border — the nav circles' _glass_plate
+        # construction verbatim (Alec: match the home/search buttons).
         _glass_plate(frame, px, py, pw, ph, radius=glass_silhouette_radius(ph), z=10,
-                     fill=PILL_FILL, border=PILL_BORDER)
+                     app=app)
     else:
         # SL-40: with REAL glass under, the scene carries its own plate fill
-        # so the capsule reads as one surface over any backdrop. The bare
-        # plate read flush next to the home/search circles ("flat compared
-        # to the other pills"), so the plate floats on the same drop-shadow
-        # pair _glass_plate gives the nav buttons — material-softened while
-        # the window material is live, offset below the capsule only.
+        # so the capsule reads as one surface over any backdrop, floating on
+        # the same drop-shadow pair _glass_plate gives the nav buttons —
+        # material-softened while the window material is live, offset below
+        # the capsule only. Round 66: the plate fill is the _plate_fill()
+        # family itself, so the pill interior reads exactly like the
+        # home/search circles next to it.
         radius = glass_silhouette_radius(ph)
         material = _material_live(app)
         shadow_far = MATERIAL_SHADOW_FAR if material else GLASS_SHADOW_FAR
@@ -1210,7 +1206,7 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
         frame.rounded_rect(x=px, y=py + 2, width=pw, height=ph,
                            radius=radius, color=shadow_near, z_index=10)
         frame.rounded_rect(x=px, y=py, width=pw, height=ph,
-                           radius=radius, color=PILL_PLATE_FILL, z_index=10)
+                           radius=radius, color=_plate_fill(app, False), z_index=10)
 
     player = app.player
     # Pre-staged at the wall-clock boundary: the queue head shows while the
