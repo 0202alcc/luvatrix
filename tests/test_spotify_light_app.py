@@ -5197,6 +5197,84 @@ class TestPillNativeGlass:
                 if n.color_rgba == getattr(sl_views, "PILL_PLATE_FILL", None)] == [], \
             "the scene plate is a native-glass-only companion"
 
+    def test_pill_plate_carries_the_nav_halo_family(self, app_ctx, monkeypatch):
+        """SL-40 follow-up: the bare plate read flush against content —
+        "looks flat compared to the other pills" (Alec's screenshot). The
+        home/search circles lift off via the _glass_plate shadow pair; the
+        pill carries the same halo family (material-softened while the
+        window material is live) beneath the plate — drop-shadow idiom,
+        offset below the capsule only."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch)
+        self._playing(app, ctx)
+
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        radius = sl_views.glass_silhouette_radius(ph)
+        rrects = _nodes(scene_buffer, RoundedRectNode)
+        far = [n for n in rrects if n.color_rgba == sl_views.MATERIAL_SHADOW_FAR
+               and (n.x, n.y, n.width, n.height) == (px - 1, py + 5, pw + 2, ph)]
+        near = [n for n in rrects if n.color_rgba == sl_views.MATERIAL_SHADOW_NEAR
+                and (n.x, n.y, n.width, n.height) == (px, py + 2, pw, ph)]
+        assert len(far) == 1, "one far halo plate at the family's offset rect"
+        assert len(near) == 1, "one near halo plate at the family's offset rect"
+        assert far[0].radius == radius and near[0].radius == radius, \
+            "the halo silhouette matches the pill glass corner"
+        assert far[0].z_index == 10 and near[0].z_index == 10, \
+            "the halo rides at the plate's z"
+        chrome_halos = [n for n in rrects
+                        if n.color_rgba == sl_views.MATERIAL_SHADOW_FAR and n.z_index == 10]
+        assert len(chrome_halos) >= 2, \
+            "the pill halo shares the nav buttons' shadow family"
+        nodes = list(scene_buffer.latest_frame().nodes)
+        plate_idx = next(i for i, n in enumerate(nodes)
+                         if getattr(n, "color_rgba", None) == sl_views.PILL_PLATE_FILL)
+        assert nodes.index(far[0]) < plate_idx, "the far halo draws beneath the plate"
+        assert nodes.index(near[0]) < plate_idx, "the near halo draws beneath the plate"
+
+    def test_pill_halo_uses_the_full_strength_family_without_the_material(
+            self, app_ctx, monkeypatch):
+        """Pill glass live with the window material rejected: the halo
+        follows the nav buttons' non-material family — GLASS_SHADOW_* at the
+        same offset rects."""
+        app, ctx, scene_buffer = app_ctx
+        bridge = self._bridge(monkeypatch)
+        bridge.backdrop_error = RuntimeError("backdrop rejected")
+        self._playing(app, ctx)
+
+        assert app._pill_glass_live, "the pill glass still lands"
+        assert not app._window_material_live, "the backdrop was rejected"
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        rrects = _nodes(scene_buffer, RoundedRectNode)
+        far = [n for n in rrects if n.color_rgba == sl_views.GLASS_SHADOW_FAR
+               and (n.x, n.y, n.width, n.height) == (px - 1, py + 5, pw + 2, ph)]
+        near = [n for n in rrects if n.color_rgba == sl_views.GLASS_SHADOW_NEAR
+                and (n.x, n.y, n.width, n.height) == (px, py + 2, pw, ph)]
+        assert len(far) == 1 and len(near) == 1
+
+    def test_pill_halo_bleeds_softly_below_and_never_above(
+            self, app_ctx, monkeypatch):
+        """Rasterizer: the halo composites as a soft drop below the capsule
+        (material-family shadow over clear) while the row above the pill
+        stays fully transparent — a drop shadow, not a glow."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch)
+        self._playing(app, ctx)
+        app.view = "library"
+        app.playlists = [_playlist("Roadtrip"), _playlist("Focus")]
+        app.invalidate()
+        _tick(app, ctx, 2)
+
+        frame = scene_buffer.latest_frame()
+        img = rasterize_scene_frame(frame)
+        px, py, pw, ph = (int(v) for v in sl_views.pill_rect(1280, 800))
+        inset = int(sl_views.glass_silhouette_radius(ph)) + 6
+        strip = img[py + ph + 1, px + inset:px + pw - inset, 3]
+        floor = int(strip.min())
+        assert 20 <= floor <= 90, \
+            f"halo alpha {floor} below the pill outside the soft-shadow band"
+        above = img[py - 2, px + inset:px + pw - inset, 3]
+        assert int(above.max()) == 0, "no halo above the capsule"
+
 
 # ---------------------------------------------------------------------------
 # SL-38: the whole window is glass. One window-spanning behind-window Apple
