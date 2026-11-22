@@ -5122,6 +5122,78 @@ class TestPillNativeGlass:
         assert [s for s in bridge.glass if s.placement == "under"
                 and not s.destroyed] == []
 
+    def test_scene_plate_fills_the_pill_silhouette_under_native_glass(
+            self, app_ctx, monkeypatch):
+        """SL-40: under the native glass the scene carries its own alpha'd
+        dark plate. The glass blurs whatever scrolls behind it, and when that
+        backdrop changes mid-pill (dark gap vs card grid) the capsule stops
+        reading as one surface — Alec's fragmented-pill screenshot. The plate
+        is the material-fill family carrying the card-body composite in the
+        bare fill (the native glass already owns the edge/blur): one readable
+        capsule over gap and cards alike."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch)
+        self._playing(app, ctx)
+
+        px, py, pw, ph = sl_views.pill_rect(1280, 800)
+        plates = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                  if n.color_rgba == sl_views.PILL_PLATE_FILL]
+        assert len(plates) == 1, "exactly one scene plate under the pill contents"
+        plate = plates[0]
+        assert (plate.x, plate.y, plate.width, plate.height) == (px, py, pw, ph), \
+            "the plate rect IS the native glass frame contract"
+        assert plate.radius == sl_views.glass_silhouette_radius(ph), \
+            "the plate silhouette matches the native glass corner"
+        assert plate.z_index == 10, "the plate sits below the pill contents"
+        assert sl_views.PILL_PLATE_FILL[:3] == sl_views.MATERIAL_PLATE_FILL[:3], \
+            "the plate is the material-fill family"
+        assert (sl_views.MATERIAL_PLATE_FILL[3]
+                <= sl_views.PILL_PLATE_FILL[3]
+                <= sl_views.MATERIAL_POPUP_FILL[3] + 40), \
+            "the plate alpha sits in the material-fill family band"
+        discs = [n for n in _nodes(scene_buffer, CircleNode) if n.radius == 16]
+        assert discs and all(n.z_index > plate.z_index for n in discs), \
+            "the play disc stays above the plate"
+
+    def test_pill_plate_composites_uniformly_over_gap_and_cards(
+            self, app_ctx, monkeypatch):
+        """Rasterizer histogram: the pill region's alpha floor lands in the
+        120–150 frost window across the whole capsule — over the dark gap and
+        the card backdrop alike — and nothing bleeds outside the glass
+        frame."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch)
+        self._playing(app, ctx)
+        app.view = "library"
+        app.playlists = [_playlist("Roadtrip"), _playlist("Focus")]
+        app.invalidate()
+        _tick(app, ctx, 2)
+
+        frame = scene_buffer.latest_frame()
+        img = rasterize_scene_frame(frame)
+        px, py, pw, ph = (int(v) for v in sl_views.pill_rect(1280, 800))
+        region = img[py + 6:py + ph - 6, px + 6:px + pw - 6, 3]
+        floor = int(region.min())
+        assert 120 <= floor <= 150, \
+            f"pill-region alpha floor {floor} outside the 120–150 frost window"
+        # Nothing bleeds outside the glass frame: above the card grid, the
+        # column just left of the pill stays fully transparent.
+        assert int(img[py + ph // 2, px - 8, 3]) == 0
+
+    def test_scene_plate_only_draws_under_native_glass(self, app_ctx, monkeypatch):
+        """Bridgeless/incapable hosts keep the simulated plate — the scene
+        plate never doubles up with it."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch, capable=False)
+        self._playing(app, ctx)
+
+        rrects = _nodes(scene_buffer, RoundedRectNode)
+        assert any(n.color_rgba == sl_views.PILL_FILL for n in rrects), \
+            "the simulated plate stays on incapable hosts"
+        assert [n for n in rrects
+                if n.color_rgba == getattr(sl_views, "PILL_PLATE_FILL", None)] == [], \
+            "the scene plate is a native-glass-only companion"
+
 
 # ---------------------------------------------------------------------------
 # SL-38: the whole window is glass. One window-spanning behind-window Apple
