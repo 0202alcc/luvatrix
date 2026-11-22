@@ -874,32 +874,29 @@ class SpotifyLightApp(App):
             if getattr(event, "device", None) == "keyboard":
                 self._handle_key(event)
 
-        # Scrollbar drags get first claim on the mouse.
-        list_top = sl_views.SIDEBAR_LIST_TOP
-        track_x, track_y = sl_views.SIDEBAR_W - 10, list_top
-        track_h = max(0.0, self.display.height_px - 64 - list_top)
+        # Scrollbar drags get first claim on the mouse. The library list
+        # lives in the search-anchored popup (round 67): its thumb/drag
+        # geometry tracks the panel's list region, and exists only expanded.
         if self.search_expanded:
-            # SL-39: the list lives in the docked panel — the thumb/drag
-            # geometry tracks the panel's list region, not the vacated rail.
             px, py, pw, ph = sl_views.library_panel_rect(
                 self, float(self.display.width_px), float(self.display.height_px))
             track_x = px + pw - 13
             track_y = py + sl_views.PANEL_LIST_TOP
             track_h = max(0.0, ph - sl_views.PANEL_CHIP_H - sl_views.PANEL_LIST_TOP)
-        sidebar_update = self.scrollbar_sidebar.update(
-            state,
-            x=track_x,
-            y=track_y,
-            width=13,
-            height=track_h,
-            content_extent=30.0 * len(self.playlists),
-            viewport_extent=max(1.0, self.display.height_px - 64 - list_top),
-            offset=self.sidebar_scroll,
-        )
-        if sidebar_update.consumed:
-            self.sidebar_scroll = sidebar_update.offset
-            self.invalidate()
-            return
+            sidebar_update = self.scrollbar_sidebar.update(
+                state,
+                x=track_x,
+                y=track_y,
+                width=13,
+                height=track_h,
+                content_extent=30.0 * len(self.playlists),
+                viewport_extent=max(1.0, track_h),
+                offset=self.sidebar_scroll,
+            )
+            if sidebar_update.consumed:
+                self.sidebar_scroll = sidebar_update.offset
+                self.invalidate()
+                return
         viewport = self.display.height_px - sl_views.DOCK_H
         content_update = self.scrollbar_content.update(
             state,
@@ -949,13 +946,7 @@ class SpotifyLightApp(App):
                 return
             self.invalidate()
             return
-        if mx < sl_views.SIDEBAR_W:
-            self.sidebar_scroll = self._clamp_scroll(
-                self.sidebar_scroll - delta_y, 30.0 * len(self.playlists),
-                self.display.height_px - 64 - sl_views.SIDEBAR_LIST_TOP,
-            )
-            self.invalidate()
-            return
+        # Collapsed there is no rail (round 67): the whole window is content.
         viewport = self.display.height_px - sl_views.DOCK_H
         self.content_scroll = self._clamp_scroll(
             self.content_scroll - delta_y, self._content_height, viewport
@@ -1598,7 +1589,7 @@ class SpotifyLightApp(App):
                     "measure inward from that window corner (or from the pill's corner for "
                     "interior ids); right/bottom anchors re-resolve when the window "
                     "resizes, so prefer them over raw rects. Rects clamp into the window. "
-                    "Valid ids: pill, nav_home, nav_search, nav_more, sidebar — plus the "
+                    "Valid ids: pill, nav_home, nav_search, nav_more — plus the "
                     "pill's interior in PILL-LOCAL space ((0,0) is the pill's top-left, "
                     "rects and anchors clamp into the pill, locals ride whole-pill moves): "
                     "pill.art (square tile, min(width,height)), pill.title (the "
@@ -1730,7 +1721,8 @@ class SpotifyLightApp(App):
                     "fade. 'height' is the total thickness in points (band + fade), 'fade' the "
                     "gradient length (0 to height), 'alpha' the band opacity (0-255), 'margin' "
                     "an inset along the band's long axis (x for top/bottom edges, y for "
-                    "left/right; 240 keeps a top/bottom scrim off the sidebar). A partial call "
+                    "left/right; 240 insets a top/bottom scrim from the window's left edge). "
+                    "A partial call "
                     "on an existing id TUNES — omitted knobs keep their stored values, e.g. "
                     "{id: \"scrim.dock\", alpha: 120} dims a dock dissolve. New ids need "
                     "edge + height. Nothing ships declared: both stock scrims were removed "
@@ -2120,15 +2112,13 @@ class SpotifyLightApp(App):
             effects = self.effect_specs.specs()
             sl_views.draw_scrims(frame, [effects[eid] for eid in sorted(effects)],
                                  width=width, height=height)
-            # SL-39: expanded, the library component docks right-aligned above
-            # the grown search field instead of drawing as the left rail. The
+            # The library exists ONLY as the search-anchored popup (round 67,
+            # Alec's mock call) — collapsed, there is no rail at all. The
             # cluster draws before the player bar so the z=20 playback popup
             # keeps winning both the paint and the hit walk where they meet.
             if self.search_expanded:
                 sl_views.draw_search_expansion(frame, self, out, width=width,
                                                height=height, mouse=mouse)
-            else:
-                sl_views.draw_sidebar(frame, self, out, width=width, height=height, mouse=mouse)
             sl_views.draw_player_bar(frame, self, out, width=width, height=height, mouse=mouse)
 
             if self.bootstrap_error:

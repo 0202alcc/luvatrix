@@ -20,7 +20,6 @@ from sl_layout import attach_slot_rect  # noqa: F401 — re-exported slot geomet
 
 # -- layout ------------------------------------------------------------------
 SIDEBAR_W = 240.0
-SIDEBAR_LIST_TOP = 142.0  # title + one nav row (Library) + section header
 DOCK_H = 92.0             # bottom reservation for the dock circle zone
 CONTENT_PAD = 28.0
 CARD_W = 180.0
@@ -153,7 +152,7 @@ DOCK_SLOT_H = 64.0
 # its in-content field while the cluster owns input).
 SEARCH_EXPAND_W = 320.0
 SEARCH_PANEL_GAP = 12.0
-PANEL_LIST_TOP = 68.0   # title row + PLAYLISTS header
+PANEL_LIST_TOP = 100.0  # brand row + title row + PLAYLISTS header
 PANEL_CHIP_H = 44.0     # account chip zone pinned at the panel's bottom
 
 
@@ -217,9 +216,6 @@ def window_naturals(width: float, height: float) -> dict:
         "nav_search": (dpx + dpw + gap, dock_cy - radius, 2 * radius, 2 * radius),
         "nav_more": (width - PILL_FLOAT - 2 * oradius, dock_cy - oradius,
                      2 * oradius, 2 * oradius),
-        "sidebar": (SIDEBAR_GLASS_MARGIN, SIDEBAR_GLASS_MARGIN,
-                    SIDEBAR_W - SIDEBAR_GLASS_MARGIN * 2,
-                    height - SIDEBAR_GLASS_MARGIN * 2),
     }
 
 
@@ -675,109 +671,32 @@ def _cull_bottom(app, height: float) -> float:
     return float(getattr(app, "_render_cull_hi", height))
 
 
-def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
-    # One floating liquid-glass rail — the dock's `_glass_plate` construction
-    # (border ring, translucent fill, silhouette-clipped sheen, softened
-    # specular, soft shadow) at full height. Scene-drawn: native glass here
-    # blurred the nav text (live bug), and bridgeless hosts get the same
-    # material. Text contrast holds by construction — only the dark window
-    # backdrop sits behind the rail (content starts at SIDEBAR_W).
-    # Round 31: the rail resolves through the live layout registry — an
-    # override moves the plate, and everything on it shifts by the same delta
-    # from the rail's natural origin.
-    m = SIDEBAR_GLASS_MARGIN
-    rx, ry, rw, rh = _layout(
-        app, "sidebar", (m, m, SIDEBAR_W - m * 2, height - m * 2), width, height)
-    _glass_plate(frame, rx, ry, rw, rh, radius=SIDEBAR_GLASS_RADIUS, z=7, app=app)
-    ox, oy = rx - m, ry - m
-    _text(frame, "Spotify Light", x=22 + ox, y=20 + oy, size=20, color=ACCENT, z=9)
-
-    # Home/Search live on the glass circles flanking the player pill (round
-    # 8); the sidebar keeps Library, playlists, and account.
-    nav = [("library", "Your Library")]
-    y = 64.0 + oy
-    for view, label in nav:
-        active = app.view == view
-        hovering = _hover(mouse, 10 + ox, y - 6, SIDEBAR_W - 20, NAV_H - 8)
-        if active:
-            _glass_plate(frame, 10 + ox, y - 6, SIDEBAR_W - 20, NAV_H - 8, radius=8.0, z=8,
-                         shadow=False, app=app)
-        elif hovering:
-            frame.rounded_rect(x=10 + ox, y=y - 6, width=SIDEBAR_W - 20, height=NAV_H - 8,
-                               radius=8.0, color=SIDEBAR_ROW_HOVER, z_index=8)
-        color = TEXT if (active or hovering) else SUBTEXT
-        _text(frame, label, x=22 + ox, y=y + 2, size=15, color=color, z=9)
-        out.hit(10 + ox, y - 6, SIDEBAR_W - 20, NAV_H - 8, "nav", view)
-        y += NAV_H
-
-    y += 10
-    _text(frame, "PLAYLISTS", x=22 + ox, y=y, size=11, color=FAINT, z=9)
-    y += 24
-
-    list_top = y
-    list_bottom = height - 64 + oy
-    row_h = 30.0
-    offset = app.sidebar_scroll
-    for idx, playlist in enumerate(app.playlists):
-        row_y = list_top + row_h * idx - offset
-        if row_y + row_h < list_top or row_y > list_bottom:
-            continue
-        hovering = _hover(mouse, 10 + ox, row_y, SIDEBAR_W - 20, row_h - 4)
-        if hovering:
-            frame.rounded_rect(x=10 + ox, y=row_y, width=SIDEBAR_W - 20, height=row_h - 4,
-                               radius=6.0, color=SIDEBAR_ROW_HOVER, z_index=8)
-        _text(frame, playlist.name, x=22 + ox, y=row_y + 4, size=13,
-              color=TEXT if hovering else SUBTEXT, z=9, max_chars=26)
-        out.hit(10 + ox, row_y, SIDEBAR_W - 20, row_h - 4, "open_playlist", playlist.id)
-
-    # The list scrolls under the glass: dissolve both seams with a short
-    # alpha ramp instead of a hard cutoff line.
-    if row_h * len(app.playlists) > list_bottom - list_top:
-        strip = SIDEBAR_SEAM_FADE_PX / SIDEBAR_SEAM_STRIPS
-        for i in range(SIDEBAR_SEAM_STRIPS):
-            a_top = int(round(210 * (1.0 - i / SIDEBAR_SEAM_STRIPS)))
-            frame.rect(x=rx + 2, y=list_top + i * strip, width=rw - 4, height=strip,
-                       color=(14, 14, 14, a_top), z_index=9)
-            a_bottom = int(round(210 * (i + 1) / SIDEBAR_SEAM_STRIPS))
-            frame.rect(x=rx + 2, y=list_bottom - SIDEBAR_SEAM_FADE_PX + i * strip,
-                       width=rw - 4, height=strip, color=(14, 14, 14, a_bottom), z_index=9)
-    _draw_scrollbar(frame, app.scrollbar_sidebar, out, x=rx + rw - 9, top=list_top,
-                    bottom=list_bottom, content=row_h * len(app.playlists), offset=offset,
-                    tag="sidebar")
-
-    chip_y = height - 52 + oy
-    frame.rect(x=rx + 14, y=chip_y - 8, width=rw - 28, height=1,
-               color=(255, 255, 255, 20), z_index=8)
-    name = app.profile.display_name if app.profile and app.profile.display_name else "Account"
-    _text(frame, name, x=22 + ox, y=chip_y + 4, size=13, color=SUBTEXT, z=9, max_chars=16)
-    hovering = _hover(mouse, 150 + ox, chip_y, 70, 26)
-    _text(frame, "Log out", x=156 + ox, y=chip_y + 4, size=13, color=TEXT if hovering else FAINT, z=9)
-    out.hit(150 + ox, chip_y - 2, 74, 28, "logout")
-
-
 def draw_search_expansion(frame, app, out: FrameOut, *, width: float, height: float,
                           mouse) -> None:
-    """The SL-39 expanded search cluster: the docked library panel above the
-    grown query field. Drawn in place of the left rail while expanded; z and
-    hit ordering keep it below the playback popup (z=20) like the rest of the
-    chrome. Contents mirror the rail's library component — title (which keeps
-    its nav-row semantics), playlist rows with the same seam-dissolve and
-    scrollbar idiom, and the account chip — so the component reads as the
-    same library, relocated."""
+    """The library IS this search-anchored popup (Alec's mock call, round
+    67): brand row, nav title, playlist rows with the seam-dissolve and
+    scrollbar idiom, and the account chip — the rail's full component
+    docked above the grown query field, drawn ONLY while expanded. Z and
+    hit ordering keep it below the playback popup (z=20) like the rest of
+    the chrome."""
     px, py, pw, ph = library_panel_rect(app, width, height)
     _glass_plate(frame, px, py, pw, ph, radius=SIDEBAR_GLASS_RADIUS, z=10, app=app)
     # Swallow dead-space clicks first so rows win the reversed hit walk while
     # the plate itself never falls through to dismiss/blur.
     out.hit(px, py, pw, ph, "panel_plate")
 
-    title_hover = _hover(mouse, px + 8, py + 8, pw - 16, 32)
+    # The rail's full component, relocated: brand row first (the popup IS the
+    # library now — it heads the panel exactly like the mock), then the nav
+    # title, then the list.
+    _text(frame, "Spotify Light", x=px + 16, y=py + 16, size=20, color=ACCENT, z=12)
+    title_hover = _hover(mouse, px + 8, py + 48, pw - 16, 32)
     if title_hover:
-        frame.rounded_rect(x=px + 8, y=py + 8, width=pw - 16, height=32,
+        frame.rounded_rect(x=px + 8, y=py + 48, width=pw - 16, height=32,
                            radius=8.0, color=SIDEBAR_ROW_HOVER, z_index=11)
-    _text(frame, "Your Library", x=px + 16, y=py + 16, size=16,
+    _text(frame, "Your Library", x=px + 16, y=py + 56, size=16,
           color=TEXT if title_hover else SUBTEXT, z=12)
-    out.hit(px + 8, py + 8, pw - 16, 32, "nav", "library")
-    _text(frame, "PLAYLISTS", x=px + 16, y=py + 44, size=11, color=FAINT, z=12)
+    out.hit(px + 8, py + 48, pw - 16, 32, "nav", "library")
+    _text(frame, "PLAYLISTS", x=px + 16, y=py + 84, size=11, color=FAINT, z=12)
 
     list_top = py + PANEL_LIST_TOP
     list_bottom = py + ph - PANEL_CHIP_H
@@ -881,7 +800,7 @@ def _draw_card(frame, app, out: FrameOut, card: sl_ui.CardView, *, x, y, mouse) 
 
 
 def _draw_track_table(frame, app, out: FrameOut, rows, *, x0, y0, width, height, context_uri, mouse) -> float:
-    table_w = width - SIDEBAR_W - CONTENT_PAD * 2
+    table_w = width - CONTENT_PAD * 2
     for row in rows:
         row_y = y0 + (row.index - 1) * ROW_H
         if row_y + ROW_H < _cull_top(app) or row_y > _cull_bottom(app, height):
@@ -911,9 +830,9 @@ def _draw_track_table(frame, app, out: FrameOut, rows, *, x0, y0, width, height,
 
 
 def draw_home(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
-    x0 = SIDEBAR_W + CONTENT_PAD
+    x0 = CONTENT_PAD
     y = 24.0 - _scroll_sub(app)
-    view_w = width - SIDEBAR_W - CONTENT_PAD * 2
+    view_w = width - CONTENT_PAD * 2
     _text(frame, "Good " + _daypart(), x=x0, y=y, size=26, z=3)
     y += 46
 
@@ -956,7 +875,7 @@ def draw_home(frame, app, out: FrameOut, *, width: float, height: float, mouse) 
 
 
 def draw_playlist(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
-    x0 = SIDEBAR_W + CONTENT_PAD
+    x0 = CONTENT_PAD
     y = 24.0 - _scroll_sub(app)
     detail = app.playlist_detail
     if detail is None:
@@ -1000,7 +919,7 @@ def draw_playlist(frame, app, out: FrameOut, *, width: float, height: float, mou
     out.hit(play_x, play_y, 120, 40, "play_context", playlist.uri, scrollable=True)
     y += 190
 
-    table_w = width - SIDEBAR_W - CONTENT_PAD * 2
+    table_w = width - CONTENT_PAD * 2
     _text(frame, "#", x=x0, y=y, size=12, color=FAINT, z=3)
     _text(frame, "Title", x=x0 + 40, y=y, size=12, color=FAINT, z=3)
     _text(frame, "Album", x=x0 + table_w * 0.55, y=y, size=12, color=FAINT, z=3)
@@ -1018,9 +937,9 @@ def draw_playlist(frame, app, out: FrameOut, *, width: float, height: float, mou
 
 
 def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
-    x0 = SIDEBAR_W + CONTENT_PAD
+    x0 = CONTENT_PAD
     y = 24.0 - _scroll_sub(app)
-    view_w = width - SIDEBAR_W - CONTENT_PAD * 2
+    view_w = width - CONTENT_PAD * 2
 
     # SL-39: while the expanding cluster owns search input, the in-content
     # field steps aside — the grown dock field is the editor; results below
@@ -1105,11 +1024,11 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
 
 
 def draw_library(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
-    x0 = SIDEBAR_W + CONTENT_PAD
+    x0 = CONTENT_PAD
     y = 24.0 - _scroll_sub(app)
     _text(frame, "Your Library", x=x0, y=y, size=26, z=3)
     y += 46
-    view_w = width - SIDEBAR_W - CONTENT_PAD * 2
+    view_w = width - CONTENT_PAD * 2
     cols = sl_ui.grid_columns(view_w, card_width=CARD_W, gap=CARD_GAP)
     cards = [sl_ui.playlist_card(p, image_target_px=app._art_pick_target(CARD_ART)) for p in app.playlists]
     if not cards:

@@ -3,7 +3,8 @@
 The layout-tool loop: nudge chrome positions on the RUNNING app over MCP
 (layout_set / layout_list / layout_clear), then layout_export the overrides
 as JSON for inspection. Addressable components are the chrome — the
-playback pill, the nav circles (home/search/more), and the sidebar rail.
+playback pill and the nav circles (home/search/more). The library popup
+docks off nav_search, so a nav_search override moves the whole cluster.
 
 An override is either an explicit rect or an anchor + offsets (the anchor
 re-resolves against the window size every frame, so a "top-right, 16pt
@@ -75,7 +76,7 @@ from pathlib import Path
 # (round 37) is the title/artist text column — the reference the progress
 # strip aligns to (SL-21/22).
 INTERIOR_IDS = ("pill.art", "pill.progress", "pill.title", "pill.transport")
-COMPONENT_IDS = ("pill", "nav_home", "nav_search", "nav_more", "sidebar") + INTERIOR_IDS
+COMPONENT_IDS = ("pill", "nav_home", "nav_search", "nav_more") + INTERIOR_IDS
 ANCHORS = ("top-left", "top-right", "bottom-left", "bottom-right", "center")
 # Align spec edges (round 37, SL-22): left/right/center_x are the x-axis
 # edges, top/bottom/center_y the y-axis ones. An edge only ever aligns to a

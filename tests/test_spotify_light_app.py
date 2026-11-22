@@ -187,21 +187,36 @@ class TestHomeView:
 
         texts = _texts(scene_buffer)
         for expected in (
-            "Your Library", "PLAYLISTS", "Roadtrip", "Focus",
             "Top tracks", "New releases", "Your playlists", "Top artists",
-            "Come As You Are", "Nevermind", "Nirvana", "Alec", "Log out",
+            "Come As You Are", "Nevermind", "Nirvana",
             "Nothing playing", sl_icons.HOME, sl_icons.SEARCH,
         ):
             assert expected in texts, f"missing text: {expected!r}"
+        # The library chrome exists only as the search-anchored popup (round
+        # 67): no rail chrome texts on the collapsed home. (Playlist NAMES
+        # legitimately appear as content cards in "Your playlists".)
+        for rail_text in ("Your Library", "PLAYLISTS", "Log out"):
+            assert rail_text not in texts, f"rail text leaked into collapsed home: {rail_text!r}"
         assert any(t.startswith("Good ") for t in texts)
         # Album art placeholders land as CpuLayerNode textures.
         assert _nodes(scene_buffer, CpuLayerNode)
         actions = {region.action for region in app._hits}
-        assert {"nav", "open_playlist", "open_card", "logout", "seek_bar",
+        assert {"nav", "open_card", "seek_bar",
                 "toggle_play", "open_devices"} <= actions
         # Volume lives in the playback popup now (round 8) — hidden until the
         # overflow circle opens it.
         assert "volume_bar" not in actions
+
+        # Expanded: the popup carries the library chrome the rail used to.
+        app.search_expanded = True
+        app.invalidate()
+        _tick(app, ctx, 2)
+        texts = _texts(scene_buffer)
+        for expected in ("Spotify Light", "Your Library", "PLAYLISTS", "Roadtrip",
+                         "Focus", "Alec", "Log out"):
+            assert expected in texts, f"missing popup text: {expected!r}"
+        actions = {region.action for region in app._hits}
+        assert {"open_playlist", "logout"} <= actions
 
     def test_loading_line_until_bootstrap_completes(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
@@ -695,7 +710,7 @@ class TestSearchView:
 
         chain = ff.get_font_chain(sl_views.FONT_FAMILY, 14.0)
         expected_w = ff.measure_runs(ff.split_runs(chain, "WWWWW"))[0]
-        expected_x = sl_views.SIDEBAR_W + sl_views.CONTENT_PAD + 18 + 2 + expected_w
+        expected_x = sl_views.CONTENT_PAD + 18 + 2 + expected_w
         assert abs(carets[0]["x"] - expected_x) < 1.0, (
             f"caret x {carets[0]['x']} must track the measured proportional "
             f"width ({expected_x:.1f}), not a mono-width estimate")
@@ -745,7 +760,7 @@ class TestSearchView:
 
         carets = [r for r in capture.rects if r["z_index"] == 4 and r["width"] <= 2.0]
         assert len(carets) == 1
-        inner_right = sl_views.SIDEBAR_W + sl_views.CONTENT_PAD + 460.0 - 14.0
+        inner_right = sl_views.CONTENT_PAD + 460.0 - 14.0
         assert carets[0]["x"] <= inner_right, \
             f"caret escapes the field: x={carets[0]['x']:.1f} > {inner_right:.1f}"
 
@@ -889,12 +904,20 @@ class TestSearchExpand:
     def test_left_rail_hidden_while_expanded(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
         self._expand(app, ctx)
-        texts = _texts(scene_buffer)
-        assert "Spotify Light" not in texts, "the left rail's title is gone"
+        px, _py, _pw, _ph = sl_views.library_panel_rect(app, WIDTH, HEIGHT)
+        texts = {n.text: n for n in _nodes(scene_buffer, TextNode)}
+        assert "Spotify Light" in texts and texts["Spotify Light"].x >= px, \
+            "the rail's brand relocated INTO the popup — there is no separate rail"
         library_texts = [n for n in _nodes(scene_buffer, TextNode)
                          if n.text == "Your Library"]
         assert library_texts and all(n.x > 600 for n in library_texts), \
             "the library lives in the right-docked panel, not the left rail"
+        m = sl_views.SIDEBAR_GLASS_MARGIN
+        old_rail = (m, m, sl_views.SIDEBAR_W - 2 * m, HEIGHT - 2 * m)
+        rings = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                 if n.color_rgba == sl_views.GLASS_BORDER
+                 and (n.x, n.y, n.width, n.height) == old_rail]
+        assert rings == [], "nothing draws at the old rail footprint, even expanded"
 
     def test_results_render_in_content_area(self, app_ctx):
         app, ctx, scene_buffer = app_ctx
@@ -934,7 +957,8 @@ class TestSearchExpand:
         assert app.view == "home", "dismiss restores the pre-expand view"
         assert app.search_focused is False
         _tick(app, ctx, 2)
-        assert "Spotify Light" in _texts(scene_buffer), "the left rail is back"
+        assert "Spotify Light" not in _texts(scene_buffer), \
+            "the library exists only as the popup — closing it leaves no rail behind"
 
     def test_escape_collapses_and_restores_view(self, app_ctx):
         app, ctx, _ = app_ctx
@@ -1459,13 +1483,22 @@ class TestFloatingPill:
             "playback popup drops from the pill's bottom, right-aligned to the ⋯"
 
     def test_sidebar_keeps_library_and_account(self, app_ctx):
+        """Round 67: the library/account component is the search-anchored
+        popup — collapsed there is no rail chrome at all; expanded, the
+        panel carries the nav row and the account chip."""
         app, ctx, scene_buffer = app_ctx
         self._with_track(app, ctx)
 
-        sidebar_nav = [r for r in app._hits
-                       if r.action == "nav" and r.x < sl_views.SIDEBAR_W]
-        assert {r.payload for r in sidebar_nav} == {"library"}, \
-            "Home/Search moved to the pill's flanking circles"
+        assert not any(r.action == "nav" and r.x < sl_views.SIDEBAR_W for r in app._hits), \
+            "Home/Search moved to the pill's flanking circles — and the rail is gone"
+        app.search_expanded = True
+        app.invalidate()
+        _tick(app, ctx, 2)
+        px, _py, pw, _ph = sl_views.library_panel_rect(app, WIDTH, HEIGHT)
+        popup_nav = [r for r in app._hits
+                     if r.action == "nav" and px <= r.x < px + pw]
+        assert {r.payload for r in popup_nav} == {"library"}, \
+            "the library nav row lives in the popup"
         texts = _texts(scene_buffer)
         assert "Your Library" in texts and "Log out" in texts
 
@@ -1870,16 +1903,18 @@ class TestGlassSurfaces:
 
         assert bridge.glass == []  # no native plates for sidebar/player pill
         assert app.glass_active is True
+        # Round 67: the library plate is the search-anchored popup — its
+        # scene-drawn border ring + translucent fill ARE the material
+        # (TestSidebarLiquidGlass pins the full construction).
+        app.search_expanded = True
+        app.invalidate()
+        _tick(app, ctx, 1)
         rects = _nodes(scene_buffer, RectNode)
-        # Round 29: the rail is a floating liquid-glass plate — its scene-drawn
-        # border ring + translucent fill ARE the material (TestSidebarLiquidGlass
-        # pins the full construction).
-        m = sl_views.SIDEBAR_GLASS_MARGIN
+        px, py, pw, ph = sl_views.library_panel_rect(app, 1280.0, 800.0)
         rrects = _nodes(scene_buffer, RoundedRectNode)
-        assert any((n.x, n.y, n.width, n.height) ==
-                   (m, m, sl_views.SIDEBAR_W - 2 * m, 800 - 2 * m)
+        assert any((n.x, n.y, n.width, n.height) == (px, py, pw, ph)
                    and n.color_rgba == sl_views.GLASS_BORDER for n in rrects), \
-            "sidebar needs its scene-drawn glass rail"
+            "the library popup needs its scene-drawn glass plate"
         # Round 8: the full-width bar is a centered floating capsule — its
         # border ring is a rounded rect at the pill rect, radius from the
         # Liquid Glass size rule (round 34), with the glass specular highlight
@@ -1926,13 +1961,15 @@ class TestGlassSurfaces:
 
         _tick(app, ctx, 2)
 
+        app.search_expanded = True
+        app.invalidate()
+        _tick(app, ctx, 1)
         rects = _nodes(scene_buffer, RectNode)
-        m = sl_views.SIDEBAR_GLASS_MARGIN
-        assert any((n.x, n.y, n.width, n.height) ==
-                   (m, m, sl_views.SIDEBAR_W - 2 * m, 800 - 2 * m)
+        lx, ly, lw, lh = sl_views.library_panel_rect(app, 1280.0, 800.0)
+        assert any((n.x, n.y, n.width, n.height) == (lx, ly, lw, lh)
                    and n.color_rgba == sl_views.GLASS_BORDER
                    for n in _nodes(scene_buffer, RoundedRectNode)), \
-            "bridgeless hosts get the same glass rail"
+            "bridgeless hosts get the same glass library popup"
         px, py, pw, ph = sl_views.pill_rect(1280, 800)
         assert any(n.color_rgba == sl_views.GLASS_BORDER and n.x == px and n.y == py
                    and n.width == pw and n.height == ph
@@ -2150,7 +2187,7 @@ class TestSimulatedGlass:
         app._apply_result("bootstrap", app._job_bootstrap())
         _tick(app, ctx, 2)
 
-        x0 = sl_views.SIDEBAR_W + sl_views.CONTENT_PAD
+        x0 = sl_views.CONTENT_PAD
         card_y = 24.0 + 46 + 32  # greeting, then "Top tracks" section title
         cards = [n for n in _nodes(scene_buffer, RoundedRectNode)
                  if (n.x, n.y, n.width, n.height) == (x0, card_y, sl_views.CARD_W, sl_views.CARD_H)]
@@ -4084,27 +4121,144 @@ class TestEventDrivenSync:
         assert abs(app._next_player_poll - (clock.now + app_main.POLL_AFTER_ACTION_SECS)) < 0.01
 
 # ---------------------------------------------------------------------------
+# Library as a search-anchored popup (Alec, mock call): the whole left-rail
+# component — brand, Your Library, playlist list, seams, scrollbar, account
+# chip — exists ONLY as the docked panel above the expanded search field.
+# Collapsed, there is no rail at all and home relayouts edge-to-edge.
+# ---------------------------------------------------------------------------
+
+class TestLibraryAsPopup:
+
+    @staticmethod
+    def _authed(app, ctx, *, playlists=6, view="home"):
+        app.authenticated = True
+        app._bootstrap_done = True
+        app.view = view
+        app.playlists = tuple(_playlist(f"Mix {i:02d}") for i in range(playlists))
+        _tick(app, ctx, 2)
+
+    @staticmethod
+    def _old_rail_rect():
+        m = sl_views.SIDEBAR_GLASS_MARGIN
+        return (m, m, sl_views.SIDEBAR_W - 2 * m, HEIGHT - 2 * m)
+
+    def test_collapsed_home_has_no_library_rail(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._authed(app, ctx)
+        assert app.search_expanded is False
+        texts = _texts(buf)
+        assert "Spotify Light" not in texts, "the brand lives in the popup, not a rail"
+        assert "Your Library" not in texts
+        assert "PLAYLISTS" not in texts
+        assert "Log out" not in texts
+        assert not any(r.action in ("open_playlist", "logout", "panel_plate")
+                       for r in app._hits), "no rail hits without the popup"
+        rail = self._old_rail_rect()
+        rings = [n for n in _nodes(buf, RoundedRectNode)
+                 if n.color_rgba == sl_views.GLASS_BORDER
+                 and (n.x, n.y, n.width, n.height) == rail]
+        assert rings == [], "the floating glass rail is gone from the collapsed window"
+
+    def test_home_content_relayouts_without_the_rail(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._authed(app, ctx)
+        greeting = next(n for n in _nodes(buf, TextNode) if n.text.startswith("Good "))
+        assert greeting.x == sl_views.CONTENT_PAD, \
+            "with the rail gone, content starts at the window's content pad"
+        app.view = "library"  # the playlist card grid, straight from app.playlists
+        app.invalidate()
+        _tick(app, ctx, 2)
+        cards = [n for n in _nodes(buf, RoundedRectNode)
+                 if n.width == sl_views.CARD_W and n.height == sl_views.CARD_H]
+        assert cards and min(n.x for n in cards) == sl_views.CONTENT_PAD, \
+            "the card grid's first column sits at the content pad"
+
+    def test_expanded_panel_carries_the_full_library(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._authed(app, ctx, playlists=48)
+        app.search_expanded = True
+        app.view = "search"
+        app.invalidate()
+        _tick(app, ctx, 2)
+        px, py, pw, ph = sl_views.library_panel_rect(app, WIDTH, HEIGHT)
+        texts = {n.text: n for n in _nodes(buf, TextNode)}
+        assert "Spotify Light" in texts, "the popup carries the rail's brand row"
+        brand = texts["Spotify Light"]
+        assert brand.color_rgba == sl_views.ACCENT, "brand keeps the accent styling"
+        assert abs(brand.x - (px + 16)) < 1e-6 and py < brand.y < py + 48, \
+            "the brand heads the panel"
+        assert texts["Your Library"].y > brand.y, "nav title sits under the brand"
+        assert texts["PLAYLISTS"].y > texts["Your Library"].y
+        assert texts["Mix 00"].x >= px and texts["Mix 00"].y >= py + sl_views.PANEL_LIST_TOP
+        assert "Log out" in texts and texts["Log out"].x >= px
+        scroll_track = [r for r in app._hits
+                        if r.action == "scrollbar" and r.payload == "sidebar"]
+        assert scroll_track and px <= scroll_track[0].x < px + pw, \
+            "the panel's long list keeps its scrollbar"
+        assert any(r.action == "logout" and r.x >= px for r in app._hits)
+        assert any(r.action == "open_playlist" and r.x >= px for r in app._hits)
+
+    def test_collapsed_wheel_over_the_old_rail_zone_scrolls_content(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._authed(app, ctx, playlists=48)
+        app._content_height = 4000.0
+        app._mouse = (100.0, 400.0)  # squarely inside the old rail footprint
+        app._apply_scroll(-120.0)
+        assert app.sidebar_scroll == 0.0, "no rail list to scroll while collapsed"
+        assert app.content_scroll == 120.0, "the whole window is content now"
+
+    def test_sidebar_scrollbar_hit_exists_only_while_expanded(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._authed(app, ctx, playlists=48)
+        assert not any(r.action == "scrollbar" and r.payload == "sidebar"
+                       for r in app._hits), "collapsed: no list, no track"
+        app.search_expanded = True
+        app.invalidate()
+        _tick(app, ctx, 2)
+        assert any(r.action == "scrollbar" and r.payload == "sidebar"
+                   for r in app._hits), "expanded: the popup list keeps the track"
+
+    def test_nav_hit_lives_only_in_the_popup(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._authed(app, ctx)
+        assert not any(r.action == "nav" and r.payload == "library" for r in app._hits), \
+            "collapsed: the library nav row does not exist without the popup"
+        app.search_expanded = True
+        app.invalidate()
+        _tick(app, ctx, 2)
+        px, py, pw, ph = sl_views.library_panel_rect(app, WIDTH, HEIGHT)
+        nav = [r for r in app._hits if r.action == "nav" and r.payload == "library"]
+        assert nav and px <= nav[0].x and nav[0].x + nav[0].w <= px + pw, \
+            "the library nav row lives inside the popup"
+
+
+# ---------------------------------------------------------------------------
 # Sidebar liquid glass (Alec): the left rail becomes one floating liquid-
 # glass component — the dock pill's material turned vertical. Border ring,
 # translucent fill, silhouette-clipped sheen, softened specular top, soft
 # shadow. Hover/selection live inside the idiom as tint/alpha shifts (never
 # opaque slabs), and the scrolling playlist list dissolves at both seams
-# instead of hard-cutting.
+# instead of hard-cutting. Round 67: the component is the search-anchored
+# popup — these probes run against the expanded docked panel, which IS the
+# rail's material relocated.
 # ---------------------------------------------------------------------------
 
 class TestSidebarLiquidGlass:
 
     @staticmethod
-    def _rail():
-        m = sl_views.SIDEBAR_GLASS_MARGIN
-        return (m, m, sl_views.SIDEBAR_W - 2 * m, HEIGHT - 2 * m)
+    def _panel(app):
+        return sl_views.library_panel_rect(app, WIDTH, HEIGHT)
 
     @staticmethod
     def _base(app, ctx, *, playlists=6, scroll=0.0, view="home"):
         app.authenticated = True
+        app._bootstrap_done = True
         app.view = view
         app.playlists = tuple(_playlist(f"Mix {i:02d}") for i in range(playlists))
         app.sidebar_scroll = scroll
+        # The library component IS the search-anchored popup now: probe it
+        # expanded, docked above the grown field.
+        app.search_expanded = True
 
     @staticmethod
     def _raster(scene_buffer):
@@ -4116,18 +4270,18 @@ class TestSidebarLiquidGlass:
         app, ctx, buf = app_ctx
         self._base(app, ctx)
         _tick(app, ctx, 2)
-        x, y, w, h = self._rail()
+        x, y, w, h = self._panel(app)
         rrects = _nodes(buf, RoundedRectNode)
         assert any((n.x, n.y, n.width, n.height) == (x, y, w, h)
                    and n.color_rgba == sl_views.GLASS_BORDER and n.radius >= 12.0
-                   for n in rrects), "the rail needs the glass border ring"
+                   for n in rrects), "the popup needs the glass border ring"
         assert any(abs(n.x - (x + 1)) < 0.5 and abs(n.y - (y + 1)) < 0.5
                    and abs(n.width - (w - 2)) < 0.5
                    and n.color_rgba == sl_views.GLASS_FILL for n in rrects), \
             "translucent glass fill sits inset inside the ring"
         assert any(n.color_rgba[0] == 0 and n.color_rgba[3] > 0 and n.width == w
                    and y < n.y <= y + 5 for n in rrects), \
-            "the rail floats on the dock's soft shadow"
+            "the popup floats on the dock's soft shadow"
         rects = _nodes(buf, RectNode)
         assert [n for n in rects
                 if n.x == 0 and n.width == sl_views.SIDEBAR_W and n.height == HEIGHT] == [], \
@@ -4135,12 +4289,16 @@ class TestSidebarLiquidGlass:
         assert [n for n in rects
                 if n.width == 1 and n.x == sl_views.SIDEBAR_W - 1 and n.height == HEIGHT] == [], \
             "the hard right-edge wire is gone — the border ring is the edge"
+        m = sl_views.SIDEBAR_GLASS_MARGIN
+        old_rail = (m, m, sl_views.SIDEBAR_W - 2 * m, HEIGHT - 2 * m)
+        assert [n for n in rrects if (n.x, n.y, n.width, n.height) == old_rail] == [], \
+            "the plate lives at the docked panel rect, never at the old rail footprint"
 
     def test_rail_specular_top_highlight_fades_like_the_dock(self, app_ctx):
         app, ctx, buf = app_ctx
         self._base(app, ctx)
         _tick(app, ctx, 2)
-        x, y, w, _h = self._rail()
+        x, y, w, _h = self._panel(app)
         segs = [n for n in _nodes(buf, RectNode)
                 if n.color_rgba[:3] == (255, 255, 255) and n.height == 1
                 and n.y == y + 1 and x < n.x < x + w]
@@ -4157,12 +4315,12 @@ class TestSidebarLiquidGlass:
         app, ctx, buf = app_ctx
         self._base(app, ctx)
         _tick(app, ctx, 2)
-        x, y, w, h = self._rail()
+        x, y, w, h = self._panel(app)
         rows = [n for n in _nodes(buf, RectNode)
                 if n.color_rgba[:3] == (255, 255, 255)
                 and 0 < n.color_rgba[3] <= sl_views.GLASS_SHEEN[3]
                 and y < n.y < y + h * 0.45 and x < n.x < x + w]
-        assert rows, "the rail carries the sheen band"
+        assert rows, "the popup carries the sheen band"
         top_row = min(rows, key=lambda n: n.y)
         assert top_row.x > x + 1.0, \
             "the topmost sheen row must be chord-clipped inside the corner arc"
@@ -4175,7 +4333,7 @@ class TestSidebarLiquidGlass:
         self._base(app, ctx)
         _tick(app, ctx, 2)
         img = self._raster(buf)
-        x, y, w, _h = self._rail()
+        x, y, w, _h = self._panel(app)
         corner = img[int(y + 2), int(x + 2), :3].sum() / 3
         assert corner < 60, \
             f"sheen leaking into the corner arc reads as a glitch (lum {corner:.0f})"
@@ -4187,50 +4345,58 @@ class TestSidebarLiquidGlass:
         app, ctx, buf = app_ctx
         self._base(app, ctx)
         _tick(app, ctx, 1)
-        app.input.state.mouse_x = 30.0
-        app.input.state.mouse_y = sl_views.SIDEBAR_LIST_TOP + 13.0
+        px, py, pw, _ph = self._panel(app)
+        list_top = py + sl_views.PANEL_LIST_TOP
+        app.input.state.mouse_x = px + 30.0
+        app.input.state.mouse_y = list_top + 13.0
         app.invalidate()
         _tick(app, ctx, 2)
         hover = [n for n in _nodes(buf, RoundedRectNode)
-                 if n.x == 10 and n.width == sl_views.SIDEBAR_W - 20
-                 and abs(n.y - sl_views.SIDEBAR_LIST_TOP) < 1.0]
+                 if n.x == px + 8 and n.width == pw - 16
+                 and abs(n.y - list_top) < 1.0]
         assert hover, "the hovered row gets a state plate"
         assert all(n.color_rgba[3] < 60 for n in hover), \
             f"hover lives inside the glass idiom as a tint, not an opaque slab: {hover[0].color_rgba}"
 
     def test_nav_hover_and_selection_stay_in_the_glass_idiom(self, app_ctx):
+        """The popup's library row is hover-only (the panel itself is the
+        library's presence — there is no separate active state to paint).
+        Hover keeps the glass tint idiom; nothing draws an opaque slab."""
         app, ctx, buf = app_ctx
         self._base(app, ctx, view="library")
+        _tick(app, ctx, 1)
+        px, py, pw, _ph = self._panel(app)
+        title_y = py + sl_views.PANEL_LIST_TOP - 52.0  # the "Your Library" row block
+        app.input.state.mouse_x = px + 30.0
+        app.input.state.mouse_y = title_y + 16.0
+        app.invalidate()
         _tick(app, ctx, 2)
-        # Selection: the active nav row is a full glass plate (unchanged idiom).
-        assert any(n.color_rgba == sl_views.GLASS_BORDER
-                   and abs(n.y - 58.0) < 1.0 and n.radius >= 6.0
-                   for n in _nodes(buf, RoundedRectNode)), \
-            "the selected nav row keeps its glass plate"
-        # Hover on the row (selection already covers it) must never draw an
-        # opaque slab anywhere in the rail.
+        tint = [n for n in _nodes(buf, RoundedRectNode)
+                if n.x == px + 8 and n.width == pw - 16
+                and abs(n.y - title_y) < 1.0 and n.color_rgba[3] < 60]
+        assert tint, "the hovered library row gets a glass tint"
         opaque = [n for n in _nodes(buf, RoundedRectNode)
-                  if n.x < sl_views.SIDEBAR_W and n.color_rgba[3] == 255
+                  if px <= n.x < px + pw and n.color_rgba[3] == 255
                   and n.color_rgba[:3] != (0, 0, 0)]
-        assert opaque == [], f"no opaque slabs inside the rail: {opaque[:1]}"
+        assert opaque == [], f"no opaque slabs inside the popup: {opaque[:1]}"
 
     def test_scroll_seams_fade_instead_of_a_hard_cutoff(self, app_ctx):
         app, ctx, buf = app_ctx
         self._base(app, ctx, playlists=48, scroll=100.0)
         _tick(app, ctx, 2)
-        x, _y, w, _h = self._rail()
-        top = sl_views.SIDEBAR_LIST_TOP
-        bottom = HEIGHT - 64
+        px, py, pw, ph = self._panel(app)
+        top = py + sl_views.PANEL_LIST_TOP
+        bottom = py + ph - sl_views.PANEL_CHIP_H
         rects = _nodes(buf, RectNode)
 
         def seam_strips(region_top, region_bottom):
-            # Scoped to the rail's x range: the round-30 top scrim used to
+            # Scoped to the popup's x range: the round-30 top scrim used to
             # draw equally wide dark strips at the same z outside the sidebar.
             strips = [n for n in rects
                       if region_top <= n.y < region_bottom
-                      and n.x < sl_views.SIDEBAR_W
+                      and px <= n.x < px + pw
                       and n.color_rgba[:3] < (40, 40, 40)
-                      and n.width >= w - 6 and n.z_index >= 4]
+                      and n.width >= pw - 6 and n.z_index >= 4]
             strips.sort(key=lambda n: n.y)
             return strips
 
@@ -4249,27 +4415,30 @@ class TestSidebarLiquidGlass:
         app, ctx, buf = app_ctx
         self._base(app, ctx)
         _tick(app, ctx, 2)
-        x, _y, w, _h = self._rail()
+        px, py, pw, ph = self._panel(app)
+        chip_rule_y = py + ph - sl_views.PANEL_CHIP_H
         dividers = [n for n in _nodes(buf, RectNode)
-                    if n.height == 1 and 730 < n.y < 745 and n.x < sl_views.SIDEBAR_W]
+                    if n.height == 1 and abs(n.y - chip_rule_y) < 1.0
+                    and px <= n.x < px + pw]
         assert dividers, "the account row keeps a separator"
         for n in dividers:
-            assert n.x >= x + 10 and n.width <= w - 20, \
+            assert n.x >= px + 10 and n.width <= pw - 20, \
                 "the separator insets like a macOS glass separator, not a full-width wire"
             assert n.color_rgba[3] <= 60, "quiet alpha on glass, not an opaque line"
 
     def test_rail_stays_a_dark_glass_so_text_contrast_holds(self, app_ctx):
-        """White/subtext glyphs ride the rail everywhere; the plate composite
+        """White/subtext glyphs ride the popup everywhere; the plate composite
         must stay dark — translucent, but never washing toward white over
         the window backdrop."""
         app, ctx, buf = app_ctx
         self._base(app, ctx)
         _tick(app, ctx, 2)
         img = self._raster(buf)
-        region = img[300:500, 20:220, :3]
+        px, py, pw, _ph = self._panel(app)
+        region = img[int(py + 40):int(py + 200), int(px + 20):int(px + pw - 20), :3]
         mean_lum = float(region.sum() / 3 / region[:, :, 0].size)
         assert mean_lum < 100, \
-            f"rail interior lum {mean_lum:.0f} — the glass must stay dark enough for light text"
+            f"popup interior lum {mean_lum:.0f} — the glass must stay dark enough for light text"
 
 # ---------------------------------------------------------------------------
 # Pill to the top-right (Alec, round 30): the now-playing pill leaves the
@@ -4475,20 +4644,22 @@ class TestOverflowPersistsLeftOfPill:
                 "popup drops 12pt below the pill's bottom (clear of the merged ⋯)"
 
     def test_search_field_clears_the_shipped_circle(self, app_ctx):
-        # 1100pt: the ⋯ merged INTO the pill, so the pill is again the only
-        # thing the field's rounded cap must clear.
+        # 1000pt: the ⋯ merged INTO the pill, so the pill is again the only
+        # thing the field's rounded cap must clear. (With the rail retired —
+        # round 67 — content starts at CONTENT_PAD, so the pill cap binds at
+        # a narrower width than it did against the old 268pt x0.)
         app, ctx, buf = app_ctx
         app.authenticated = True
         app.view = "search"
-        ctx.logical_width_px = 1100.0
+        ctx.logical_width_px = 1000.0
         _tick(app, ctx, 2)
-        pill_x = sl_views.pill_rect(1100.0, 800.0)[0]
+        pill_x = sl_views.pill_rect(1000.0, 800.0)[0]
         fields = [n for n in _nodes(buf, RoundedRectNode)
                   if n.radius == 20.0 and abs(n.y - 24.0) < 1.0]
         assert fields, "search field missing"
         assert fields[0].x + fields[0].width == pill_x - 12.0, \
             "the field's rounded cap stops 12pt short of the pill"
-        assert fields[0].width == pytest.approx(pill_x - 12.0 - (240.0 + 28.0)), \
+        assert fields[0].width == pytest.approx(pill_x - 12.0 - sl_views.CONTENT_PAD), \
             "the pill — not the merged circle, not the 460pt max — sets the cap again"
 
     def test_a_nav_more_override_still_wins(self, app_ctx):
@@ -5688,9 +5859,10 @@ class TestScrollContentBand:
         app, ctx, buf = app_ctx
         self._enable_band(ctx)
         self._library(app, ctx)
+        app.search_expanded = True  # the library popup is the chrome probe
         self._engage(app, ctx)
         rail = next(n for n in _nodes(buf, TextNode) if n.text == "Spotify Light")
-        assert rail.z_index >= 5, "sidebar chrome must renumber out of the content band"
+        assert rail.z_index >= 5, "popup chrome must renumber out of the content band"
         rail_y = rail.y
         app._mouse = (600.0, 400.0)
         app._apply_scroll(-180.0)
@@ -5772,20 +5944,22 @@ class TestScrollContentBand:
             "the resting frame bakes the translation where the gesture ended"
 
     def test_sidebar_wheel_still_renders_every_tick(self, app_ctx):
-        """Scope: only the content area is on the retained path — the rail's
-        own list scroll keeps today's invalidate-per-tick behavior."""
+        """Scope: only the content area is on the retained path — the popup
+        list's own scroll keeps today's invalidate-per-tick behavior."""
         app, ctx, buf = app_ctx
         self._enable_band(ctx)
         self._tracks(app, ctx)
-        # The rail needs real scrollable extent: one seeded playlist clamps
+        # The list needs real scrollable extent: one seeded playlist clamps
         # any wheel to 0 on every implementation.
         app.playlists = tuple(_playlist(f"Rail {i:02d}") for i in range(60))
+        app.search_expanded = True  # the list lives in the search-anchored popup
         _tick(app, ctx, 2)
 
-        app._mouse = (100.0, 400.0)
+        px, py, pw, ph = sl_views.library_panel_rect(app, WIDTH, HEIGHT)
+        app._mouse = (px + pw / 2, py + ph / 2)
         app._apply_scroll(-120.0)
         assert app.sidebar_scroll == 120.0 and app.content_scroll == 0.0
-        assert app._render_requested, "sidebar list scroll still rebuilds per tick"
+        assert app._render_requested, "popup list scroll still rebuilds per tick"
 
     # -- input correctness mid-gesture --------------------------------------
     def test_click_dispatches_against_content_space_hits_mid_scroll(self, app_ctx, monkeypatch):
@@ -5813,6 +5987,7 @@ class TestScrollContentBand:
         app, ctx, buf = app_ctx
         self._enable_band(ctx)
         self._tracks(app, ctx, count=40)
+        app.search_expanded = True  # the library nav row lives in the popup
         _tick(app, ctx, 2)
         nav = next(r for r in app._hits if r.action == "nav" and r.payload == "library")
         assert not nav.scrollable, "chrome hits stay in screen space"

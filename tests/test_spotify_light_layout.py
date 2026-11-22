@@ -311,35 +311,29 @@ class TestLayoutMcpSurface:
         assert _pill_ring(buf).x == 1000.0 - 16 - sl_views.PILL_W, \
             "anchored overrides follow the window — the anchor IS the override"
 
-    def test_nav_circles_and_sidebar_move(self, app_ctx):
+    def test_nav_circles_move(self, app_ctx):
         app, ctx, buf = app_ctx
         _with_track(app, ctx)
         app.mcp_call("layout_set", {
             "id": "nav_home", "rect": {"x": 600, "y": 300, "width": 44, "height": 44}})
         app.mcp_call("layout_set", {
             "id": "nav_more", "rect": {"x": 660, "y": 300, "width": 44, "height": 44}})
-        app.mcp_call("layout_set", {
-            "id": "sidebar", "rect": {"x": 30, "y": 24, "width": 240, "height": 752}})
         _tick(app, ctx, 2)
         home = next(r for r in app._hits if r.action == "nav" and r.payload == "home")
         assert (home.x, home.y) == (600.0, 300.0)
         overflow = next(r for r in app._hits if r.action == "open_devices")
         assert (overflow.x, overflow.y) == (660.0, 300.0), \
             "a rect spec REPLACES the shipped attach spec — window-space raw rect wins"
-        rings = [n for n in _nodes(buf, RoundedRectNode)
-                 if n.color_rgba == sl_views.GLASS_BORDER
-                 and (n.x, n.y, n.width, n.height) == (30.0, 24.0, 240.0, 752.0)]
-        assert rings, "the floating glass rail rides the override"
-        labels = [n for n in _nodes(buf, TextNode) if n.text == "Your Library"]
-        assert labels and labels[0].x == 22.0 + (30.0 - sl_views.SIDEBAR_GLASS_MARGIN), \
-            "sidebar contents shift with the rail by the delta from its natural origin"
 
-    def test_sidebar_natural_rect_is_the_floating_rail(self, app_ctx):
+    def test_sidebar_id_is_gone_with_the_rail(self, app_ctx):
+        """Round 67: the library is a search-anchored popup — the rail's
+        "sidebar" layout id retired with it (the popup docks off nav_search,
+        which remains the override anchor)."""
         app, ctx, _buf = app_ctx
-        natural = app._layout_naturals(1280.0, 800.0)["sidebar"]
-        m = sl_views.SIDEBAR_GLASS_MARGIN
-        assert natural == (m, m, sl_views.SIDEBAR_W - 2 * m, 800.0 - 2 * m), \
-            "the overridable sidebar natural tracks the floating liquid-glass rail"
+        assert "sidebar" not in app._layout_naturals(1280.0, 800.0)
+        with pytest.raises(sl_layout.LayoutError):
+            app.mcp_call("layout_set", {
+                "id": "sidebar", "rect": {"x": 30, "y": 24, "width": 240, "height": 752}})
 
     def test_layout_clear_restores_natural_geometry(self, app_ctx):
         app, ctx, buf = app_ctx
