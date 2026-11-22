@@ -255,6 +255,25 @@ class TestUnifiedRuntimeWalk(unittest.TestCase):
         self.assertFalse(payload["available"])
         self.assertIn("reason", payload)
 
+    def test_wires_present_hook_to_lifecycle_invalidate(self) -> None:
+        """The idle-arm fix's runtime half: the backend's present-request hook
+        becomes the app's invalidate(), so an armed probe on an idle
+        invalidation-driven app still gets a frame inside the wait window."""
+        wired: list = []
+        backend = types.SimpleNamespace(
+            set_drawable_probe_present_hook=lambda hook: wired.append(hook))
+        runtime = self._runtime(types.SimpleNamespace(backend=backend))
+        lifecycle = types.SimpleNamespace(invalidate=lambda: "invalidated")
+        runtime._wire_drawable_probe_present_hook(lifecycle)
+        self.assertEqual(len(wired), 1)
+        self.assertEqual(wired[0](), "invalidated")
+
+    def test_wire_skips_when_backend_or_invalidate_missing(self) -> None:
+        runtime = self._runtime(types.SimpleNamespace(backend=object()))
+        runtime._wire_drawable_probe_present_hook(types.SimpleNamespace())
+        self._runtime(None)._wire_drawable_probe_present_hook(
+            types.SimpleNamespace(invalidate=lambda: None))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -803,8 +803,11 @@ class _FakeBlitEncoder:
     def __init__(self) -> None:
         self.copies: list[tuple] = []
         self.ended = False
+        self.fail_on_copy: Exception | None = None
 
     def copyFromTexture_sourceLevel_sourceSlice_sourceOrigin_sourceSize_toTexture_destinationLevel_destinationSlice_destinationOrigin_(self, *args) -> None:
+        if self.fail_on_copy is not None:
+            raise self.fail_on_copy
         self.copies.append(args)
 
     def endEncoding(self) -> None:
@@ -882,6 +885,8 @@ class TestDrawableProbeCapture(unittest.TestCase):
         backend._drawable_probe_armed = True
         backend._drawable_probe_regions = None
         backend._drawable_probe_capture = None
+        backend._drawable_probe_present_hook = None
+        backend._instance_index = 1
         import threading
 
         backend._drawable_probe_done = threading.Event()
@@ -993,3 +998,53 @@ class TestDrawableProbeCapture(unittest.TestCase):
         result = backend.request_drawable_probe(timeout_s=0.1)
         self.assertFalse(result["available"])
         self.assertIn("reason", result)
+
+    def test_copy_failure_never_leaks_an_open_encoder_into_commit(self) -> None:
+        """Alec's live crash (sl-app.log): -[IOGPUMetalCommandBuffer validate]
+        'commit command buffer with uncommitted encoder' — instant process
+        death. Anything raising between blitCommandEncoder() and endEncoding()
+        (the 12-arg copy call is the suspect) must STILL close the encoder;
+        an open one reaching cmd.commit() is a Metal assertion, not a Python
+        exception."""
+        backend, drawable_tex, _probe_tex, _device = self._backend()
+        cmd = _FakeCommandBuffer()
+        cmd.blit.fail_on_copy = RuntimeError("copyFromTexture exploded")
+        with unittest.mock.patch.dict("sys.modules", {"Metal": _fake_metal_module()}):
+            backend._capture_drawable_probe(cmd, _FakeDrawable(drawable_tex), 4.0, 2.0, self._frame())
+        self.assertTrue(cmd.blit.ended, "the blit encoder must never reach commit() open")
+        self.assertTrue(backend._drawable_probe_done.is_set())
+        capture = backend._drawable_probe_capture
+        self.assertIsNotNone(capture.error)
+        self.assertIn("copyFromTexture exploded", capture.error)
+
+    def test_arm_requests_a_present_through_the_wired_hook(self) -> None:
+        """Idle-app gap (runner: frames_presented flat through four armed
+        attempts): presents are invalidation-driven (repeat_latest=False), so
+        arming must request a frame itself or the wait window races user
+        activity. The hook is wired to the app's invalidate() by the runtime."""
+        backend, _drawable_tex, _probe_tex, _device = self._backend()
+        calls: list[str] = []
+        backend.set_drawable_probe_present_hook(lambda: calls.append("invalidate"))
+        result = backend.request_drawable_probe(timeout_s=0.1)
+        self.assertFalse(result["available"])  # no present happens in this test
+        self.assertEqual(calls, ["invalidate"], "arming must request a frame")
+
+    def test_arm_without_a_hook_still_waits_and_reports(self) -> None:
+        backend, _drawable_tex, _probe_tex, _device = self._backend()
+        result = backend.request_drawable_probe(timeout_s=0.1)
+        self.assertFalse(result["available"])
+        self.assertIn("reason", result)
+
+    def test_instance_index_is_counted_and_reported(self) -> None:
+        """Runner anomaly: 'slow frame #1' printed twice in one boot — the
+        counter is per-instance, so two instances would mean arm-state and
+        rendering can live on different objects. Instance identity is now
+        observable (init log, slow-frame line, and every probe response), so
+        a two-instance boot is provable from the log instead of inferred."""
+        before = mst.MacOSMetalSceneBackend.instances_created()
+        first = mst.MacOSMetalSceneBackend(window_system=object())
+        second = mst.MacOSMetalSceneBackend(window_system=object())
+        self.assertEqual(mst.MacOSMetalSceneBackend.instances_created(), before + 2)
+        self.assertNotEqual(first._instance_index, second._instance_index)
+        probeless = first.request_drawable_probe(timeout_s=0.1)
+        self.assertEqual(probeless.get("backend_instance"), first._instance_index)
