@@ -59,10 +59,13 @@ fn blend_px_f32(buf: &mut [u8], offset: usize, color: [u8; 4], alpha_f64: f64) {
     }
     // Source-over for the alpha channel too (mirroring `paste` and the GPU
     // blend state): a translucent fill over a transparent clear keeps its
-    // alpha — the SL-38 window material reads through it.
-    let dst_a = f64::from(buf[offset + 3]) / 255.0;
-    let out_a = alpha_f64 + dst_a * (1.0 - alpha_f64);
-    buf[offset + 3] = (out_a * 255.0).clamp(0.0, 255.0) as u8;
+    // alpha — the SL-38 window material reads through it. Written on the
+    // 0..255 scale as 255-(255-d)(1-a) in f32, bit-exact with the numpy
+    // path: exact 255 over an opaque destination (the a + d*(1-a) form
+    // truncates to 254 on AA edges) with no 0..1-scale cancellation at d=0.
+    let one_minus = (1.0 - alpha_f64) as f32;
+    let out_a = 255.0f32 - (255.0f32 - buf[offset + 3] as f32) * one_minus;
+    buf[offset + 3] = out_a.clamp(0.0, 255.0) as u8;
 }
 
 pub fn prepare(buf: &mut [u8]) {
@@ -509,9 +512,11 @@ fn mask_blend(
             }
             // Alpha composites source-over with the per-pixel coverage, the
             // same as `paste`: text/masks must not stomp the bbox opaque.
-            let dst_a = buf[offset + 3] as f32 / 255.0;
-            let out_a = alpha + dst_a * (1.0 - alpha);
-            buf[offset + 3] = (out_a * 255.0).clamp(0.0, 255.0) as u8;
+            // Same 0..255-scale 255-(255-d)(1-a) form as `blend_px_f32`,
+            // bit-exact with the numpy f32 path at both ends.
+            let dst_a = buf[offset + 3] as f32;
+            let out_a = 255.0f32 - (255.0f32 - dst_a) * (1.0 - alpha);
+            buf[offset + 3] = out_a.clamp(0.0, 255.0) as u8;
         }
     }
 }
