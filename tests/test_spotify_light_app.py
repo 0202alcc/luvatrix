@@ -5158,9 +5158,12 @@ class TestPillNativeGlass:
     def test_pill_plate_composites_uniformly_over_gap_and_cards(
             self, app_ctx, monkeypatch):
         """Rasterizer histogram: the pill region's alpha floor lands in the
-        120–150 frost window across the whole capsule — over the dark gap and
-        the card backdrop alike — and nothing bleeds outside the glass
-        frame."""
+        frost window across the whole capsule — over the dark gap and the
+        card backdrop alike — and nothing bleeds outside the glass frame.
+        SL-40 follow-up: the nav-family halo beneath the plate deepens the
+        interior composite (plate 130 over the shadow pair ≈ 46 → 152 over
+        clear, the same fill-over-shadow read the nav circles carry), so the
+        window centers on 152 instead of the bare plate's 130."""
         app, ctx, scene_buffer = app_ctx
         self._bridge(monkeypatch)
         self._playing(app, ctx)
@@ -5177,8 +5180,8 @@ class TestPillNativeGlass:
         inset = int(sl_views.glass_silhouette_radius(ph)) + 6
         region = img[py + 6:py + ph - 6, px + inset:px + pw - inset, 3]
         floor = int(region.min())
-        assert 120 <= floor <= 150, \
-            f"pill-region alpha floor {floor} outside the 120–150 frost window"
+        assert 145 <= floor <= 165, \
+            f"pill-region alpha floor {floor} outside the halo frost window"
         # Nothing bleeds outside the glass frame: above the card grid, the
         # column just left of the pill stays fully transparent.
         assert int(img[py + ph // 2, px - 8, 3]) == 0

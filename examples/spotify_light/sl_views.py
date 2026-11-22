@@ -1196,10 +1196,21 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
                      fill=PILL_FILL, border=PILL_BORDER)
     else:
         # SL-40: with REAL glass under, the scene carries its own plate fill
-        # so the capsule reads as one surface over any backdrop.
+        # so the capsule reads as one surface over any backdrop. The bare
+        # plate read flush next to the home/search circles ("flat compared
+        # to the other pills"), so the plate floats on the same drop-shadow
+        # pair _glass_plate gives the nav buttons — material-softened while
+        # the window material is live, offset below the capsule only.
+        radius = glass_silhouette_radius(ph)
+        material = _material_live(app)
+        shadow_far = MATERIAL_SHADOW_FAR if material else GLASS_SHADOW_FAR
+        shadow_near = MATERIAL_SHADOW_NEAR if material else GLASS_SHADOW_NEAR
+        frame.rounded_rect(x=px - 1, y=py + 5, width=pw + 2, height=ph,
+                           radius=radius, color=shadow_far, z_index=10)
+        frame.rounded_rect(x=px, y=py + 2, width=pw, height=ph,
+                           radius=radius, color=shadow_near, z_index=10)
         frame.rounded_rect(x=px, y=py, width=pw, height=ph,
-                           radius=glass_silhouette_radius(ph),
-                           color=PILL_PLATE_FILL, z_index=10)
+                           radius=radius, color=PILL_PLATE_FILL, z_index=10)
 
     player = app.player
     # Pre-staged at the wall-clock boundary: the queue head shows while the
