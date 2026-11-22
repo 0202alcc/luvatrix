@@ -634,14 +634,23 @@ class SceneFrame(AbstractContextManager["SceneFrame"]):
         *,
         content_offset: tuple[float, float] = (0.0, 0.0),
         retained: bool = False,
+        content_z_band: tuple[float, float] | None = None,
     ) -> None:
         self._ctx = ctx
         self._clear = _rgba(clear)
         self._content_offset = (float(content_offset[0]), float(content_offset[1]))
         self._retained = bool(retained)
+        self._content_z_band = (
+            None if content_z_band is None
+            else (float(content_z_band[0]), float(content_z_band[1]))
+        )
 
     def __enter__(self) -> "SceneFrame":
-        self._ctx.begin_scene_frame(content_offset=self._content_offset, retained=self._retained)
+        self._ctx.begin_scene_frame(
+            content_offset=self._content_offset,
+            retained=self._retained,
+            content_z_band=self._content_z_band,
+        )
         self._ctx.clear_scene(self._clear)
         return self
 
@@ -1676,6 +1685,7 @@ class App:
         *,
         content_offset: tuple[float, float] = (0.0, 0.0),
         retained: bool = False,
+        content_z_band: tuple[float, float] | None = None,
     ) -> AbstractContextManager[Any]:
         manifest = getattr(self.ctx, "app_manifest", None)
         preferred = getattr(manifest, "render_preferred", "auto")
@@ -1683,7 +1693,8 @@ class App:
         modes = fallbacks if preferred == "auto" else [preferred, *[m for m in fallbacks if m != preferred]]
         for mode in modes:
             if mode == "scene" and self.ctx.supports_scene_graph:
-                return SceneFrame(self.ctx, clear=clear, content_offset=content_offset, retained=retained)
+                return SceneFrame(self.ctx, clear=clear, content_offset=content_offset,
+                                  retained=retained, content_z_band=content_z_band)
             if mode == "ui":
                 try:
                     return UIFrame(self.ctx, clear=clear)
@@ -1699,8 +1710,10 @@ class App:
         *,
         content_offset: tuple[float, float] = (0.0, 0.0),
         retained: bool = False,
+        content_z_band: tuple[float, float] | None = None,
     ) -> SceneFrame:
-        return SceneFrame(self.ctx, clear=clear, content_offset=content_offset, retained=retained)
+        return SceneFrame(self.ctx, clear=clear, content_offset=content_offset,
+                          retained=retained, content_z_band=content_z_band)
 
     def matrix_frame(self, clear: tuple[int, int, int, int] | str = (0, 0, 0, 255)) -> MatrixFrame:
         return MatrixFrame(self.ctx, clear=clear)

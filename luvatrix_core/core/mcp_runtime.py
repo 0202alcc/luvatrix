@@ -546,8 +546,11 @@ class McpRuntimeBridge:
                     "commit_ms, and gap_ms (loop turnaround + app scene build "
                     "between presents). Use it before/after a candidate fix to "
                     "name the scroll-lag cost center instead of guessing. "
-                    "Optional 'frames' (1-600, default 120) and 'wait_s' "
-                    "(0.5-30, default 10)."
+                    "Optional 'frames' (1-600, default 120), 'wait_s' "
+                    "(0.5-30, default 10), and 'drive' (default true). "
+                    "drive=false records passively — no synthetic invalidate "
+                    "chain — for hand-scrolled before/after measurements on "
+                    "real content."
                 ),
                 input_schema={
                     "type": "object",
@@ -565,6 +568,14 @@ class McpRuntimeBridge:
                             "maximum": 30.0,
                             "default": 10.0,
                             "description": "Overall timeout; a timeout still returns the partial series.",
+                        },
+                        "drive": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": (
+                                "true chains invalidations (synthetic scroll); false "
+                                "records passively while a human scrolls."
+                            ),
                         },
                     },
                 },

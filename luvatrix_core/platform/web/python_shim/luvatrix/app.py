@@ -959,8 +959,20 @@ class App:
     def teardown_browser(self) -> None:
         self.teardown()
 
-    def frame(self, clear: tuple[int, int, int, int] | str = (0, 0, 0, 255)) -> SceneFrame:
+    def frame(self, clear: tuple[int, int, int, int] | str = (0, 0, 0, 255), *,
+              content_offset: tuple[float, float] = (0.0, 0.0),
+              retained: bool = False,
+              content_z_band: tuple[float, float] | None = None) -> SceneFrame:
+        # Browser frames are command buffers without retained-geometry
+        # semantics; the kwargs are accepted for call-site parity with the
+        # native builder (apps gate band use on supports_scene_content_z_band,
+        # which the shim never advertises).
+        _ = (content_offset, retained, content_z_band)
         return SceneFrame(self.ctx, clear=clear)
 
-    def scene_frame(self, clear: tuple[int, int, int, int] | str = (0, 0, 0, 255)) -> SceneFrame:
+    def scene_frame(self, clear: tuple[int, int, int, int] | str = (0, 0, 0, 255), *,
+                    content_offset: tuple[float, float] = (0.0, 0.0),
+                    retained: bool = False,
+                    content_z_band: tuple[float, float] | None = None) -> SceneFrame:
+        _ = (content_offset, retained, content_z_band)
         return SceneFrame(self.ctx, clear=clear)

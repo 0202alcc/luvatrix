@@ -553,6 +553,7 @@ class AppContext:
         presentation_mode: str | None = None,
         content_offset: tuple[float, float] = (0.0, 0.0),
         retained: bool = False,
+        content_z_band: tuple[float, float] | None = None,
     ) -> None:
         self._require_capability("window.write")
         if self.scene_buffer is None:
@@ -565,6 +566,22 @@ class AppContext:
         self._scene_presentation_mode = presentation_mode
         self._scene_content_offset = (float(content_offset[0]), float(content_offset[1]))
         self._scene_retained = bool(retained)
+        self._scene_content_z_band = (
+            None if content_z_band is None
+            else (float(content_z_band[0]), float(content_z_band[1]))
+        )
+
+    @property
+    def supports_scene_content_z_band(self) -> bool:
+        """Whether the active scene target honors banded content offsets
+        (SL-41). Apps gate the retained scroll hot path on this; targets
+        without support keep the legacy translate-everything path."""
+        return bool(getattr(self, "_scene_content_z_band_supported", False))
+
+    def set_scene_content_z_band_supported(self, supported: bool) -> None:
+        """Wire the scene target's band capability into the app context
+        (UnifiedRuntime does this from the target at app start)."""
+        self._scene_content_z_band_supported = bool(supported)
 
     def add_scene_node(self, node: SceneNode) -> None:
         if self._scene_nodes is None:
@@ -1033,6 +1050,7 @@ class AppContext:
                 content_offset_x=float(self._scene_content_offset[0]),
                 content_offset_y=float(self._scene_content_offset[1]),
                 retained=bool(self._scene_retained),
+                content_z_band=getattr(self, "_scene_content_z_band", None),
             )
             return self.scene_buffer.submit_if_changed(frame)
         finally:
@@ -1040,6 +1058,7 @@ class AppContext:
             self._scene_started_ns = 0
             self._scene_quality_tier = 0
             self._scene_presentation_mode = None
+            self._scene_content_z_band = None
 
     def _require_capability(self, capability: str) -> None:
         if capability not in self.granted_capabilities:

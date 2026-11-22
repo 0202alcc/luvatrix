@@ -276,15 +276,18 @@ class TestUnifiedRuntimeWalk(unittest.TestCase):
         calls: list[dict] = []
 
         class _Backend:
-            def request_frame_time_probe(self, *, frames=120, timeout_s=10.0):
-                calls.append({"frames": frames, "timeout_s": timeout_s})
+            def request_frame_time_probe(self, *, frames=120, timeout_s=10.0, drive=True):
+                calls.append({"frames": frames, "timeout_s": timeout_s, "drive": drive})
                 return {"available": True, "captured_frames": 60, "complete": True}
 
         target = types.SimpleNamespace(backend=_Backend())
         payload = self._runtime(target)._mcp_frame_time_probe({"frames": 60, "wait_s": 5.0})
         self.assertTrue(payload["available"])
         self.assertEqual(payload["captured_frames"], 60)
-        self.assertEqual(calls, [{"frames": 60, "timeout_s": 5.0}])
+        self.assertEqual(calls, [{"frames": 60, "timeout_s": 5.0, "drive": True}])
+
+        self._runtime(target)._mcp_frame_time_probe({"drive": False})
+        self.assertEqual(calls[-1], {"frames": 120, "timeout_s": 10.0, "drive": False})
 
     def test_frame_time_probe_unavailable_without_scene_runtime(self) -> None:
         from luvatrix_core.core.unified_runtime import UnifiedRuntime

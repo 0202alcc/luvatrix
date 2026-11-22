@@ -27,6 +27,14 @@ class SceneRenderTarget(Protocol):
         """Device pixels per logical point (2.0 on Retina); 1.0 when unknown."""
         return 1.0
 
+    def supports_content_z_band(self) -> bool:
+        """Whether present_scene honors SceneFrame.content_z_band (offset
+        applies only inside the z band). Default False keeps unported
+        targets on whole-frame semantics; apps must gate banded frames on
+        this capability and stay on the legacy translate-everything path
+        otherwise."""
+        return False
+
 
 @dataclass
 class SceneTargetAdapter(RenderTarget):

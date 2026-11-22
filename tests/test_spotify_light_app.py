@@ -5733,6 +5733,9 @@ class TestScrollContentBand:
         app, ctx, buf = app_ctx
         self._enable_band(ctx)
         self._tracks(app, ctx)
+        # The rail needs real scrollable extent: one seeded playlist clamps
+        # any wheel to 0 on every implementation.
+        app.playlists = tuple(_playlist(f"Rail {i:02d}") for i in range(60))
         _tick(app, ctx, 2)
 
         app._mouse = (100.0, 400.0)

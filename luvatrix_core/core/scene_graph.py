@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import math
 import threading
 import time
@@ -601,6 +601,12 @@ class SceneFrame:
     content_offset_x: float = 0.0
     content_offset_y: float = 0.0
     retained: bool = False
+    # Inclusive (low, high) z range the content offset applies to; nodes
+    # outside the band present untransformed. None = whole-frame offset
+    # (legacy semantics). Consumers: macOS Metal + the CPU rasterizer;
+    # other targets must only receive bandless frames (app-gated via the
+    # supports_content_z_band target capability).
+    content_z_band: tuple[float, float] | None = None
 
     def __post_init__(self) -> None:
         for label, value in (
@@ -613,6 +619,14 @@ class SceneFrame:
         ):
             if int(value) < (0 if label in ("revision", "ts_ns") else 1):
                 raise ValueError(f"{label} is out of range: {value}")
+        if self.content_z_band is not None:
+            band = tuple(self.content_z_band)
+            if len(band) != 2:
+                raise ValueError(f"content_z_band must be (low, high): {self.content_z_band!r}")
+            low, high = float(band[0]), float(band[1])
+            if low > high:
+                raise ValueError(f"content_z_band low exceeds high: {self.content_z_band!r}")
+            object.__setattr__(self, "content_z_band", (low, high))
         nodes = tuple(self.nodes)
         if any(
             getattr(nodes[index - 1], "z_index", 0) > getattr(nodes[index], "z_index", 0)
@@ -641,6 +655,11 @@ def _scene_render_signature(frame: SceneFrame) -> tuple[object, ...]:
         round(float(frame.content_offset_x), 4),
         round(float(frame.content_offset_y), 4),
         bool(frame.retained),
+        (
+            None
+            if frame.content_z_band is None
+            else (round(float(frame.content_z_band[0]), 4), round(float(frame.content_z_band[1]), 4))
+        ),
     )
 
 
@@ -653,6 +672,7 @@ def _scene_render_equal(previous: SceneFrame, incoming: SceneFrame) -> bool:
         or abs(float(previous.content_offset_x) - float(incoming.content_offset_x)) > 1e-4
         or abs(float(previous.content_offset_y) - float(incoming.content_offset_y)) > 1e-4
         or bool(previous.retained) != bool(incoming.retained)
+        or previous.content_z_band != incoming.content_z_band
     ):
         return False
     try:
@@ -660,6 +680,42 @@ def _scene_render_equal(previous: SceneFrame, incoming: SceneFrame) -> bool:
         return result if isinstance(result, bool) else bool(result)
     except (TypeError, ValueError, RuntimeError):
         return False
+
+
+def split_frame_by_z_band(frame: SceneFrame) -> tuple[SceneFrame, ...]:
+    """Split a banded frame into z-contiguous tier sub-frames for present.
+
+    Returns up to three frames — below the band, in-band, above — in draw
+    order. Because the tiers partition the z axis, presenting them in
+    sequence composites exactly like the unsplit frame. Fixed tiers carry a
+    zeroed content offset; the band tier keeps it. Every sub-frame has
+    ``content_z_band=None`` so downstream consumers never re-split.
+    """
+    band = frame.content_z_band
+    if band is None:
+        raise ValueError("split_frame_by_z_band requires a banded frame")
+    low, high = float(band[0]), float(band[1])
+    below: list[SceneNode] = []
+    banded: list[SceneNode] = []
+    above: list[SceneNode] = []
+    for node in frame.nodes:
+        z = float(getattr(node, "z_index", 0))
+        if z < low:
+            below.append(node)
+        elif z > high:
+            above.append(node)
+        else:
+            banded.append(node)
+    tiers: list[SceneFrame] = []
+    if below:
+        tiers.append(replace(frame, nodes=tuple(below), content_offset_x=0.0,
+                             content_offset_y=0.0, content_z_band=None))
+    if banded:
+        tiers.append(replace(frame, nodes=tuple(banded), content_z_band=None))
+    if above:
+        tiers.append(replace(frame, nodes=tuple(above), content_offset_x=0.0,
+                             content_offset_y=0.0, content_z_band=None))
+    return tuple(tiers)
 
 
 class SceneGraphBuffer:
@@ -695,6 +751,7 @@ class SceneGraphBuffer:
                 content_offset_x=frame.content_offset_x,
                 content_offset_y=frame.content_offset_y,
                 retained=frame.retained,
+                content_z_band=frame.content_z_band,
             )
             self._frame = frame
             event = SceneBlitEvent(
@@ -742,6 +799,7 @@ class SceneGraphBuffer:
                 content_offset_x=float(x),
                 content_offset_y=float(y),
                 retained=previous.retained,
+                content_z_band=previous.content_z_band,
             )
         return self.submit_if_changed(transformed)
 

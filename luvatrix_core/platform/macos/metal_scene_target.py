@@ -29,6 +29,7 @@ from luvatrix_core.core.scene_graph import (
     SceneFrame,
     ShaderRectNode,
     TextNode,
+    split_frame_by_z_band,
 )
 from luvatrix_core.core.scene_rasterizer import _Offsets, _draw_layer, _draw_text, _numpy, rasterize_scene_frame
 from luvatrix_core.platform.macos.metal_backend import (
@@ -593,18 +594,16 @@ class MacOSMetalSceneBackend:
             vp_x, vp_y, vp_w, vp_h = _viewport(drawable_w, drawable_h, frame)
             enc.setViewport_((vp_x, vp_y, vp_w, vp_h, 0.0, 1.0))
 
-            if _needs_z_ordered_batches(frame):
-                walked_at = self._present_z_ordered(
-                    enc, state, frame, drawable_w=drawable_w, drawable_h=drawable_h
-                )
-                after_rects = walked_at
-                after_circles = walked_at
-                after_rounded_rects = walked_at
-                after_text = walked_at
-            else:
-                after_rects, after_circles, after_rounded_rects, after_text = self._present_kind_grouped(
-                    enc, state, frame, drawable_w=drawable_w, drawable_h=drawable_h
-                )
+            marks = self._present_batched(
+                enc, state, frame, drawable_w=drawable_w, drawable_h=drawable_h
+            )
+            if isinstance(marks, tuple):
+                after_rects, after_circles, after_rounded_rects, after_text = marks
+            elif marks is not None:
+                after_rects = marks
+                after_circles = marks
+                after_rounded_rects = marks
+                after_text = marks
         finally:
             enc.endEncoding()
         if self._drawable_probe_armed:
@@ -646,6 +645,50 @@ class MacOSMetalSceneBackend:
                 committed=time.perf_counter(),
                 revision=int(getattr(frame, "revision", 0)),
             )
+
+    def _present_batched(
+        self,
+        enc,
+        state: _MacOSMetalSceneState,
+        frame: SceneFrame,
+        *,
+        drawable_w: float,
+        drawable_h: float,
+    ):
+        """Dispatch a frame's present passes, splitting banded frames into
+        z-band tiers first (SL-41).
+
+        A bandless frame presents exactly as before (identity pass-through).
+        A banded frame splits into up to three z-contiguous tier sub-frames
+        — below the band (window backstop, untransformed), in-band (content,
+        offset applied), above (chrome, untransformed) — and each tier takes
+        the kind-grouped fast path or the z-ordered walk on its own kinds.
+        Tiers partition the z axis, so the tier sequence composites exactly
+        like the unsplit frame. Geometry cache keys hash node content only,
+        so retained transform-only ticks keep hitting the tier buffers.
+
+        Returns the LAST tier's present marks (the probe's encode_end is the
+        last tier's end ≈ full encode end), or None for an empty frame.
+        """
+        if frame.content_z_band is None:
+            if _needs_z_ordered_batches(frame):
+                return self._present_z_ordered(
+                    enc, state, frame, drawable_w=drawable_w, drawable_h=drawable_h
+                )
+            return self._present_kind_grouped(
+                enc, state, frame, drawable_w=drawable_w, drawable_h=drawable_h
+            )
+        marks = None
+        for tier in split_frame_by_z_band(frame):
+            if _needs_z_ordered_batches(tier):
+                marks = self._present_z_ordered(
+                    enc, state, tier, drawable_w=drawable_w, drawable_h=drawable_h
+                )
+            else:
+                marks = self._present_kind_grouped(
+                    enc, state, tier, drawable_w=drawable_w, drawable_h=drawable_h
+                )
+        return marks
 
     def _present_kind_grouped(
         self,
@@ -1229,7 +1272,8 @@ class MacOSMetalSceneBackend:
             )
             self._drawable_probe_done.set()
 
-    def request_frame_time_probe(self, *, frames: int = 120, timeout_s: float = 10.0) -> dict:
+    def request_frame_time_probe(self, *, frames: int = 120, timeout_s: float = 10.0,
+                                 drive: bool = True) -> dict:
         """SL-41 ("scrolling is really laggy"): time the present path under a
         synthetic scroll. Input injection is banned on the Mac (403-flake
         policy), so this chains invalidations through the wired present hook
@@ -1240,7 +1284,9 @@ class MacOSMetalSceneBackend:
         raster), commit_ms (command submission), and gap_ms (everything
         between presents: loop turnaround + app scene build). A timeout
         still returns the partial series — a stalled chain is itself lag
-        evidence."""
+        evidence. drive=False (Round 65) arms the recorder with NO nudge
+        chain: a human scrolls real content while presents record passively,
+        so the synthetic chain can't fight the gesture stream."""
         if self._state is None:
             return {"available": False, "reason": "backend not initialized",
                     "backend_instance": self._instance_index, "captured_frames": 0}
@@ -1256,10 +1302,11 @@ class MacOSMetalSceneBackend:
         self._frame_probe_target = target
         self._frame_probe_last_committed = None
         self._frame_probe_first_started = None
+        self._frame_probe_drive = bool(drive)
         self._frame_probe_done.clear()
         self._frame_probe_armed = True
         hook = self._drawable_probe_present_hook
-        if hook is not None:
+        if drive and hook is not None:
             try:
                 hook()
             except Exception:  # noqa: BLE001 — a failed nudge must not fail the probe
@@ -1284,6 +1331,7 @@ class MacOSMetalSceneBackend:
             "requested_frames": target,
             "captured_frames": len(marks),
             "complete": len(marks) >= target,
+            "drive": bool(getattr(self, "_frame_probe_drive", True)),
             "elapsed_ms": elapsed_ms,
             "frames": marks,
             "summary": _frame_probe_summary(marks),
@@ -1317,6 +1365,8 @@ class MacOSMetalSceneBackend:
             self._frame_probe_armed = False
             self._frame_probe_done.set()
             return
+        if not getattr(self, "_frame_probe_drive", True):
+            return  # passive recording: presents arrive on their own
         hook = self._drawable_probe_present_hook
         if hook is not None:
             try:
@@ -1369,6 +1419,10 @@ class MacOSMetalSceneTarget(SceneRenderTarget):
     def backing_scale(self) -> float:
         """Display backing scale for the app loop's raster payload sizing."""
         return float(getattr(self.backend, "last_backing_scale", 1.0))
+
+    def supports_content_z_band(self) -> bool:
+        """The Metal present path splits banded frames into tier sub-passes."""
+        return True
 
     def stop(self) -> None:
         if not self._started or self._context is None:

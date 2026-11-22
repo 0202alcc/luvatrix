@@ -44,6 +44,16 @@ def _wire_scene_backing_scale(ctx, scene_target) -> None:
         ctx.set_backing_scale_provider(scale_getter)
 
 
+def _wire_scene_content_z_band(ctx, scene_target) -> None:
+    """Advertise the scene target's content_z_band support to the app (SL-41).
+
+    Targets without the method fall back to the protocol default False, so
+    apps stay on the legacy translate-everything scroll path there.
+    """
+    supports = getattr(scene_target, "supports_content_z_band", None)
+    ctx.set_scene_content_z_band_supported(bool(supports()) if callable(supports) else False)
+
+
 @dataclass(frozen=True)
 class UnifiedRunResult:
     ticks_run: int
@@ -231,6 +241,7 @@ class UnifiedRuntime:
         ctx = self._app_runtime.build_context(granted_capabilities=granted, manifest=manifest)
         ctx.runtime_telemetry_provider = self._runtime_telemetry
         _wire_scene_backing_scale(ctx, self._scene_target)
+        _wire_scene_content_z_band(ctx, self._scene_target)
         resolved = self._app_runtime.resolve_variant(app_path, manifest)
         if manifest.runtime_kind == "process":
             from .process_runtime import ProcessLifecycleClient  # noqa: PLC0415
@@ -559,6 +570,7 @@ class UnifiedRuntime:
         return request(
             frames=arguments.get("frames", 120),
             timeout_s=arguments.get("wait_s", 10.0),
+            drive=bool(arguments.get("drive", True)),
         )
 
     def _mcp_scene_tree(self) -> dict[str, Any]:

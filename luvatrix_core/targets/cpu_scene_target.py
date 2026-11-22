@@ -21,6 +21,10 @@ class CpuSceneTarget(SceneRenderTarget):
         """Display/logical pixel ratio of the last presented frame."""
         return float(self._last_backing_scale)
 
+    def supports_content_z_band(self) -> bool:
+        """The CPU rasterizer applies the content offset per z-band tier."""
+        return True
+
     def start(self) -> None:
         if self._started:
             return

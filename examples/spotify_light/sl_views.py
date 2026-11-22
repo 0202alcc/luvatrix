@@ -391,6 +391,10 @@ class HitRegion:
     h: float
     action: str
     payload: object = None
+    # SL-41: True marks a region recorded in CONTENT space (the retained band
+    # draws content un-translated); the dispatcher maps the live scroll offset
+    # onto the click before testing it. Chrome regions stay screen-space.
+    scrollable: bool = False
 
     def contains(self, px: float, py: float) -> bool:
         return self.x <= px <= self.x + self.w and self.y <= py <= self.y + self.h
@@ -403,8 +407,8 @@ class FrameOut:
     hits: list[HitRegion] = field(default_factory=list)
     content_height: float = 0.0
 
-    def hit(self, x, y, w, h, action, payload=None) -> None:
-        self.hits.append(HitRegion(x, y, w, h, action, payload))
+    def hit(self, x, y, w, h, action, payload=None, *, scrollable: bool = False) -> None:
+        self.hits.append(HitRegion(x, y, w, h, action, payload, scrollable))
 
 
 def _ck(*parts: object) -> str:
@@ -647,13 +651,28 @@ def _daypart() -> str:
 # -- sidebar -------------------------------------------------------------------
 
 
+def _scroll_sub(app) -> float:
+    """Y subtracted from content draws: 0 under the retained content band
+    (SL-41 — the GPU transform scrolls instead), content_scroll on legacy
+    targets. Falls back to content_scroll for bare test doubles."""
+    return float(getattr(app, "_render_scroll_sub", getattr(app, "content_scroll", 0.0)))
+
+
+def _cull_top(app) -> float:
+    """Top cull edge for content draws, in draw space. Legacy: 0 (screen);
+    band mode: scroll minus one window of margin (content space)."""
+    return float(getattr(app, "_render_cull_lo", 0.0))
+
+
 def _cull_bottom(app, height: float) -> float:
-    """Bottom cull edge for content views.
+    """Bottom cull edge for content draws, in draw space.
 
     The player bar is simulated glass on every host, so content flows under
-    it everywhere — cull at the window bottom.
+    it everywhere — legacy culls at the window bottom. Under the retained
+    band the app publishes the re-window margin instead (scroll + two
+    windows of content space).
     """
-    return height
+    return float(getattr(app, "_render_cull_hi", height))
 
 
 def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
@@ -669,9 +688,9 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
     m = SIDEBAR_GLASS_MARGIN
     rx, ry, rw, rh = _layout(
         app, "sidebar", (m, m, SIDEBAR_W - m * 2, height - m * 2), width, height)
-    _glass_plate(frame, rx, ry, rw, rh, radius=SIDEBAR_GLASS_RADIUS, z=1, app=app)
+    _glass_plate(frame, rx, ry, rw, rh, radius=SIDEBAR_GLASS_RADIUS, z=7, app=app)
     ox, oy = rx - m, ry - m
-    _text(frame, "Spotify Light", x=22 + ox, y=20 + oy, size=20, color=ACCENT, z=3)
+    _text(frame, "Spotify Light", x=22 + ox, y=20 + oy, size=20, color=ACCENT, z=9)
 
     # Home/Search live on the glass circles flanking the player pill (round
     # 8); the sidebar keeps Library, playlists, and account.
@@ -681,18 +700,18 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
         active = app.view == view
         hovering = _hover(mouse, 10 + ox, y - 6, SIDEBAR_W - 20, NAV_H - 8)
         if active:
-            _glass_plate(frame, 10 + ox, y - 6, SIDEBAR_W - 20, NAV_H - 8, radius=8.0, z=2,
+            _glass_plate(frame, 10 + ox, y - 6, SIDEBAR_W - 20, NAV_H - 8, radius=8.0, z=8,
                          shadow=False, app=app)
         elif hovering:
             frame.rounded_rect(x=10 + ox, y=y - 6, width=SIDEBAR_W - 20, height=NAV_H - 8,
-                               radius=8.0, color=SIDEBAR_ROW_HOVER, z_index=2)
+                               radius=8.0, color=SIDEBAR_ROW_HOVER, z_index=8)
         color = TEXT if (active or hovering) else SUBTEXT
-        _text(frame, label, x=22 + ox, y=y + 2, size=15, color=color, z=3)
+        _text(frame, label, x=22 + ox, y=y + 2, size=15, color=color, z=9)
         out.hit(10 + ox, y - 6, SIDEBAR_W - 20, NAV_H - 8, "nav", view)
         y += NAV_H
 
     y += 10
-    _text(frame, "PLAYLISTS", x=22 + ox, y=y, size=11, color=FAINT, z=3)
+    _text(frame, "PLAYLISTS", x=22 + ox, y=y, size=11, color=FAINT, z=9)
     y += 24
 
     list_top = y
@@ -706,9 +725,9 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
         hovering = _hover(mouse, 10 + ox, row_y, SIDEBAR_W - 20, row_h - 4)
         if hovering:
             frame.rounded_rect(x=10 + ox, y=row_y, width=SIDEBAR_W - 20, height=row_h - 4,
-                               radius=6.0, color=SIDEBAR_ROW_HOVER, z_index=2)
+                               radius=6.0, color=SIDEBAR_ROW_HOVER, z_index=8)
         _text(frame, playlist.name, x=22 + ox, y=row_y + 4, size=13,
-              color=TEXT if hovering else SUBTEXT, z=3, max_chars=26)
+              color=TEXT if hovering else SUBTEXT, z=9, max_chars=26)
         out.hit(10 + ox, row_y, SIDEBAR_W - 20, row_h - 4, "open_playlist", playlist.id)
 
     # The list scrolls under the glass: dissolve both seams with a short
@@ -718,21 +737,21 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
         for i in range(SIDEBAR_SEAM_STRIPS):
             a_top = int(round(210 * (1.0 - i / SIDEBAR_SEAM_STRIPS)))
             frame.rect(x=rx + 2, y=list_top + i * strip, width=rw - 4, height=strip,
-                       color=(14, 14, 14, a_top), z_index=4)
+                       color=(14, 14, 14, a_top), z_index=9)
             a_bottom = int(round(210 * (i + 1) / SIDEBAR_SEAM_STRIPS))
             frame.rect(x=rx + 2, y=list_bottom - SIDEBAR_SEAM_FADE_PX + i * strip,
-                       width=rw - 4, height=strip, color=(14, 14, 14, a_bottom), z_index=4)
+                       width=rw - 4, height=strip, color=(14, 14, 14, a_bottom), z_index=9)
     _draw_scrollbar(frame, app.scrollbar_sidebar, out, x=rx + rw - 9, top=list_top,
                     bottom=list_bottom, content=row_h * len(app.playlists), offset=offset,
                     tag="sidebar")
 
     chip_y = height - 52 + oy
     frame.rect(x=rx + 14, y=chip_y - 8, width=rw - 28, height=1,
-               color=(255, 255, 255, 20), z_index=2)
+               color=(255, 255, 255, 20), z_index=8)
     name = app.profile.display_name if app.profile and app.profile.display_name else "Account"
-    _text(frame, name, x=22 + ox, y=chip_y + 4, size=13, color=SUBTEXT, z=3, max_chars=16)
+    _text(frame, name, x=22 + ox, y=chip_y + 4, size=13, color=SUBTEXT, z=9, max_chars=16)
     hovering = _hover(mouse, 150 + ox, chip_y, 70, 26)
-    _text(frame, "Log out", x=156 + ox, y=chip_y + 4, size=13, color=TEXT if hovering else FAINT, z=3)
+    _text(frame, "Log out", x=156 + ox, y=chip_y + 4, size=13, color=TEXT if hovering else FAINT, z=9)
     out.hit(150 + ox, chip_y - 2, 74, 28, "logout")
 
 
@@ -834,7 +853,7 @@ def _draw_scrollbar(frame, controller, out: FrameOut, *, x, top, bottom, content
     if metrics.thumb_extent <= 0:
         return
     frame.rounded_rect(x=x, y=top + metrics.thumb_start, width=5, height=metrics.thumb_extent,
-                       radius=2.5, color=(90, 90, 90, 255), z_index=4)
+                       radius=2.5, color=(90, 90, 90, 255), z_index=9)
     out.hit(x - 4, top, 13, view, "scrollbar", tag)
 
 
@@ -850,9 +869,9 @@ def _draw_card(frame, app, out: FrameOut, card: sl_ui.CardView, *, x, y, mouse) 
     _text(frame, card.subtitle, x=x + 12, y=y + CARD_ART + 28, size=12, color=SUBTEXT, z=3,
           max_chars=26)
     if card.kind in ("playlist", "album"):
-        out.hit(x, y, CARD_W, CARD_H, "open_card", card)
+        out.hit(x, y, CARD_W, CARD_H, "open_card", card, scrollable=True)
     elif card.kind == "track":
-        out.hit(x, y, CARD_W, CARD_H, "play_card", card)
+        out.hit(x, y, CARD_W, CARD_H, "play_card", card, scrollable=True)
     if hovering and card.context_uri:
         frame.circle(cx=x + CARD_W - 28, cy=y + CARD_ART - 26, radius=20,
                      fill=(0, 0, 0, 90), z_index=3)
@@ -865,7 +884,7 @@ def _draw_track_table(frame, app, out: FrameOut, rows, *, x0, y0, width, height,
     table_w = width - SIDEBAR_W - CONTENT_PAD * 2
     for row in rows:
         row_y = y0 + (row.index - 1) * ROW_H
-        if row_y + ROW_H < 0 or row_y > _cull_bottom(app, height):
+        if row_y + ROW_H < _cull_top(app) or row_y > _cull_bottom(app, height):
             continue
         hovering = _hover(mouse, x0 - 8, row_y, table_w + 8, ROW_H)
         if hovering:
@@ -882,9 +901,9 @@ def _draw_track_table(frame, app, out: FrameOut, rows, *, x0, y0, width, height,
         _text(frame, row.duration, x=x0 + table_w - 56, y=row_y + 14, size=13, color=SUBTEXT, z=3)
         if context_uri is not None:
             out.hit(x0 - 8, row_y + 2, table_w + 8, ROW_H - 6, "play_track_in_context",
-                    (context_uri, row.uri))
+                    (context_uri, row.uri), scrollable=True)
         else:
-            out.hit(x0 - 8, row_y + 2, table_w + 8, ROW_H - 6, "play_uris", [row.uri])
+            out.hit(x0 - 8, row_y + 2, table_w + 8, ROW_H - 6, "play_uris", [row.uri], scrollable=True)
     return y0 + len(rows) * ROW_H
 
 
@@ -893,7 +912,7 @@ def _draw_track_table(frame, app, out: FrameOut, rows, *, x0, y0, width, height,
 
 def draw_home(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
     x0 = SIDEBAR_W + CONTENT_PAD
-    y = 24.0 - app.content_scroll
+    y = 24.0 - _scroll_sub(app)
     view_w = width - SIDEBAR_W - CONTENT_PAD * 2
     _text(frame, "Good " + _daypart(), x=x0, y=y, size=26, z=3)
     y += 46
@@ -926,11 +945,11 @@ def draw_home(frame, app, out: FrameOut, *, width: float, height: float, mouse) 
             row, col = divmod(idx, cols)
             cx = x0 + col * (CARD_W + CARD_GAP)
             cy = y + row * (CARD_H + CARD_GAP)
-            if cy + CARD_H > 0 and cy < _cull_bottom(app, height):
+            if cy + CARD_H > _cull_top(app) and cy < _cull_bottom(app, height):
                 _draw_card(frame, app, out, card, x=cx, y=cy, mouse=mouse)
         y += rows * (CARD_H + CARD_GAP) + 12
 
-    out.content_height = y + app.content_scroll
+    out.content_height = y + _scroll_sub(app)
 
 
 # -- playlist detail -------------------------------------------------------------
@@ -938,7 +957,7 @@ def draw_home(frame, app, out: FrameOut, *, width: float, height: float, mouse) 
 
 def draw_playlist(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
     x0 = SIDEBAR_W + CONTENT_PAD
-    y = 24.0 - app.content_scroll
+    y = 24.0 - _scroll_sub(app)
     detail = app.playlist_detail
     if detail is None:
         if app.playlist_error:
@@ -954,7 +973,7 @@ def draw_playlist(frame, app, out: FrameOut, *, width: float, height: float, mou
             _text(frame, "Retry", x=retry_x + 29, y=retry_y + 10, size=14,
                   color=(0, 0, 0, 255), z=3)
             playlist_id = app.view.split(":", 1)[1] if ":" in app.view else ""
-            out.hit(retry_x, retry_y, retry_w, retry_h, "retry_playlist", playlist_id)
+            out.hit(retry_x, retry_y, retry_w, retry_h, "retry_playlist", playlist_id, scrollable=True)
             return
         _text(frame, "Loading playlist…", x=x0, y=y, size=16, color=SUBTEXT, z=3)
         return
@@ -978,7 +997,7 @@ def draw_playlist(frame, app, out: FrameOut, *, width: float, height: float, mou
     frame.rect(x=play_x + 14, y=play_y + 1, width=92, height=1,
                color=(255, 255, 255, 70), z_index=3)
     _text(frame, "Play", x=play_x + 42, y=play_y + 11, size=15, color=(0, 0, 0, 255), z=3)
-    out.hit(play_x, play_y, 120, 40, "play_context", playlist.uri)
+    out.hit(play_x, play_y, 120, 40, "play_context", playlist.uri, scrollable=True)
     y += 190
 
     table_w = width - SIDEBAR_W - CONTENT_PAD * 2
@@ -992,7 +1011,7 @@ def draw_playlist(frame, app, out: FrameOut, *, width: float, height: float, mou
     rows = sl_ui.build_track_rows(tracks)
     end_y = _draw_track_table(frame, app, out, rows, x0=x0, y0=y, width=width, height=height,
                               context_uri=playlist.uri, mouse=mouse)
-    out.content_height = end_y + 40 + app.content_scroll
+    out.content_height = end_y + 40 + _scroll_sub(app)
 
 
 # -- search ---------------------------------------------------------------------
@@ -1000,7 +1019,7 @@ def draw_playlist(frame, app, out: FrameOut, *, width: float, height: float, mou
 
 def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
     x0 = SIDEBAR_W + CONTENT_PAD
-    y = 24.0 - app.content_scroll
+    y = 24.0 - _scroll_sub(app)
     view_w = width - SIDEBAR_W - CONTENT_PAD * 2
 
     # SL-39: while the expanding cluster owns search input, the in-content
@@ -1042,7 +1061,7 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
             caret_x = x0 + 18 + app.ctx.measure_text(
                 shown if app.search_query else "", font_size_px=14.0, font_family=FONT_FAMILY)
             frame.rect(x=caret_x + 2, y=y + 10, width=1.5, height=20, color=TEXT, z_index=4)
-        out.hit(x0, y, field_w, 40, "focus_search")
+        out.hit(x0, y, field_w, 40, "focus_search", scrollable=True)
         y += 60
 
     if app.search_error:
@@ -1076,10 +1095,10 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
             row, col = divmod(idx, cols)
             cx = x0 + col * (CARD_W + CARD_GAP)
             cy = y + row * (CARD_H + CARD_GAP)
-            if cy + CARD_H > 0 and cy < _cull_bottom(app, height):
+            if cy + CARD_H > _cull_top(app) and cy < _cull_bottom(app, height):
                 _draw_card(frame, app, out, card, x=cx, y=cy, mouse=mouse)
         y += rows_n * (CARD_H + CARD_GAP) + 12
-    out.content_height = y + app.content_scroll
+    out.content_height = y + _scroll_sub(app)
 
 
 # -- library ---------------------------------------------------------------------
@@ -1087,7 +1106,7 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
 
 def draw_library(frame, app, out: FrameOut, *, width: float, height: float, mouse) -> None:
     x0 = SIDEBAR_W + CONTENT_PAD
-    y = 24.0 - app.content_scroll
+    y = 24.0 - _scroll_sub(app)
     _text(frame, "Your Library", x=x0, y=y, size=26, z=3)
     y += 46
     view_w = width - SIDEBAR_W - CONTENT_PAD * 2
@@ -1102,9 +1121,9 @@ def draw_library(frame, app, out: FrameOut, *, width: float, height: float, mous
         row, col = divmod(idx, cols)
         cx = x0 + col * (CARD_W + CARD_GAP)
         cy = y + row * (CARD_H + CARD_GAP)
-        if cy + CARD_H > 0 and cy < _cull_bottom(app, height):
+        if cy + CARD_H > _cull_top(app) and cy < _cull_bottom(app, height):
             _draw_card(frame, app, out, card, x=cx, y=cy, mouse=mouse)
-    out.content_height = y + rows * (CARD_H + CARD_GAP) + app.content_scroll
+    out.content_height = y + rows * (CARD_H + CARD_GAP) + _scroll_sub(app)
 
 
 # -- now playing bar ---------------------------------------------------------------

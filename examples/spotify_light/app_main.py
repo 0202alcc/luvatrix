@@ -64,6 +64,12 @@ ACTIVITY_RESYNC_MIN_SECS = 15.0
 # enough for a sliding-window limit to open up, short enough to feel alive.
 RATE_LIMIT_DEFAULT_SECS = 10.0
 SEARCH_DEBOUNCE_SECS = 0.4
+# SL-41 retained scroll band: mid-gesture wheel ticks publish a
+# transform-only content offset; a re-window render fires at most this often
+# (keeps cull/hover/thumb honest) and one settle render lands after the
+# gesture goes quiet.
+SCROLL_REWINDOW_INTERVAL_S = 0.1
+SCROLL_SETTLE_S = 0.12
 STATUS_TOAST_SECS = 6.0
 LOGIN_TIMEOUT_SECS = 180.0
 # How long a failed art fetch backs off before one retry: a dead CDN URL must
@@ -176,6 +182,15 @@ class SpotifyLightApp(App):
         self.content_scroll = 0.0
         self.sidebar_scroll = 0.0
         self._content_height = 0.0
+        # SL-41 band state: _render_scroll_sub is what content draws subtract
+        # (0 when the retained band carries the offset); _render_cull_lo/hi
+        # bound the draw window in that same space; _last_scroll_build_t and
+        # _scroll_settle_due drive the re-window throttle and settle render.
+        self._render_scroll_sub = 0.0
+        self._render_cull_lo = 0.0
+        self._render_cull_hi = 0.0
+        self._last_scroll_build_t = 0.0
+        self._scroll_settle_due: float | None = None
 
         # Under-glass pill (SL-36): a real NSGlassEffectView below the render
         # surface replaces the pill's simulated plate on capable hosts.
@@ -814,6 +829,12 @@ class SpotifyLightApp(App):
         if self.search_focused or self.client_id_focused:
             self.invalidate()
 
+        # SL-41: the gesture went quiet — one rebuild recentres the draw
+        # window and refreshes hover/thumb after transform-only revisions.
+        if self._scroll_settle_due is not None and now >= self._scroll_settle_due:
+            self._scroll_settle_due = None
+            self.invalidate()
+
     # -- input --------------------------------------------------------------------
 
     def _maybe_activity_resync(self) -> None:
@@ -882,7 +903,7 @@ class SpotifyLightApp(App):
         )
         if content_update.consumed:
             self.content_scroll = content_update.offset
-            self.invalidate()
+            self._publish_content_scroll()
             return
 
         if state.scroll_y:
@@ -914,6 +935,8 @@ class SpotifyLightApp(App):
                 self.content_scroll = self._clamp_scroll(
                     self.content_scroll - delta_y, self._content_height, viewport
                 )
+                self._publish_content_scroll()
+                return
             self.invalidate()
             return
         if mx < sl_views.SIDEBAR_W:
@@ -921,12 +944,29 @@ class SpotifyLightApp(App):
                 self.sidebar_scroll - delta_y, 30.0 * len(self.playlists),
                 self.display.height_px - 64 - sl_views.SIDEBAR_LIST_TOP,
             )
-        else:
-            viewport = self.display.height_px - sl_views.DOCK_H
-            self.content_scroll = self._clamp_scroll(
-                self.content_scroll - delta_y, self._content_height, viewport
-            )
-        self.invalidate()
+            self.invalidate()
+            return
+        viewport = self.display.height_px - sl_views.DOCK_H
+        self.content_scroll = self._clamp_scroll(
+            self.content_scroll - delta_y, self._content_height, viewport
+        )
+        self._publish_content_scroll()
+
+    def _publish_content_scroll(self) -> None:
+        """Content offset moved (wheel / scrollbar drag). Band mode: publish
+        a transform-only revision and let the throttle + settle render keep
+        cull, hover, and the thumb honest; legacy targets re-render per tick
+        as today."""
+        if not self._band_mode():
+            self.invalidate()
+            return
+        now = time.monotonic()
+        self._scroll_settle_due = now + SCROLL_SETTLE_S
+        if now - self._last_scroll_build_t >= SCROLL_REWINDOW_INTERVAL_S:
+            self.invalidate()  # throttle window elapsed: rebuild the draw window
+            return
+        if self.ctx.set_scene_content_offset(0.0, self.content_scroll) is None:
+            self.invalidate()  # no retained frame to transform yet
 
     @staticmethod
     def _clamp_scroll(value: float, content: float, viewport: float) -> float:
@@ -934,8 +974,13 @@ class SpotifyLightApp(App):
         return max(0.0, min(value, max_offset))
 
     def _dispatch_click(self, x: float, y: float) -> None:
+        # Band mode records content hits in content space; map the live
+        # scroll offset onto the click so mid-gesture taps still land
+        # (SL-41). Chrome regions stay screen-space. Legacy: byte-identical.
+        scroll = self.content_scroll if self._band_mode() else 0.0
         for region in reversed(self._hits):
-            if region.contains(x, y):
+            hit_y = y + scroll if region.scrollable else y
+            if region.contains(x, hit_y):
                 self._dispatch_action(region.action, region.payload, x)
                 return
         # Clicked empty space: drop focus / close popups.
@@ -1889,11 +1934,18 @@ class SpotifyLightApp(App):
 
     # -- app loop ---------------------------------------------------------------------
 
+    @staticmethod
+    def _pure_scroll_batch(events) -> bool:
+        return bool(events) and all(getattr(e, "event_type", None) == "scroll" for e in events)
+
     def update(self, dt: float) -> None:
         events = self.input.raw_events()
         reset_transient_input(self.input.state)
         apply_hdi_events(self.input.state, events)
-        if events:
+        if events and not (self._pure_scroll_batch(events) and self._band_mode()):
+            # Band-mode wheel ticks publish the offset themselves
+            # (transform-only, throttled re-window, settle render); every
+            # other input invalidates as today.
             self.invalidate()
         self._handle_input(events)
         self._handle_worker_results()
@@ -1914,6 +1966,13 @@ class SpotifyLightApp(App):
         return bool(self.authenticated and bridge is not None and bridge.available
                     and getattr(bridge, "supports_under_glass", False))
 
+    def _band_mode(self) -> bool:
+        """SL-41 retained scroll hot path: only when the scene target can
+        split the frame on a z band (content 1..4 scrolls by transform;
+        chrome at 0 and 5+ stays put). Legacy targets keep translated draws."""
+        return bool(self.ctx.supports_scene_graph
+                    and getattr(self.ctx, "supports_scene_content_z_band", False))
+
     def render(self) -> None:
         self._pill_glass_active = self._pill_glass_supported()
         self._window_material_active = (self._under_glass_capable()
@@ -1926,8 +1985,16 @@ class SpotifyLightApp(App):
         clear = ((0, 0, 0, 0) if (self._pill_glass_active or self._window_material_active)
                  else sl_views.BG)
         if self.ctx.supports_scene_graph:
-            with self.scene_frame(clear=clear) as frame:
-                self._render_scene(frame)
+            if self._band_mode():
+                # Content lives at z 1..4 and draws un-translated; the target
+                # applies content_offset as a transform on that band only.
+                with self.scene_frame(clear=clear, retained=True,
+                                      content_offset=(0.0, self.content_scroll),
+                                      content_z_band=(1.0, 4.0)) as frame:
+                    self._render_scene(frame)
+            else:
+                with self.scene_frame(clear=clear) as frame:
+                    self._render_scene(frame)
         else:
             with self.matrix_frame(clear=clear) as frame:
                 self._render_matrix(frame)
@@ -1937,6 +2004,21 @@ class SpotifyLightApp(App):
         height = float(self.ctx.display_height_px)
         out = sl_views.FrameOut()
         mouse = self._mouse
+        band = self._band_mode()
+        self._render_scroll_sub = 0.0 if band else self.content_scroll
+        if band:
+            # Content draws in content space under the band: cull one window
+            # of margin around the live scroll so off-screen cards/rows never
+            # enter the frame, and give content views a content-space mouse
+            # so hover keeps working mid-gesture. Chrome stays screen-space.
+            self._render_cull_lo = self.content_scroll - height
+            self._render_cull_hi = self.content_scroll + 2.0 * height
+            self._last_scroll_build_t = time.monotonic()
+            content_mouse = (mouse[0], mouse[1] + self.content_scroll)
+        else:
+            self._render_cull_lo = 0.0
+            self._render_cull_hi = height
+            content_mouse = mouse
 
         if not self.authenticated:
             bridge = native_controls()
@@ -1979,15 +2061,22 @@ class SpotifyLightApp(App):
                 sl_views.draw_window_backdrop(frame, width=width, height=height,
                                               skip=self._pill_glass_rect)
             if self.view == "search":
-                sl_views.draw_search(frame, self, out, width=width, height=height, mouse=mouse)
+                sl_views.draw_search(frame, self, out, width=width, height=height,
+                                     mouse=content_mouse)
             elif self.view.startswith("playlist:"):
-                sl_views.draw_playlist(frame, self, out, width=width, height=height, mouse=mouse)
+                sl_views.draw_playlist(frame, self, out, width=width, height=height,
+                                       mouse=content_mouse)
             elif self.view == "library":
-                sl_views.draw_library(frame, self, out, width=width, height=height, mouse=mouse)
+                sl_views.draw_library(frame, self, out, width=width, height=height,
+                                      mouse=content_mouse)
             else:
-                sl_views.draw_home(frame, self, out, width=width, height=height, mouse=mouse)
+                sl_views.draw_home(frame, self, out, width=width, height=height,
+                                   mouse=content_mouse)
 
-            # Content-area scrollbar for tall views.
+            # Content-area scrollbar for tall views. The extent publishes
+            # right after the view draw (not at end-of-render) so the very
+            # first frame of a tall view already carries an honest thumb.
+            self._content_height = out.content_height
             viewport = height - sl_views.DOCK_H
             if self._content_height > viewport:
                 metrics = self.scrollbar_content.metrics(

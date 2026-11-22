@@ -90,14 +90,17 @@ sinks from `--audit-sqlite`.
   `app_drawable_probe` verifies the renderer's alpha, this verifies what the
   window stack does with it. Best-effort: failing properties are collected
   under `notes`/per-view `error` and never crash the app.
-- `app_frame_time_probe {frames?, wait_s?}` — time the present path under a
-  synthetic scroll (macOS Metal scene target only). Scroll injection is
-  banned for measurement, so the probe chains invalidations through the
-  app's present hook — each present re-requests the next, like a wheel-event
-  stream — and records per-frame phase timings: `drawable_wait_ms` (CA/GPU
-  backpressure, e.g. the window backdrop material recompositing),
-  `setup_ms`, `encode_ms` (scene raster), `commit_ms`, and `gap_ms`
-  (present-loop turnaround + app scene build between presents). Returns the
+- `app_frame_time_probe {frames?, wait_s?, drive?}` — time the present path
+  under a synthetic scroll (macOS Metal scene target only). Scroll injection
+  is banned for measurement, so by default (`drive: true`) the probe chains
+  invalidations through the app's present hook — each present re-requests
+  the next, like a wheel-event stream — and records per-frame phase timings:
+  `drawable_wait_ms` (CA/GPU backpressure, e.g. the window backdrop material
+  recompositing), `setup_ms`, `encode_ms` (scene raster), `commit_ms`, and
+  `gap_ms` (present-loop turnaround + app scene build between presents).
+  With `drive: false` the probe records passively instead — no synthetic
+  invalidate chain — so `gap_ms` reflects whatever the human drives (e.g.
+  hand-scrolling the retained content band) between presents. Returns the
   raw series plus mean/p50/p95/max per phase; a timeout still returns the
   partial series. Run it before/after a candidate fix (for example with and
   without `LUVATRIX_VEV_RASTERIZE=1`) to name the cost center from data.

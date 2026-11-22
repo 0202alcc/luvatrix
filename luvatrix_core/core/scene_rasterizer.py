@@ -24,6 +24,7 @@ from luvatrix_core.core.scene_graph import (
     SvgNode,
     Text3DNode,
     TextNode,
+    split_frame_by_z_band,
 )
 
 
@@ -83,6 +84,14 @@ def rasterize_scene_frame(frame: SceneFrame, out=None):
             _LAST_RASTER_BACKEND = "rust"
             return result
     _LAST_RASTER_BACKEND = "python"
+    if frame.content_z_band is not None:
+        # Tier sub-frames are z-contiguous, so compositing them in order into
+        # one buffer matches the unsplit frame; fixed tiers carry a zeroed
+        # offset.
+        result = out
+        for tier in split_frame_by_z_band(frame):
+            result = _rasterize_scene_frame_python(tier, out=result)
+        return result
     return _rasterize_scene_frame_python(frame, out=out)
 
 
@@ -106,17 +115,23 @@ def _rasterize_scene_frame_rs(frame: SceneFrame, out=None):
             raise _SceneRsFallback("out buffer is not a contiguous writable uint8 array")
     sx = float(frame.display_width) / max(1.0, float(frame.logical_width))
     sy = float(frame.display_height) / max(1.0, float(frame.logical_height))
-    offsets = _Offsets(float(frame.content_offset_x), float(frame.content_offset_y), sx, sy)
+    # A banded frame encodes as one native pass: each tier's nodes encode
+    # with that tier's offsets (fixed tiers zeroed). The native preset is
+    # overwritten by the below tier's ClearNode, exactly like a bandless
+    # frame — per-tier calls would re-opaque earlier tiers instead.
+    tiers = split_frame_by_z_band(frame) if frame.content_z_band is not None else (frame,)
     encoded = []
     camera3d = _DEFAULT_CAMERA_3D
-    for node in frame.nodes:
-        if isinstance(node, Camera3DNode):
-            camera3d = node
-            continue
-        ops = _encode_node_for_rs(node, sx, sy, frame, camera3d, offsets)
-        if ops is None:
-            raise _SceneRsFallback(f"node not lowered by the Rust rasterizer: {type(node).__name__}")
-        encoded.extend(ops)
+    for tier in tiers:
+        offsets = _Offsets(float(tier.content_offset_x), float(tier.content_offset_y), sx, sy)
+        for node in tier.nodes:
+            if isinstance(node, Camera3DNode):
+                camera3d = node
+                continue
+            ops = _encode_node_for_rs(node, sx, sy, tier, camera3d, offsets)
+            if ops is None:
+                raise _SceneRsFallback(f"node not lowered by the Rust rasterizer: {type(node).__name__}")
+            encoded.extend(ops)
     _rs_raster.rasterize(view, int(frame.display_width), int(frame.display_height), encoded)
     return buffer
 
@@ -433,7 +448,11 @@ def _rasterize_scene_frame_python(frame: SceneFrame, out=None):
         else:
             out = accel.zeros((frame.display_height, frame.display_width, 4))
 
-    out[:, :, 3] = 255
+    # The opaque-alpha preset is only for frames without a ClearNode (a
+    # ClearNode rewrites every channel anyway). Skipping it when one is
+    # present keeps z-band tier passes from re-opaquing earlier tiers.
+    if not any(isinstance(node, ClearNode) for node in frame.nodes):
+        out[:, :, 3] = 255
     sx = float(frame.display_width) / max(1.0, float(frame.logical_width))
     sy = float(frame.display_height) / max(1.0, float(frame.logical_height))
     offsets = _Offsets(float(frame.content_offset_x), float(frame.content_offset_y), sx, sy)
