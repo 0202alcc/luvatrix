@@ -48,7 +48,7 @@ MCP tools are gated by runtime-side capability families, filtered by
 
 | Family        | Tools                                            |
 | ------------- | ------------------------------------------------ |
-| `mcp.inspect` | `app_state`, `app_screenshot`, `app_scene_tree`, `app_drawable_probe`, `app_window_stack`, `app_logs` |
+| `mcp.inspect` | `app_state`, `app_screenshot`, `app_scene_tree`, `app_drawable_probe`, `app_window_stack`, `app_frame_time_probe`, `app_logs` |
 | `mcp.input`   | `app_input`                                      |
 | `mcp.control` | `app_pause`, `app_step`, `app_resume`, `app_stop` |
 | `mcp.app`     | app-defined tools                                |
@@ -90,6 +90,17 @@ sinks from `--audit-sqlite`.
   `app_drawable_probe` verifies the renderer's alpha, this verifies what the
   window stack does with it. Best-effort: failing properties are collected
   under `notes`/per-view `error` and never crash the app.
+- `app_frame_time_probe {frames?, wait_s?}` — time the present path under a
+  synthetic scroll (macOS Metal scene target only). Scroll injection is
+  banned for measurement, so the probe chains invalidations through the
+  app's present hook — each present re-requests the next, like a wheel-event
+  stream — and records per-frame phase timings: `drawable_wait_ms` (CA/GPU
+  backpressure, e.g. the window backdrop material recompositing),
+  `setup_ms`, `encode_ms` (scene raster), `commit_ms`, and `gap_ms`
+  (present-loop turnaround + app scene build between presents). Returns the
+  raw series plus mean/p50/p95/max per phase; a timeout still returns the
+  partial series. Run it before/after a candidate fix (for example with and
+  without `LUVATRIX_VEV_RASTERIZE=1`) to name the cost center from data.
 - `app_logs` — recent log records (ring buffer, 200 entries). The root log
   level is lowered to INFO for the session and restored on shutdown.
 - `app_input` — inject synthetic HDI events: `{event: {device, event_type,

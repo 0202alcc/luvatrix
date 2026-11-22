@@ -403,6 +403,12 @@ class MacOSMetalSceneBackend:
     _drawable_probe_done: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
     _drawable_probe_present_hook: object = field(default=None, init=False, repr=False)
     _drawable_probe_binding: str | None = field(default=None, init=False, repr=False)
+    _frame_probe_armed: bool = field(default=False, init=False, repr=False)
+    _frame_probe_marks: list = field(default_factory=list, init=False, repr=False)
+    _frame_probe_target: int = field(default=0, init=False, repr=False)
+    _frame_probe_done: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _frame_probe_last_committed: float | None = field(default=None, init=False, repr=False)
+    _frame_probe_first_started: float | None = field(default=None, init=False, repr=False)
     # Runner anomaly (SL-38c): "slow frame #1" printed twice in one boot — the
     # counter is per-instance, so two instances in one process would put
     # arm-state and rendering on different objects and misfire the probe.
@@ -631,6 +637,15 @@ class MacOSMetalSceneBackend:
                     file=sys.stderr,
                     flush=True,
                 )
+        if self._frame_probe_armed:
+            self._record_frame_probe_mark(
+                started=started,
+                after_drawable=after_drawable,
+                after_encoder=after_encoder,
+                encode_end=after_text,
+                committed=time.perf_counter(),
+                revision=int(getattr(frame, "revision", 0)),
+            )
 
     def _present_kind_grouped(
         self,
@@ -1213,6 +1228,122 @@ class MacOSMetalSceneBackend:
                 regions=self._drawable_probe_regions, error=repr(exc),
             )
             self._drawable_probe_done.set()
+
+    def request_frame_time_probe(self, *, frames: int = 120, timeout_s: float = 10.0) -> dict:
+        """SL-41 ("scrolling is really laggy"): time the present path under a
+        synthetic scroll. Input injection is banned on the Mac (403-flake
+        policy), so this chains invalidations through the wired present hook
+        — each present re-requests the next, like a wheel-event stream — and
+        records the present path's own perf marks per frame. The phase split
+        names the cost center: drawable_wait_ms (CA/GPU backpressure — the
+        whole-window VEV recomposite holding drawables), encode_ms (scene
+        raster), commit_ms (command submission), and gap_ms (everything
+        between presents: loop turnaround + app scene build). A timeout
+        still returns the partial series — a stalled chain is itself lag
+        evidence."""
+        if self._state is None:
+            return {"available": False, "reason": "backend not initialized",
+                    "backend_instance": self._instance_index, "captured_frames": 0}
+        try:
+            target = max(1, min(600, int(frames)))
+        except (TypeError, ValueError):
+            target = 120
+        try:
+            timeout = max(0.5, min(30.0, float(timeout_s)))
+        except (TypeError, ValueError):
+            timeout = 10.0
+        self._frame_probe_marks = []
+        self._frame_probe_target = target
+        self._frame_probe_last_committed = None
+        self._frame_probe_first_started = None
+        self._frame_probe_done.clear()
+        self._frame_probe_armed = True
+        hook = self._drawable_probe_present_hook
+        if hook is not None:
+            try:
+                hook()
+            except Exception:  # noqa: BLE001 — a failed nudge must not fail the probe
+                pass
+        self._frame_probe_done.wait(timeout)
+        self._frame_probe_armed = False
+        marks = list(self._frame_probe_marks)
+        if not marks:
+            return {"available": False,
+                    "reason": "no frames presented within timeout",
+                    "backend_instance": self._instance_index,
+                    "requested_frames": target, "captured_frames": 0}
+        first_started = self._frame_probe_first_started
+        last_committed = self._frame_probe_last_committed
+        elapsed_ms = (
+            0.0 if first_started is None or last_committed is None
+            else round((last_committed - first_started) * 1000.0, 3)
+        )
+        return {
+            "available": True,
+            "backend_instance": self._instance_index,
+            "requested_frames": target,
+            "captured_frames": len(marks),
+            "complete": len(marks) >= target,
+            "elapsed_ms": elapsed_ms,
+            "frames": marks,
+            "summary": _frame_probe_summary(marks),
+        }
+
+    def _record_frame_probe_mark(self, *, started: float, after_drawable: float,
+                                 after_encoder: float, encode_end: float,
+                                 committed: float, revision: int) -> None:
+        """Append one present's phase marks and chain the next frame.
+
+        Called from present_scene on the render thread. The present hook
+        fires again unless this mark reached the target count — and must NOT
+        fire once disarmed, or a dead probe would invalidate forever."""
+        if not self._frame_probe_armed:
+            return
+        if self._frame_probe_first_started is None:
+            self._frame_probe_first_started = started
+        last = self._frame_probe_last_committed
+        self._frame_probe_marks.append({
+            "i": len(self._frame_probe_marks),
+            "revision": int(revision),
+            "present_ms": round((committed - started) * 1000.0, 3),
+            "drawable_wait_ms": round((after_drawable - started) * 1000.0, 3),
+            "setup_ms": round((after_encoder - after_drawable) * 1000.0, 3),
+            "encode_ms": round((encode_end - after_encoder) * 1000.0, 3),
+            "commit_ms": round((committed - encode_end) * 1000.0, 3),
+            "gap_ms": None if last is None else round((started - last) * 1000.0, 3),
+        })
+        self._frame_probe_last_committed = committed
+        if len(self._frame_probe_marks) >= self._frame_probe_target:
+            self._frame_probe_armed = False
+            self._frame_probe_done.set()
+            return
+        hook = self._drawable_probe_present_hook
+        if hook is not None:
+            try:
+                hook()
+            except Exception:  # noqa: BLE001 — never break the present loop
+                pass
+
+
+def _frame_probe_summary(marks: list[dict]) -> dict:
+    summary: dict = {}
+    for key in ("present_ms", "drawable_wait_ms", "setup_ms", "encode_ms",
+                "commit_ms", "gap_ms"):
+        values = sorted(m[key] for m in marks if m.get(key) is not None)
+        if not values:
+            continue
+        summary[key] = {
+            "mean": round(sum(values) / len(values), 3),
+            "p50": _frame_probe_percentile(values, 50),
+            "p95": _frame_probe_percentile(values, 95),
+            "max": round(values[-1], 3),
+        }
+    return summary
+
+
+def _frame_probe_percentile(sorted_values: list[float], pct: int) -> float:
+    rank = max(1, math.ceil(pct / 100.0 * len(sorted_values)))
+    return round(sorted_values[min(rank - 1, len(sorted_values) - 1)], 3)
 
 
 @dataclass

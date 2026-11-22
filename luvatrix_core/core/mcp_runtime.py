@@ -270,6 +270,7 @@ class McpRuntimeBridge:
         scene_tree_provider: Callable[[], dict[str, Any]] | None = None,
         drawable_probe_provider: Callable[[dict[str, Any]], Any] | None = None,
         window_stack_provider: Callable[[], dict[str, Any]] | None = None,
+        frame_time_probe_provider: Callable[[dict[str, Any]], Any] | None = None,
         log_provider: Callable[[int], list[dict[str, Any]]] | None = None,
         input_injector: Callable[[HDIEvent], int] | None = None,
         app_call_timeout_s: float = 10.0,
@@ -282,6 +283,7 @@ class McpRuntimeBridge:
         self._scene_tree_provider = scene_tree_provider
         self._drawable_probe_provider = drawable_probe_provider
         self._window_stack_provider = window_stack_provider
+        self._frame_time_probe_provider = frame_time_probe_provider
         self._log_provider = log_provider
         self._input_injector = input_injector
         self._app_call_timeout_s = float(app_call_timeout_s)
@@ -532,6 +534,43 @@ class McpRuntimeBridge:
                 capability="mcp.inspect",
             ),
             McpToolSpec(
+                name="app_frame_time_probe",
+                description=(
+                    "Time the present path under a synthetic scroll (macOS Metal "
+                    "scene target only). Input injection is banned for scroll "
+                    "measurement, so this chains invalidations through the app's "
+                    "present hook — each present re-requests the next, like a "
+                    "wheel-event stream — and records per-frame phase timings: "
+                    "drawable_wait_ms (CA/GPU backpressure from the window "
+                    "backdrop material), setup_ms, encode_ms (scene raster), "
+                    "commit_ms, and gap_ms (loop turnaround + app scene build "
+                    "between presents). Use it before/after a candidate fix to "
+                    "name the scroll-lag cost center instead of guessing. "
+                    "Optional 'frames' (1-600, default 120) and 'wait_s' "
+                    "(0.5-30, default 10)."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "frames": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 600,
+                            "default": 120,
+                            "description": "How many chained presents to record.",
+                        },
+                        "wait_s": {
+                            "type": "number",
+                            "minimum": 0.5,
+                            "maximum": 30.0,
+                            "default": 10.0,
+                            "description": "Overall timeout; a timeout still returns the partial series.",
+                        },
+                    },
+                },
+                capability="mcp.inspect",
+            ),
+            McpToolSpec(
                 name="app_input",
                 description=(
                     "Inject synthetic input events into the app's HDI queue. "
@@ -657,6 +696,10 @@ class McpRuntimeBridge:
             if self._window_stack_provider is None:
                 raise RuntimeError("app_window_stack unavailable: no window stack provider configured")
             return self._window_stack_provider()
+        if name == "app_frame_time_probe":
+            if self._frame_time_probe_provider is None:
+                raise RuntimeError("app_frame_time_probe unavailable: no frame-time probe provider configured")
+            return self._frame_time_probe_provider(arguments)
         if name == "app_logs":
             if self._log_provider is None:
                 raise RuntimeError("app_logs unavailable: no log capture configured")

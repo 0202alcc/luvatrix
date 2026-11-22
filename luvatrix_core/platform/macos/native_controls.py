@@ -16,6 +16,7 @@ silently and returns the original HDI source.
 """
 from __future__ import annotations
 
+import os
 import sys
 import threading
 
@@ -31,6 +32,13 @@ _ROUNDED_BEZEL = 1  # NSTextFieldRoundedBezel
 
 # None = unresolved, False = resolved-absent (pre-Tahoe), else the class.
 _GLASS_EFFECT_VIEW_CLASS = None
+
+
+def _vev_rasterize_enabled() -> bool:
+    """SL-41 scroll-lag A/B lever: LUVATRIX_VEV_RASTERIZE=1 caches the
+    window-backdrop material's rendered effect. Off by default — the runner
+    flips it for the before/after frame-time probe pass."""
+    return os.environ.get("LUVATRIX_VEV_RASTERIZE", "") == "1"
 
 
 def _on_main(fn) -> None:
@@ -602,6 +610,29 @@ class _AppKitGlassSurface:
             bridge._content_view().addSubview_(self._view)
         self._logical_frame = (float(x), float(y), float(width), float(height))
         self.set_frame(x, y, width, height)
+        if placement == "backdrop" and _vev_rasterize_enabled():
+            self._apply_rasterize_hint()
+
+    def _apply_rasterize_hint(self) -> None:
+        """SL-41 A/B lever (LUVATRIX_VEV_RASTERIZE=1): cache the behind-window
+        material's rendered effect as a bitmap. While the window is
+        stationary the desktop behind it doesn't change, so the per-present
+        recomposite can drop to a texture re-blit. The rasterization scale
+        tracks the window's backing factor or the cached effect goes soft on
+        Retina. Runs after parenting so the view has a window to ask."""
+        self._view.setWantsLayer_(True)
+        layer = self._view.layer()
+        if layer is None:
+            return
+        layer.setShouldRasterize_(True)
+        scale = 2.0
+        try:
+            window = self._view.window()
+            if window is not None:
+                scale = float(window.backingScaleFactor())
+        except Exception:  # noqa: BLE001 — scale is best-effort
+            pass
+        layer.setRasterizationScale_(scale)
 
     def _apply_corner_radius(self, radius: float) -> None:
         """Round the visible edge, and log what actually took.

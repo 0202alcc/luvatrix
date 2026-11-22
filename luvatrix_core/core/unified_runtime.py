@@ -440,6 +440,7 @@ class UnifiedRuntime:
             scene_tree_provider=self._mcp_scene_tree,
             drawable_probe_provider=self._mcp_drawable_probe,
             window_stack_provider=self._mcp_window_stack,
+            frame_time_probe_provider=self._mcp_frame_time_probe,
             log_provider=log_handler.entries,
             input_injector=self._hdi.inject_synthetic_event,
             audit_logger=self._capability_audit_logger,
@@ -542,6 +543,23 @@ class UnifiedRuntime:
             }
         regions = arguments.get("regions")
         return request(regions=regions, timeout_s=arguments.get("wait_s", 2.0))
+
+    def _mcp_frame_time_probe(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Route app_frame_time_probe to the macOS Metal scene backend (the
+        only target with a present path to time); report cleanly elsewhere."""
+        runtime = self._scene_display_runtime
+        target = getattr(runtime, "target", None)
+        backend = getattr(target, "backend", None)
+        request = getattr(backend, "request_frame_time_probe", None)
+        if request is None:
+            return {
+                "available": False,
+                "reason": "frame-time probe requires the macOS Metal scene target",
+            }
+        return request(
+            frames=arguments.get("frames", 120),
+            timeout_s=arguments.get("wait_s", 10.0),
+        )
 
     def _mcp_scene_tree(self) -> dict[str, Any]:
         if self._scene_buffer is None:
