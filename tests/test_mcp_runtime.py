@@ -514,6 +514,7 @@ class UnifiedRuntimeMcpTests(unittest.TestCase):
                     "app_logs",
                     "app_drawable_probe",
                     "app_window_stack",
+                    "app_frame_time_probe",
                     "app_pause",
                     "app_step",
                     "app_resume",

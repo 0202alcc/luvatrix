@@ -1319,3 +1319,152 @@ class TestDrawableProbeCapture(unittest.TestCase):
         self.assertNotEqual(first._instance_index, second._instance_index)
         probeless = first.request_drawable_probe(timeout_s=0.1)
         self.assertEqual(probeless.get("backend_instance"), first._instance_index)
+
+
+class TestFrameTimeProbe(unittest.TestCase):
+    """SL-41 ("scrolling is really laggy"): Alec's 403-flake policy bans
+    synthetic scroll injection on the Mac, so measurement drives presents
+    synthetically instead — the probe arms, nudges invalidate through the
+    wired present hook, then re-nudges after EVERY present until the target
+    frame count, recording the present path's own perf marks per frame. The
+    phase split names the cost center: drawable_wait (CA/GPU backpressure —
+    the whole-window VEV recomposite holding drawables), encode (scene
+    raster), commit (command submission), and gap (everything between
+    presents: loop turnaround + app scene build)."""
+
+    def _backend(self, *, initialized: bool = True):
+        import threading
+
+        backend = object.__new__(mst.MacOSMetalSceneBackend)
+        backend._state = _bare_state() if initialized else None
+        backend._frame_probe_armed = False
+        backend._frame_probe_marks = []
+        backend._frame_probe_target = 0
+        backend._frame_probe_done = threading.Event()
+        backend._frame_probe_last_committed = None
+        backend._drawable_probe_present_hook = None
+        backend._instance_index = 1
+        return backend
+
+    def _drive(self, backend, n: int, *, start: float = 1.0, step: float = 0.021,
+               present: float = 0.012) -> None:
+        """Simulate n presents 12ms long with 21ms of turnaround between."""
+        t = start
+        for i in range(n):
+            backend._record_frame_probe_mark(
+                started=t,
+                after_drawable=t + 0.004,
+                after_encoder=t + 0.005,
+                encode_end=t + 0.011,
+                committed=t + present,
+                revision=100 + i,
+            )
+            t += present + step
+
+    def _request_in_thread(self, backend, **kwargs):
+        import threading
+        import time
+
+        result: dict = {}
+        thread = threading.Thread(
+            target=lambda: result.update(backend.request_frame_time_probe(**kwargs)))
+        thread.start()
+        time.sleep(0.05)  # let the request arm before the test drives presents
+        return result, thread
+
+    def test_arm_fires_hook_and_chains_until_the_target_count(self) -> None:
+        """The chained drive is what makes this a synthetic scroll: every
+        present re-requests a frame (like a wheel-event stream invalidating),
+        until the requested count lands — then the chain stops dead so an
+        idle app goes quiet again."""
+        backend = self._backend()
+        calls: list[str] = []
+        backend.set_drawable_probe_present_hook(lambda: calls.append("invalidate"))
+        result, thread = self._request_in_thread(backend, frames=3, timeout_s=2.0)
+        self.assertEqual(calls, ["invalidate"], "arming must request the first frame")
+        self._drive(backend, 3)
+        thread.join(timeout=2.0)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(
+            calls, ["invalidate"] * 3,
+            "one nudge at arm + one after each present except the last")
+        self.assertTrue(result.get("available"), result)
+        self.assertTrue(result["complete"])
+        self.assertEqual(result["requested_frames"], 3)
+        self.assertEqual(result["captured_frames"], 3)
+        self.assertEqual([f["revision"] for f in result["frames"]], [100, 101, 102])
+        self.assertFalse(backend._frame_probe_armed)
+
+    def test_phase_marks_split_the_present_into_cost_centers(self) -> None:
+        backend = self._backend()
+        result, thread = self._request_in_thread(backend, frames=2, timeout_s=2.0)
+        self._drive(backend, 2)
+        thread.join(timeout=2.0)
+        frames = result["frames"]
+        first, second = frames
+        self.assertEqual(first["i"], 0)
+        self.assertAlmostEqual(first["drawable_wait_ms"], 4.0, places=2)
+        self.assertAlmostEqual(first["setup_ms"], 1.0, places=2)
+        self.assertAlmostEqual(first["encode_ms"], 6.0, places=2)
+        self.assertAlmostEqual(first["commit_ms"], 1.0, places=2)
+        self.assertAlmostEqual(first["present_ms"], 12.0, places=2)
+        self.assertIsNone(first["gap_ms"], "first frame has no predecessor")
+        self.assertAlmostEqual(second["gap_ms"], 21.0, places=2)
+        summary = result["summary"]
+        self.assertAlmostEqual(summary["present_ms"]["mean"], 12.0, places=2)
+        self.assertAlmostEqual(summary["present_ms"]["max"], 12.0, places=2)
+        self.assertAlmostEqual(summary["drawable_wait_ms"]["p50"], 4.0, places=2)
+        self.assertAlmostEqual(summary["encode_ms"]["p95"], 6.0, places=2)
+        self.assertAlmostEqual(summary["gap_ms"]["mean"], 21.0, places=2)
+
+    def test_timeout_returns_the_partial_series(self) -> None:
+        """A stalled chain (e.g. drawable starvation) must still hand back
+        what it saw — the partial series IS the lag evidence."""
+        backend = self._backend()
+        result, thread = self._request_in_thread(backend, frames=5, timeout_s=0.2)
+        self._drive(backend, 2)
+        thread.join(timeout=2.0)
+        self.assertTrue(result.get("available"), result)
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["requested_frames"], 5)
+        self.assertEqual(result["captured_frames"], 2)
+        self.assertEqual(len(result["frames"]), 2)
+        self.assertFalse(backend._frame_probe_armed, "a timed-out probe disarms")
+
+    def test_timeout_with_zero_frames_reports_unavailable(self) -> None:
+        backend = self._backend()
+        result = backend.request_frame_time_probe(frames=3, timeout_s=0.1)
+        self.assertFalse(result["available"])
+        self.assertIn("no frames presented", result["reason"])
+        self.assertEqual(result["captured_frames"], 0)
+
+    def test_uninitialized_backend_reports_unavailable(self) -> None:
+        backend = self._backend(initialized=False)
+        result = backend.request_frame_time_probe(frames=3, timeout_s=0.1)
+        self.assertFalse(result["available"])
+        self.assertIn("reason", result)
+        self.assertEqual(result["backend_instance"], 1)
+
+    def test_marks_after_disarm_are_ignored_and_never_renudge(self) -> None:
+        """A late present racing the timeout must not record, and must NOT
+        fire the hook — otherwise a dead probe keeps invalidating forever."""
+        backend = self._backend()
+        calls: list[str] = []
+        backend.set_drawable_probe_present_hook(lambda: calls.append("invalidate"))
+        result = backend.request_frame_time_probe(frames=3, timeout_s=0.1)
+        self.assertFalse(result["available"])
+        self.assertEqual(calls, ["invalidate"])
+        self._drive(backend, 2)
+        self.assertEqual(backend._frame_probe_marks, [])
+        self.assertEqual(calls, ["invalidate"], "no re-nudge once disarmed")
+
+    def test_frames_and_timeout_are_clamped(self) -> None:
+        backend = self._backend()
+        result, thread = self._request_in_thread(backend, frames=9999, timeout_s=2.0)
+        self._drive(backend, 600)
+        thread.join(timeout=3.0)
+        self.assertEqual(result["requested_frames"], 600)
+        self.assertTrue(result["complete"])
+        result2 = backend.request_frame_time_probe(frames=0, timeout_s=0.1)
+        self.assertFalse(result2["available"])
+        self.assertEqual(result2["requested_frames"], 1)

@@ -266,12 +266,20 @@ class _FakeCALayer:
     def __init__(self) -> None:
         self.corner_radius = None
         self.masks_to_bounds = None
+        self.should_rasterize = None
+        self.rasterization_scale = None
 
     def setCornerRadius_(self, radius):
         self.corner_radius = radius
 
     def setMasksToBounds_(self, value):
         self.masks_to_bounds = value
+
+    def setShouldRasterize_(self, value):
+        self.should_rasterize = value
+
+    def setRasterizationScale_(self, scale):
+        self.rasterization_scale = scale
 
 
 class _FakeNSView:
@@ -1110,6 +1118,42 @@ class TestAppKitWindowBackdrop:
         with pytest.raises(RuntimeError, match="backdrop"):
             bridge.create_glass_surface(x=0, y=0, width=100, height=40,
                                         placement="backdrop")
+
+    def test_rasterize_hint_off_by_default(self):
+        """SL-41 A/B lever stays inert unless the runner opts in — the
+        default build composites the behind-window material live."""
+        bridge, _ = self._bridge(capable=True)
+        surface = bridge.create_glass_surface(x=0, y=0, width=1280, height=800,
+                                              placement="backdrop")
+        assert not surface._view.wants_layer
+        layer = surface._view._layer
+        assert layer is None or not layer.should_rasterize
+
+    def test_rasterize_hint_caches_the_backdrop_effect_when_enabled(self, monkeypatch):
+        """SL-41: LUVATRIX_VEV_RASTERIZE=1 asks CA to cache the material's
+        rendered effect as a bitmap — while the window is stationary the
+        desktop behind it doesn't change, so the per-present recomposite can
+        drop to a texture re-blit. Scale must track the backing factor or the
+        cached blur goes soft."""
+        monkeypatch.setenv("LUVATRIX_VEV_RASTERIZE", "1")
+        bridge, _ = self._bridge(capable=True)
+        surface = bridge.create_glass_surface(x=0, y=0, width=1280, height=800,
+                                              placement="backdrop")
+        assert surface._view.wants_layer is True
+        layer = surface._view.layer()
+        assert layer.should_rasterize is True
+        assert layer.rasterization_scale is not None
+        assert layer.rasterization_scale >= 1.0
+
+    def test_rasterize_hint_leaves_foreground_placements_alone(self, monkeypatch):
+        """Only the window-spanning backdrop recomposites the desktop blur;
+        the pill's own glass must not grow a cache knob it never needed."""
+        monkeypatch.setenv("LUVATRIX_VEV_RASTERIZE", "1")
+        bridge, _ = self._bridge(capable=True)
+        surface = bridge.create_glass_surface(x=100, y=20, width=400, height=84,
+                                              corner_radius=18.0, placement="under")
+        layer = surface._view._layer
+        assert layer is None or not layer.should_rasterize
 
 
 class TestUnderGlassContract:

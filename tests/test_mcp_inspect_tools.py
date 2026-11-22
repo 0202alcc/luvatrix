@@ -524,3 +524,54 @@ class DrawableProbeBridgeTests(unittest.TestCase):
         response = _call_tool(bridge, "app_drawable_probe")
         self.assertTrue(response["result"]["isError"])
         self.assertIn("unavailable", response["result"]["content"][0]["text"])
+
+
+class FrameTimeProbeBridgeTests(unittest.TestCase):
+    """SL-41: app_frame_time_probe drives a synthetic scroll (chained
+    invalidations, no input injection) and reports per-present phase
+    timings — drawable wait vs scene encode vs commit vs inter-present
+    gap — so the scroll-lag cost center is measured, not guessed."""
+
+    def _bridge_with_provider(self, provider, *, granted=None):
+        return McpRuntimeBridge(
+            app_id="test.mcp",
+            granted_capabilities=granted if granted is not None else set(MCP_CAPABILITIES),
+            state_provider=lambda: {},
+            frame_time_probe_provider=provider,
+        )
+
+    def test_listed_and_dispatches_arguments_to_provider(self) -> None:
+        calls: list[dict] = []
+
+        def provider(arguments: dict) -> dict:
+            calls.append(arguments)
+            return {"available": True, "captured_frames": 120, "complete": True}
+
+        bridge = self._bridge_with_provider(provider)
+        listing = bridge.dispatcher().handle_payload({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        assert listing is not None
+        names = [tool["name"] for tool in listing["result"]["tools"]]
+        self.assertIn("app_frame_time_probe", names)
+
+        payload = _tool_payload(
+            _call_tool(bridge, "app_frame_time_probe", {"frames": 60, "wait_s": 5.0})
+        )
+        self.assertTrue(payload["available"])
+        self.assertEqual(payload["captured_frames"], 120)
+        self.assertEqual(calls, [{"frames": 60, "wait_s": 5.0}])
+
+    def test_requires_inspect_capability(self) -> None:
+        bridge = self._bridge_with_provider(lambda arguments: {}, granted={"mcp.control"})
+        listing = bridge.dispatcher().handle_payload({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        assert listing is not None
+        names = [tool["name"] for tool in listing["result"]["tools"]]
+        self.assertNotIn("app_frame_time_probe", names)
+        response = _call_tool(bridge, "app_frame_time_probe")
+        self.assertEqual(response["error"]["code"], -32601)
+        self.assertIn("mcp.inspect", response["error"]["message"])
+
+    def test_without_provider_reports_tool_error(self) -> None:
+        bridge = _make_bridge()
+        response = _call_tool(bridge, "app_frame_time_probe")
+        self.assertTrue(response["result"]["isError"])
+        self.assertIn("unavailable", response["result"]["content"][0]["text"])

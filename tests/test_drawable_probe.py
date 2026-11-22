@@ -270,6 +270,37 @@ class TestUnifiedRuntimeWalk(unittest.TestCase):
         self.assertFalse(payload["available"])
         self.assertIn("reason", payload)
 
+    def test_routes_frame_time_probe_with_arguments(self) -> None:
+        """SL-41: the synthetic-scroll probe reaches the macOS Metal backend
+        through the same scene-display-runtime walk as the drawable probe."""
+        calls: list[dict] = []
+
+        class _Backend:
+            def request_frame_time_probe(self, *, frames=120, timeout_s=10.0):
+                calls.append({"frames": frames, "timeout_s": timeout_s})
+                return {"available": True, "captured_frames": 60, "complete": True}
+
+        target = types.SimpleNamespace(backend=_Backend())
+        payload = self._runtime(target)._mcp_frame_time_probe({"frames": 60, "wait_s": 5.0})
+        self.assertTrue(payload["available"])
+        self.assertEqual(payload["captured_frames"], 60)
+        self.assertEqual(calls, [{"frames": 60, "timeout_s": 5.0}])
+
+    def test_frame_time_probe_unavailable_without_scene_runtime(self) -> None:
+        from luvatrix_core.core.unified_runtime import UnifiedRuntime
+
+        runtime = object.__new__(UnifiedRuntime)
+        runtime._scene_display_runtime = None
+        payload = runtime._mcp_frame_time_probe({})
+        self.assertFalse(payload["available"])
+        self.assertIn("reason", payload)
+
+    def test_frame_time_probe_unavailable_when_backend_lacks_it(self) -> None:
+        target = types.SimpleNamespace(backend=object())
+        payload = self._runtime(target)._mcp_frame_time_probe({})
+        self.assertFalse(payload["available"])
+        self.assertIn("reason", payload)
+
     def test_wires_present_hook_to_lifecycle_invalidate(self) -> None:
         """The idle-arm fix's runtime half: the backend's present-request hook
         becomes the app's invalidate(), so an armed probe on an idle
