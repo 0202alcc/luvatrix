@@ -5235,8 +5235,9 @@ class TestWindowMaterial:
         rrects = _nodes(scene_buffer, RoundedRectNode)
         assert any(n.color_rgba == sl_views.MATERIAL_PLATE_FILL for n in rrects), \
             "cards/sidebar alpha down over the window material"
-        assert 128 <= sl_views.MATERIAL_PLATE_FILL[3] <= 191, \
-            "material fills stay in the 0.5–0.75 alpha window"
+        assert 64 <= sl_views.MATERIAL_PLATE_FILL[3] <= 128, \
+            "frost trial: fills sit below the old 0.5–0.75 window — the stack " \
+            "composite, not the fill alone, targets the 120–150 card-body floor"
         assert [n for n in rrects if n.color_rgba == sl_views.GLASS_FILL] == [], \
             "no white-tint plates while the material is live"
 
@@ -5275,7 +5276,106 @@ class TestWindowMaterial:
         plates = [n for n in _nodes(scene_buffer, RoundedRectNode)
                   if n.width == 298 and n.color_rgba == sl_views.MATERIAL_POPUP_FILL]
         assert plates, "popup plate alphas down over the material"
-        assert 128 <= sl_views.MATERIAL_POPUP_FILL[3] <= 191
+        assert sl_views.MATERIAL_PLATE_FILL[3] < sl_views.MATERIAL_POPUP_FILL[3] <= 160, \
+            "the popup keeps the most body inside the frost window"
+        popup_floor = self._stack_floor(sl_views.MATERIAL_SHADOW_FAR[3],
+                                        sl_views.MATERIAL_SHADOW_NEAR[3],
+                                        30,  # the popup's own hairline border
+                                        sl_views.MATERIAL_POPUP_FILL[3])
+        assert 120.0 <= popup_floor <= 165.0, \
+            f"popup stack composites to {popup_floor:.1f} — most body, still glass"
         assert [n for n in _nodes(scene_buffer, RoundedRectNode)
                 if n.color_rgba == (18, 18, 18, 234)] == [], \
             "the near-opaque popup fill is gone while the material is live"
+
+    @staticmethod
+    def _stack_floor(*alphas: float) -> float:
+        """f32 source-over composite, bottom-up from the transparent clear —
+        the same math the rasterizer and the GPU blend apply per pixel."""
+        d = 0.0
+        for a in alphas:
+            d = 255.0 - (255.0 - d) * (1.0 - a / 255.0)
+        return d
+
+    def test_frost_trial_card_body_composite_window(self, app_ctx, monkeypatch):
+        """Frost trial (round 62): the first material pass composited card
+        bodies to ~205/255 over the clear (~80% opacity — reads solid on a
+        dark desktop). The retune halves the shadow-tint stack and drops the
+        fills so card bodies land in the 120–150 frost window (about 50%
+        bleed-through). Pins the constant stack math, headlessly."""
+        self._bridge(monkeypatch)
+        floor = self._stack_floor(sl_views.MATERIAL_SHADOW_FAR[3],
+                                  sl_views.MATERIAL_SHADOW_NEAR[3],
+                                  sl_views.MATERIAL_BORDER[3],
+                                  sl_views.MATERIAL_PLATE_FILL[3])
+        assert 120.0 <= floor <= 150.0, \
+            f"card-body stack composites to {floor:.1f}, outside the 120–150 frost window"
+
+    def test_frost_trial_softens_the_shadow_tint_stack(self, app_ctx, monkeypatch):
+        """The a34/a64/a36 shadow-tint stack under material plates softens in
+        material mode — otherwise the black under-stack (113 alpha on its
+        own) dominates the composite and reads as muddy blobs, not frost."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch)
+        self._playing(app, ctx)
+        self._library(app, ctx)
+
+        rrects = _nodes(scene_buffer, RoundedRectNode)
+        assert any(n.color_rgba == sl_views.MATERIAL_SHADOW_FAR for n in rrects), \
+            "material-mode plates draw the softened far shadow"
+        assert any(n.color_rgba == sl_views.MATERIAL_SHADOW_NEAR for n in rrects), \
+            "material-mode plates draw the softened near shadow"
+        assert any(n.color_rgba == sl_views.MATERIAL_BORDER for n in rrects), \
+            "the hairline border ring softens with the stack"
+        full = (sl_views.GLASS_SHADOW_FAR, sl_views.GLASS_SHADOW_NEAR)
+        assert [n for n in rrects if n.color_rgba in full] == [], \
+            "no full-strength shadow plates survive while the material is live"
+
+    def test_frost_trial_rasterized_card_floor(self, app_ctx, monkeypatch):
+        """Rasterizer histogram: card-body alpha floors land in the 120–150
+        frost window, gaps stay exactly 0, art/glyphs stay opaque."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch)
+        self._playing(app, ctx)
+        self._library(app, ctx)
+
+        frame = scene_buffer.latest_frame()
+        img = rasterize_scene_frame(frame)
+        fills = [n for n in frame.nodes if isinstance(n, RoundedRectNode)
+                 and n.color_rgba == sl_views.MATERIAL_PLATE_FILL]
+        assert fills, "material cards/rail drawn"
+        floors = []
+        for n in fills:
+            # Inset past the border ring AA and the shadowless top rows so
+            # the floor samples the fully stacked card body.
+            x0, y0 = int(n.x) + 8, int(n.y) + 10
+            x1, y1 = int(n.x + n.width) - 8, int(n.y + n.height) - 8
+            if x1 <= x0 or y1 <= y0:
+                continue
+            floors.append(int(img[y0:y1, x0:x1, 3].min()))
+        assert floors, "sampled card interiors"
+        assert all(120 <= f <= 150 for f in floors), \
+            f"card-body floors {sorted(set(floors))} outside the 120–150 frost window"
+        assert int(img[..., 3].min()) == 0, "gaps stay fully transparent"
+        assert int(img[..., 3].max()) == 255, "art/glyphs stay opaque"
+
+    def test_frost_trial_probe_expectations_track_the_retune(self, app_ctx, monkeypatch):
+        """The drawable probe's composite-aware expectations derive from the
+        frame, so they track the retune automatically: material fills report
+        expected ≈130 (the stack composite), the gap region reports 0."""
+        from luvatrix_core.core.drawable_probe import default_probe_regions
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch)
+        self._playing(app, ctx)
+        self._library(app, ctx)
+
+        frame = scene_buffer.latest_frame()
+        regions = default_probe_regions(frame)
+        fills = [r for r in regions
+                 if r.name.endswith(f"_a{sl_views.MATERIAL_PLATE_FILL[3]}")]
+        assert fills, "probe auto-regions track the retuned fill alpha"
+        assert all(128 <= r.expected_alpha <= 132 for r in fills), \
+            f"composite expectations {[r.expected_alpha for r in fills]} miss the ~130 floor"
+        gaps = [r for r in regions if r.name.startswith("gap")]
+        assert gaps and all(r.expected_alpha == 0 for r in gaps), \
+            "the gap region keeps its zero expectation"
