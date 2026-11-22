@@ -799,16 +799,36 @@ class _FakeDrawable:
         return self._texture
 
 
+# The copy selectors a REAL MTLBlitCommandEncoder exposes (Metal headers,
+# macOS 10.11+; the concrete driver class — Alec's crash log named
+# AGXG17GFamilyBlitContext — implements exactly these). The level-first
+# 9-arg ordering ("copyFromTexture:sourceLevel:sourceSlice:...") does NOT
+# exist in Metal; the probe bound that name from bb23f98 onward and this
+# fake mirrored it, so the mismatch stayed green here while the real driver
+# raised AttributeError. The strict surface below makes the next binding
+# typo fail in tests, the way PyObjC fails on the driver.
+_REAL_BLIT_COPY_SELECTORS = frozenset({
+    "copyFromTexture_sourceSlice_sourceLevel_toTexture_destinationSlice_destinationLevel_",
+    "copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_",
+})
+
+
 class _FakeBlitEncoder:
-    def __init__(self) -> None:
-        self.copies: list[tuple] = []
+    def __init__(self, *, selector_surface=_REAL_BLIT_COPY_SELECTORS) -> None:
+        self.copies: list[tuple] = []  # (selector_name, args) per accepted copy
         self.ended = False
         self.fail_on_copy: Exception | None = None
+        self._selector_surface = frozenset(selector_surface)
 
-    def copyFromTexture_sourceLevel_sourceSlice_sourceOrigin_sourceSize_toTexture_destinationLevel_destinationSlice_destinationOrigin_(self, *args) -> None:
-        if self.fail_on_copy is not None:
-            raise self.fail_on_copy
-        self.copies.append(args)
+    def __getattr__(self, name: str):
+        if name in self._selector_surface:
+            def _copy(*args) -> None:
+                if self.fail_on_copy is not None:
+                    raise self.fail_on_copy
+                self.copies.append((name, args))
+
+            return _copy
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def endEncoding(self) -> None:
         self.ended = True
@@ -886,6 +906,7 @@ class TestDrawableProbeCapture(unittest.TestCase):
         backend._drawable_probe_regions = None
         backend._drawable_probe_capture = None
         backend._drawable_probe_present_hook = None
+        backend._drawable_probe_binding = None
         backend._instance_index = 1
         import threading
 
@@ -910,12 +931,16 @@ class TestDrawableProbeCapture(unittest.TestCase):
         desc = _FakeTextureDescriptor.made[0]
         self.assertEqual((desc.fmt, desc.width, desc.height, desc.mipmapped), (80, 4, 2, False))
         self.assertEqual(desc.storage_mode, 0)  # MTLStorageModeShared
-        # Blit copies the full drawable texture into the probe texture.
+        # Blit copies the full drawable texture into the probe texture. The
+        # primary binding is the 6-arg whole-texture variant (no MTLOrigin/
+        # MTLSize by-value structs for PyObjC to marshal on the driver class).
         self.assertEqual(len(cmd.blit.copies), 1)
-        copy = cmd.blit.copies[0]
-        self.assertIs(copy[0], drawable_tex)
-        self.assertEqual(copy[4], (4, 2, 1))
-        self.assertIs(copy[5], probe_tex)
+        name, args = cmd.blit.copies[0]
+        self.assertEqual(
+            name,
+            "copyFromTexture_sourceSlice_sourceLevel_toTexture_destinationSlice_destinationLevel_",
+        )
+        self.assertEqual(args, (drawable_tex, 0, 0, probe_tex, 0, 0))
         self.assertTrue(cmd.blit.ended)
         self.assertEqual(len(cmd.handlers), 1)
         self.assertFalse(backend._drawable_probe_armed, "arm is one-shot")
@@ -992,6 +1017,12 @@ class TestDrawableProbeCapture(unittest.TestCase):
         fills = [r for r in result["regions"] if r.get("expected_alpha") == 166]
         self.assertEqual(len(fills), 1)
         self.assertTrue(fills[0]["alpha_matches_expected"], fills[0])
+        # The winning binding is reported so the runner can see which copy
+        # variant the concrete driver class accepted.
+        self.assertEqual(
+            result["binding"],
+            "copyFromTexture_sourceSlice_sourceLevel_toTexture_destinationSlice_destinationLevel_",
+        )
 
     def test_request_times_out_cleanly_when_no_frame_presents(self) -> None:
         backend, _drawable_tex, _probe_tex, _device = self._backend()
@@ -1016,6 +1047,61 @@ class TestDrawableProbeCapture(unittest.TestCase):
         capture = backend._drawable_probe_capture
         self.assertIsNotNone(capture.error)
         self.assertIn("copyFromTexture exploded", capture.error)
+
+    def test_copy_binds_a_selector_the_real_driver_exposes(self) -> None:
+        """The bug Alec's Mac reported: the probe bound
+        copyFromTexture:sourceLevel:sourceSlice:... (level-first), which does
+        not exist in Metal — the concrete driver class (AGXG17GFamilyBlitContext)
+        raised AttributeError. The fake's strict selector surface mirrors the
+        real driver, so any binding outside _REAL_BLIT_COPY_SELECTORS fails
+        here instead of on Alec's machine."""
+        backend, drawable_tex, _probe_tex, _device = self._backend()
+        cmd = _FakeCommandBuffer()
+        with unittest.mock.patch.dict("sys.modules", {"Metal": _fake_metal_module()}):
+            backend._capture_drawable_probe(cmd, _FakeDrawable(drawable_tex), 4.0, 2.0, self._frame())
+        capture = backend._drawable_probe_capture
+        self.assertIsNotNone(capture)
+        self.assertIsNone(capture.error, capture.error)
+        self.assertEqual(len(cmd.blit.copies), 1)
+        name, _args = cmd.blit.copies[0]
+        self.assertIn(name, _REAL_BLIT_COPY_SELECTORS)
+
+    def test_falls_back_to_the_nine_arg_slice_first_binding(self) -> None:
+        """If a driver exposes only the canonical 9-arg slice-first variant,
+        the probe must still capture — binding resolution walks the candidate
+        chain instead of dying on the first missing name."""
+        nine_arg = "copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_"
+        backend, drawable_tex, probe_tex, _device = self._backend()
+        cmd = _FakeCommandBuffer()
+        cmd.blit = _FakeBlitEncoder(selector_surface={nine_arg})
+        with unittest.mock.patch.dict("sys.modules", {"Metal": _fake_metal_module()}):
+            backend._capture_drawable_probe(cmd, _FakeDrawable(drawable_tex), 4.0, 2.0, self._frame())
+        capture = backend._drawable_probe_capture
+        self.assertIsNotNone(capture)
+        self.assertIsNone(capture.error, capture.error)
+        self.assertEqual(len(cmd.blit.copies), 1)
+        name, args = cmd.blit.copies[0]
+        self.assertEqual(name, nine_arg)
+        self.assertEqual(
+            args,
+            (drawable_tex, 0, 0, (0, 0, 0), (4, 2, 1), probe_tex, 0, 0, (0, 0, 0)),
+        )
+        self.assertTrue(cmd.blit.ended)
+
+    def test_no_usable_binding_reports_error_and_still_closes_the_encoder(self) -> None:
+        """Total binding failure must degrade to an error capture (never a
+        crash, never a hang): the encoder still closes before commit, the
+        done event still fires, and the reason names what was tried."""
+        backend, drawable_tex, _probe_tex, _device = self._backend()
+        cmd = _FakeCommandBuffer()
+        cmd.blit = _FakeBlitEncoder(selector_surface=set())
+        with unittest.mock.patch.dict("sys.modules", {"Metal": _fake_metal_module()}):
+            backend._capture_drawable_probe(cmd, _FakeDrawable(drawable_tex), 4.0, 2.0, self._frame())
+        self.assertTrue(cmd.blit.ended, "the blit encoder must never reach commit() open")
+        self.assertTrue(backend._drawable_probe_done.is_set())
+        capture = backend._drawable_probe_capture
+        self.assertIsNotNone(capture.error)
+        self.assertIn("no usable blit copy binding", capture.error)
 
     def test_arm_requests_a_present_through_the_wired_hook(self) -> None:
         """Idle-app gap (runner: frames_presented flat through four armed
