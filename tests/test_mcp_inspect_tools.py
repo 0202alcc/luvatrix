@@ -420,6 +420,55 @@ class McpInspectEndToEndTests(unittest.TestCase):
             self.assertFalse(thread.is_alive())
 
 
+class WindowStackBridgeTests(unittest.TestCase):
+    """SL-38d: app_window_stack dumps the live NSWindow view/layer hierarchy
+    (opaqueness, background alphas, VEV material/blending, CAMetalLayer
+    config) so CA-compositing bugs are read off the actual window instead of
+    guessed at."""
+
+    def _bridge_with_provider(self, provider, *, granted=None):
+        return McpRuntimeBridge(
+            app_id="test.mcp",
+            granted_capabilities=granted if granted is not None else set(MCP_CAPABILITIES),
+            state_provider=lambda: {},
+            window_stack_provider=provider,
+        )
+
+    def test_listed_and_dispatches_to_provider(self) -> None:
+        calls: list[str] = []
+
+        def provider() -> dict:
+            calls.append("dump")
+            return {"available": True, "views": [{"class": "NSVisualEffectView"}]}
+
+        bridge = self._bridge_with_provider(provider)
+        listing = bridge.dispatcher().handle_payload({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        assert listing is not None
+        names = [tool["name"] for tool in listing["result"]["tools"]]
+        self.assertIn("app_window_stack", names)
+
+        payload = _tool_payload(_call_tool(bridge, "app_window_stack"))
+        self.assertTrue(payload["available"])
+        self.assertEqual(payload["views"], [{"class": "NSVisualEffectView"}])
+        self.assertEqual(calls, ["dump"])
+
+    def test_requires_inspect_capability(self) -> None:
+        bridge = self._bridge_with_provider(lambda: {}, granted={"mcp.control"})
+        listing = bridge.dispatcher().handle_payload({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        assert listing is not None
+        names = [tool["name"] for tool in listing["result"]["tools"]]
+        self.assertNotIn("app_window_stack", names)
+        response = _call_tool(bridge, "app_window_stack")
+        self.assertEqual(response["error"]["code"], -32601)
+        self.assertIn("mcp.inspect", response["error"]["message"])
+
+    def test_without_provider_reports_tool_error(self) -> None:
+        bridge = _make_bridge()
+        response = _call_tool(bridge, "app_window_stack")
+        self.assertTrue(response["result"]["isError"])
+        self.assertIn("unavailable", response["result"]["content"][0]["text"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

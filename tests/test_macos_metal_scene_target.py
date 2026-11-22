@@ -887,6 +887,189 @@ def _fake_metal_module():
     return metal
 
 
+def _run_inline(block, timeout_s: float = 2.0) -> bool:
+    """Test stand-in for the main-thread hop: run the collect block inline."""
+    block()
+    return True
+
+
+class _FakeCGColor:
+    def __init__(self, alpha: float) -> None:
+        self._alpha = alpha
+
+    def alpha(self) -> float:
+        return self._alpha
+
+
+class _FakeNSColor:
+    def __init__(self, alpha: float) -> None:
+        self._alpha = alpha
+
+    def alphaComponent(self) -> float:
+        return self._alpha
+
+
+class _FakeNSRect:
+    def __init__(self, x: float, y: float, w: float, h: float) -> None:
+        self.origin = types.SimpleNamespace(x=x, y=y)
+        self.size = types.SimpleNamespace(width=w, height=h)
+
+
+class _FakeCALayer:
+    def __init__(self, *, opaque: bool = False, bg_alpha: float | None = None, opacity: float = 1.0) -> None:
+        self._opaque = opaque
+        self._bg_alpha = bg_alpha
+        self._opacity = opacity
+
+    def isOpaque(self) -> bool:
+        return self._opaque
+
+    def opacity(self) -> float:
+        return self._opacity
+
+    def backgroundColor(self):
+        return None if self._bg_alpha is None else _FakeCGColor(self._bg_alpha)
+
+
+class _FakeCAMetalLayer(_FakeCALayer):
+    def pixelFormat(self) -> int:
+        return 80  # MTLPixelFormatBGRA8Unorm
+
+    def framebufferOnly(self) -> bool:
+        return True
+
+
+class _FakeNSView:
+    def __init__(self, *, frame=(0.0, 0.0, 100.0, 100.0), hidden: bool = False,
+                 layer=None, subviews: tuple = ()) -> None:
+        self._frame = frame
+        self._hidden = hidden
+        self._layer = layer
+        self._subviews = list(subviews)
+
+    def frame(self) -> _FakeNSRect:
+        return _FakeNSRect(*self._frame)
+
+    def isHidden(self) -> bool:
+        return self._hidden
+
+    def wantsLayer(self) -> bool:
+        return self._layer is not None
+
+    def layer(self):
+        return self._layer
+
+    def subviews(self) -> list:
+        return list(self._subviews)
+
+
+class _FakeNSVisualEffectView(_FakeNSView):
+    def material(self) -> int:
+        return 22  # underWindowBackground-ish stand-in
+
+    def blendingMode(self) -> int:
+        return 0  # behindWindow
+
+    def state(self) -> int:
+        return 1  # active
+
+
+class _FakeNSWindow:
+    def __init__(self, *, opaque: bool, bg_alpha: float, content_view) -> None:
+        self._opaque = opaque
+        self._bg = _FakeNSColor(bg_alpha)
+        self._content_view = content_view
+
+    def isOpaque(self) -> bool:
+        return self._opaque
+
+    def title(self) -> str:
+        return "Spotify Light"
+
+    def backgroundColor(self) -> _FakeNSColor:
+        return self._bg
+
+    def contentView(self):
+        return self._content_view
+
+
+# Rename the fakes so type(...).__name__ reads like the real AppKit classes.
+_FakeNSVisualEffectView.__name__ = "NSVisualEffectView"
+_FakeCAMetalLayer.__name__ = "CAMetalLayer"
+_FakeNSView.__name__ = "NSView"
+
+
+class TestWindowStackDump(unittest.TestCase):
+    """SL-38d: the drawable carries truthful alpha, so the remaining question
+    is the CA/window compositing stack. The dump walks the live NSWindow view
+    hierarchy and reports the properties that decide compositing — opaqueness,
+    background alphas, VEV material/blending, CAMetalLayer config — so the
+    runner reads the actual stack instead of guessing."""
+
+    def _backend(self, handle) -> object:
+        backend = object.__new__(mst.MacOSMetalSceneBackend)
+        backend._state = types.SimpleNamespace(window_handle=handle)
+        return backend
+
+    def _dump(self, backend) -> dict:
+        with unittest.mock.patch.object(mst, "_run_on_main_thread_sync", _run_inline):
+            return backend.dump_window_stack()
+
+    def _handle(self):
+        metal_layer = _FakeCAMetalLayer(opaque=False, bg_alpha=None)
+        host = _FakeNSView(layer=metal_layer)
+        vev = _FakeNSVisualEffectView()
+        content = _FakeNSView(layer=_FakeCALayer(), subviews=(vev, host))
+        window = _FakeNSWindow(opaque=False, bg_alpha=0.0, content_view=content)
+        return types.SimpleNamespace(window=window, layer=metal_layer, render_view=host)
+
+    def test_walks_the_hierarchy_with_compositing_properties(self) -> None:
+        handle = self._handle()
+        backend = self._backend(handle)
+        report = self._dump(backend)
+        self.assertTrue(report["available"], report)
+        self.assertEqual(report["window"]["isOpaque"], False)
+        self.assertEqual(report["window"]["backgroundColorAlpha"], 0.0)
+        views = report["views"]
+        classes = [v["class"] for v in views]
+        self.assertEqual(classes, ["NSView", "NSVisualEffectView", "NSView"])
+        # Depth-first z-order: the VEV sits below the render host.
+        self.assertLess(views[1]["z"], views[2]["z"])
+        self.assertEqual(views[1]["material"], 22)
+        self.assertEqual(views[1]["blendingMode"], 0)
+        host = views[2]
+        self.assertEqual(host["role"], "render_host")
+        self.assertEqual(host["layer"]["class"], "CAMetalLayer")
+        self.assertEqual(host["layer"]["isOpaque"], False)
+        self.assertEqual(host["layer"]["pixelFormat"], 80)
+        self.assertEqual(host["layer"]["framebufferOnly"], True)
+        self.assertIsNone(host["layer"]["backgroundColorAlpha"])
+
+    def test_unavailable_without_a_window_handle(self) -> None:
+        backend = object.__new__(mst.MacOSMetalSceneBackend)
+        backend._state = None
+        report = self._dump(backend)
+        self.assertFalse(report["available"])
+        self.assertIn("reason", report)
+
+    def test_a_failing_property_is_noted_never_raised(self) -> None:
+        handle = self._handle()
+
+        class _ExplodingView(_FakeNSView):
+            def layer(self):
+                raise RuntimeError("layer exploded")
+
+        _ExplodingView.__name__ = "NSBadView"
+        content = handle.window.contentView()
+        content._subviews.append(_ExplodingView())
+        backend = self._backend(handle)
+        report = self._dump(backend)
+        self.assertTrue(report["available"], report)
+        bad = [v for v in report["views"] if v["class"] == "NSBadView"]
+        self.assertEqual(len(bad), 1)
+        self.assertIn("layer exploded", bad[0].get("error", ""))
+
+
 class TestDrawableProbeCapture(unittest.TestCase):
     """SL-38b: the only remaining alpha question is what the PRESENTED
     drawable carries before CA composites it. The probe blits the drawable

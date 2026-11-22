@@ -24,6 +24,7 @@ from luvatrix_core.core.drawable_probe import (
 )
 from luvatrix_core.core.scene_graph import (
     ClearNode,
+    ImageNode,
     RectNode,
     RoundedRectNode,
     SceneFrame,
@@ -255,6 +256,20 @@ class TestUnifiedRuntimeWalk(unittest.TestCase):
         self.assertFalse(payload["available"])
         self.assertIn("reason", payload)
 
+    def test_routes_window_stack_to_the_backend(self) -> None:
+        class _Backend:
+            def dump_window_stack(self):
+                return {"available": True, "views": [{"class": "NSView"}], "backend_instance": 1}
+
+        payload = self._runtime(types.SimpleNamespace(backend=_Backend()))._mcp_window_stack()
+        self.assertTrue(payload["available"])
+        self.assertEqual(payload["views"], [{"class": "NSView"}])
+
+    def test_window_stack_unavailable_when_backend_lacks_the_dump(self) -> None:
+        payload = self._runtime(types.SimpleNamespace(backend=object()))._mcp_window_stack()
+        self.assertFalse(payload["available"])
+        self.assertIn("reason", payload)
+
     def test_wires_present_hook_to_lifecycle_invalidate(self) -> None:
         """The idle-arm fix's runtime half: the backend's present-request hook
         becomes the app's invalidate(), so an armed probe on an idle
@@ -273,6 +288,110 @@ class TestUnifiedRuntimeWalk(unittest.TestCase):
         runtime._wire_drawable_probe_present_hook(types.SimpleNamespace())
         self._runtime(None)._wire_drawable_probe_present_hook(
             types.SimpleNamespace(invalidate=lambda: None))
+
+
+class TestCompositeAwareExpectation(unittest.TestCase):
+    """Runner follow-up (SL-38d): expected_alpha was each node's own
+    single-layer fill alpha, so alpha_matches_expected failed 0/579 by
+    construction — region rects measure the full source-over STACK beneath
+    them. The expectation is now the theoretical stack composite at the
+    region's sample point, compared against the region FLOOR (alpha_min):
+    nodes above the sampled fill only lift the max, never the floor."""
+
+    def test_stacked_fills_expect_the_composite(self) -> None:
+        frame = _frame(
+            [
+                ClearNode((0, 0, 0, 0)),
+                RectNode(0, 0, 200, 100, (18, 18, 18, 64)),  # tint base
+                RoundedRectNode(10, 10, 40, 40, 6, (16, 16, 16, 166)),  # card over tint
+            ]
+        )
+        regions = {r.name: r for r in default_probe_regions(frame)}
+        # The tint base expects its own alpha (only the transparent clear beneath).
+        self.assertEqual(regions["fill[0]_a64"].expected_alpha, 64)
+        # The card expects 166 over 64: 166/255 + 64/255*(1-166/255) ≈ 0.7386 -> 188.
+        self.assertEqual(regions["fill[1]_a166"].expected_alpha, 188)
+
+    def test_clear_alpha_joins_the_stack(self) -> None:
+        frame = _frame(
+            [
+                ClearNode((10, 10, 10, 40)),
+                RoundedRectNode(10, 10, 40, 40, 6, (16, 16, 16, 166)),
+            ]
+        )
+        regions = {r.name: r for r in default_probe_regions(frame)}
+        # 166 over a 40-alpha clear ≈ 0.7057 -> 180.
+        self.assertEqual(regions["fill[0]_a166"].expected_alpha, 180)
+
+    def test_fill_covered_by_an_opaque_node_skips_the_flag(self) -> None:
+        frame = _frame(
+            [
+                ClearNode((0, 0, 0, 0)),
+                RoundedRectNode(10, 10, 40, 40, 6, (16, 16, 16, 166)),
+                ImageNode("art", 10, 10, 40, 40),  # opaque album art over the whole fill
+            ]
+        )
+        regions = {r.name: r for r in default_probe_regions(frame)}
+        region = regions["fill[0]_a166"]
+        self.assertEqual(region.expected_alpha, 166)
+        self.assertEqual(region.expected_skipped, "covered_by_opaque")
+
+    def test_gap_region_expects_the_stack_beneath_it(self) -> None:
+        frame = _frame(
+            [
+                ClearNode((0, 0, 0, 0)),
+                RectNode(0, 0, 200, 100, (18, 18, 18, 30)),  # full-window tint
+                RoundedRectNode(10, 10, 80, 20, 6, (16, 16, 16, 166)),
+                RoundedRectNode(10, 50, 80, 20, 6, (16, 16, 16, 166)),
+            ]
+        )
+        gaps = [r for r in default_probe_regions(frame) if "gap" in r.name]
+        self.assertEqual(len(gaps), 1)
+        self.assertEqual(gaps[0].expected_alpha, 30)
+
+    def test_flag_compares_against_the_region_floor(self) -> None:
+        # Half the region carries the bare stack (188), half is covered by
+        # opaque art (255): the floor is the truthful stack reading.
+        buf = np.zeros((8, 16, 4), dtype=np.uint8)
+        buf[:, :] = (0, 0, 0, 255)
+        buf[2:6, 2:6] = (16, 16, 16, 188)  # left half of the region: bare stack
+        buf[2:6, 6:10] = (40, 40, 40, 255)  # right half: art-covered
+        report = analyze_capture(
+            buf.tobytes(),
+            16,
+            8,
+            viewport=(0.0, 0.0, 16.0, 8.0),
+            logical_size=(16, 8),
+            regions=[ProbeRegion("fill[1]_a166", 2.0, 2.0, 8.0, 4.0, expected_alpha=188)],
+        )
+        region = report["regions"][0]
+        self.assertEqual(region["alpha_min"], 188)
+        self.assertTrue(region["alpha_matches_expected"])
+
+    def test_skipped_expectation_reports_a_none_flag(self) -> None:
+        buf = np.zeros((8, 16, 4), dtype=np.uint8)
+        buf[:, :] = (0, 0, 0, 255)
+        report = analyze_capture(
+            buf.tobytes(),
+            16,
+            8,
+            viewport=(0.0, 0.0, 16.0, 8.0),
+            logical_size=(16, 8),
+            regions=[
+                ProbeRegion(
+                    "fill[0]_a166",
+                    2.0,
+                    2.0,
+                    8.0,
+                    4.0,
+                    expected_alpha=166,
+                    expected_skipped="covered_by_opaque",
+                )
+            ],
+        )
+        region = report["regions"][0]
+        self.assertIsNone(region["alpha_matches_expected"])
+        self.assertEqual(region["expected_skipped"], "covered_by_opaque")
 
 
 if __name__ == "__main__":
