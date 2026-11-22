@@ -13,7 +13,7 @@ import threading
 import time
 import zlib
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from luvatrix_core import accel
 from luvatrix_core.core.debug_capture import build_screenshot_artifact_bundle
@@ -1032,6 +1032,42 @@ class MacOSMetalSceneBackend:
         with self._debug_menu_events_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(enriched, sort_keys=True, default=str) + "\n")
 
+    def dump_window_stack(self, *, timeout_s: float = 2.0) -> dict:
+        """SL-38d: dump the live NSWindow view/layer hierarchy with the
+        properties that decide CA compositing (opaqueness, background alphas,
+        VEV material/blendingMode, CAMetalLayer config). The drawable probe
+        proved the renderer's alpha is truthful; the remaining 'solid cards'
+        question is what the window stack does with it. Called from the MCP
+        HTTP thread; the AppKit reads hop to the main thread."""
+        state = self._state
+        handle = state.window_handle if state is not None else None
+        if handle is None or getattr(handle, "window", None) is None:
+            return {"available": False, "reason": "no window handle",
+                    "backend_instance": self._instance_index}
+        box: dict[str, Any] = {}
+
+        def _collect() -> None:
+            try:
+                box["report"] = _collect_window_stack(handle)
+            except Exception as exc:  # noqa: BLE001 — a dump must never crash the app
+                box["error"] = repr(exc)
+
+        try:
+            ran = _run_on_main_thread_sync(_collect, timeout_s)
+        except Exception as exc:  # noqa: BLE001
+            return {"available": False, "reason": f"main-thread hop failed: {exc!r}",
+                    "backend_instance": self._instance_index}
+        if not ran:
+            return {"available": False, "reason": "main-thread read timed out",
+                    "backend_instance": self._instance_index}
+        if "report" not in box:
+            return {"available": False,
+                    "reason": f"stack read failed: {box.get('error', 'unknown')}",
+                    "backend_instance": self._instance_index}
+        report = box["report"]
+        report["backend_instance"] = self._instance_index
+        return report
+
     def set_drawable_probe_present_hook(self, hook) -> None:
         """Wire the frame request fired when the probe arms (SL-38c). The
         runtime sets this to the app's invalidate(): presents are
@@ -1371,6 +1407,139 @@ def _run_on_main_thread(block) -> None:
         block()
     else:
         NSOperationQueue.mainQueue().addOperationWithBlock_(block)
+
+
+def _run_on_main_thread_sync(block, timeout_s: float = 2.0) -> bool:
+    """Run an AppKit READ on the main thread and wait for it (dump tooling).
+
+    Unlike _run_on_main_thread this blocks until the read completes (or the
+    timeout elapses) so the caller can return the collected payload."""
+    from AppKit import NSOperationQueue, NSThread  # type: ignore
+
+    if NSThread.isMainThread():
+        block()
+        return True
+    done = threading.Event()
+
+    def _wrapped() -> None:
+        try:
+            block()
+        finally:
+            done.set()
+
+    NSOperationQueue.mainQueue().addOperationWithBlock_(_wrapped)
+    return done.wait(timeout_s)
+
+
+def _safe_read(reader, notes: list[str], label: str):
+    """Best-effort property read for the window-stack dump: a failing
+    property must never crash the app for a diagnostic."""
+    try:
+        return reader()
+    except Exception as exc:  # noqa: BLE001
+        notes.append(f"{label}: {exc!r}")
+        return None
+
+
+def _ns_color_alpha(color, notes: list[str]) -> float | None:
+    if color is None:
+        return None
+    return _safe_read(lambda: float(color.alphaComponent()), notes, "NSColor.alphaComponent")
+
+
+def _cg_color_alpha(color, notes: list[str]) -> float | None:
+    if color is None:
+        return None
+
+    def _via_quartz() -> float:
+        import Quartz  # type: ignore
+
+        return float(Quartz.CGColorGetAlpha(color))
+
+    alpha = _safe_read(_via_quartz, notes, "CGColorGetAlpha")
+    if alpha is not None:
+        return alpha
+    # Fakes and non-Quartz helpers may expose a plain alpha() method.
+    attr = getattr(color, "alpha", None)
+    if callable(attr):
+        return _safe_read(lambda: float(attr()), notes, "CGColor.alpha")
+    return None
+
+
+def _dump_layer_entry(layer, notes: list[str]) -> dict | None:
+    if layer is None:
+        return None
+    entry: dict[str, Any] = {
+        "class": type(layer).__name__,
+        "isOpaque": _safe_read(lambda: bool(layer.isOpaque()), notes, "layer.isOpaque"),
+        "opacity": _safe_read(lambda: float(layer.opacity()), notes, "layer.opacity"),
+        "backgroundColorAlpha": _cg_color_alpha(
+            _safe_read(layer.backgroundColor, notes, "layer.backgroundColor"), notes
+        ),
+    }
+    if type(layer).__name__ == "CAMetalLayer":
+        entry["pixelFormat"] = _safe_read(lambda: int(layer.pixelFormat()), notes, "layer.pixelFormat")
+        entry["framebufferOnly"] = _safe_read(
+            lambda: bool(layer.framebufferOnly()), notes, "layer.framebufferOnly"
+        )
+    return entry
+
+
+def _collect_window_stack(handle) -> dict:
+    """Depth-first walk of the live NSWindow hierarchy (main thread). Reports
+    exactly the properties that decide CA compositing, so a 'solid cards'
+    class of bug is read off the actual stack instead of guessed at."""
+    notes: list[str] = []
+    window = handle.window
+    views: list[dict] = []
+
+    def _walk(view, depth: int) -> None:
+        entry: dict[str, Any] = {"class": type(view).__name__, "depth": depth, "z": len(views)}
+        view_notes: list[str] = []
+        frame = _safe_read(view.frame, view_notes, f"{entry['class']}.frame")
+        if frame is not None:
+            entry["frame"] = [
+                float(frame.origin.x),
+                float(frame.origin.y),
+                float(frame.size.width),
+                float(frame.size.height),
+            ]
+        entry["hidden"] = _safe_read(lambda: bool(view.isHidden()), view_notes, "view.isHidden")
+        if view is getattr(handle, "render_view", None):
+            entry["role"] = "render_host"
+        if "VisualEffectView" in entry["class"] or "GlassEffectView" in entry["class"]:
+            entry["role"] = entry.get("role", "material")
+            entry["material"] = _safe_read(lambda: int(view.material()), view_notes, "vev.material")
+            entry["blendingMode"] = _safe_read(lambda: int(view.blendingMode()), view_notes, "vev.blendingMode")
+            entry["state"] = _safe_read(lambda: int(view.state()), view_notes, "vev.state")
+        layer = _safe_read(view.layer, view_notes, f"{entry['class']}.layer")
+        layer_entry = _dump_layer_entry(layer, view_notes)
+        if layer_entry is not None:
+            entry["layer"] = layer_entry
+        views.append(entry)
+        for subview in _safe_read(view.subviews, view_notes, "view.subviews") or []:
+            _walk(subview, depth + 1)
+        if view_notes:
+            entry["error"] = "; ".join(view_notes)
+            notes.extend(view_notes)
+
+    content_view = _safe_read(window.contentView, notes, "window.contentView")
+    if content_view is not None:
+        _walk(content_view, 0)
+    report: dict[str, Any] = {
+        "available": True,
+        "window": {
+            "title": _safe_read(window.title, notes, "window.title"),
+            "isOpaque": _safe_read(lambda: bool(window.isOpaque()), notes, "window.isOpaque"),
+            "backgroundColorAlpha": _ns_color_alpha(
+                _safe_read(window.backgroundColor, notes, "window.backgroundColor"), notes
+            ),
+        },
+        "views": views,
+    }
+    if notes:
+        report["notes"] = notes
+    return report
 
 
 def _under_glass_transparency(clear_rgba: tuple[int, int, int, int]) -> bool:

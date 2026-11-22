@@ -513,6 +513,7 @@ class UnifiedRuntimeMcpTests(unittest.TestCase):
                     "app_scene_tree",
                     "app_logs",
                     "app_drawable_probe",
+                    "app_window_stack",
                     "app_pause",
                     "app_step",
                     "app_resume",

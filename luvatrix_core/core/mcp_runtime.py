@@ -269,6 +269,7 @@ class McpRuntimeBridge:
         screenshot_provider: Callable[[], McpScreenshot] | None = None,
         scene_tree_provider: Callable[[], dict[str, Any]] | None = None,
         drawable_probe_provider: Callable[[dict[str, Any]], Any] | None = None,
+        window_stack_provider: Callable[[], dict[str, Any]] | None = None,
         log_provider: Callable[[int], list[dict[str, Any]]] | None = None,
         input_injector: Callable[[HDIEvent], int] | None = None,
         app_call_timeout_s: float = 10.0,
@@ -280,6 +281,7 @@ class McpRuntimeBridge:
         self._screenshot_provider = screenshot_provider
         self._scene_tree_provider = scene_tree_provider
         self._drawable_probe_provider = drawable_probe_provider
+        self._window_stack_provider = window_stack_provider
         self._log_provider = log_provider
         self._input_injector = input_injector
         self._app_call_timeout_s = float(app_call_timeout_s)
@@ -516,6 +518,20 @@ class McpRuntimeBridge:
                 capability="mcp.inspect",
             ),
             McpToolSpec(
+                name="app_window_stack",
+                description=(
+                    "Dump the live NSWindow view/layer hierarchy with the properties "
+                    "that decide Core Animation compositing: per-view class, frame, "
+                    "z-order, opaqueness and background alpha, NSVisualEffectView "
+                    "material/blendingMode/state, and the CAMetalLayer's pixelFormat, "
+                    "framebufferOnly, and isOpaque (macOS Metal scene target only). "
+                    "The drawable probe verifies the renderer's alpha; this verifies "
+                    "what the window stack does with it."
+                ),
+                input_schema={"type": "object", "properties": {}},
+                capability="mcp.inspect",
+            ),
+            McpToolSpec(
                 name="app_input",
                 description=(
                     "Inject synthetic input events into the app's HDI queue. "
@@ -637,6 +653,10 @@ class McpRuntimeBridge:
             if self._drawable_probe_provider is None:
                 raise RuntimeError("app_drawable_probe unavailable: no drawable probe provider configured")
             return self._drawable_probe_provider(arguments)
+        if name == "app_window_stack":
+            if self._window_stack_provider is None:
+                raise RuntimeError("app_window_stack unavailable: no window stack provider configured")
+            return self._window_stack_provider()
         if name == "app_logs":
             if self._log_provider is None:
                 raise RuntimeError("app_logs unavailable: no log capture configured")

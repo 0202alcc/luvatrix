@@ -439,6 +439,7 @@ class UnifiedRuntime:
             screenshot_provider=self._mcp_screenshot,
             scene_tree_provider=self._mcp_scene_tree,
             drawable_probe_provider=self._mcp_drawable_probe,
+            window_stack_provider=self._mcp_window_stack,
             log_provider=log_handler.entries,
             input_injector=self._hdi.inject_synthetic_event,
             audit_logger=self._capability_audit_logger,
@@ -513,6 +514,19 @@ class UnifiedRuntime:
         invalidate = getattr(lifecycle, "invalidate", None)
         if setter is not None and invalidate is not None:
             setter(invalidate)
+
+    def _mcp_window_stack(self) -> dict[str, Any]:
+        """Route app_window_stack to the macOS Metal scene backend (the only
+        target with a live AppKit window); report cleanly elsewhere."""
+        runtime = self._scene_display_runtime
+        backend = getattr(getattr(runtime, "target", None), "backend", None)
+        dump = getattr(backend, "dump_window_stack", None)
+        if dump is None:
+            return {
+                "available": False,
+                "reason": "window stack dump requires the macOS Metal scene target",
+            }
+        return dump()
 
     def _mcp_drawable_probe(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Route app_drawable_probe to the macOS Metal scene backend (the only

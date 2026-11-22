@@ -48,7 +48,7 @@ MCP tools are gated by runtime-side capability families, filtered by
 
 | Family        | Tools                                            |
 | ------------- | ------------------------------------------------ |
-| `mcp.inspect` | `app_state`, `app_screenshot`, `app_scene_tree`, `app_drawable_probe`, `app_logs` |
+| `mcp.inspect` | `app_state`, `app_screenshot`, `app_scene_tree`, `app_drawable_probe`, `app_window_stack`, `app_logs` |
 | `mcp.input`   | `app_input`                                      |
 | `mcp.control` | `app_pause`, `app_step`, `app_resume`, `app_stop` |
 | `mcp.app`     | app-defined tools                                |
@@ -77,7 +77,19 @@ sinks from `--audit-sqlite`.
   fill with its expected alpha, text runs, and one inter-fill gap) and
   `wait_s` (capture timeout, default 2s; one frame is captured per call).
   Returns `{available: false, reason}` on non-Metal targets or when no frame
-  presents in time.
+  presents in time. Region expectations are composite-aware: `expected_alpha`
+  is the theoretical source-over stack beneath the sampled fill (not the
+  fill's own alpha), compared against the region floor (`alpha_min`); a
+  region fully covered by an opaque node reports `expected_skipped:
+  "covered_by_opaque"` and a null match flag instead of a misleading False.
+- `app_window_stack` — dump the live NSWindow view/layer hierarchy with the
+  properties that decide Core Animation compositing (macOS Metal scene target
+  only): per-view class, frame, depth-first z-order, `isOpaque`, background
+  alpha, NSVisualEffectView `material`/`blendingMode`/`state`, and the
+  CAMetalLayer's `pixelFormat`, `framebufferOnly`, and `isOpaque`. Where
+  `app_drawable_probe` verifies the renderer's alpha, this verifies what the
+  window stack does with it. Best-effort: failing properties are collected
+  under `notes`/per-view `error` and never crash the app.
 - `app_logs` — recent log records (ring buffer, 200 entries). The root log
   level is lowered to INFO for the session and restored on shutdown.
 - `app_input` — inject synthetic HDI events: `{event: {device, event_type,

@@ -55,7 +55,7 @@ class TestDefaultProbeRegions(unittest.TestCase):
             ]
         )
         regions = default_probe_regions(frame)
-        fills = [r for r in regions if r.expected_alpha is not None]
+        fills = [r for r in regions if r.name.startswith("fill")]
         self.assertEqual([r.expected_alpha for r in fills], [166, 191])
         # Region must sit strictly inside the fill (no AA edge pixels).
         first = fills[0]
