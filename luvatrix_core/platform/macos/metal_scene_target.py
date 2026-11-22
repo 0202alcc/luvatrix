@@ -13,6 +13,7 @@ import threading
 import time
 import zlib
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from luvatrix_core import accel
 from luvatrix_core.core.debug_capture import build_screenshot_artifact_bundle
@@ -371,8 +372,24 @@ class MacOSMetalSceneBackend:
     _drawable_probe_regions: list | None = field(default=None, init=False, repr=False)
     _drawable_probe_capture: DrawableProbeCapture | None = field(default=None, init=False, repr=False)
     _drawable_probe_done: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _drawable_probe_present_hook: object = field(default=None, init=False, repr=False)
+    # Runner anomaly (SL-38c): "slow frame #1" printed twice in one boot — the
+    # counter is per-instance, so two instances in one process would put
+    # arm-state and rendering on different objects and misfire the probe.
+    # Instance identity is observable now: the index is logged at init,
+    # carried on the slow-frame line, and reported by every probe response.
+    _instance_index: int = field(default=0, init=False, repr=False)
+    _instances_created: ClassVar[int] = 0
+
+    @classmethod
+    def instances_created(cls) -> int:
+        return cls._instances_created
 
     def __post_init__(self) -> None:
+        type(self)._instances_created += 1
+        self._instance_index = type(self)._instances_created
+        print(f"[macos-metal-scene] backend instance #{self._instance_index} initialized",
+              file=sys.stderr, flush=True)
         if self.window_system is None:
             from .window_system import AppKitWindowSystem
 
@@ -572,6 +589,7 @@ class MacOSMetalSceneBackend:
             if self._slow_frame_count <= 20 or self._slow_frame_count % 60 == 0:
                 print(
                     f"[macos-metal-scene] slow frame #{self._slow_frame_count} "
+                    f"inst={self._instance_index} "
                     f"{frame_ms:.1f}ms "
                     f"drawable={(after_drawable - started) * 1000.0:.1f} "
                     f"setup={(after_encoder - after_drawable) * 1000.0:.1f} "
@@ -984,6 +1002,14 @@ class MacOSMetalSceneBackend:
         with self._debug_menu_events_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(enriched, sort_keys=True, default=str) + "\n")
 
+    def set_drawable_probe_present_hook(self, hook) -> None:
+        """Wire the frame request fired when the probe arms (SL-38c). The
+        runtime sets this to the app's invalidate(): presents are
+        invalidation-driven (the present loop runs repeat_latest=False), so
+        on an idle app an armed probe would otherwise race user activity
+        against the wait window."""
+        self._drawable_probe_present_hook = hook
+
     def request_drawable_probe(self, *, regions: list | None = None, timeout_s: float = 2.0) -> dict:
         """Arm a one-shot drawable alpha capture and wait for the next present.
 
@@ -993,7 +1019,8 @@ class MacOSMetalSceneBackend:
         the present loop keeps running on the render thread.
         """
         if self._state is None:
-            return {"available": False, "reason": "backend not initialized"}
+            return {"available": False, "reason": "backend not initialized",
+                    "backend_instance": self._instance_index}
         try:
             timeout = max(0.1, min(10.0, float(timeout_s)))
         except (TypeError, ValueError):
@@ -1002,17 +1029,27 @@ class MacOSMetalSceneBackend:
         self._drawable_probe_regions = regions
         self._drawable_probe_done.clear()
         self._drawable_probe_armed = True
+        hook = self._drawable_probe_present_hook
+        if hook is not None:
+            try:
+                hook()
+            except Exception:  # noqa: BLE001 — a failed nudge must not fail the probe
+                pass
         if not self._drawable_probe_done.wait(timeout):
             self._drawable_probe_armed = False
-            return {"available": False, "reason": "no frame presented within timeout"}
+            return {"available": False, "reason": "no frame presented within timeout",
+                    "backend_instance": self._instance_index}
         capture = self._drawable_probe_capture
         if capture is None:
-            return {"available": False, "reason": "capture missing after present"}
+            return {"available": False, "reason": "capture missing after present",
+                    "backend_instance": self._instance_index}
         if capture.error is not None:
-            return {"available": False, "reason": f"drawable readback failed: {capture.error}"}
+            return {"available": False, "reason": f"drawable readback failed: {capture.error}",
+                    "backend_instance": self._instance_index}
         frame = self._latest_frame
         if frame is None:
-            return {"available": False, "reason": "no scene frame submitted yet"}
+            return {"available": False, "reason": "no scene frame submitted yet",
+                    "backend_instance": self._instance_index}
         viewport = _viewport(float(capture.width), float(capture.height), frame)
         probe_regions = (
             [r if isinstance(r, ProbeRegion) else r for r in capture.regions]
@@ -1029,6 +1066,7 @@ class MacOSMetalSceneBackend:
             revision=capture.revision,
         )
         report["available"] = True
+        report["backend_instance"] = self._instance_index
         return report
 
     def _capture_drawable_probe(self, cmd, drawable, width: float, height: float, frame: SceneFrame) -> None:
@@ -1057,13 +1095,21 @@ class MacOSMetalSceneBackend:
                 if probe is None:
                     raise RuntimeError("probe texture allocation failed")
                 state.probe_texture = probe
+            # A blit encoder opened on the command buffer must never still be
+            # open when this frame commits — `commit command buffer with
+            # uncommitted encoder` is an instant process-killing assertion
+            # (Alec's crash). Guard every exit path: the copy raising (real
+            # Metal rejects what the test fakes accept) previously leaked the
+            # encoder into commit.
             blit = cmd.blitCommandEncoder()  # zero-arg selector: no trailing underscore
             if blit is None:
                 raise RuntimeError("no blit encoder for drawable probe")
-            blit.copyFromTexture_sourceLevel_sourceSlice_sourceOrigin_sourceSize_toTexture_destinationLevel_destinationSlice_destinationOrigin_(
-                src, 0, 0, (0, 0, 0), (tex_w, tex_h, 1), probe, 0, 0, (0, 0, 0)
-            )
-            blit.endEncoding()
+            try:
+                blit.copyFromTexture_sourceLevel_sourceSlice_sourceOrigin_sourceSize_toTexture_destinationLevel_destinationSlice_destinationOrigin_(
+                    src, 0, 0, (0, 0, 0), (tex_w, tex_h, 1), probe, 0, 0, (0, 0, 0)
+                )
+            finally:
+                blit.endEncoding()
             regions = self._drawable_probe_regions
             revision = int(getattr(frame, "revision", 0))
 

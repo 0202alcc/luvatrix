@@ -302,6 +302,7 @@ class UnifiedRuntime:
             if before_lifecycle_init is not None:
                 before_lifecycle_init()
             lifecycle.init(ctx)
+            self._wire_drawable_probe_present_hook(lifecycle)
             tick_idx = 0
             while max_ticks is None or tick_idx < max_ticks:
                 for active_target in active_targets:
@@ -500,6 +501,18 @@ class UnifiedRuntime:
             source="matrix",
             rgba=snapshot.tobytes(),
         )
+
+    def _wire_drawable_probe_present_hook(self, lifecycle) -> None:
+        """Give the Metal backend's probe a way to request a frame (SL-38c):
+        presents are invalidation-driven, so on an idle app an armed probe
+        would otherwise time out waiting for user activity. Wiring the app's
+        invalidate() makes arming itself nudge one present."""
+        runtime = self._scene_display_runtime
+        backend = getattr(getattr(runtime, "target", None), "backend", None)
+        setter = getattr(backend, "set_drawable_probe_present_hook", None)
+        invalidate = getattr(lifecycle, "invalidate", None)
+        if setter is not None and invalidate is not None:
+            setter(invalidate)
 
     def _mcp_drawable_probe(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Route app_drawable_probe to the macOS Metal scene backend (the only
