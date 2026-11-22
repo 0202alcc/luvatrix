@@ -5297,6 +5297,23 @@ class TestWindowMaterial:
             d = 255.0 - (255.0 - d) * (1.0 - a / 255.0)
         return d
 
+    @staticmethod
+    def _base_material_fills(frame):
+        """Material plate fills that sit on the clear (cards, rail, dock
+        circles) — NOT plates nested on another material plate (the active
+        nav row, the account chip), whose floor legitimately composites over
+        the host plate's ~130 body instead of over the clear."""
+        fills = [n for n in frame.nodes if isinstance(n, RoundedRectNode)
+                 and n.color_rgba == sl_views.MATERIAL_PLATE_FILL]
+        base = []
+        for i, n in enumerate(fills):
+            cx, cy = n.x + n.width / 2.0, n.y + n.height / 2.0
+            nested = any(m.x <= cx <= m.x + m.width and m.y <= cy <= m.y + m.height
+                         for m in fills[:i])
+            if not nested:
+                base.append(n)
+        return base
+
     def test_frost_trial_card_body_composite_window(self, app_ctx, monkeypatch):
         """Frost trial (round 62): the first material pass composited card
         bodies to ~205/255 over the clear (~80% opacity — reads solid on a
@@ -5341,8 +5358,7 @@ class TestWindowMaterial:
 
         frame = scene_buffer.latest_frame()
         img = rasterize_scene_frame(frame)
-        fills = [n for n in frame.nodes if isinstance(n, RoundedRectNode)
-                 and n.color_rgba == sl_views.MATERIAL_PLATE_FILL]
+        fills = self._base_material_fills(frame)
         assert fills, "material cards/rail drawn"
         floors = []
         for n in fills:
@@ -5374,8 +5390,16 @@ class TestWindowMaterial:
         fills = [r for r in regions
                  if r.name.endswith(f"_a{sl_views.MATERIAL_PLATE_FILL[3]}")]
         assert fills, "probe auto-regions track the retuned fill alpha"
-        assert all(128 <= r.expected_alpha <= 132 for r in fills), \
-            f"composite expectations {[r.expected_alpha for r in fills]} miss the ~130 floor"
+        # Card-body fills sit on the clear; plates nested on another material
+        # plate (active nav row) composite over its ~130 body instead.
+        base_nodes = self._base_material_fills(frame)
+        base = [r for r in fills
+                if any(abs((r.x + r.width / 2.0) - (n.x + n.width / 2.0)) < 4.0
+                       and abs((r.y + r.height / 2.0) - (n.y + n.height / 2.0)) < 4.0
+                       for n in base_nodes)]
+        assert base, "card-body probe regions found"
+        assert all(128 <= r.expected_alpha <= 132 for r in base), \
+            f"composite expectations {[r.expected_alpha for r in base]} miss the ~130 floor"
         gaps = [r for r in regions if r.name.startswith("gap")]
         assert gaps and all(r.expected_alpha == 0 for r in gaps), \
             "the gap region keeps its zero expectation"

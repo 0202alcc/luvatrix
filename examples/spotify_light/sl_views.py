@@ -64,14 +64,28 @@ GLASS_SHADOW_FAR = (0, 0, 0, 34)
 # icons, and borders keep their opaque colors — legibility is the
 # constraint; only fills alpha down. Bridgeless/incapable hosts keep the
 # white-tint language byte-for-byte.
-MATERIAL_PLATE_FILL = (16, 16, 16, 166)        # ~0.65 over the backdrop
-MATERIAL_PLATE_FILL_HOVER = (16, 16, 16, 140)  # hover lifts toward the material
-MATERIAL_POPUP_FILL = (16, 16, 16, 191)        # ~0.75 — the popup keeps the most body
+# Frost trial (round 62, glance-only pending Alec's eyeball): the first pass
+# composited card bodies to ~205/255 over the clear — ~80% opacity reads
+# solid on a dark desktop even though the alpha reaches the drawable
+# truthfully (GPU probe verdict, round 61). The shadow-tint stack halves and
+# the fills drop so card bodies composite to ~130/255 (about 50%
+# bleed-through). The UnderWindowBackground material itself is unchanged.
+MATERIAL_SHADOW_FAR = (0, 0, 0, 17)
+MATERIAL_SHADOW_NEAR = (0, 0, 0, 32)
+MATERIAL_BORDER = (255, 255, 255, 20)
+MATERIAL_BORDER_HOVER = (255, 255, 255, 28)
+MATERIAL_PLATE_FILL = (16, 16, 16, 90)         # card bodies composite ~130/255
+MATERIAL_PLATE_FILL_HOVER = (16, 16, 16, 76)   # hover lifts toward the material
+MATERIAL_POPUP_FILL = (16, 16, 16, 104)        # ~140 — the popup keeps the most body
+
+
+def _material_live(app) -> bool:
+    return app is not None and getattr(app, "_window_material_live", False)
 
 
 def _plate_fill(app, hovering: bool):
     """Default plate fill for the current backdrop state (SL-38)."""
-    if app is not None and getattr(app, "_window_material_live", False):
+    if _material_live(app):
         return MATERIAL_PLATE_FILL_HOVER if hovering else MATERIAL_PLATE_FILL
     return GLASS_FILL_HOVER if hovering else GLASS_FILL
 # Chrome plates (sidebar): dark translucent material so scene text stays
@@ -554,14 +568,22 @@ def _glass_plate(frame, x, y, w, h, *, radius, z, hovering=False, shadow=True,
     w = max(w, 1.0)
     h = max(h, 1.0)
     radius = max(0.0, min(radius, w / 2.0, h / 2.0))
+    material = _material_live(app)
     if shadow:
+        shadow_far = MATERIAL_SHADOW_FAR if material else GLASS_SHADOW_FAR
+        shadow_near = MATERIAL_SHADOW_NEAR if material else GLASS_SHADOW_NEAR
         frame.rounded_rect(x=x - 1, y=y + 5, width=w + 2, height=h, radius=radius,
-                           color=GLASS_SHADOW_FAR, z_index=z)
+                           color=shadow_far, z_index=z)
         frame.rounded_rect(x=x, y=y + 2, width=w, height=h, radius=radius,
-                           color=GLASS_SHADOW_NEAR, z_index=z)
+                           color=shadow_near, z_index=z)
+    if border is not None:
+        ring = border
+    elif material:
+        ring = MATERIAL_BORDER_HOVER if hovering else MATERIAL_BORDER
+    else:
+        ring = GLASS_BORDER_HOVER if hovering else GLASS_BORDER
     frame.rounded_rect(x=x, y=y, width=w, height=h, radius=radius,
-                       color=border or (GLASS_BORDER_HOVER if hovering else GLASS_BORDER),
-                       z_index=z)
+                       color=ring, z_index=z)
     if w > 2.0 and h > 2.0:
         frame.rounded_rect(x=x + 1, y=y + 1, width=w - 2, height=h - 2,
                            radius=max(0.0, radius - 1),
