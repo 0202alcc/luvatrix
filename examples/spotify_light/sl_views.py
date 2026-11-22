@@ -115,6 +115,16 @@ PILL_H = 108.0
 PILL_FLOAT = 16.0
 PILL_FILL = (16, 16, 16, 208)
 PILL_BORDER = (255, 255, 255, 40)
+# SL-40: under the NATIVE pill glass the scene still carries its own plate
+# fill. The glass blurs whatever scrolls behind it, and when that backdrop
+# changes mid-pill (dark gap above the card grid vs the cards themselves)
+# the capsule stops reading as one surface — Alec's fragmented-pill
+# screenshot: bar and transport read as floating on the cards. The plate is
+# the material-fill family carrying the card-body composite value in the
+# BARE fill (the native glass already owns the edge/blur, so no shadow,
+# border ring, or sheen stack): one readable capsule over gap and cards
+# alike. Contents stay opaque above it (z 11+).
+PILL_PLATE_FILL = (16, 16, 16, 130)
 PILL_THUMB_EMPTY = (255, 255, 255, 16)
 # Interior column: the album tile sits flush at the left cap with the
 # PILL_ART_INSET idiom; title/artist, the progress bar, and the transport
@@ -1184,6 +1194,12 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
         # render surface (SL-36); art/text/controls below draw either way.
         _glass_plate(frame, px, py, pw, ph, radius=glass_silhouette_radius(ph), z=10,
                      fill=PILL_FILL, border=PILL_BORDER)
+    else:
+        # SL-40: with REAL glass under, the scene carries its own plate fill
+        # so the capsule reads as one surface over any backdrop.
+        frame.rounded_rect(x=px, y=py, width=pw, height=ph,
+                           radius=glass_silhouette_radius(ph),
+                           color=PILL_PLATE_FILL, z_index=10)
 
     player = app.player
     # Pre-staged at the wall-clock boundary: the queue head shows while the

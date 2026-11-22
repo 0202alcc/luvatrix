@@ -5172,7 +5172,10 @@ class TestPillNativeGlass:
         frame = scene_buffer.latest_frame()
         img = rasterize_scene_frame(frame)
         px, py, pw, ph = (int(v) for v in sl_views.pill_rect(1280, 800))
-        region = img[py + 6:py + ph - 6, px + 6:px + pw - 6, 3]
+        # Inset past the corner arcs (the silhouette radius cuts deeper than
+        # a uniform 6px inset) so the floor samples the plate body.
+        inset = int(sl_views.glass_silhouette_radius(ph)) + 6
+        region = img[py + 6:py + ph - 6, px + inset:px + pw - inset, 3]
         floor = int(region.min())
         assert 120 <= floor <= 150, \
             f"pill-region alpha floor {floor} outside the 120–150 frost window"
