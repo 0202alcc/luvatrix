@@ -760,3 +760,236 @@ class TestUnderGlassTransparencyMainThread(unittest.TestCase):
         self.assertTrue(all(call[1] for call in window.calls))
         self.assertFalse(backend._under_glass_enabled)
         self.assertIn("under-glass transparency off", buf.getvalue())
+
+
+class _FakeProbeTexture:
+    """CPU-readable stand-in for the shared probe texture: getBytes copies a
+    scripted payload into the caller's buffer, like MTLStorageModeShared."""
+
+    def __init__(self, width: int, height: int, payload: bytes | None = None) -> None:
+        self._width = width
+        self._height = height
+        self.payload = payload if payload is not None else bytes(width * height * 4)
+        self.reads: list[tuple] = []
+        self.fail_on_read: Exception | None = None
+
+    def width(self) -> int:
+        return self._width
+
+    def height(self) -> int:
+        return self._height
+
+    def getBytes_bytesPerRow_fromRegion_mipmapLevel_(self, out, bpr, region, level) -> None:
+        if self.fail_on_read is not None:
+            raise self.fail_on_read
+        self.reads.append((int(bpr), region, int(level)))
+        out[:] = self.payload[: len(out)]
+
+
+class _FakeDrawableTexture(_FakeProbeTexture):
+    def pixelFormat(self) -> int:
+        return 80  # MTLPixelFormatBGRA8Unorm
+
+
+class _FakeDrawable:
+    def __init__(self, texture) -> None:
+        self._texture = texture
+
+    def texture(self):
+        return self._texture
+
+
+class _FakeBlitEncoder:
+    def __init__(self) -> None:
+        self.copies: list[tuple] = []
+        self.ended = False
+
+    def copyFromTexture_sourceLevel_sourceSlice_sourceOrigin_sourceSize_toTexture_destinationLevel_destinationSlice_destinationOrigin_(self, *args) -> None:
+        self.copies.append(args)
+
+    def endEncoding(self) -> None:
+        self.ended = True
+
+
+class _FakeCommandBuffer:
+    def __init__(self) -> None:
+        self.blit = _FakeBlitEncoder()
+        self.handlers: list = []
+
+    def blitCommandEncoder(self):
+        return self.blit
+
+    def addCompletedHandler_(self, block) -> None:
+        self.handlers.append(block)
+
+
+class _FakeTextureDescriptor:
+    made: list = []
+
+    def __init__(self, fmt: int, width: int, height: int, mipmapped: bool) -> None:
+        self.fmt = fmt
+        self.width = width
+        self.height = height
+        self.mipmapped = mipmapped
+        self.storage_mode = None
+        self.usage = None
+        _FakeTextureDescriptor.made.append(self)
+
+    @classmethod
+    def texture2DDescriptorWithPixelFormat_width_height_mipmapped_(cls, fmt, width, height, mipmapped):
+        return cls(fmt, width, height, mipmapped)
+
+    def setStorageMode_(self, mode) -> None:
+        self.storage_mode = mode
+
+    def setUsage_(self, usage) -> None:
+        self.usage = usage
+
+
+class _FakeProbeDevice:
+    def __init__(self, probe_texture) -> None:
+        self.probe_texture = probe_texture
+        self.created = 0
+
+    def newTextureWithDescriptor_(self, _desc):
+        self.created += 1
+        return self.probe_texture
+
+
+def _fake_metal_module():
+    metal = types.ModuleType("Metal")
+    metal.MTLTextureDescriptor = _FakeTextureDescriptor
+    metal.MTLStorageModeShared = 0
+    metal.MTLTextureUsageShaderRead = 1
+    return metal
+
+
+class TestDrawableProbeCapture(unittest.TestCase):
+    """SL-38b: the only remaining alpha question is what the PRESENTED
+    drawable carries before CA composites it. The probe blits the drawable
+    texture into a CPU-readable shared texture inside the same command
+    buffer (before present), then reads it back on completion."""
+
+    def _backend(self, payload: bytes | None = None, tex_w: int = 4, tex_h: int = 2):
+        drawable_tex = _FakeDrawableTexture(tex_w, tex_h)
+        probe_tex = _FakeProbeTexture(tex_w, tex_h, payload=payload)
+        device = _FakeProbeDevice(probe_tex)
+        backend = object.__new__(mst.MacOSMetalSceneBackend)
+        state = _bare_state()
+        state.device = device
+        state.probe_texture = None
+        backend._state = state
+        backend._drawable_probe_armed = True
+        backend._drawable_probe_regions = None
+        backend._drawable_probe_capture = None
+        import threading
+
+        backend._drawable_probe_done = threading.Event()
+        return backend, drawable_tex, probe_tex, device
+
+    def _frame(self, revision: int = 7) -> SceneFrame:
+        return SceneFrame(
+            logical_width=4, logical_height=2, display_width=4, display_height=2,
+            revision=revision, ts_ns=1, nodes=(ClearNode((0, 0, 0, 0)),),
+        )
+
+    def test_blits_drawable_into_shared_probe_texture_and_stashes_bytes(self) -> None:
+        payload = bytes(range(4 * 2 * 4))
+        backend, drawable_tex, probe_tex, device = self._backend(payload)
+        cmd = _FakeCommandBuffer()
+        _FakeTextureDescriptor.made = []
+        with unittest.mock.patch.dict("sys.modules", {"Metal": _fake_metal_module()}):
+            backend._capture_drawable_probe(cmd, _FakeDrawable(drawable_tex), 4.0, 2.0, self._frame())
+        # Probe texture allocated CPU-readable with the drawable's format+size.
+        self.assertEqual(device.created, 1)
+        desc = _FakeTextureDescriptor.made[0]
+        self.assertEqual((desc.fmt, desc.width, desc.height, desc.mipmapped), (80, 4, 2, False))
+        self.assertEqual(desc.storage_mode, 0)  # MTLStorageModeShared
+        # Blit copies the full drawable texture into the probe texture.
+        self.assertEqual(len(cmd.blit.copies), 1)
+        copy = cmd.blit.copies[0]
+        self.assertIs(copy[0], drawable_tex)
+        self.assertEqual(copy[4], (4, 2, 1))
+        self.assertIs(copy[5], probe_tex)
+        self.assertTrue(cmd.blit.ended)
+        self.assertEqual(len(cmd.handlers), 1)
+        self.assertFalse(backend._drawable_probe_armed, "arm is one-shot")
+        # Completion reads the probe texture back and stashes the capture.
+        cmd.handlers[0](None)
+        self.assertTrue(backend._drawable_probe_done.is_set())
+        capture = backend._drawable_probe_capture
+        self.assertIsNotNone(capture)
+        self.assertIsNone(capture.error)
+        self.assertEqual(capture.pixels, payload)
+        self.assertEqual((capture.width, capture.height, capture.revision), (4, 2, 7))
+        self.assertEqual(probe_tex.reads[0][0], 4 * 4)  # bytesPerRow
+
+    def test_probe_texture_reused_when_size_matches(self) -> None:
+        backend, drawable_tex, probe_tex, device = self._backend()
+        state = backend._state
+        state.probe_texture = probe_tex  # already allocated
+        cmd = _FakeCommandBuffer()
+        with unittest.mock.patch.dict("sys.modules", {"Metal": _fake_metal_module()}):
+            backend._capture_drawable_probe(cmd, _FakeDrawable(drawable_tex), 4.0, 2.0, self._frame())
+        self.assertEqual(device.created, 0, "same-size probe texture must be reused")
+
+    def test_read_error_is_captured_not_raised_and_done_is_set(self) -> None:
+        backend, drawable_tex, probe_tex, _device = self._backend()
+        probe_tex.fail_on_read = RuntimeError("getBytes exploded")
+        backend._state.probe_texture = probe_tex
+        cmd = _FakeCommandBuffer()
+        with unittest.mock.patch.dict("sys.modules", {"Metal": _fake_metal_module()}):
+            backend._capture_drawable_probe(cmd, _FakeDrawable(drawable_tex), 4.0, 2.0, self._frame())
+            cmd.handlers[0](None)
+        self.assertTrue(backend._drawable_probe_done.is_set())
+        capture = backend._drawable_probe_capture
+        self.assertIsNotNone(capture.error)
+        self.assertIn("getBytes exploded", capture.error)
+
+    def test_request_returns_analysis_for_the_captured_frame(self) -> None:
+        import threading
+        import time
+
+        # 4x2 drawable, all opaque except a 2x1 fill strip at alpha 166.
+        buf = bytearray(4 * 2 * 4)
+        for i in range(0, len(buf), 4):
+            buf[i : i + 4] = bytes((0, 0, 0, 255))
+        for px in ((1, 0), (2, 0)):
+            i = (px[1] * 4 + px[0]) * 4
+            buf[i : i + 4] = bytes((16, 16, 16, 166))
+        backend, drawable_tex, _probe_tex, _device = self._backend(bytes(buf))
+        backend._latest_frame = SceneFrame(
+            logical_width=4, logical_height=2, display_width=4, display_height=2,
+            revision=9, ts_ns=1,
+            nodes=(
+                ClearNode((0, 0, 0, 0)),
+                RectNode(1, 0, 2, 1, (16, 16, 16, 166)),
+            ),
+        )
+
+        result: dict = {}
+
+        def _request():
+            result.update(backend.request_drawable_probe(timeout_s=2.0))
+
+        thread = threading.Thread(target=_request)
+        thread.start()
+        time.sleep(0.05)
+        cmd = _FakeCommandBuffer()
+        with unittest.mock.patch.dict("sys.modules", {"Metal": _fake_metal_module()}):
+            backend._capture_drawable_probe(cmd, _FakeDrawable(drawable_tex), 4.0, 2.0, backend._latest_frame)
+            cmd.handlers[0](None)
+        thread.join(timeout=2.0)
+
+        self.assertTrue(result.get("available"), result)
+        self.assertEqual(result["revision"], 9)
+        self.assertEqual(result["alpha"]["mid_alpha_px"], 2)
+        fills = [r for r in result["regions"] if r.get("expected_alpha") == 166]
+        self.assertEqual(len(fills), 1)
+        self.assertTrue(fills[0]["alpha_matches_expected"], fills[0])
+
+    def test_request_times_out_cleanly_when_no_frame_presents(self) -> None:
+        backend, _drawable_tex, _probe_tex, _device = self._backend()
+        result = backend.request_drawable_probe(timeout_s=0.1)
+        self.assertFalse(result["available"])
+        self.assertIn("reason", result)

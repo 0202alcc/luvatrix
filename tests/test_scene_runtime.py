@@ -341,5 +341,19 @@ class SceneRuntimeTests(unittest.TestCase):
         self.assertEqual(_text_node_texture_key(dynamic, 1.0), _text_node_texture_key(moved, 1.0))
 
 
+class SceneDisplayRuntimeTargetTests(unittest.TestCase):
+    """The MCP drawable probe reaches the macOS Metal backend through the
+    scene display runtime's target — expose it read-only instead of having
+    callers poke the private attribute."""
+
+    def test_target_property_exposes_the_wrapped_target(self) -> None:
+        from luvatrix_core.core.scene_display_runtime import SceneDisplayRuntime
+
+        runtime = object.__new__(SceneDisplayRuntime)
+        sentinel = object()
+        runtime._target = sentinel
+        self.assertIs(runtime.target, sentinel)
+
+
 if __name__ == "__main__":
     unittest.main()

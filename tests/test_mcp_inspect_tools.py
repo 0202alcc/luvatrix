@@ -422,3 +422,56 @@ class McpInspectEndToEndTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DrawableProbeBridgeTests(unittest.TestCase):
+    """SL-38b: app_drawable_probe arms the macOS Metal backend's drawable
+    readback (the only capture path that sees the PRESENTED pixels before CA
+    composites them) and returns the alpha analysis."""
+
+    def _bridge_with_provider(self, provider, *, granted=None):
+        return McpRuntimeBridge(
+            app_id="test.mcp",
+            granted_capabilities=granted if granted is not None else set(MCP_CAPABILITIES),
+            state_provider=lambda: {},
+            drawable_probe_provider=provider,
+        )
+
+    def test_listed_and_dispatches_arguments_to_provider(self) -> None:
+        calls: list[dict] = []
+
+        def provider(arguments: dict) -> dict:
+            calls.append(arguments)
+            return {"available": True, "alpha": {"mid_alpha_px": 12}}
+
+        bridge = self._bridge_with_provider(provider)
+        listing = bridge.dispatcher().handle_payload({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        assert listing is not None
+        names = [tool["name"] for tool in listing["result"]["tools"]]
+        self.assertIn("app_drawable_probe", names)
+
+        payload = _tool_payload(
+            _call_tool(bridge, "app_drawable_probe", {"regions": [{"name": "card", "x": 1, "y": 2, "width": 3, "height": 4}], "wait_s": 1.0})
+        )
+        self.assertTrue(payload["available"])
+        self.assertEqual(payload["alpha"]["mid_alpha_px"], 12)
+        self.assertEqual(
+            calls,
+            [{"regions": [{"name": "card", "x": 1, "y": 2, "width": 3, "height": 4}], "wait_s": 1.0}],
+        )
+
+    def test_requires_inspect_capability(self) -> None:
+        bridge = self._bridge_with_provider(lambda arguments: {}, granted={"mcp.control"})
+        listing = bridge.dispatcher().handle_payload({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        assert listing is not None
+        names = [tool["name"] for tool in listing["result"]["tools"]]
+        self.assertNotIn("app_drawable_probe", names)
+        response = _call_tool(bridge, "app_drawable_probe")
+        self.assertEqual(response["error"]["code"], -32601)
+        self.assertIn("mcp.inspect", response["error"]["message"])
+
+    def test_without_provider_reports_tool_error(self) -> None:
+        bridge = _make_bridge()
+        response = _call_tool(bridge, "app_drawable_probe")
+        self.assertTrue(response["result"]["isError"])
+        self.assertIn("unavailable", response["result"]["content"][0]["text"])
