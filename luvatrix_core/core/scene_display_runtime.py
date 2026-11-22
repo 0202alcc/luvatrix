@@ -122,6 +122,12 @@ class SceneDisplayRuntime:
         self._present_stop = threading.Event()
 
     @property
+    def target(self) -> SceneRenderTarget:
+        """The wrapped scene target — read-only escape hatch for diagnostics
+        that must reach backend-specific hooks (the MCP drawable probe)."""
+        return self._target
+
+    @property
     def last_error(self) -> Exception | None:
         return self._last_error
 

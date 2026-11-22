@@ -268,6 +268,7 @@ class McpRuntimeBridge:
         state_provider: Callable[[], dict[str, Any]],
         screenshot_provider: Callable[[], McpScreenshot] | None = None,
         scene_tree_provider: Callable[[], dict[str, Any]] | None = None,
+        drawable_probe_provider: Callable[[dict[str, Any]], Any] | None = None,
         log_provider: Callable[[int], list[dict[str, Any]]] | None = None,
         input_injector: Callable[[HDIEvent], int] | None = None,
         app_call_timeout_s: float = 10.0,
@@ -278,6 +279,7 @@ class McpRuntimeBridge:
         self._state_provider = state_provider
         self._screenshot_provider = screenshot_provider
         self._scene_tree_provider = scene_tree_provider
+        self._drawable_probe_provider = drawable_probe_provider
         self._log_provider = log_provider
         self._input_injector = input_injector
         self._app_call_timeout_s = float(app_call_timeout_s)
@@ -474,6 +476,46 @@ class McpRuntimeBridge:
                 capability="mcp.inspect",
             ),
             McpToolSpec(
+                name="app_drawable_probe",
+                description=(
+                    "Arm a one-shot readback of the presented GPU drawable and return "
+                    "per-region pixel alpha (macOS Metal scene target only). Unlike "
+                    "app_screenshot — which re-rasterizes the scene on the CPU — this "
+                    "reads the actual CAMetalDrawable texture before Core Animation "
+                    "composites it. Optional 'regions' (scene-space rects) and "
+                    "'wait_s' (capture timeout, default 2s)."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "regions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "x": {"type": "number"},
+                                    "y": {"type": "number"},
+                                    "width": {"type": "number"},
+                                    "height": {"type": "number"},
+                                    "expected_alpha": {"type": "integer"},
+                                },
+                                "required": ["x", "y", "width", "height"],
+                            },
+                            "description": "Scene-space rects to sample; defaults to regions derived from the latest scene frame.",
+                        },
+                        "wait_s": {
+                            "type": "number",
+                            "minimum": 0.1,
+                            "maximum": 10.0,
+                            "default": 2.0,
+                            "description": "How long to wait for the next presented frame.",
+                        },
+                    },
+                },
+                capability="mcp.inspect",
+            ),
+            McpToolSpec(
                 name="app_input",
                 description=(
                     "Inject synthetic input events into the app's HDI queue. "
@@ -591,6 +633,10 @@ class McpRuntimeBridge:
             if self._scene_tree_provider is None:
                 raise RuntimeError("app_scene_tree unavailable: no scene provider configured")
             return self._scene_tree_provider()
+        if name == "app_drawable_probe":
+            if self._drawable_probe_provider is None:
+                raise RuntimeError("app_drawable_probe unavailable: no drawable probe provider configured")
+            return self._drawable_probe_provider(arguments)
         if name == "app_logs":
             if self._log_provider is None:
                 raise RuntimeError("app_logs unavailable: no log capture configured")

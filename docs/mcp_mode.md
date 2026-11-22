@@ -48,7 +48,7 @@ MCP tools are gated by runtime-side capability families, filtered by
 
 | Family        | Tools                                            |
 | ------------- | ------------------------------------------------ |
-| `mcp.inspect` | `app_state`, `app_screenshot`, `app_scene_tree`, `app_logs` |
+| `mcp.inspect` | `app_state`, `app_screenshot`, `app_scene_tree`, `app_drawable_probe`, `app_logs` |
 | `mcp.input`   | `app_input`                                      |
 | `mcp.control` | `app_pause`, `app_step`, `app_resume`, `app_stop` |
 | `mcp.app`     | app-defined tools                                |
@@ -66,6 +66,18 @@ sinks from `--audit-sqlite`.
   when scene render mode produced one (`source = "scene_retained"`), else the
   window matrix (`source = "matrix"`).
 - `app_scene_tree` — serialized nodes of the latest retained scene frame.
+- `app_drawable_probe` — read back the PRESENTED GPU drawable and report
+  per-pixel alpha (macOS Metal scene target only). Unlike `app_screenshot`,
+  which re-rasterizes the scene on the CPU, this blits the CAMetalDrawable
+  texture into a CPU-readable texture inside the present command buffer and
+  analyzes what the window server actually receives: global alpha stats plus
+  per-region `{alpha_mean, rgb_mean, ...}` samples. Optional arguments:
+  `regions` (scene-space rects `[{name?, x, y, width, height, expected_alpha?}]`;
+  defaults to regions derived from the latest scene frame — every translucent
+  fill with its expected alpha, text runs, and one inter-fill gap) and
+  `wait_s` (capture timeout, default 2s; one frame is captured per call).
+  Returns `{available: false, reason}` on non-Metal targets or when no frame
+  presents in time.
 - `app_logs` — recent log records (ring buffer, 200 entries). The root log
   level is lowered to INFO for the session and restored on shutdown.
 - `app_input` — inject synthetic HDI events: `{event: {device, event_type,

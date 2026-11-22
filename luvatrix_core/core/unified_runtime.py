@@ -437,6 +437,7 @@ class UnifiedRuntime:
             state_provider=self._runtime_telemetry,
             screenshot_provider=self._mcp_screenshot,
             scene_tree_provider=self._mcp_scene_tree,
+            drawable_probe_provider=self._mcp_drawable_probe,
             log_provider=log_handler.entries,
             input_injector=self._hdi.inject_synthetic_event,
             audit_logger=self._capability_audit_logger,
@@ -499,6 +500,21 @@ class UnifiedRuntime:
             source="matrix",
             rgba=snapshot.tobytes(),
         )
+
+    def _mcp_drawable_probe(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Route app_drawable_probe to the macOS Metal scene backend (the only
+        target with a presented-drawable readback); report cleanly elsewhere."""
+        runtime = self._scene_display_runtime
+        target = getattr(runtime, "target", None)
+        backend = getattr(target, "backend", None)
+        request = getattr(backend, "request_drawable_probe", None)
+        if request is None:
+            return {
+                "available": False,
+                "reason": "drawable probe requires the macOS Metal scene target",
+            }
+        regions = arguments.get("regions")
+        return request(regions=regions, timeout_s=arguments.get("wait_s", 2.0))
 
     def _mcp_scene_tree(self) -> dict[str, Any]:
         if self._scene_buffer is None:

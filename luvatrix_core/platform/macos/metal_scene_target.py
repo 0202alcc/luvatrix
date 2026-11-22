@@ -9,6 +9,7 @@ import math
 import os
 from pathlib import Path
 import sys
+import threading
 import time
 import zlib
 from dataclasses import dataclass, field
@@ -16,6 +17,7 @@ from dataclasses import dataclass, field
 from luvatrix_core import accel
 from luvatrix_core.core.debug_capture import build_screenshot_artifact_bundle
 from luvatrix_core.core.debug_menu import DEFAULT_DEBUG_MENU_ACTIONS, DebugMenuDispatchResult, DebugMenuDispatcher
+from luvatrix_core.core.drawable_probe import DrawableProbeCapture, ProbeRegion, analyze_capture, default_probe_regions
 from luvatrix_core.core.scene_graph import (
     CircleNode,
     ClearNode,
@@ -335,6 +337,9 @@ class _MacOSMetalSceneState:
     dynamic_layer_textures: OrderedDict[tuple[int, int, str], object] = field(
         default_factory=OrderedDict
     )
+    # CPU-readable (storageModeShared) blit destination for the drawable alpha
+    # probe, reallocated only when the drawable size changes.
+    probe_texture: object = None
 
 
 @dataclass
@@ -362,6 +367,10 @@ class MacOSMetalSceneBackend:
     _debug_menu_dispatcher: DebugMenuDispatcher = field(default_factory=DebugMenuDispatcher, init=False, repr=False)
     _auto_capture_frame: int | None = field(default=None, init=False, repr=False)
     _auto_capture_done: bool = field(default=False, init=False, repr=False)
+    _drawable_probe_armed: bool = field(default=False, init=False, repr=False)
+    _drawable_probe_regions: list | None = field(default=None, init=False, repr=False)
+    _drawable_probe_capture: DrawableProbeCapture | None = field(default=None, init=False, repr=False)
+    _drawable_probe_done: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.window_system is None:
@@ -545,6 +554,8 @@ class MacOSMetalSceneBackend:
                 )
         finally:
             enc.endEncoding()
+        if self._drawable_probe_armed:
+            self._capture_drawable_probe(cmd, drawable, drawable_w, drawable_h, frame)
         if target_present_time is not None and target_present_time > 0.0:
             cmd.presentDrawable_atTime_(drawable, target_present_time)
         else:
@@ -972,6 +983,117 @@ class MacOSMetalSceneBackend:
         enriched = {"ts": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"), **payload}
         with self._debug_menu_events_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(enriched, sort_keys=True, default=str) + "\n")
+
+    def request_drawable_probe(self, *, regions: list | None = None, timeout_s: float = 2.0) -> dict:
+        """Arm a one-shot drawable alpha capture and wait for the next present.
+
+        SL-38b: the only capture path that sees the PRESENTED drawable pixels
+        before Core Animation composites them — app_screenshot re-rasterizes
+        the scene on the CPU instead. Called from the MCP HTTP thread while
+        the present loop keeps running on the render thread.
+        """
+        if self._state is None:
+            return {"available": False, "reason": "backend not initialized"}
+        try:
+            timeout = max(0.1, min(10.0, float(timeout_s)))
+        except (TypeError, ValueError):
+            timeout = 2.0
+        self._drawable_probe_capture = None
+        self._drawable_probe_regions = regions
+        self._drawable_probe_done.clear()
+        self._drawable_probe_armed = True
+        if not self._drawable_probe_done.wait(timeout):
+            self._drawable_probe_armed = False
+            return {"available": False, "reason": "no frame presented within timeout"}
+        capture = self._drawable_probe_capture
+        if capture is None:
+            return {"available": False, "reason": "capture missing after present"}
+        if capture.error is not None:
+            return {"available": False, "reason": f"drawable readback failed: {capture.error}"}
+        frame = self._latest_frame
+        if frame is None:
+            return {"available": False, "reason": "no scene frame submitted yet"}
+        viewport = _viewport(float(capture.width), float(capture.height), frame)
+        probe_regions = (
+            [r if isinstance(r, ProbeRegion) else r for r in capture.regions]
+            if capture.regions
+            else default_probe_regions(frame)
+        )
+        report = analyze_capture(
+            capture.pixels,
+            capture.width,
+            capture.height,
+            viewport=viewport,
+            logical_size=(float(frame.logical_width), float(frame.logical_height)),
+            regions=probe_regions,
+            revision=capture.revision,
+        )
+        report["available"] = True
+        return report
+
+    def _capture_drawable_probe(self, cmd, drawable, width: float, height: float, frame: SceneFrame) -> None:
+        """Blit the presented drawable into a CPU-readable texture inside the
+        same command buffer (before present), then read it back on completion
+        and stash the bytes for request_drawable_probe. One-shot per arm;
+        every failure still sets the done event with an error capture so the
+        waiting MCP call never hangs."""
+        import Metal
+
+        self._drawable_probe_armed = False
+        try:
+            state = self._state
+            if state is None:
+                raise RuntimeError("backend not initialized")
+            src = drawable.texture()
+            tex_w, tex_h = int(src.width()), int(src.height())
+            probe = state.probe_texture
+            if probe is None or int(probe.width()) != tex_w or int(probe.height()) != tex_h:
+                desc = Metal.MTLTextureDescriptor.texture2DDescriptorWithPixelFormat_width_height_mipmapped_(
+                    src.pixelFormat(), tex_w, tex_h, False
+                )
+                desc.setStorageMode_(_MTL_RESOURCE_STORAGE_MODE_SHARED)
+                desc.setUsage_(_MTL_TEXTURE_USAGE_SHADER_READ)
+                probe = state.device.newTextureWithDescriptor_(desc)
+                if probe is None:
+                    raise RuntimeError("probe texture allocation failed")
+                state.probe_texture = probe
+            blit = cmd.blitCommandEncoder()  # zero-arg selector: no trailing underscore
+            if blit is None:
+                raise RuntimeError("no blit encoder for drawable probe")
+            blit.copyFromTexture_sourceLevel_sourceSlice_sourceOrigin_sourceSize_toTexture_destinationLevel_destinationSlice_destinationOrigin_(
+                src, 0, 0, (0, 0, 0), (tex_w, tex_h, 1), probe, 0, 0, (0, 0, 0)
+            )
+            blit.endEncoding()
+            regions = self._drawable_probe_regions
+            revision = int(getattr(frame, "revision", 0))
+
+            def _on_probe_complete(_cmd) -> None:
+                try:
+                    row_bytes = tex_w * 4
+                    buf = bytearray(row_bytes * tex_h)
+                    probe.getBytes_bytesPerRow_fromRegion_mipmapLevel_(
+                        buf, row_bytes, ((0, 0, 0), (tex_w, tex_h, 1)), 0
+                    )
+                    self._drawable_probe_capture = DrawableProbeCapture(
+                        pixels=bytes(buf), width=tex_w, height=tex_h,
+                        revision=revision, regions=regions,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    self._drawable_probe_capture = DrawableProbeCapture(
+                        pixels=b"", width=tex_w, height=tex_h,
+                        revision=revision, regions=regions, error=repr(exc),
+                    )
+                finally:
+                    self._drawable_probe_done.set()
+
+            cmd.addCompletedHandler_(_on_probe_complete)
+        except Exception as exc:  # noqa: BLE001
+            self._drawable_probe_capture = DrawableProbeCapture(
+                pixels=b"", width=int(width), height=int(height),
+                revision=int(getattr(frame, "revision", 0)),
+                regions=self._drawable_probe_regions, error=repr(exc),
+            )
+            self._drawable_probe_done.set()
 
 
 @dataclass
