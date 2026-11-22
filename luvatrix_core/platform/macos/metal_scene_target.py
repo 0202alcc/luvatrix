@@ -50,6 +50,35 @@ from luvatrix_core.targets.scene_target import SceneRenderTarget
 _MTL_PRIMITIVE_TYPE_TRIANGLE = 3
 _TEXTURE_USAGE_RENDER_TARGET = 4
 
+# Drawable-probe blit bindings, shortest first. The 6-arg whole-texture copy
+# avoids passing MTLOrigin/MTLSize by value, so it needs the least PyObjC
+# bridge metadata on the concrete driver class (Alec's log: AGXG17GFamilyBlitContext);
+# the probe texture is always allocated at the drawable's size, so a whole-
+# texture copy is exactly the semantics wanted. The 9-arg fallback is the
+# canonical SLICE-FIRST form from the Metal headers — the level-first
+# ordering ("copyFromTexture:sourceLevel:sourceSlice:...") bound before does
+# not exist in Metal, which is the AttributeError the Mac reported (the old
+# test fake had mirrored the same wrong name, hiding the mismatch).
+_BLIT_COPY_CANDIDATES: tuple[tuple[str, int], ...] = (
+    ("copyFromTexture_sourceSlice_sourceLevel_toTexture_destinationSlice_destinationLevel_", 6),
+    (
+        "copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin_",
+        9,
+    ),
+)
+
+
+def _resolve_blit_copy(blit):
+    """First (callable, selector_name, arity) from _BLIT_COPY_CANDIDATES that
+    the encoder actually exposes — driver-class surfaces are resolved by
+    getattr, exactly the lookup that fails with AttributeError on real Metal."""
+    for name, arity in _BLIT_COPY_CANDIDATES:
+        candidate = getattr(blit, name, None)
+        if candidate is not None:
+            return candidate, name, arity
+    tried = ", ".join(name for name, _ in _BLIT_COPY_CANDIDATES)
+    raise RuntimeError(f"no usable blit copy binding on {type(blit).__name__} (tried: {tried})")
+
 
 _SCENE_MSL = """
 #include <metal_stdlib>
@@ -373,6 +402,7 @@ class MacOSMetalSceneBackend:
     _drawable_probe_capture: DrawableProbeCapture | None = field(default=None, init=False, repr=False)
     _drawable_probe_done: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
     _drawable_probe_present_hook: object = field(default=None, init=False, repr=False)
+    _drawable_probe_binding: str | None = field(default=None, init=False, repr=False)
     # Runner anomaly (SL-38c): "slow frame #1" printed twice in one boot — the
     # counter is per-instance, so two instances in one process would put
     # arm-state and rendering on different objects and misfire the probe.
@@ -1026,6 +1056,7 @@ class MacOSMetalSceneBackend:
         except (TypeError, ValueError):
             timeout = 2.0
         self._drawable_probe_capture = None
+        self._drawable_probe_binding = None
         self._drawable_probe_regions = regions
         self._drawable_probe_done.clear()
         self._drawable_probe_armed = True
@@ -1067,6 +1098,7 @@ class MacOSMetalSceneBackend:
         )
         report["available"] = True
         report["backend_instance"] = self._instance_index
+        report["binding"] = self._drawable_probe_binding
         return report
 
     def _capture_drawable_probe(self, cmd, drawable, width: float, height: float, frame: SceneFrame) -> None:
@@ -1105,9 +1137,14 @@ class MacOSMetalSceneBackend:
             if blit is None:
                 raise RuntimeError("no blit encoder for drawable probe")
             try:
-                blit.copyFromTexture_sourceLevel_sourceSlice_sourceOrigin_sourceSize_toTexture_destinationLevel_destinationSlice_destinationOrigin_(
-                    src, 0, 0, (0, 0, 0), (tex_w, tex_h, 1), probe, 0, 0, (0, 0, 0)
-                )
+                copy_call, binding_name, arity = _resolve_blit_copy(blit)
+                self._drawable_probe_binding = binding_name
+                if arity == 6:
+                    copy_call(src, 0, 0, probe, 0, 0)
+                else:
+                    copy_call(
+                        src, 0, 0, (0, 0, 0), (tex_w, tex_h, 1), probe, 0, 0, (0, 0, 0)
+                    )
             finally:
                 blit.endEncoding()
             regions = self._drawable_probe_regions

@@ -1059,6 +1059,7 @@ class TestDrawableProbeCapture(unittest.TestCase):
         cmd = _FakeCommandBuffer()
         with unittest.mock.patch.dict("sys.modules", {"Metal": _fake_metal_module()}):
             backend._capture_drawable_probe(cmd, _FakeDrawable(drawable_tex), 4.0, 2.0, self._frame())
+            cmd.handlers[0](None)
         capture = backend._drawable_probe_capture
         self.assertIsNotNone(capture)
         self.assertIsNone(capture.error, capture.error)
@@ -1076,6 +1077,7 @@ class TestDrawableProbeCapture(unittest.TestCase):
         cmd.blit = _FakeBlitEncoder(selector_surface={nine_arg})
         with unittest.mock.patch.dict("sys.modules", {"Metal": _fake_metal_module()}):
             backend._capture_drawable_probe(cmd, _FakeDrawable(drawable_tex), 4.0, 2.0, self._frame())
+            cmd.handlers[0](None)
         capture = backend._drawable_probe_capture
         self.assertIsNotNone(capture)
         self.assertIsNone(capture.error, capture.error)
