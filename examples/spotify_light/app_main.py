@@ -186,11 +186,18 @@ class SpotifyLightApp(App):
         # (0 when the retained band carries the offset); _render_cull_lo/hi
         # bound the draw window in that same space; _last_scroll_build_t and
         # _scroll_settle_due drive the re-window throttle and settle render.
+        # The band is GESTURE-scoped (round 67, runner's encode finding):
+        # resting frames render bandless so non-scroll frames never pay the
+        # tier-split encode tax; _band_engaged flips on the first visible
+        # tick of a gesture and off at the settle render.
         self._render_scroll_sub = 0.0
         self._render_cull_lo = 0.0
         self._render_cull_hi = 0.0
         self._last_scroll_build_t = 0.0
         self._scroll_settle_due: float | None = None
+        self._band_engaged = False
+        self._last_scroll_published = 0.0
+        self._hits_content_space = False
 
         # Under-glass pill (SL-36): a real NSGlassEffectView below the render
         # surface replaces the pill's simulated plate on capable hosts.
@@ -830,9 +837,12 @@ class SpotifyLightApp(App):
             self.invalidate()
 
         # SL-41: the gesture went quiet — one rebuild recentres the draw
-        # window and refreshes hover/thumb after transform-only revisions.
+        # window and refreshes hover/thumb, and the band DISENGAGES: the
+        # resting frame is the pre-SL-41 bandless shape (round 67: non-scroll
+        # frames must not pay the tier-split encode tax).
         if self._scroll_settle_due is not None and now >= self._scroll_settle_due:
             self._scroll_settle_due = None
+            self._band_engaged = False
             self.invalidate()
 
     # -- input --------------------------------------------------------------------
@@ -953,20 +963,34 @@ class SpotifyLightApp(App):
         self._publish_content_scroll()
 
     def _publish_content_scroll(self) -> None:
-        """Content offset moved (wheel / scrollbar drag). Band mode: publish
-        a transform-only revision and let the throttle + settle render keep
-        cull, hover, and the thumb honest; legacy targets re-render per tick
-        as today."""
+        """Content offset moved (wheel / scrollbar drag). Band mode: the
+        gesture's first visible tick ENGAGES the band with one banded
+        rebuild; streak ticks publish transform-only; the settle render
+        disengages back to a bandless resting frame. Clamped boundary ticks
+        and sub-pixel jitter publish nothing — they must not churn renders
+        or presents (round 67 idle-churn finding). Legacy targets re-render
+        per tick as today."""
         if not self._band_mode():
             self.invalidate()
             return
         now = time.monotonic()
+        if not self._band_engaged:
+            if abs(self.content_scroll - self._last_scroll_published) < 0.1:
+                return  # clamped / sub-pixel noise: nothing visible to show
+            self._band_engaged = True
+            self._scroll_settle_due = now + SCROLL_SETTLE_S
+            self.invalidate()  # no banded frame exists yet: rebuild, then streak
+            return
+        if abs(self.content_scroll - self._last_scroll_published) < 0.1:
+            return  # boundary wiggle mid-gesture: nothing new to publish
         self._scroll_settle_due = now + SCROLL_SETTLE_S
         if now - self._last_scroll_build_t >= SCROLL_REWINDOW_INTERVAL_S:
             self.invalidate()  # throttle window elapsed: rebuild the draw window
             return
         if self.ctx.set_scene_content_offset(0.0, self.content_scroll) is None:
             self.invalidate()  # no retained frame to transform yet
+        else:
+            self._last_scroll_published = self.content_scroll
 
     @staticmethod
     def _clamp_scroll(value: float, content: float, viewport: float) -> float:
@@ -974,10 +998,12 @@ class SpotifyLightApp(App):
         return max(0.0, min(value, max_offset))
 
     def _dispatch_click(self, x: float, y: float) -> None:
-        # Band mode records content hits in content space; map the live
+        # Banded renders record content hits in content space; map the live
         # scroll offset onto the click so mid-gesture taps still land
-        # (SL-41). Chrome regions stay screen-space. Legacy: byte-identical.
-        scroll = self.content_scroll if self._band_mode() else 0.0
+        # (SL-41). The recorded frame's own coordinate space decides — a
+        # click landing between an engage scroll tick and its rebuild must
+        # not mis-map. Chrome regions stay screen-space. Legacy: identical.
+        scroll = self.content_scroll if self._hits_content_space else 0.0
         for region in reversed(self._hits):
             hit_y = y + scroll if region.scrollable else y
             if region.contains(x, hit_y):
@@ -1985,7 +2011,7 @@ class SpotifyLightApp(App):
         clear = ((0, 0, 0, 0) if (self._pill_glass_active or self._window_material_active)
                  else sl_views.BG)
         if self.ctx.supports_scene_graph:
-            if self._band_mode():
+            if self._band_mode() and self._band_engaged:
                 # Content lives at z 1..4 and draws un-translated; the target
                 # applies content_offset as a transform on that band only.
                 with self.scene_frame(clear=clear, retained=True,
@@ -2004,9 +2030,11 @@ class SpotifyLightApp(App):
         height = float(self.ctx.display_height_px)
         out = sl_views.FrameOut()
         mouse = self._mouse
-        band = self._band_mode()
-        self._render_scroll_sub = 0.0 if band else self.content_scroll
-        if band:
+        banded = self._band_mode() and self._band_engaged
+        self._render_scroll_sub = 0.0 if banded else self.content_scroll
+        self._hits_content_space = banded
+        self._last_scroll_published = self.content_scroll
+        if banded:
             # Content draws in content space under the band: cull one window
             # of margin around the live scroll so off-screen cards/rows never
             # enter the frame, and give content views a content-space mouse

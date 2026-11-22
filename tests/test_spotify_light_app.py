@@ -5612,6 +5612,19 @@ class TestScrollContentBand:
     def _enable_band(ctx) -> None:
         ctx.set_scene_content_z_band_supported(True)
 
+    def _engage(self, app, ctx, ticks: int = 2) -> None:
+        """The gesture's first wheel tick ENGAGES the band: it cannot go
+        transform-only (no banded frame exists yet), so it falls back to one
+        full banded rebuild. Streak ticks after that are transform-only.
+        The pre-tick lands the bandless resting frame first — it is what
+        publishes the content extent the scroll clamps against."""
+        _tick(app, ctx, 2)
+        app._mouse = (600.0, 400.0)
+        app._apply_scroll(-120.0)
+        assert app._render_requested, "the gesture's first tick rebuilds banded"
+        assert app._band_engaged, "a visible scroll tick engages the band"
+        _tick(app, ctx, ticks)
+
     @staticmethod
     def _library(app, ctx, count: int = 48):
         app.authenticated = True
@@ -5632,12 +5645,25 @@ class TestScrollContentBand:
         app.playlist_detail = (playlist, tracks)
 
     # -- frame shape --------------------------------------------------------
-    def test_frame_carries_offset_retained_and_band(self, app_ctx):
+    def test_resting_frames_stay_bandless_and_unretained(self, app_ctx):
+        """THE encode gate: a frame nobody is scrolling through is EXACTLY
+        the pre-SL-41 shape — no band, no retained flag, zero offset. Probe-
+        driven non-scroll frames must never pay the tier-split tax."""
         app, ctx, buf = app_ctx
         self._enable_band(ctx)
         self._library(app, ctx)
         app.content_scroll = 120.0
         _tick(app, ctx, 2)
+        frame = buf.latest_frame()
+        assert frame.content_z_band is None, "resting frames carry no z band"
+        assert not frame.retained, "resting frames are not retained"
+        assert frame.content_offset_y == 0.0, "resting frames bake the translation"
+
+    def test_frame_carries_offset_retained_and_band(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._library(app, ctx)
+        self._engage(app, ctx)
         frame = buf.latest_frame()
         assert frame.retained, "the hot path publishes retained frames"
         assert frame.content_z_band == (1.0, 4.0), "content z 1..4 scrolls; chrome z>=5 and backstop z=0 stay"
@@ -5650,11 +5676,10 @@ class TestScrollContentBand:
         app, ctx, buf = app_ctx
         self._enable_band(ctx)
         self._library(app, ctx)
-        _tick(app, ctx, 2)
+        self._engage(app, ctx)
         title_y = next(n.y for n in _nodes(buf, TextNode) if n.text == "Your Library")
-        app.content_scroll = 300.0
-        app.invalidate()
-        _tick(app, ctx, 2)
+        app._mouse = (600.0, 400.0)
+        app._apply_scroll(-180.0)  # streak tick: transform-only to 300
         title = next(n for n in _nodes(buf, TextNode) if n.text == "Your Library")
         assert title.y == title_y, "content-space y must not bake the scroll offset"
         assert buf.latest_frame().content_offset_y == 300.0
@@ -5663,13 +5688,13 @@ class TestScrollContentBand:
         app, ctx, buf = app_ctx
         self._enable_band(ctx)
         self._library(app, ctx)
-        _tick(app, ctx, 2)
+        self._engage(app, ctx)
         rail = next(n for n in _nodes(buf, TextNode) if n.text == "Spotify Light")
         assert rail.z_index >= 5, "sidebar chrome must renumber out of the content band"
         rail_y = rail.y
-        app.content_scroll = 300.0
-        app.invalidate()
-        _tick(app, ctx, 2)
+        app._mouse = (600.0, 400.0)
+        app._apply_scroll(-180.0)
+        _tick(app, ctx, 1)
         rail2 = next(n for n in _nodes(buf, TextNode) if n.text == "Spotify Light")
         assert rail2.y == rail_y, "chrome draws at screen coordinates — no offset baked, ever"
 
@@ -5678,19 +5703,19 @@ class TestScrollContentBand:
         app, ctx, buf = app_ctx
         self._enable_band(ctx)
         self._tracks(app, ctx)
-        _tick(app, ctx, 2)
+        self._engage(app, ctx)  # gesture underway: banded frame at 120 exists
         before = buf.latest_frame()
         rev_before = buf.revision
 
         app._mouse = (600.0, 400.0)
         app._apply_scroll(-120.0)
 
-        assert app.content_scroll == 120.0
+        assert app.content_scroll == 240.0
         assert not app._render_requested, "a hot-path tick must NOT schedule a rebuild"
         after = buf.latest_frame()
         assert buf.revision == rev_before + 1, "the offset publishes immediately"
         assert after.nodes is before.nodes, "transform-only revision reuses the exact node tuple"
-        assert after.content_offset_y == 120.0
+        assert after.content_offset_y == 240.0
         assert after.content_z_band == (1.0, 4.0), "the band survives the transform-only revision"
 
     def test_wheel_throttled_rewindow_rerenders(self, app_ctx, monkeypatch):
@@ -5709,23 +5734,42 @@ class TestScrollContentBand:
         assert buf.latest_frame().content_offset_y == 120.0
 
     def test_settle_render_fires_after_the_gesture(self, app_ctx, monkeypatch):
-        """The final crisp frame lands once the wheel stream stops: hover,
-        thumb, and the cull window re-sync to the resting offset."""
+        """The final crisp frame lands once the wheel stream stops — and it
+        lands BANDLESS: the settle render disengages the band so the resting
+        frame (and every idle frame after it) is the pre-SL-41 shape with
+        the translation baked back in."""
         app, ctx, buf = app_ctx
         self._enable_band(ctx)
         self._tracks(app, ctx)
-        monkeypatch.setattr(app_main, "SCROLL_SETTLE_S", 0.0)
-        _tick(app, ctx, 2)
-        before = buf.latest_frame()
+        # The streak must deterministically take the transform-only branch:
+        # software-rendered ticks can burn the real 0.1s re-window throttle
+        # all by themselves (that path has its own test).
+        monkeypatch.setattr(app_main, "SCROLL_REWINDOW_INTERVAL_S", 999.0)
+        _tick(app, ctx, 2)  # bandless rest at 0: ground-truth content space
+        rest_y = next(n.y for n in _nodes(buf, TextNode) if n.text == "T005")
 
         app._mouse = (600.0, 400.0)
         app._apply_scroll(-120.0)
-        assert buf.latest_frame().nodes is before.nodes, "tick itself stays transform-only"
+        assert app._render_requested, "the first tick engages with a banded rebuild"
+        _tick(app, ctx, 2)  # banded frame at 120; the 0.12s settle has not fired
+        before = buf.latest_frame()
+        assert before.content_z_band == (1.0, 4.0)
+
+        monkeypatch.setattr(app_main, "SCROLL_SETTLE_S", 0.0)
+        app._mouse = (600.0, 400.0)  # ticks re-read the (empty) input mouse
+        app._apply_scroll(-120.0)  # streak tick: transform-only to 240
+        assert not app._render_requested, "a streak tick must not rebuild"
+        assert buf.latest_frame().nodes is before.nodes, "the streak stays transform-only"
+        assert buf.latest_frame().content_offset_y == 240.0
 
         _tick(app, ctx, 1)
         after = buf.latest_frame()
         assert after.nodes is not before.nodes, "the settle render rebuilds the window"
-        assert after.content_offset_y == 120.0, "the settle lands where the gesture ended"
+        assert after.content_z_band is None, "the settle render rests the band"
+        assert after.content_offset_y == 0.0
+        title = next(n for n in _nodes(buf, TextNode) if n.text == "T005")
+        assert abs(title.y - (rest_y - 240.0)) < 1.0, \
+            "the resting frame bakes the translation where the gesture ended"
 
     def test_sidebar_wheel_still_renders_every_tick(self, app_ctx):
         """Scope: only the content area is on the retained path — the rail's
@@ -5751,7 +5795,7 @@ class TestScrollContentBand:
         app, ctx, buf = app_ctx
         self._enable_band(ctx)
         self._tracks(app, ctx, count=40)
-        _tick(app, ctx, 2)
+        self._engage(app, ctx)  # banded gesture underway at scroll 120
         region = next(r for r in app._hits if r.action == "play_track_in_context")
         assert region.scrollable, "content hits must be flagged scrollable"
 
@@ -5760,8 +5804,8 @@ class TestScrollContentBand:
         calls = []
         monkeypatch.setattr(app, "_dispatch_action",
                             lambda action, payload, x: calls.append((action, payload)))
-        # The row now shows at content_y - scroll on screen.
-        app._dispatch_click(region.x + 4, region.y - 200.0 + 2)
+        # The row now shows at content_y - scroll on screen (120 + 200 live).
+        app._dispatch_click(region.x + 4, region.y - 320.0 + 2)
         assert calls and calls[0][0] == "play_track_in_context", \
             "the click must land on the row that sits under the cursor NOW"
 
@@ -5790,7 +5834,7 @@ class TestScrollContentBand:
         app, ctx, buf = app_ctx
         self._enable_band(ctx)
         self._tracks(app, ctx)
-        _tick(app, ctx, 2)
+        self._engage(app, ctx)  # banded window recentred at scroll 120
         texts = _texts(buf)
         assert "T005" in texts, "rows inside the viewport draw"
         assert "T025" in texts, "rows inside the margin draw"
@@ -5808,7 +5852,7 @@ class TestScrollContentBand:
         app, ctx, buf = app_ctx
         self._enable_band(ctx)
         self._tracks(app, ctx)
-        _tick(app, ctx, 2)
+        self._engage(app, ctx)
         thumb = next(n for n in _nodes(buf, RoundedRectNode) if n.x == 1280 - 7)
         assert thumb.z_index == 5, "the thumb is chrome — outside the content band"
         y0 = thumb.y
@@ -5817,6 +5861,43 @@ class TestScrollContentBand:
         _tick(app, ctx, 2)
         thumb2 = next(n for n in _nodes(buf, RoundedRectNode) if n.x == 1280 - 7)
         assert thumb2.y > y0, "re-window renders keep the thumb honest"
+
+    # -- publish hygiene: noise must not churn renders or presents -----------
+    def test_noop_ticks_at_the_scroll_bounds_stay_silent(self, app_ctx):
+        """Clamped wheel noise (trackpad momentum tails at a boundary) must
+        not arm the settle, publish an offset, or schedule a render — the
+        pre-SL-41 path deduped these away at submit time."""
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._tracks(app, ctx)
+        _tick(app, ctx, 2)
+        rev0 = buf.revision
+        assert app.content_scroll == 0.0
+
+        app._mouse = (600.0, 400.0)
+        app._apply_scroll(60.0)  # clamps to 0: nothing moved
+        assert not app._render_requested, "a no-op tick must not render"
+        assert app._scroll_settle_due is None, "a no-op tick must not arm the settle"
+        _tick(app, ctx, 3)
+        assert not app._render_requested
+        assert buf.revision == rev0, "a no-op tick must not present either"
+
+    def test_sub_pixel_creep_does_not_publish(self, app_ctx):
+        """Sub-pixel trackpad jitter accumulates silently: publishes start at
+        a visible delta (0.1 logical px), not at the first float wobble."""
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._tracks(app, ctx)
+        _tick(app, ctx, 2)
+        rev0 = buf.revision
+
+        app._mouse = (600.0, 400.0)
+        app._apply_scroll(-0.05)
+        assert app.content_scroll == 0.05
+        assert not app._render_requested and buf.revision == rev0, \
+            "invisible creep neither renders nor presents"
+        app._apply_scroll(-5.0)
+        assert app._render_requested, "a visible delta engages the gesture"
 
     # -- legacy fallback -------------------------------------------------------
     def test_targets_without_band_support_keep_the_legacy_path(self, app_ctx):
