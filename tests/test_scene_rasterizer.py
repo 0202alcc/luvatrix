@@ -132,3 +132,80 @@ class TestLayerAlphaBlending:
         img = rasterize_scene_frame(_frame(nodes))
         lum = int(img[0, 0, :3].sum()) / 3
         assert 120 <= lum <= 135, f"black at half alpha over white must land mid-gray, got {lum}"
+
+
+class TestContentZBand:
+    """SL-41: with ``content_z_band`` set, the offset translates only the
+    band's nodes — the z=0 window backstop and the z>=5 chrome (scrollbar,
+    sidebar, pill) stay anchored while content scrolls under them."""
+
+    @staticmethod
+    def _banded_frame(nodes, *, band=(1.0, 4.0), offset_y=4.0) -> SceneFrame:
+        return SceneFrame(
+            revision=1,
+            logical_width=16,
+            logical_height=16,
+            display_width=16,
+            display_height=16,
+            ts_ns=0,
+            nodes=tuple(nodes),
+            content_offset_y=offset_y,
+            content_z_band=band,
+        )
+
+    def test_only_band_nodes_shift(self):
+        nodes = [
+            ClearNode(color_rgba=(0, 0, 0, 0)),
+            RectNode(x=0, y=0, width=16, height=2, color_rgba=(200, 0, 0, 255), z_index=0),
+            RectNode(x=0, y=6, width=16, height=2, color_rgba=(0, 200, 0, 255), z_index=2),
+            RectNode(x=0, y=10, width=16, height=2, color_rgba=(0, 0, 200, 255), z_index=5),
+        ]
+        img = rasterize_scene_frame(self._banded_frame(nodes))
+        assert tuple(int(v) for v in img[1, 8, :3]) == (200, 0, 0), \
+            "z=0 backstop must NOT move with the content offset"
+        assert tuple(int(v) for v in img[2, 8, :3]) == (0, 200, 0), \
+            "band node (z=2) paints at y=6-4=2"
+        assert int(img[6, 8, 3]) == 0, "the band node's vacated rows stay clear"
+        assert tuple(int(v) for v in img[11, 8, :3]) == (0, 0, 200), \
+            "z=5 chrome must NOT move with the content offset"
+
+    def test_compositing_order_survives_the_tier_split(self):
+        """A fixed plate sandwiched between two band rows in z still paints
+        between them — tiers are z-contiguous so the split is order-safe."""
+        nodes = [
+            ClearNode(color_rgba=(0, 0, 0, 0)),
+            RectNode(x=0, y=4, width=16, height=2, color_rgba=(200, 0, 0, 255), z_index=2),
+            RectNode(x=0, y=0, width=16, height=16, color_rgba=(0, 0, 200, 255), z_index=5),
+            RectNode(x=0, y=8, width=16, height=2, color_rgba=(0, 200, 0, 255), z_index=3),
+        ]
+        # offset 4: red z=2 -> rows 0-1, green z=3 -> rows 4-5; the z=5 plate
+        # paints OVER both where they land.
+        img = rasterize_scene_frame(self._banded_frame(nodes))
+        assert tuple(int(v) for v in img[0, 8, :3]) == (0, 0, 200)
+        assert tuple(int(v) for v in img[4, 8, :3]) == (0, 0, 200)
+
+    def test_no_band_keeps_whole_frame_offset(self):
+        nodes = [
+            ClearNode(color_rgba=(0, 0, 0, 0)),
+            RectNode(x=0, y=6, width=16, height=2, color_rgba=(0, 0, 200, 255), z_index=5),
+        ]
+        img = rasterize_scene_frame(self._banded_frame(nodes, band=None))
+        assert tuple(int(v) for v in img[2, 8, :3]) == (0, 0, 200), \
+            "legacy whole-frame semantics: chrome z=5 shifts with the offset too"
+
+    def test_out_buffer_is_reused_across_tiers(self):
+        """CpuSceneTarget reuses one raster buffer; tier sub-passes must all
+        composite into it (the backstop clear must not wipe earlier tiers —
+        tiers draw below -> band -> above in one buffer)."""
+        nodes = [
+            ClearNode(color_rgba=(0, 0, 0, 0)),
+            RectNode(x=0, y=0, width=16, height=2, color_rgba=(200, 0, 0, 255), z_index=0),
+            RectNode(x=0, y=6, width=16, height=2, color_rgba=(0, 200, 0, 255), z_index=2),
+            RectNode(x=0, y=10, width=16, height=2, color_rgba=(0, 0, 200, 255), z_index=5),
+        ]
+        out = np.zeros((16, 16, 4), dtype=np.uint8)
+        img = rasterize_scene_frame(self._banded_frame(nodes), out=out)
+        assert img is out or img.base is out, "caller's buffer must be reused"
+        assert tuple(int(v) for v in img[1, 8, :3]) == (200, 0, 0)
+        assert tuple(int(v) for v in img[2, 8, :3]) == (0, 200, 0)
+        assert tuple(int(v) for v in img[11, 8, :3]) == (0, 0, 200)

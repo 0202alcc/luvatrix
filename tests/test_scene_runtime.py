@@ -83,6 +83,121 @@ class _FakeSensorManager(SensorManagerThread):
         self.stopped += 1
 
 
+class _BandAwareSceneTarget(_RecordingSceneTarget):
+    """Scene target that honors SceneFrame.content_z_band (Metal macOS and
+    the CPU rasterizer do; the protocol default is False)."""
+
+    def supports_content_z_band(self) -> bool:
+        return True
+
+
+class ContentZBandWiringTests(unittest.TestCase):
+    """SL-41: the app gates its retained scroll hot path on the target's
+    advertised band support — a target that would apply the offset to the
+    whole frame (or ignore it) must keep the app on the legacy path."""
+
+    def _write_app(self, app_dir: Path, loop_lines: list[str]) -> None:
+        (app_dir / "app.toml").write_text(
+            "\n".join(
+                [
+                    'app_id = "test.scene.zband"',
+                    'protocol_version = "1"',
+                    'entrypoint = "app_main:create"',
+                    'required_capabilities = ["window.write"]',
+                    "optional_capabilities = []",
+                ]
+            )
+        )
+        (app_dir / "app_main.py").write_text(
+            "\n".join(
+                [
+                    "class _App:",
+                    "    def init(self, ctx):",
+                    "        pass",
+                    "    def loop(self, ctx, dt):",
+                    *loop_lines,
+                    "    def stop(self, ctx):",
+                    "        pass",
+                    "def create():",
+                    "    return _App()",
+                ]
+            )
+        )
+
+    def _run(self, app_dir: Path, scene_target) -> None:
+        runtime = UnifiedRuntime(
+            matrix=WindowMatrix(height=2, width=2),
+            target=_RecordingMatrixTarget(),
+            scene_target=scene_target,
+            render_mode="scene",
+            hdi=HDIThread(source=_NoopHDISource()),
+            sensor_manager=_FakeSensorManager(),
+            capability_decider=lambda _cap: True,
+        )
+        runtime.run_app(app_dir, max_ticks=2, target_fps=1000)
+
+    def test_begin_scene_frame_threads_the_band_to_the_frame(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            self._write_app(
+                app_dir,
+                [
+                    "        ctx.begin_scene_frame(content_offset=(0.0, 12.0), retained=True, content_z_band=(1.0, 4.0))",
+                    "        ctx.clear_scene((0, 0, 0, 255))",
+                    "        ctx.draw_rect(x=0, y=0, width=1, height=1, color_rgba=(255, 0, 0, 255), z_index=2)",
+                    "        ctx.finalize_scene_frame()",
+                ],
+            )
+            scene_target = _BandAwareSceneTarget()
+            self._run(app_dir, scene_target)
+            frame = scene_target.presented[-1]
+            self.assertEqual(frame.content_z_band, (1.0, 4.0))
+            self.assertEqual(frame.content_offset_y, 12.0)
+            self.assertTrue(frame.retained)
+
+    def test_begin_scene_frame_band_defaults_to_none(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            self._write_app(
+                app_dir,
+                [
+                    "        ctx.begin_scene_frame()",
+                    "        ctx.clear_scene((0, 0, 0, 255))",
+                    "        ctx.finalize_scene_frame()",
+                ],
+            )
+            scene_target = _BandAwareSceneTarget()
+            self._run(app_dir, scene_target)
+            self.assertIsNone(scene_target.presented[-1].content_z_band)
+
+    def test_band_capability_follows_the_scene_target(self) -> None:
+        loop_lines = [
+            "        ctx.begin_scene_frame()",
+            "        ctx.clear_scene((0, 0, 0, 255))",
+            "        w = 1.0 if getattr(ctx, 'supports_scene_content_z_band', False) else 2.0",
+            "        ctx.draw_rect(x=0, y=0, width=w, height=1, color_rgba=(255, 0, 0, 255))",
+            "        ctx.finalize_scene_frame()",
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            self._write_app(app_dir, loop_lines)
+            aware = _BandAwareSceneTarget()
+            self._run(app_dir, aware)
+            rects = [n for n in aware.presented[-1].nodes if isinstance(n, RectNode)]
+            self.assertEqual(rects[-1].width, 1.0, "band-aware target must advertise support")
+
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = Path(td)
+            self._write_app(app_dir, loop_lines)
+            plain = _RecordingSceneTarget()
+            self._run(app_dir, plain)
+            rects = [n for n in plain.presented[-1].nodes if isinstance(n, RectNode)]
+            self.assertEqual(rects[-1].width, 2.0, "targets without support keep the legacy gate")
+
+    def test_cpu_scene_target_advertises_band_support(self) -> None:
+        self.assertTrue(CpuSceneTarget(_RecordingMatrixTarget()).supports_content_z_band())
+
+
 class SceneRuntimeTests(unittest.TestCase):
     def test_auto_mode_honors_manifest_matrix_preference(self) -> None:
         with tempfile.TemporaryDirectory() as td:

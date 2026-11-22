@@ -575,3 +575,23 @@ class FrameTimeProbeBridgeTests(unittest.TestCase):
         response = _call_tool(bridge, "app_frame_time_probe")
         self.assertTrue(response["result"]["isError"])
         self.assertIn("unavailable", response["result"]["content"][0]["text"])
+
+    def test_drive_flag_is_declared_and_forwarded(self) -> None:
+        """drive=false (Round 65): passive recording for hand-scrolled
+        real-content measurements — the runner asked for before/after gap
+        data on the scroll rebuild refactor."""
+        calls: list[dict] = []
+
+        def provider(arguments: dict) -> dict:
+            calls.append(arguments)
+            return {"available": True, "drive": False}
+
+        bridge = self._bridge_with_provider(provider)
+        listing = bridge.dispatcher().handle_payload({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        assert listing is not None
+        tool = next(t for t in listing["result"]["tools"] if t["name"] == "app_frame_time_probe")
+        self.assertIn("drive", tool["inputSchema"]["properties"])
+
+        payload = _tool_payload(_call_tool(bridge, "app_frame_time_probe", {"frames": 2, "drive": False}))
+        self.assertTrue(payload["available"])
+        self.assertEqual(calls, [{"frames": 2, "drive": False}])

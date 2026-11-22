@@ -5559,3 +5559,247 @@ class TestWindowMaterial:
         gaps = [r for r in regions if r.name.startswith("gap")]
         assert gaps and all(r.expected_alpha == 0 for r in gaps), \
             "the gap region keeps its zero expectation"
+
+
+# ---------------------------------------------------------------------------
+# SL-41 retained scroll hot path: content-space scene + GPU content offset
+# ---------------------------------------------------------------------------
+class TestScrollContentBand:
+    """Round 64 A/B data exonerated the VEV/blur stack at idle-home: the gap
+    phase (~13ms/present) is the app rebuilding every primitive per wheel
+    tick. The hot path publishes the scrollable content (z 1..4) in stable
+    CONTENT coordinates on a retained frame whose content_offset the GPU
+    applies; chrome (z>=5: scrollbar, scrims, sidebar, pill, popup, toasts)
+    and the z=0 window backstop stay anchored. Wheel ticks become
+    transform-only revisions; throttled re-window renders (plus a settle
+    render after the gesture) keep culling, hover, and the thumb honest.
+    Targets without band support keep today's translate-everything path."""
+
+    # -- helpers ----------------------------------------------------------
+    @staticmethod
+    def _enable_band(ctx) -> None:
+        ctx.set_scene_content_z_band_supported(True)
+
+    @staticmethod
+    def _library(app, ctx, count: int = 48):
+        app.authenticated = True
+        app._bootstrap_done = True
+        app.view = "library"
+        app.playlists = tuple(_playlist(f"Mix {i:02d}") for i in range(count))
+
+    @staticmethod
+    def _tracks(app, ctx, count: int = 200):
+        artist = _artist("Nirvana")
+        album = _album("Nevermind", artist)
+        playlist = _playlist("Biglist", count=count)
+        tracks = [_track(f"T{i:03d}", artist, album, n=i + 1) for i in range(count)]
+        app.authenticated = True
+        app._bootstrap_done = True
+        app.playlists = [playlist]
+        app.view = "playlist:pl-Biglist"
+        app.playlist_detail = (playlist, tracks)
+
+    # -- frame shape --------------------------------------------------------
+    def test_frame_carries_offset_retained_and_band(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._library(app, ctx)
+        app.content_scroll = 120.0
+        _tick(app, ctx, 2)
+        frame = buf.latest_frame()
+        assert frame.retained, "the hot path publishes retained frames"
+        assert frame.content_z_band == (1.0, 4.0), "content z 1..4 scrolls; chrome z>=5 and backstop z=0 stay"
+        assert frame.content_offset_y == 120.0
+
+    def test_content_geometry_is_stable_across_scroll_positions(self, app_ctx):
+        """THE rebuild killer: a node that did not change keeps its exact
+        content-space y no matter where scroll sits — only the frame's
+        offset moves."""
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._library(app, ctx)
+        _tick(app, ctx, 2)
+        title_y = next(n.y for n in _nodes(buf, TextNode) if n.text == "Your Library")
+        app.content_scroll = 300.0
+        app.invalidate()
+        _tick(app, ctx, 2)
+        title = next(n for n in _nodes(buf, TextNode) if n.text == "Your Library")
+        assert title.y == title_y, "content-space y must not bake the scroll offset"
+        assert buf.latest_frame().content_offset_y == 300.0
+
+    def test_chrome_stays_anchored_outside_the_band(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._library(app, ctx)
+        _tick(app, ctx, 2)
+        rail = next(n for n in _nodes(buf, TextNode) if n.text == "Spotify Light")
+        assert rail.z_index >= 5, "sidebar chrome must renumber out of the content band"
+        rail_y = rail.y
+        app.content_scroll = 300.0
+        app.invalidate()
+        _tick(app, ctx, 2)
+        rail2 = next(n for n in _nodes(buf, TextNode) if n.text == "Spotify Light")
+        assert rail2.y == rail_y, "chrome draws at screen coordinates — no offset baked, ever"
+
+    # -- wheel path ---------------------------------------------------------
+    def test_wheel_tick_publishes_a_transform_only_revision(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._tracks(app, ctx)
+        _tick(app, ctx, 2)
+        before = buf.latest_frame()
+        rev_before = buf.revision
+
+        app._mouse = (600.0, 400.0)
+        app._apply_scroll(-120.0)
+
+        assert app.content_scroll == 120.0
+        assert not app._render_requested, "a hot-path tick must NOT schedule a rebuild"
+        after = buf.latest_frame()
+        assert buf.revision == rev_before + 1, "the offset publishes immediately"
+        assert after.nodes is before.nodes, "transform-only revision reuses the exact node tuple"
+        assert after.content_offset_y == 120.0
+        assert after.content_z_band == (1.0, 4.0), "the band survives the transform-only revision"
+
+    def test_wheel_throttled_rewindow_rerenders(self, app_ctx, monkeypatch):
+        """Unbounded gestures re-window: when the throttle window elapses the
+        tick falls back to a full render (fresh cull window, thumb, hover)."""
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._tracks(app, ctx)
+        monkeypatch.setattr(app_main, "SCROLL_REWINDOW_INTERVAL_S", 0.0)
+        _tick(app, ctx, 2)
+
+        app._mouse = (600.0, 400.0)
+        app._apply_scroll(-120.0)
+        assert app._render_requested, "an elapsed throttle window forces a rebuild"
+        _tick(app, ctx, 1)
+        assert buf.latest_frame().content_offset_y == 120.0
+
+    def test_settle_render_fires_after_the_gesture(self, app_ctx, monkeypatch):
+        """The final crisp frame lands once the wheel stream stops: hover,
+        thumb, and the cull window re-sync to the resting offset."""
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._tracks(app, ctx)
+        monkeypatch.setattr(app_main, "SCROLL_SETTLE_S", 0.0)
+        _tick(app, ctx, 2)
+        before = buf.latest_frame()
+
+        app._mouse = (600.0, 400.0)
+        app._apply_scroll(-120.0)
+        assert buf.latest_frame().nodes is before.nodes, "tick itself stays transform-only"
+
+        _tick(app, ctx, 1)
+        after = buf.latest_frame()
+        assert after.nodes is not before.nodes, "the settle render rebuilds the window"
+        assert after.content_offset_y == 120.0, "the settle lands where the gesture ended"
+
+    def test_sidebar_wheel_still_renders_every_tick(self, app_ctx):
+        """Scope: only the content area is on the retained path — the rail's
+        own list scroll keeps today's invalidate-per-tick behavior."""
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._tracks(app, ctx)
+        _tick(app, ctx, 2)
+
+        app._mouse = (100.0, 400.0)
+        app._apply_scroll(-120.0)
+        assert app.sidebar_scroll == 120.0 and app.content_scroll == 0.0
+        assert app._render_requested, "sidebar list scroll still rebuilds per tick"
+
+    # -- input correctness mid-gesture --------------------------------------
+    def test_click_dispatches_against_content_space_hits_mid_scroll(self, app_ctx, monkeypatch):
+        """Hits recorded at the last render live in content space; a click
+        during a transform-only streak maps through the LIVE offset, so rows
+        stay clickable while the gesture is still scrolling."""
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._tracks(app, ctx, count=40)
+        _tick(app, ctx, 2)
+        region = next(r for r in app._hits if r.action == "play_track_in_context")
+        assert region.scrollable, "content hits must be flagged scrollable"
+
+        app._mouse = (600.0, 400.0)
+        app._apply_scroll(-200.0)  # transform-only: hits are NOT re-recorded
+        calls = []
+        monkeypatch.setattr(app, "_dispatch_action",
+                            lambda action, payload, x: calls.append((action, payload)))
+        # The row now shows at content_y - scroll on screen.
+        app._dispatch_click(region.x + 4, region.y - 200.0 + 2)
+        assert calls and calls[0][0] == "play_track_in_context", \
+            "the click must land on the row that sits under the cursor NOW"
+
+    def test_chrome_hits_ignore_the_scroll_offset(self, app_ctx, monkeypatch):
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._tracks(app, ctx, count=40)
+        _tick(app, ctx, 2)
+        nav = next(r for r in app._hits if r.action == "nav" and r.payload == "library")
+        assert not nav.scrollable, "chrome hits stay in screen space"
+
+        app._mouse = (600.0, 400.0)
+        app._apply_scroll(-200.0)
+        calls = []
+        monkeypatch.setattr(app, "_dispatch_action",
+                            lambda action, payload, x: calls.append((action, payload)))
+        app._dispatch_click(nav.x + 2, nav.y + 2)
+        assert calls == [("nav", "library")], "fixed chrome hit regions must not shift"
+
+    # -- culling + scrollbar --------------------------------------------------
+    def test_cull_window_covers_viewport_plus_margin(self, app_ctx):
+        """The retained window spans the viewport plus one viewport of margin
+        on each side — enough that a 100ms re-window throttle can never
+        outrun drawn content — but far rows still cull (build cost stays
+        proportional to the window, not the library)."""
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._tracks(app, ctx)
+        _tick(app, ctx, 2)
+        texts = _texts(buf)
+        assert "T005" in texts, "rows inside the viewport draw"
+        assert "T025" in texts, "rows inside the margin draw"
+        assert "T060" not in texts, "rows beyond viewport + margin cull"
+
+        app.content_scroll = 2400.0
+        app.invalidate()
+        _tick(app, ctx, 2)
+        texts = _texts(buf)
+        assert "T005" not in texts, "scrolled-past rows cull above the window"
+        assert "T060" in texts, "the window recenters on the new offset"
+        assert "T199" not in texts, "far-below rows still cull"
+
+    def test_scrollbar_thumb_stays_chrome_and_tracks_renders(self, app_ctx):
+        app, ctx, buf = app_ctx
+        self._enable_band(ctx)
+        self._tracks(app, ctx)
+        _tick(app, ctx, 2)
+        thumb = next(n for n in _nodes(buf, RoundedRectNode) if n.x == 1280 - 7)
+        assert thumb.z_index == 5, "the thumb is chrome — outside the content band"
+        y0 = thumb.y
+        app.content_scroll = 2400.0
+        app.invalidate()
+        _tick(app, ctx, 2)
+        thumb2 = next(n for n in _nodes(buf, RoundedRectNode) if n.x == 1280 - 7)
+        assert thumb2.y > y0, "re-window renders keep the thumb honest"
+
+    # -- legacy fallback -------------------------------------------------------
+    def test_targets_without_band_support_keep_the_legacy_path(self, app_ctx):
+        """Vulkan/matrix hosts (and any scene target without the band): the
+        app must behave byte-for-byte like today — translated draws, no
+        retained frame, whole-frame offset zero."""
+        app, ctx, buf = app_ctx
+        # Capability deliberately NOT enabled — the fixture default.
+        self._library(app, ctx)
+        app.content_scroll = 100.0
+        _tick(app, ctx, 2)
+        frame = buf.latest_frame()
+        assert frame.content_z_band is None
+        assert not frame.retained
+        assert frame.content_offset_y == 0.0
+        title = next(n for n in _nodes(buf, TextNode) if n.text == "Your Library")
+        assert title.y == 24.0 - 100.0, "legacy draws bake the translation"
+
+        app._mouse = (600.0, 400.0)
+        app._apply_scroll(-120.0)
+        assert app._render_requested, "legacy wheel ticks invalidate as today"

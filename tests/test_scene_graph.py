@@ -16,6 +16,7 @@ from luvatrix_core.core.scene_graph import (
     SceneGraphBuffer,
     ShaderRectNode,
     TextNode,
+    split_frame_by_z_band,
 )
 from luvatrix_core.core.scene_rasterizer import (
     _Offsets,
@@ -147,6 +148,112 @@ class SceneGraphTests(unittest.TestCase):
         self.assertEqual(event.revision, 2)
         self.assertIs(transformed.nodes, original.nodes)
         self.assertEqual(transformed.content_offset_y, 24.0)
+
+
+class ContentZBandTests(unittest.TestCase):
+    """SL-41 app-side scroll rebuild: the retained content-offset path needs
+    fixed chrome (sidebar, pill, scrollbar) living in the SAME frame as the
+    scrolling content. ``content_z_band`` names the inclusive z range the
+    offset applies to; nodes outside the band (the z=0 window backstop below,
+    z>=5 chrome above) present untransformed. ``None`` keeps the legacy
+    whole-frame semantics every existing app and target already has."""
+
+    @staticmethod
+    def _frame(nodes, *, band=None, offset_y: float = 0.0) -> SceneFrame:
+        return SceneFrame(
+            revision=0,
+            logical_width=100,
+            logical_height=80,
+            display_width=100,
+            display_height=80,
+            ts_ns=1,
+            nodes=tuple(nodes),
+            content_offset_y=offset_y,
+            content_z_band=band,
+        )
+
+    def test_content_z_band_defaults_to_none(self) -> None:
+        frame = SceneFrame(0, 100, 80, 100, 80, 1, ())
+        self.assertIsNone(frame.content_z_band)
+
+    def test_invalid_band_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._frame((), band=(4.0, 1.0))  # low must not exceed high
+        with self.assertRaises(ValueError):
+            self._frame((), band=(2.0,))  # exactly (low, high)
+
+    def test_submit_preserves_the_band(self) -> None:
+        buffer = SceneGraphBuffer()
+        buffer.submit(self._frame((RectNode(1, 2, 3, 4, (1, 2, 3, 255)),), band=(1.0, 4.0)))
+        self.assertEqual(buffer.latest_frame().content_z_band, (1.0, 4.0))
+
+    def test_submit_content_offset_preserves_the_band(self) -> None:
+        """A transform-only scroll tick must keep the band — losing it would
+        drag the chrome along with the content for one revision."""
+        buffer = SceneGraphBuffer()
+        buffer.submit(self._frame((RectNode(1, 2, 3, 4, (1, 2, 3, 255)),), band=(1.0, 4.0)))
+
+        event = buffer.submit_content_offset(0.0, 42.0)
+        transformed = buffer.latest_frame()
+
+        self.assertIsNotNone(event)
+        self.assertEqual(transformed.content_z_band, (1.0, 4.0))
+        self.assertEqual(transformed.content_offset_y, 42.0)
+
+    def test_band_change_is_a_render_change(self) -> None:
+        """Same nodes + same offset but a different band composites
+        differently, so the dedup must not swallow it."""
+        buffer = SceneGraphBuffer()
+        first = self._frame((RectNode(1, 2, 3, 4, (1, 2, 3, 255)),), band=(1.0, 4.0), offset_y=8.0)
+        second = self._frame((RectNode(1, 2, 3, 4, (1, 2, 3, 255)),), band=None, offset_y=8.0)
+        third = self._frame((RectNode(1, 2, 3, 4, (1, 2, 3, 255)),), band=None, offset_y=8.0)
+
+        self.assertEqual(buffer.submit_if_changed(first).revision, 1)
+        self.assertEqual(buffer.submit_if_changed(second).revision, 2)
+        deduped = buffer.submit_if_changed(third)
+        self.assertEqual(deduped.event_id, 0)
+        self.assertEqual(buffer.deduplicated_submissions, 1)
+
+    def test_split_groups_nodes_into_z_tiers(self) -> None:
+        """Tiers are z-contiguous by construction, so drawing below -> band ->
+        above preserves the frame's exact z compositing order."""
+        backstop = RectNode(0, 0, 100, 80, (9, 9, 9, 255), z_index=0)
+        card = RectNode(4, 100, 20, 20, (200, 0, 0, 255), z_index=2)
+        label = TextNode("row", x=4, y=100, z_index=3)
+        chrome = RectNode(90, 0, 5, 40, (90, 90, 90, 255), z_index=5)
+        pill = CircleNode(50, 70, 10, (255, 255, 255, 255), z_index=10)
+        frame = self._frame((backstop, card, label, chrome, pill), band=(1.0, 4.0), offset_y=33.0)
+
+        tiers = split_frame_by_z_band(frame)
+
+        self.assertEqual(len(tiers), 3)
+        below, banded, above = tiers
+        self.assertEqual(below.nodes, (backstop,))
+        self.assertEqual(banded.nodes, (card, label))
+        self.assertEqual(above.nodes, (chrome, pill))
+        # Fixed tiers present untransformed; only the band keeps the offset.
+        self.assertEqual((below.content_offset_x, below.content_offset_y), (0.0, 0.0))
+        self.assertEqual(banded.content_offset_y, 33.0)
+        self.assertEqual((above.content_offset_x, above.content_offset_y), (0.0, 0.0))
+        # Sub-frames must not re-split downstream (rasterizer recursion).
+        for tier in tiers:
+            self.assertIsNone(tier.content_z_band)
+
+    def test_split_skips_empty_tiers(self) -> None:
+        card = RectNode(4, 100, 20, 20, (200, 0, 0, 255), z_index=2)
+        frame = self._frame((card,), band=(1.0, 4.0), offset_y=12.0)
+        tiers = split_frame_by_z_band(frame)
+        self.assertEqual(len(tiers), 1)
+        self.assertIs(tiers[0].nodes[0], card)
+        self.assertEqual(tiers[0].content_offset_y, 12.0)
+
+    def test_split_band_bounds_are_inclusive(self) -> None:
+        low_node = RectNode(0, 0, 10, 10, (1, 1, 1, 255), z_index=1)
+        high_node = RectNode(0, 20, 10, 10, (2, 2, 2, 255), z_index=4)
+        frame = self._frame((low_node, high_node), band=(1.0, 4.0), offset_y=5.0)
+        tiers = split_frame_by_z_band(frame)
+        self.assertEqual(len(tiers), 1)
+        self.assertEqual(tiers[0].nodes, (low_node, high_node))
 
 
 class CpuLayerGeometryRasterTests(unittest.TestCase):

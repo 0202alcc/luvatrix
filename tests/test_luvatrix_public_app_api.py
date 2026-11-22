@@ -744,6 +744,39 @@ class LuvatrixPublicAppApiTests(unittest.TestCase):
         self.assertEqual(texts["styled"].font_family, "Helvetica Neue")
         self.assertEqual(texts["plain"].font_family, "Comic Mono")
 
+    def test_scene_frame_content_z_band_reaches_the_frame(self) -> None:
+        """SL-41 scroll hot path: apps publish retained frames whose content
+        offset translates only a z band (scrolling content), leaving fixed
+        chrome anchored. The public builder must thread the band alongside
+        content_offset/retained; omitting it keeps whole-frame semantics."""
+        scene_buffer = SceneGraphBuffer()
+        ctx = AppRuntime(
+            matrix=WindowMatrix(101, 101),
+            hdi=HDIThread(source=_NoopHDISource()),
+            sensor_manager=SensorManagerThread(providers={}),
+        ).build_context({"window.write"})
+        ctx.scene_buffer = scene_buffer
+        app = App()
+        app.init(ctx)
+
+        with app.scene_frame(clear=(0, 0, 0, 255), retained=True,
+                             content_offset=(0.0, 24.0),
+                             content_z_band=(1.0, 4.0)) as frame:
+            frame.rect(x=0, y=0, width=10, height=10, color=(255, 255, 255, 255), z_index=2)
+
+        latest = scene_buffer.latest_frame()
+        assert latest is not None
+        self.assertEqual(latest.content_z_band, (1.0, 4.0))
+        self.assertEqual(latest.content_offset_y, 24.0)
+        self.assertTrue(latest.retained)
+
+        with app.scene_frame(clear=(0, 0, 0, 255)) as frame:
+            frame.rect(x=0, y=0, width=10, height=10, color=(255, 255, 255, 255))
+
+        latest = scene_buffer.latest_frame()
+        assert latest is not None
+        self.assertIsNone(latest.content_z_band, "default keeps legacy whole-frame offset")
+
     def test_display_backing_scale_defaults_to_one_and_tracks_provider(self) -> None:
         ctx = AppRuntime(
             matrix=WindowMatrix(101, 101),

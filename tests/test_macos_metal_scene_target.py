@@ -1468,3 +1468,149 @@ class TestFrameTimeProbe(unittest.TestCase):
         result2 = backend.request_frame_time_probe(frames=0, timeout_s=0.1)
         self.assertFalse(result2["available"])
         self.assertEqual(result2["requested_frames"], 1)
+
+    def test_drive_false_records_presents_without_nudging(self) -> None:
+        """Real-scroll mode (Round 65, runner's request): Alec scrolls by
+        hand over real card content while the probe passively records
+        presents — the synthetic invalidate chain would fight the human
+        gesture stream, so drive=False arms the recorder with no hook at
+        all. This is the before/after measurement for the scroll rebuild
+        refactor's gap phase."""
+        backend = self._backend()
+        calls: list[str] = []
+        backend.set_drawable_probe_present_hook(lambda: calls.append("invalidate"))
+        result, thread = self._request_in_thread(backend, frames=2, timeout_s=2.0, drive=False)
+        self.assertEqual(calls, [], "passive mode must not nudge at arm")
+        self._drive(backend, 2)
+        thread.join(timeout=2.0)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(calls, [], "passive mode never re-nudges")
+        self.assertTrue(result.get("available"), result)
+        self.assertTrue(result["complete"])
+        self.assertEqual(result["captured_frames"], 2)
+        self.assertFalse(result["drive"])
+
+
+class TestContentZBandDispatch(unittest.TestCase):
+    """SL-41: a banded frame presents as up to three tier sub-passes — below
+    the band (window backstop), in-band (scrolling content, offset applied),
+    above (chrome, offset zeroed). Tiers are z-contiguous, so the encoder's
+    per-tier walks preserve the frame's exact compositing order, and each
+    tier keeps using the fast kind-grouped path whenever its own kinds are
+    z-segregated. Geometry cache keys hash node content only, so retained
+    transform-only ticks still hit the tier buffers."""
+
+    def _backend(self):
+        return object.__new__(mst.MacOSMetalSceneBackend)
+
+    @staticmethod
+    def _frame(nodes, *, band=(1.0, 4.0), offset_y=33.0) -> SceneFrame:
+        return SceneFrame(
+            logical_width=200,
+            logical_height=100,
+            display_width=200,
+            display_height=100,
+            revision=1,
+            ts_ns=1,
+            nodes=tuple(nodes),
+            content_offset_y=offset_y,
+            content_z_band=band,
+        )
+
+    def _record(self, backend):
+        calls: list[tuple[str, SceneFrame]] = []
+
+        def _grouped(_enc, _state, frame, *, drawable_w, drawable_h):
+            calls.append(("grouped", frame))
+            return (1.0, 2.0, 3.0, 4.0 + len(calls))
+
+        def _ordered(_enc, _state, frame, *, drawable_w, drawable_h):
+            calls.append(("ordered", frame))
+            return 9.0
+
+        backend._present_kind_grouped = _grouped
+        backend._present_z_ordered = _ordered
+        return calls
+
+    def test_no_band_routes_the_frame_unchanged(self) -> None:
+        backend = self._backend()
+        calls = self._record(backend)
+        frame = self._frame([RectNode(0, 0, 10, 10, (1, 2, 3, 255), z_index=0)], band=None)
+
+        marks = backend._present_batched(None, None, frame, drawable_w=200, drawable_h=100)
+
+        self.assertEqual(len(calls), 1)
+        kind, sub = calls[0]
+        self.assertEqual(kind, "grouped")
+        self.assertIs(sub, frame, "bandless frames must not be re-wrapped")
+        self.assertEqual(marks, (1.0, 2.0, 3.0, 5.0))
+
+    def test_band_splits_into_tiered_presents_in_z_order(self) -> None:
+        backend = self._backend()
+        calls = self._record(backend)
+        backstop = RectNode(0, 0, 200, 100, (9, 9, 9, 255), z_index=0)
+        card = RectNode(4, 100, 20, 20, (200, 0, 0, 255), z_index=2)
+        chrome = RectNode(190, 0, 5, 40, (90, 90, 90, 255), z_index=5)
+        pill = CircleNode(50, 70, 10, (255, 255, 255, 255), z_index=10)
+        frame = self._frame((backstop, card, chrome, pill))
+
+        backend._present_batched(None, None, frame, drawable_w=200, drawable_h=100)
+
+        self.assertEqual([kind for kind, _ in calls], ["grouped", "grouped", "grouped"])
+        below, banded, above = [sub for _, sub in calls]
+        self.assertEqual(below.nodes, (backstop,))
+        self.assertEqual(banded.nodes, (card,))
+        self.assertEqual(above.nodes, (chrome, pill))
+        self.assertEqual(below.content_offset_y, 0.0, "backstop tier presents untransformed")
+        self.assertEqual(banded.content_offset_y, 33.0, "only the band tier keeps the offset")
+        self.assertEqual(above.content_offset_y, 0.0, "chrome tier presents untransformed")
+        for sub in (below, banded, above):
+            self.assertIsNone(sub.content_z_band, "tier frames must not re-split")
+
+    def test_empty_tiers_are_skipped(self) -> None:
+        backend = self._backend()
+        calls = self._record(backend)
+        card = RectNode(4, 100, 20, 20, (200, 0, 0, 255), z_index=2)
+        backend._present_batched(None, None, self._frame((card,)), drawable_w=200, drawable_h=100)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][1].nodes, (card,))
+        self.assertEqual(calls[0][1].content_offset_y, 33.0)
+
+    def test_interleaved_tier_uses_the_z_ordered_walk(self) -> None:
+        """A circle under a rect inside the band (pause-glyph-over-plate
+        pattern) keeps the correct-compositing walk for ITS tier; the
+        z-segregated chrome tier still gets the instanced fast path."""
+        backend = self._backend()
+        calls = self._record(backend)
+        glyph = CircleNode(50, 20, 8, (255, 255, 255, 255), z_index=2)
+        plate = RectNode(0, 0, 100, 40, (22, 22, 22, 255), z_index=3)
+        chrome = RectNode(190, 0, 5, 40, (90, 90, 90, 255), z_index=5)
+        frame = self._frame((glyph, plate, chrome))
+
+        backend._present_batched(None, None, frame, drawable_w=200, drawable_h=100)
+
+        self.assertEqual([kind for kind, _ in calls], ["ordered", "grouped"])
+        self.assertEqual(calls[0][1].nodes, (glyph, plate))
+        self.assertEqual(calls[0][1].content_offset_y, 33.0)
+        self.assertEqual(calls[1][1].nodes, (chrome,))
+        self.assertEqual(calls[1][1].content_offset_y, 0.0)
+
+    def test_encode_marks_come_from_the_last_tier(self) -> None:
+        backend = self._backend()
+        self._record(backend)
+        frame = self._frame((
+            RectNode(0, 0, 10, 10, (1, 1, 1, 255), z_index=0),
+            RectNode(0, 0, 10, 10, (2, 2, 2, 255), z_index=2),
+            RectNode(0, 0, 10, 10, (3, 3, 3, 255), z_index=5),
+        ))
+        marks = backend._present_batched(None, None, frame, drawable_w=200, drawable_h=100)
+        self.assertEqual(marks, (1.0, 2.0, 3.0, 7.0),
+                         "the probe's encode_end is the LAST tier's end ≈ full encode end")
+
+    def test_target_advertises_band_support(self) -> None:
+        from luvatrix_core.targets.scene_target import SceneRenderTarget
+
+        target = object.__new__(mst.MacOSMetalSceneTarget)
+        self.assertTrue(target.supports_content_z_band())
+        self.assertFalse(SceneRenderTarget.supports_content_z_band(object()),
+                         "the protocol default keeps unported targets on whole-frame semantics")
