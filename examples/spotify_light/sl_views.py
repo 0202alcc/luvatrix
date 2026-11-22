@@ -126,6 +126,53 @@ OVERFLOW_R = NAV_CIRCLE_R
 DOCK_SLOT_W = 460.0
 DOCK_SLOT_H = 64.0
 
+# -- SL-39 expanding search cluster -------------------------------------------
+# Alec's annotated mock: the bottom-dock search circle grows leftward into an
+# editable query field (its right edge stays pinned where the circle's was),
+# and the library rail leaves the left edge to become a floating panel docked
+# right-aligned directly above the field. The circle's own footprint morphs
+# into the dismiss affordance (×). The field drives the existing debounced
+# search flow; results keep the content stage (the search view simply skips
+# its in-content field while the cluster owns input).
+SEARCH_EXPAND_W = 320.0
+SEARCH_PANEL_GAP = 12.0
+PANEL_LIST_TOP = 68.0   # title row + PLAYLISTS header
+PANEL_CHIP_H = 44.0     # account chip zone pinned at the panel's bottom
+
+
+def _nav_search_rect(app, width: float, height: float) -> tuple[float, float, float, float]:
+    """The search circle's CURRENT rect (override-aware) — the expansion's
+    anchor, so a nav_search layout override moves the whole cluster."""
+    dpx, dpy, dpw, dph = dock_cluster_rect(width, height)
+    dock_cy = dpy + dph / 2
+    return _layout(app, "nav_search",
+                   (dpx + dpw + NAV_CIRCLE_GAP, dock_cy - NAV_CIRCLE_R,
+                    2 * NAV_CIRCLE_R, 2 * NAV_CIRCLE_R), width, height)
+
+
+def search_expanded_field_rect(app, width: float, height: float) -> tuple[float, float, float, float]:
+    """The grown field: the circle's height and right edge, widened leftward."""
+    sx, sy, sw, sh = _nav_search_rect(app, width, height)
+    right = sx + sw
+    field_w = min(SEARCH_EXPAND_W, right - PILL_FLOAT)
+    return (right - field_w, sy, field_w, sh)
+
+
+def library_panel_rect(app, width: float, height: float) -> tuple[float, float, float, float]:
+    """The docked library panel: the rail's width, right-aligned with the
+    field, bottom edge SEARCH_PANEL_GAP above it, top edge clearing the
+    top-right pill whenever their x-ranges meet."""
+    sx, sy, sw, sh = _nav_search_rect(app, width, height)
+    right = sx + sw
+    panel_w = SIDEBAR_W - SIDEBAR_GLASS_MARGIN * 2
+    px = right - panel_w
+    bottom = sy - SEARCH_PANEL_GAP
+    prx, pry, prw, prh = _layout(app, "pill", pill_rect(width, height), width, height)
+    top = SIDEBAR_GLASS_MARGIN
+    if px < prx + prw and prx < right:
+        top = max(top, pry + prh + SEARCH_PANEL_GAP)
+    return (px, top, panel_w, max(0.0, bottom - top))
+
 
 def pill_rect(width: float, height: float) -> tuple[float, float, float, float]:
     """Now-playing capsule, pinned to the window's TOP-RIGHT corner (Alec,
@@ -664,6 +711,94 @@ def draw_sidebar(frame, app, out: FrameOut, *, width: float, height: float, mous
     out.hit(150 + ox, chip_y - 2, 74, 28, "logout")
 
 
+def draw_search_expansion(frame, app, out: FrameOut, *, width: float, height: float,
+                          mouse) -> None:
+    """The SL-39 expanded search cluster: the docked library panel above the
+    grown query field. Drawn in place of the left rail while expanded; z and
+    hit ordering keep it below the playback popup (z=20) like the rest of the
+    chrome. Contents mirror the rail's library component — title (which keeps
+    its nav-row semantics), playlist rows with the same seam-dissolve and
+    scrollbar idiom, and the account chip — so the component reads as the
+    same library, relocated."""
+    px, py, pw, ph = library_panel_rect(app, width, height)
+    _glass_plate(frame, px, py, pw, ph, radius=SIDEBAR_GLASS_RADIUS, z=10, app=app)
+    # Swallow dead-space clicks first so rows win the reversed hit walk while
+    # the plate itself never falls through to dismiss/blur.
+    out.hit(px, py, pw, ph, "panel_plate")
+
+    title_hover = _hover(mouse, px + 8, py + 8, pw - 16, 32)
+    if title_hover:
+        frame.rounded_rect(x=px + 8, y=py + 8, width=pw - 16, height=32,
+                           radius=8.0, color=SIDEBAR_ROW_HOVER, z_index=11)
+    _text(frame, "Your Library", x=px + 16, y=py + 16, size=16,
+          color=TEXT if title_hover else SUBTEXT, z=12)
+    out.hit(px + 8, py + 8, pw - 16, 32, "nav", "library")
+    _text(frame, "PLAYLISTS", x=px + 16, y=py + 44, size=11, color=FAINT, z=12)
+
+    list_top = py + PANEL_LIST_TOP
+    list_bottom = py + ph - PANEL_CHIP_H
+    row_h = 30.0
+    offset = app.sidebar_scroll
+    for idx, playlist in enumerate(app.playlists):
+        row_y = list_top + row_h * idx - offset
+        if row_y + row_h < list_top or row_y > list_bottom:
+            continue
+        hovering = _hover(mouse, px + 8, row_y, pw - 16, row_h - 4)
+        if hovering:
+            frame.rounded_rect(x=px + 8, y=row_y, width=pw - 16, height=row_h - 4,
+                               radius=6.0, color=SIDEBAR_ROW_HOVER, z_index=11)
+        _text(frame, playlist.name, x=px + 16, y=row_y + 4, size=13,
+              color=TEXT if hovering else SUBTEXT, z=12, max_chars=26)
+        out.hit(px + 8, row_y, pw - 16, row_h - 4, "open_playlist", playlist.id)
+
+    if row_h * len(app.playlists) > list_bottom - list_top:
+        strip = SIDEBAR_SEAM_FADE_PX / SIDEBAR_SEAM_STRIPS
+        for i in range(SIDEBAR_SEAM_STRIPS):
+            a_top = int(round(210 * (1.0 - i / SIDEBAR_SEAM_STRIPS)))
+            frame.rect(x=px + 2, y=list_top + i * strip, width=pw - 4, height=strip,
+                       color=(14, 14, 14, a_top), z_index=14)
+            a_bottom = int(round(210 * (i + 1) / SIDEBAR_SEAM_STRIPS))
+            frame.rect(x=px + 2, y=list_bottom - SIDEBAR_SEAM_FADE_PX + i * strip,
+                       width=pw - 4, height=strip, color=(14, 14, 14, a_bottom), z_index=14)
+    _draw_scrollbar(frame, app.scrollbar_sidebar, out, x=px + pw - 9, top=list_top,
+                    bottom=list_bottom, content=row_h * len(app.playlists), offset=offset,
+                    tag="sidebar")
+
+    chip_y = py + ph - 36
+    frame.rect(x=px + 14, y=chip_y - 8, width=pw - 28, height=1,
+               color=(255, 255, 255, 20), z_index=12)
+    name = app.profile.display_name if app.profile and app.profile.display_name else "Account"
+    _text(frame, name, x=px + 16, y=chip_y + 4, size=13, color=SUBTEXT, z=12, max_chars=16)
+    logout_hover = _hover(mouse, px + pw - 90, chip_y, 70, 26)
+    _text(frame, "Log out", x=px + pw - 86, y=chip_y + 4, size=13,
+          color=TEXT if logout_hover else FAINT, z=12)
+    out.hit(px + pw - 90, chip_y - 2, 74, 28, "logout")
+
+    # The grown field: the circle's capsule widened leftward, same glass
+    # idiom and focus language as the content-area field it replaces.
+    fx, fy, fw, fh = search_expanded_field_rect(app, width, height)
+    _glass_plate(frame, fx, fy, fw, fh, radius=fh / 2, z=10,
+                 border=(ACCENT[0], ACCENT[1], ACCENT[2], 200) if app.search_focused else None,
+                 app=app)
+    cap_x = fx + fw - fh  # the circle's own footprint, now the dismiss cap
+    budget = cap_x - fx - 16 - 8
+    shown = app.search_query or ("What do you want to listen to?" if not app.search_focused else "")
+    if app.search_query:
+        shown = _clip_head(frame._ctx.measure_text, app.search_query, max_w=budget, size=14)
+        _text(frame, shown, x=fx + 16, y=fy + 14, size=14, color=TEXT, z=12)
+    else:
+        _text(frame, shown, x=fx + 16, y=fy + 14, size=14, color=FAINT, z=12)
+    if app.search_focused and int(app.now_monotonic * 2) % 2 == 0:
+        caret_x = fx + 16 + frame._ctx.measure_text(
+            shown if app.search_query else "", font_size_px=14.0, font_family=FONT_FAMILY)
+        frame.rect(x=caret_x + 2, y=fy + 12, width=1.5, height=20, color=TEXT, z_index=13)
+    out.hit(fx, fy, fw, fh, "focus_search")
+    cap_hover = _hover(mouse, cap_x, fy, fh, fh)
+    _centered_glyph(frame, "×", cx=cap_x + fh / 2, cy=fy + fh / 2, size=18,
+                    color=TEXT if cap_hover else SUBTEXT, z=12)
+    out.hit(cap_x, fy, fh, fh, "close_search")
+
+
 def _draw_scrollbar(frame, controller, out: FrameOut, *, x, top, bottom, content, offset, tag) -> None:
     view = bottom - top
     if content <= view or view <= 0:
@@ -843,43 +978,47 @@ def draw_search(frame, app, out: FrameOut, *, width: float, height: float, mouse
     y = 24.0 - app.content_scroll
     view_w = width - SIDEBAR_W - CONTENT_PAD * 2
 
-    # The field's right cap must clear the top-right pill (round 30): at
-    # narrow widths the 460pt field would slide under the glass. Round 41
-    # (SL-26/27): the overflow circle merged INTO the pill's top-right
-    # slot, so the pill is again the only obstacle — the resolved circle
-    # still feeds the min() below, so a detached/overridden nav_more in
-    # the field's band keeps capping the field exactly like round 38.
-    pill_x = pill_rect(width, height)[0]
-    obstacle_x = pill_x
-    dpx, dpy, dpw, dph = dock_cluster_rect(width, height)
-    nav_natural = (width - PILL_FLOAT - 2 * OVERFLOW_R, dpy + dph / 2 - OVERFLOW_R,
-                   2 * OVERFLOW_R, 2 * OVERFLOW_R)
-    cx, cy, cw, ch = _layout(app, "nav_more", nav_natural, width, height)
-    if cy < y + 40.0 and y < cy + ch:
-        obstacle_x = min(obstacle_x, cx)
-    gap_cap = obstacle_x - 12.0 - x0
-    if gap_cap >= 180.0:
-        field_w = max(180.0, min(460.0, view_w, gap_cap))
-    else:
-        field_w = max(60.0, min(460.0, view_w, gap_cap))
-    _glass_plate(frame, x0, y, field_w, 40, radius=20.0, z=2, shadow=False,
-                 border=(ACCENT[0], ACCENT[1], ACCENT[2], 200) if app.search_focused else None,
-                 app=app)
-    shown = app.search_query or ("What do you want to listen to?" if not app.search_focused else "")
-    if app.search_query:
-        # Overflow clips the head (text-field idiom): the tail being typed
-        # stays visible and the caret hugs its end inside the field.
-        shown = _clip_head(app.ctx.measure_text, app.search_query,
-                           max_w=field_w - 18 - 14, size=14)
-        _text(frame, shown, x=x0 + 18, y=y + 12, size=14, color=TEXT, z=4)
-    else:
-        _text(frame, shown, x=x0 + 18, y=y + 12, size=14, color=FAINT, z=4, max_chars=52)
-    if app.search_focused and int(app.now_monotonic * 2) % 2 == 0:
-        caret_x = x0 + 18 + app.ctx.measure_text(
-            shown if app.search_query else "", font_size_px=14.0, font_family=FONT_FAMILY)
-        frame.rect(x=caret_x + 2, y=y + 10, width=1.5, height=20, color=TEXT, z_index=4)
-    out.hit(x0, y, field_w, 40, "focus_search")
-    y += 60
+    # SL-39: while the expanding cluster owns search input, the in-content
+    # field steps aside — the grown dock field is the editor; results below
+    # are unchanged. The field block is otherwise byte-identical to round 41.
+    if not getattr(app, "search_expanded", False):
+        # The field's right cap must clear the top-right pill (round 30): at
+        # narrow widths the 460pt field would slide under the glass. Round 41
+        # (SL-26/27): the overflow circle merged INTO the pill's top-right
+        # slot, so the pill is again the only obstacle — the resolved circle
+        # still feeds the min() below, so a detached/overridden nav_more in
+        # the field's band keeps capping the field exactly like round 38.
+        pill_x = pill_rect(width, height)[0]
+        obstacle_x = pill_x
+        dpx, dpy, dpw, dph = dock_cluster_rect(width, height)
+        nav_natural = (width - PILL_FLOAT - 2 * OVERFLOW_R, dpy + dph / 2 - OVERFLOW_R,
+                       2 * OVERFLOW_R, 2 * OVERFLOW_R)
+        cx, cy, cw, ch = _layout(app, "nav_more", nav_natural, width, height)
+        if cy < y + 40.0 and y < cy + ch:
+            obstacle_x = min(obstacle_x, cx)
+        gap_cap = obstacle_x - 12.0 - x0
+        if gap_cap >= 180.0:
+            field_w = max(180.0, min(460.0, view_w, gap_cap))
+        else:
+            field_w = max(60.0, min(460.0, view_w, gap_cap))
+        _glass_plate(frame, x0, y, field_w, 40, radius=20.0, z=2, shadow=False,
+                     border=(ACCENT[0], ACCENT[1], ACCENT[2], 200) if app.search_focused else None,
+                     app=app)
+        shown = app.search_query or ("What do you want to listen to?" if not app.search_focused else "")
+        if app.search_query:
+            # Overflow clips the head (text-field idiom): the tail being typed
+            # stays visible and the caret hugs its end inside the field.
+            shown = _clip_head(app.ctx.measure_text, app.search_query,
+                               max_w=field_w - 18 - 14, size=14)
+            _text(frame, shown, x=x0 + 18, y=y + 12, size=14, color=TEXT, z=4)
+        else:
+            _text(frame, shown, x=x0 + 18, y=y + 12, size=14, color=FAINT, z=4, max_chars=52)
+        if app.search_focused and int(app.now_monotonic * 2) % 2 == 0:
+            caret_x = x0 + 18 + app.ctx.measure_text(
+                shown if app.search_query else "", font_size_px=14.0, font_family=FONT_FAMILY)
+            frame.rect(x=caret_x + 2, y=y + 10, width=1.5, height=20, color=TEXT, z_index=4)
+        out.hit(x0, y, field_w, 40, "focus_search")
+        y += 60
 
     if app.search_error:
         _text(frame, app.search_error, x=x0, y=y, size=14, color=DANGER, z=3)
@@ -1148,8 +1287,11 @@ def draw_player_bar(frame, app, out: FrameOut, *, width: float, height: float, m
                               2 * NAV_CIRCLE_R, 2 * NAV_CIRCLE_R), width, height)
     _nav_circle(frame, app, out, mouse, cx=hx + hw / 2, cy=hy + hh / 2,
                 view="home", glyph=sl_icons.HOME)
-    _nav_circle(frame, app, out, mouse, cx=sx + sw / 2, cy=sy + sh / 2,
-                view="search", glyph=sl_icons.SEARCH)
+    if not getattr(app, "search_expanded", False):
+        # SL-39: the circle is replaced by the expanded cluster's field while
+        # search owns it (drawn by draw_search_expansion off the same anchor).
+        _nav_circle(frame, app, out, mouse, cx=sx + sw / 2, cy=sy + sh / 2,
+                    view="search", glyph=sl_icons.SEARCH)
 
     # Overflow icon: volume / shuffle / repeat / devices. The dock-side
     # natural below is just the fallback — the shipped layout.toml (round

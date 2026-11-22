@@ -22,8 +22,11 @@ uv run python main.py run-app examples/spotify_light --render macos-metal
   playlists, Top artists.
 - **Playlist detail** — header art + Play button, full track table with
   title/artists/album/duration and an accent highlight on the playing track.
-- **Search** — debounced as-you-type search with Songs / Albums / Artists /
-  Playlists groups.
+- **Search** — the dock's search circle expands into the query field while
+  the library docks as a floating panel right-aligned above it (SL-39);
+  debounced as-you-type search keeps results in the content area with
+  Songs / Albums / Artists / Playlists groups. Dismiss via the field's × cap
+  or Escape to restore the left rail.
 - **Now-playing bar** — art, transport (shuffle, previous, play/pause, next,
   repeat), draggable seek bar, volume, and a device picker popup (Spotify
   Connect).

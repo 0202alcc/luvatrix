@@ -164,6 +164,12 @@ class SpotifyLightApp(App):
         self._glass_surfaces: dict[str, object] = {}  # keyed glass regions (liquid glass)
         self.glass_active = False  # True while chrome glass plates are up
         self.show_devices = False
+        # SL-39 expanding search cluster: the dock's search circle grows into
+        # the query field while the library rail docks right-aligned above it.
+        # _search_pre_expand_view is restored on dismiss (close cap / Escape);
+        # navigating elsewhere collapses without the restore.
+        self.search_expanded = False
+        self._search_pre_expand_view = "home"
         self._hits: list[sl_views.HitRegion] = []
         self._mouse = (0.0, 0.0)
         self._drag: tuple[str, object] | None = None
@@ -372,6 +378,9 @@ class SpotifyLightApp(App):
         self.playlist_detail = None
         self.playlist_error = ""
         self.search_results = None
+        self.search_expanded = False
+        self.search_focused = False
+        self._search_pre_expand_view = "home"
         self.player = None
         self.devices = []
         self.view = "home"
@@ -836,12 +845,22 @@ class SpotifyLightApp(App):
 
         # Scrollbar drags get first claim on the mouse.
         list_top = sl_views.SIDEBAR_LIST_TOP
+        track_x, track_y = sl_views.SIDEBAR_W - 10, list_top
+        track_h = max(0.0, self.display.height_px - 64 - list_top)
+        if self.search_expanded:
+            # SL-39: the list lives in the docked panel — the thumb/drag
+            # geometry tracks the panel's list region, not the vacated rail.
+            px, py, pw, ph = sl_views.library_panel_rect(
+                self, float(self.display.width_px), float(self.display.height_px))
+            track_x = px + pw - 13
+            track_y = py + sl_views.PANEL_LIST_TOP
+            track_h = max(0.0, ph - sl_views.PANEL_CHIP_H - sl_views.PANEL_LIST_TOP)
         sidebar_update = self.scrollbar_sidebar.update(
             state,
-            x=sl_views.SIDEBAR_W - 10,
-            y=list_top,
+            x=track_x,
+            y=track_y,
             width=13,
-            height=max(0.0, self.display.height_px - 64 - list_top),
+            height=track_h,
             content_extent=30.0 * len(self.playlists),
             viewport_extent=max(1.0, self.display.height_px - 64 - list_top),
             offset=self.sidebar_scroll,
@@ -880,6 +899,23 @@ class SpotifyLightApp(App):
 
     def _apply_scroll(self, delta_y: float) -> None:
         mx, my = self._mouse
+        if self.search_expanded:
+            # SL-39: wheel over the docked panel scrolls the playlist list;
+            # everywhere else (including the vacated left strip) is content.
+            px, py, pw, ph = sl_views.library_panel_rect(
+                self, float(self.display.width_px), float(self.display.height_px))
+            if px <= mx <= px + pw and py <= my <= py + ph:
+                self.sidebar_scroll = self._clamp_scroll(
+                    self.sidebar_scroll - delta_y, 30.0 * len(self.playlists),
+                    ph - sl_views.PANEL_CHIP_H - sl_views.PANEL_LIST_TOP,
+                )
+            else:
+                viewport = self.display.height_px - sl_views.DOCK_H
+                self.content_scroll = self._clamp_scroll(
+                    self.content_scroll - delta_y, self._content_height, viewport
+                )
+            self.invalidate()
+            return
         if mx < sl_views.SIDEBAR_W:
             self.sidebar_scroll = self._clamp_scroll(
                 self.sidebar_scroll - delta_y, 30.0 * len(self.playlists),
@@ -936,13 +972,40 @@ class SpotifyLightApp(App):
             timestamp_ms=self.player.timestamp_ms,
         )
 
+    def _expand_search(self) -> None:
+        """SL-39: the search circle's click docks the library panel and grows
+        the field. The content view switches to search so the existing flow's
+        results keep the stage; the view we came from is remembered for the
+        dismiss affordance."""
+        if not self.search_expanded:
+            self._search_pre_expand_view = self.view if self.view != "search" else "home"
+        self.search_expanded = True
+        self.search_focused = True
+        self.client_id_focused = False
+        self.view = "search"
+
+    def _collapse_search(self, *, restore: bool) -> None:
+        if restore:
+            self.view = self._search_pre_expand_view
+        self.search_expanded = False
+        self.search_focused = False
+
     def _dispatch_action(self, action: str, payload, click_x: float) -> None:
         if action == "nav":
-            self.view = payload
+            if payload == "search":
+                self._expand_search()
+            else:
+                if self.search_expanded:
+                    self._collapse_search(restore=False)
+                self.view = payload
             self.content_scroll = 0.0
             self.show_devices = False
             self.invalidate()
         elif action == "open_playlist":
+            if self.search_expanded:
+                # Picking from the docked library leaves search: collapse the
+                # cluster and let the navigation below own the view.
+                self._collapse_search(restore=False)
             self.view = f"playlist:{payload}"
             self.content_scroll = 0.0
             self.playlist_detail = None
@@ -1016,6 +1079,14 @@ class SpotifyLightApp(App):
             self.search_focused = True
             self.client_id_focused = False
             self.invalidate()
+        elif action == "close_search":
+            # SL-39 dismiss: the cap where the circle was restores the prior
+            # layout — left rail back, view back to what search covered.
+            self._collapse_search(restore=True)
+            self.content_scroll = 0.0
+            self.invalidate()
+        elif action == "panel_plate":
+            pass  # swallowed: dead panel space must not dismiss or blur
         elif action == "focus_client_id":
             self.client_id_focused = True
             self.search_focused = False
@@ -1114,7 +1185,10 @@ class SpotifyLightApp(App):
                 self._search_dirty_at = None
                 self._submit_search()
             elif control == "escape":
-                self.search_focused = False
+                if self.search_expanded:
+                    self._collapse_search(restore=True)
+                else:
+                    self.search_focused = False
             else:
                 self.search_query = self._edit_text(self.search_query, key, control)
                 self._search_dirty_at = time.monotonic()
@@ -1416,6 +1490,7 @@ class SpotifyLightApp(App):
             "client_id_draft_len": len(self.client_id_draft),  # never the value
             "native_field_active": self._native_client_id_field is not None,
             "search_query": self.search_query,
+            "search_expanded": self.search_expanded,
             "content_scroll": round(self.content_scroll, 1),
             "hit_actions": sorted({region.action for region in self._hits}),
             "now_playing": now_playing,
@@ -1928,7 +2003,15 @@ class SpotifyLightApp(App):
             effects = self.effect_specs.specs()
             sl_views.draw_scrims(frame, [effects[eid] for eid in sorted(effects)],
                                  width=width, height=height)
-            sl_views.draw_sidebar(frame, self, out, width=width, height=height, mouse=mouse)
+            # SL-39: expanded, the library component docks right-aligned above
+            # the grown search field instead of drawing as the left rail. The
+            # cluster draws before the player bar so the z=20 playback popup
+            # keeps winning both the paint and the hit walk where they meet.
+            if self.search_expanded:
+                sl_views.draw_search_expansion(frame, self, out, width=width,
+                                               height=height, mouse=mouse)
+            else:
+                sl_views.draw_sidebar(frame, self, out, width=width, height=height, mouse=mouse)
             sl_views.draw_player_bar(frame, self, out, width=width, height=height, mouse=mouse)
 
             if self.bootstrap_error:

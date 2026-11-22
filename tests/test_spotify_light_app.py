@@ -795,6 +795,219 @@ class TestSearchView:
         assert "90s Rock" in _texts(scene_buffer)
 
 
+# ---------------------------------------------------------------------------
+# SL-39 (Alec, annotated mock): the bottom-dock search circle becomes an
+# expanding search cluster — clicking it docks the library component as a
+# floating panel right-aligned directly above the circle, and the circle
+# itself grows horizontally into an editable query field wired to the
+# existing debounced search flow (results keep rendering in the content
+# area's search view). The circle's cap morphs into a dismiss affordance;
+# Escape and navigating elsewhere also collapse back to the left rail.
+# ---------------------------------------------------------------------------
+
+class TestSearchExpand:
+    # nav_search circle at 1280x800 (dock-cluster natural): (1008,730,44,44).
+    CIRCLE = (1030.0, 752.0)
+    CIRCLE_RIGHT = 1052.0
+
+    @staticmethod
+    def _click(app, ctx, x, y):
+        events = [
+            HDIEvent(event_id=1, ts_ns=1, window_id="w", device="mouse",
+                     event_type="pointer_move", status="OK",
+                     payload={"x": x, "y": y, "buttons_mask": 0}),
+            HDIEvent(event_id=2, ts_ns=2, window_id="w", device="mouse",
+                     event_type="click", status="OK",
+                     payload={"x": x, "y": y, "button": 0, "phase": "down", "click_count": 1}),
+            HDIEvent(event_id=3, ts_ns=3, window_id="w", device="mouse",
+                     event_type="click", status="OK",
+                     payload={"x": x, "y": y, "button": 0, "phase": "up", "click_count": 1}),
+        ]
+        app.input.raw_events = lambda *args, **kwargs: list(events)
+        try:
+            _tick(app, ctx, 1)
+        finally:
+            del app.input.raw_events
+
+    @staticmethod
+    def _authed(app, ctx, *, playlists=3):
+        app.authenticated = True
+        app._bootstrap_done = True
+        app.playlists = [_playlist(f"Mix {i}") for i in range(playlists)]
+        _tick(app, ctx, 2)
+
+    def _expand(self, app, ctx):
+        self._authed(app, ctx)
+        self._click(app, ctx, *self.CIRCLE)
+        _tick(app, ctx, 2)
+
+    def test_circle_click_expands_and_focuses(self, app_ctx):
+        app, ctx, _ = app_ctx
+        self._authed(app, ctx)
+        assert app.search_expanded is False
+        self._click(app, ctx, *self.CIRCLE)
+        assert app.search_expanded is True
+        assert app.view == "search", "results render in the existing search view"
+        assert app.search_focused is True, "the expanded field is ready to type"
+        assert app.mcp_state()["search_expanded"] is True
+
+    def test_field_anchors_to_circle_right_edge(self, app_ctx):
+        app, ctx, _ = app_ctx
+        self._expand(app, ctx)
+        field = sl_views.search_expanded_field_rect(app, WIDTH, HEIGHT)
+        fx, fy, fw, fh = field
+        assert abs((fx + fw) - self.CIRCLE_RIGHT) < 1e-6, \
+            "the field grows leftward from the circle's right edge"
+        assert fw >= 300.0 and fh == 44.0
+        focus = [r for r in app._hits if r.action == "focus_search"]
+        assert len(focus) == 1, "the in-content field is gone while expanded"
+        assert abs(focus[0].x - fx) < 1e-6 and focus[0].w == fw
+        close = next(r for r in app._hits if r.action == "close_search")
+        assert (close.x, close.y, close.w, close.h) == (1008.0, 730.0, 44.0, 44.0), \
+            "the dismiss affordance sits exactly where the circle was"
+        assert not any(r.action == "nav" and r.payload == "search" for r in app._hits), \
+            "the nav circle is replaced by the field while expanded"
+
+    def test_library_panel_docks_right_aligned_above_field(self, app_ctx):
+        app, ctx, _ = app_ctx
+        self._expand(app, ctx)
+        px, py, pw, ph = sl_views.library_panel_rect(app, WIDTH, HEIGHT)
+        fx, fy, fw, fh = sl_views.search_expanded_field_rect(app, WIDTH, HEIGHT)
+        assert abs((px + pw) - (fx + fw)) < 1e-6, "panel is right-aligned with the field"
+        assert abs((py + ph) - (fy - 12.0)) < 1e-6, "panel bottom sits 12pt above the field"
+        pill_bottom = sl_views.pill_rect(WIDTH, HEIGHT)[1] + sl_views.pill_rect(WIDTH, HEIGHT)[3]
+        assert py >= pill_bottom, "the panel clears the top-right pill"
+        # The docked library component: title, playlist rows, account chip.
+        texts = {n.text: n for n in _nodes(app_ctx[2], TextNode)}
+        assert "Your Library" in texts and "PLAYLISTS" in texts
+        assert texts["Your Library"].x >= px
+        assert "Mix 0" in texts and texts["Mix 0"].x >= px
+        assert "Log out" in texts and texts["Log out"].x >= px
+        assert any(r.action == "open_playlist" and r.x >= px for r in app._hits)
+        assert any(r.action == "logout" and r.x >= px for r in app._hits)
+
+    def test_left_rail_hidden_while_expanded(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._expand(app, ctx)
+        texts = _texts(scene_buffer)
+        assert "Spotify Light" not in texts, "the left rail's title is gone"
+        library_texts = [n for n in _nodes(scene_buffer, TextNode)
+                         if n.text == "Your Library"]
+        assert library_texts and all(n.x > 600 for n in library_texts), \
+            "the library lives in the right-docked panel, not the left rail"
+
+    def test_results_render_in_content_area(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._expand(app, ctx)
+        artist = _artist("Nirvana")
+        album = _album("Nevermind", artist)
+        app.search_query = "nirvana"
+        app.search_results = sl_models.SearchResults(
+            tracks=(_track("Lithium", artist, album),), albums=(album,),
+            artists=(artist,), playlists=())
+        app.invalidate()
+        _tick(app, ctx, 2)
+        texts = _texts(scene_buffer)
+        assert "Songs" in texts and "Lithium" in texts, \
+            "the existing search flow's results keep the content stage"
+
+    def test_typing_and_enter_submit_the_query(self, app_ctx):
+        app, ctx, _ = app_ctx
+        self._expand(app, ctx)
+        event = lambda key: type("E", (), {"payload": {"key": key, "phase": "down"}})()
+        for ch in "jaz":
+            app._handle_key(event(ch))
+        assert app.search_query == "jaz"
+        assert app._search_dirty_at is not None, "typing keeps the debounce armed"
+        app._client = object()
+        submitted = []
+        app.worker.submit = lambda name, job: submitted.append(name)
+        app._handle_key(event("enter"))
+        assert submitted == ["search"], "the expanded field drives the existing search job"
+
+    def test_close_cap_restores_prior_layout(self, app_ctx):
+        app, ctx, scene_buffer = app_ctx
+        self._expand(app, ctx)
+        # Same point that opened the cluster: the cap is now the dismiss.
+        self._click(app, ctx, *self.CIRCLE)
+        assert app.search_expanded is False
+        assert app.view == "home", "dismiss restores the pre-expand view"
+        assert app.search_focused is False
+        _tick(app, ctx, 2)
+        assert "Spotify Light" in _texts(scene_buffer), "the left rail is back"
+
+    def test_escape_collapses_and_restores_view(self, app_ctx):
+        app, ctx, _ = app_ctx
+        app.authenticated = True
+        app._bootstrap_done = True
+        app.view = "library"
+        _tick(app, ctx, 1)
+        app._dispatch_action("nav", "search", 0.0)
+        assert app.search_expanded is True and app.view == "search"
+        event = type("E", (), {"payload": {"key": "escape", "phase": "down"}})()
+        app._handle_key(event)
+        assert app.search_expanded is False
+        assert app.view == "library", "escape restores the view the user came from"
+        assert app.search_focused is False
+
+    def test_navigating_elsewhere_collapses_without_restore(self, app_ctx):
+        app, ctx, _ = app_ctx
+        self._expand(app, ctx)
+        app._dispatch_action("nav", "home", 0.0)
+        assert app.search_expanded is False and app.view == "home"
+
+    def test_open_playlist_from_panel_collapses(self, app_ctx):
+        app, ctx, _ = app_ctx
+        self._expand(app, ctx)
+        row = next(r for r in app._hits if r.action == "open_playlist")
+        app._dispatch_action(row.action, row.payload, row.x)
+        assert app.view == f"playlist:{row.payload}"
+        assert app.search_expanded is False, "leaving search collapses the cluster"
+
+    def test_panel_dead_space_swallows_clicks(self, app_ctx):
+        app, ctx, _ = app_ctx
+        self._expand(app, ctx)
+        assert app.search_focused is True
+        px, py, pw, ph = sl_views.library_panel_rect(app, WIDTH, HEIGHT)
+        # Dead plate space: below the last playlist row, above the account chip.
+        self._click(app, ctx, px + pw / 2, py + ph - 60)
+        assert app.search_expanded is True and app.search_focused is True, \
+            "clicks on the panel plate must not fall through to dismiss/blur"
+
+    def test_layout_override_moves_the_expansion_anchor(self, app_ctx):
+        app, ctx, _ = app_ctx
+        self._authed(app, ctx)
+        app.layout_overrides.set("nav_search",
+                                 {"rect": {"x": 900, "y": 600, "width": 44, "height": 44}})
+        app._dispatch_action("nav", "search", 0.0)
+        _tick(app, ctx, 1)
+        fx, fy, fw, fh = sl_views.search_expanded_field_rect(app, WIDTH, HEIGHT)
+        assert abs((fx + fw) - 944.0) < 1e-6 and fy == 600.0, \
+            "the expansion anchors to the OVERRIDDEN circle, not the natural"
+        px, py, pw, ph = sl_views.library_panel_rect(app, WIDTH, HEIGHT)
+        assert abs((px + pw) - 944.0) < 1e-6
+        assert py + ph <= fy, "the panel still docks above the field"
+
+    def test_wheel_scroll_tracks_the_panel_not_the_rail(self, app_ctx):
+        app, ctx, _ = app_ctx
+        app.authenticated = True
+        app._bootstrap_done = True
+        app.playlists = [_playlist(f"Mix {i}") for i in range(40)]
+        app._dispatch_action("nav", "search", 0.0)
+        _tick(app, ctx, 1)
+        app._content_height = 4000.0  # after the tick: the frame recomputes it
+        px, py, pw, ph = sl_views.library_panel_rect(app, WIDTH, HEIGHT)
+        # Inside the panel: the playlist list scrolls (offset -= delta_y, the
+        # app's natural-scroll sign convention).
+        app._mouse = (px + pw / 2, py + ph / 2)
+        app._apply_scroll(-120.0)
+        assert app.sidebar_scroll == 120.0 and app.content_scroll == 0.0
+        # The vacated left-rail strip is content now, not the sidebar list.
+        app._mouse = (100.0, 400.0)
+        app._apply_scroll(-60.0)
+        assert app.sidebar_scroll == 120.0 and app.content_scroll == 60.0
+
+
 class _FakeNativeField:
     def __init__(self, *, x, y, width, height, placeholder, value, on_change, on_submit,
                  within=None, bordered=True):
