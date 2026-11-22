@@ -934,6 +934,7 @@ class _FakeNativeBridge:
         self.glass: list[_FakeGlassSurface] = []
         self.web_view_error: Exception | None = None
         self.button_error: Exception | None = None
+        self.backdrop_error: Exception | None = None
 
     def create_text_field(self, **kwargs):
         field = _FakeNativeField(**kwargs)
@@ -955,6 +956,8 @@ class _FakeNativeBridge:
         return view
 
     def create_glass_surface(self, **kwargs):
+        if self.backdrop_error is not None and kwargs.get("placement") == "backdrop":
+            raise self.backdrop_error
         surface = _FakeGlassSurface(**kwargs)
         self.glass.append(surface)
         return surface
@@ -4816,10 +4819,13 @@ class TestPillNativeGlass:
         texts = _texts(scene_buffer)
         assert "Lithium" in texts, "pill content keeps drawing on top"
 
-    def test_clear_transparent_and_backdrop_surrounds_pill(self, app_ctx, monkeypatch):
-        """Under-glass needs a see-through window at the pill zone only: the
-        clear goes fully transparent and an opaque backdrop covers the rest,
-        so content scrolling under the pill floats over the real material."""
+    def test_clear_transparent_and_no_scene_base_when_material_live(
+            self, app_ctx, monkeypatch):
+        """SL-38: under-glass makes the WHOLE window see-through — the clear
+        is fully transparent and the scene paints no opaque base anywhere;
+        the behind-window Apple material is the only backdrop (pill zone
+        included). The opaque SL-36 tiles only return if the native backdrop
+        itself fails (TestWindowMaterial)."""
         app, ctx, scene_buffer = app_ctx
         self._bridge(monkeypatch)
         self._playing(app, ctx)
@@ -4827,22 +4833,10 @@ class TestPillNativeGlass:
         clears = _nodes(scene_buffer, ClearNode)
         assert clears and all(c.color_rgba == (0, 0, 0, 0) for c in clears), \
             "window clear must be fully transparent while under-glass is live"
-        px, py, pw, ph = sl_views.pill_rect(1280, 800)
         bg_rects = [n for n in _nodes(scene_buffer, RectNode)
                     if n.color_rgba == sl_views.BG and n.z_index == 0]
-        for n in bg_rects:
-            overlap_x = n.x < px + pw and n.x + n.width > px
-            overlap_y = n.y < py + ph and n.y + n.height > py
-            assert not (overlap_x and overlap_y), \
-                f"backdrop rect {n} must not cover the pill zone"
-        expected = [
-            (0.0, 0.0, 1280.0, py),
-            (0.0, py + ph, 1280.0, 800.0 - py - ph),
-            (0.0, py, px, ph),
-            (px + pw, py, 1280.0 - px - pw, ph),
-        ]
-        got = sorted((n.x, n.y, n.width, n.height) for n in bg_rects)
-        assert got == sorted(expected), "backdrop tiles the frame around the pill"
+        assert bg_rects == [], \
+            "no opaque scene base once the window material provides the backdrop"
 
     def test_pill_glass_destroyed_on_logout(self, app_ctx, monkeypatch):
         app, ctx, _ = app_ctx
@@ -4859,3 +4853,161 @@ class TestPillNativeGlass:
         assert pill.destroyed is True
         assert [s for s in bridge.glass if s.placement == "under"
                 and not s.destroyed] == []
+
+
+# ---------------------------------------------------------------------------
+# SL-38: the whole window is glass. One window-spanning behind-window Apple
+# material replaces the scene's near-black base ("make the entire app
+# background transparent instead of black"); component fills alpha down so
+# the blur material reads through, while text/icons/borders stay opaque.
+# Hosts without under-glass capability keep today's opaque look, and a host
+# that rejects the backdrop surface keeps the SL-36 opaque tiles.
+# ---------------------------------------------------------------------------
+
+
+class TestWindowMaterial:
+    def _bridge(self, monkeypatch, *, capable=True):
+        bridge = _FakeNativeBridge()
+        bridge.supports_under_glass = capable
+        monkeypatch.setattr(app_main, "native_controls", lambda: bridge)
+        return bridge
+
+    def _playing(self, app, ctx, *, show_devices=False):
+        app.authenticated = True
+        nirvana = _artist("Nirvana")
+        track = _track("Lithium", nirvana, _album("Nevermind", nirvana), ms=257_000)
+        app.player = sl_models.PlayerState(is_playing=True, progress_ms=30_500, track=track,
+                                           device=None, shuffle=False, repeat="off")
+        app._player_synced_at = app.now_monotonic
+        app.show_devices = show_devices
+        _tick(app, ctx, 2)
+
+    def _library(self, app, ctx):
+        app.view = "library"
+        app.playlists = [_playlist("Roadtrip"), _playlist("Focus")]
+        app.invalidate()
+        _tick(app, ctx, 2)
+
+    def _backdrop(self, bridge):
+        backdrops = [s for s in bridge.glass if s.placement == "backdrop"]
+        assert len(backdrops) == 1, "exactly one window backdrop surface"
+        return backdrops[0]
+
+    def test_window_backdrop_spans_window(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        bridge = self._bridge(monkeypatch)
+        self._playing(app, ctx)
+
+        backdrop = self._backdrop(bridge)
+        assert backdrop.frame == (0.0, 0.0, 1280.0, 800.0)
+        assert backdrop.is_visible is True
+        assert app._window_material_live is True
+
+    def test_backdrop_tracks_window_resize(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        bridge = self._bridge(monkeypatch)
+        self._playing(app, ctx)
+        backdrop = self._backdrop(bridge)
+
+        ctx.logical_width_px = 1000
+        ctx.logical_height_px = 700
+        app.invalidate()
+        _tick(app, ctx, 2)
+
+        assert backdrop.frame == (0.0, 0.0, 1000.0, 700.0)
+        assert backdrop.destroyed is False
+
+    def test_backdrop_failure_keeps_opaque_scene_tiles(self, app_ctx, monkeypatch):
+        """A host that rejects the backdrop keeps the SL-36 fallback: pill
+        glass live, opaque scene tiles around it — never a raw desktop bleed
+        with no material. The failure latches off (no per-frame retry)."""
+        app, ctx, scene_buffer = app_ctx
+        bridge = self._bridge(monkeypatch)
+        bridge.backdrop_error = RuntimeError("no backdrop for you")
+        self._playing(app, ctx)
+
+        assert [s for s in bridge.glass if s.placement == "backdrop"] == []
+        assert app._window_material_live is False
+        pills = [s for s in bridge.glass if s.placement == "under" and not s.destroyed]
+        assert len(pills) == 1, "pill glass stays live when the backdrop fails"
+        bg_rects = [n for n in _nodes(scene_buffer, RectNode)
+                    if n.color_rgba == sl_views.BG and n.z_index == 0]
+        assert len(bg_rects) == 4, "opaque scene tiles backstop the failed backdrop"
+
+        created = len(bridge.glass)
+        _tick(app, ctx, 2)
+        assert len(bridge.glass) == created, "backdrop failure latches off"
+
+    def test_backdrop_destroyed_on_logout(self, app_ctx, monkeypatch):
+        app, ctx, scene_buffer = app_ctx
+        bridge = self._bridge(monkeypatch)
+        self._playing(app, ctx)
+        backdrop = self._backdrop(bridge)
+
+        app.authenticated = False
+        app.invalidate()
+        _tick(app, ctx, 2)
+
+        assert backdrop.destroyed is True
+        assert app._window_material_live is False
+        clears = _nodes(scene_buffer, ClearNode)
+        assert clears and clears[-1].color_rgba == sl_views.BG, \
+            "logged-out hosts return to the opaque near-black clear"
+
+    def test_card_and_sidebar_fills_alpha_when_material_live(self, app_ctx, monkeypatch):
+        """Alec's callout: the opaque dark-gray cards blocked the effect.
+        Over the live material, plates switch from the near-invisible white
+        tint (designed for an opaque near-black base) to alpha'd dark fills
+        in the tasteful 0.5–0.75 window so the blur reads through."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch)
+        self._playing(app, ctx)
+        self._library(app, ctx)
+
+        rrects = _nodes(scene_buffer, RoundedRectNode)
+        assert any(n.color_rgba == sl_views.MATERIAL_PLATE_FILL for n in rrects), \
+            "cards/sidebar alpha down over the window material"
+        assert 128 <= sl_views.MATERIAL_PLATE_FILL[3] <= 191, \
+            "material fills stay in the 0.5–0.75 alpha window"
+        assert [n for n in rrects if n.color_rgba == sl_views.GLASS_FILL] == [], \
+            "no white-tint plates while the material is live"
+
+    def test_fills_unchanged_when_material_not_live(self, app_ctx, monkeypatch):
+        """Bridgeless/incapable hosts keep today's plate language byte-for-byte."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch, capable=False)
+        self._playing(app, ctx)
+        self._library(app, ctx)
+
+        rrects = _nodes(scene_buffer, RoundedRectNode)
+        assert any(n.color_rgba == sl_views.GLASS_FILL for n in rrects), \
+            "incapable hosts keep the white-tint plate fill"
+        assert [n for n in rrects
+                if n.color_rgba == getattr(sl_views, "MATERIAL_PLATE_FILL", None)] == []
+
+    def test_text_stays_opaque_over_material(self, app_ctx, monkeypatch):
+        """Legibility is the constraint: fills alpha down, text does not."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch)
+        self._playing(app, ctx)
+        self._library(app, ctx)
+
+        headings = [n for n in _nodes(scene_buffer, TextNode) if n.text == "Your Library"]
+        assert headings, "library heading drawn"
+        assert all(n.color_rgba[3] == 255 for n in headings), \
+            "text stays fully opaque over the material"
+
+    def test_popup_fill_alphad_when_material_live(self, app_ctx, monkeypatch):
+        """The playback popup is the darkest floating panel: it keeps the
+        most body (top of the alpha window) but still lets the material read."""
+        app, ctx, scene_buffer = app_ctx
+        self._bridge(monkeypatch)
+        self._playing(app, ctx, show_devices=True)
+
+        plates = [n for n in _nodes(scene_buffer, RoundedRectNode)
+                  if n.width == 298 and n.color_rgba == sl_views.MATERIAL_POPUP_FILL]
+        assert plates, "popup plate alphas down over the material"
+        assert 128 <= sl_views.MATERIAL_POPUP_FILL[3] <= 191
+        assert [n for n in _nodes(scene_buffer, RoundedRectNode)
+                if n.color_rgba == (18, 18, 18, 234)] == [], \
+            "the near-opaque popup fill is gone while the material is live"

@@ -278,7 +278,12 @@ class NativeControlBridge(Protocol):
         """``placement="above"`` composites the plate over the render surface
         (it blurs scene content beneath — fine behind native controls).
         ``placement="under"`` slots it below the render surface so scene
-        content draws crisply on top; requires ``supports_under_glass``."""
+        content draws crisply on top; requires ``supports_under_glass``.
+        ``placement="backdrop"`` is the SL-38 whole-window material: one
+        behind-window plate at the very back of the window (spans it; the
+        app re-applies the frame each render), also requiring
+        ``supports_under_glass`` since it only reads through a see-through
+        window."""
         ...
 
     def close(self) -> None: ...

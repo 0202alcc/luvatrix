@@ -12,11 +12,13 @@ from __future__ import annotations
 import numpy as np
 
 from luvatrix_core.core.scene_graph import (
+    ClearNode,
     CpuLayerNode,
     RectNode,
+    RoundedRectNode,
     SceneFrame,
 )
-from luvatrix_core.core.scene_rasterizer import rasterize_scene_frame
+from luvatrix_core.core.scene_rasterizer import _blend_alpha_mask, rasterize_scene_frame
 
 
 def _frame(nodes) -> SceneFrame:
@@ -29,6 +31,69 @@ def _frame(nodes) -> SceneFrame:
         ts_ns=0,
         nodes=tuple(nodes),
     )
+
+
+class TestFillAlphaSurvives:
+    """SL-38 whole-window material: the scene's alpha'd fills must reach the
+    framebuffer with their alpha INTACT — the behind-window material shows
+    through covered-but-translucent pixels exactly like it shows through
+    unpainted gaps. The MCP app_screenshot readback rasters this same path,
+    so a forced-opaque alpha here also lies about the layer to probes."""
+
+    def test_rect_fill_alpha_survives_over_transparent_clear(self):
+        nodes = [
+            ClearNode(color_rgba=(0, 0, 0, 0)),
+            RectNode(x=2, y=2, width=4, height=4, color_rgba=(16, 16, 16, 166), z_index=1),
+        ]
+        img = rasterize_scene_frame(_frame(nodes))
+        assert abs(int(img[3, 3, 3]) - 166) <= 2, \
+            f"covered pixel keeps the fill alpha, got {int(img[3, 3, 3])}"
+        assert int(img[0, 0, 3]) == 0, "unpainted gaps keep the clear alpha"
+
+    def test_stacked_fills_composite_source_over_alpha(self):
+        nodes = [
+            ClearNode(color_rgba=(0, 0, 0, 0)),
+            RectNode(x=0, y=0, width=8, height=8, color_rgba=(16, 16, 16, 64), z_index=1),
+            RectNode(x=2, y=2, width=4, height=4, color_rgba=(16, 16, 16, 166), z_index=2),
+        ]
+        img = rasterize_scene_frame(_frame(nodes))
+        a_lo = 64 / 255.0
+        a_hi = 166 / 255.0
+        expected = round(255 * (a_hi + a_lo * (1.0 - a_hi)))
+        assert abs(int(img[3, 3, 3]) - expected) <= 2, \
+            f"stacked fills composite alpha source-over, got {int(img[3, 3, 3])} want ~{expected}"
+        assert abs(int(img[0, 0, 3]) - 64) <= 2, \
+            f"singly-covered pixel keeps its own alpha, got {int(img[0, 0, 3])}"
+
+    def test_rounded_rect_fill_alpha_survives(self):
+        nodes = [
+            ClearNode(color_rgba=(0, 0, 0, 0)),
+            RoundedRectNode(x=1, y=1, width=6, height=6, radius=2,
+                            color_rgba=(16, 16, 16, 166), z_index=1),
+        ]
+        img = rasterize_scene_frame(_frame(nodes))
+        assert abs(int(img[4, 4, 3]) - 166) <= 2, \
+            f"rounded fill keeps its alpha, got {int(img[4, 4, 3])}"
+
+    def test_alpha_mask_blend_keeps_color_alpha(self):
+        """Glyph/mask compositing: coverage*color_alpha must composite into
+        the destination alpha, not stomp it opaque (text over the material)."""
+        import numpy as np
+
+        out = np.zeros((4, 4, 4), dtype=np.uint8)
+        mask = np.full((2, 2), 255, dtype=np.uint8)
+        _blend_alpha_mask(out, mask, x=1, y=1, color=(255, 255, 255, 200))
+        assert abs(int(out[1, 1, 3]) - 200) <= 2, \
+            f"full-ink pixel keeps the text color alpha, got {int(out[1, 1, 3])}"
+        assert int(out[0, 0, 3]) == 0, "uncovered pixels stay transparent"
+
+    def test_opaque_fill_still_writes_255(self):
+        nodes = [
+            ClearNode(color_rgba=(0, 0, 0, 0)),
+            RectNode(x=2, y=2, width=4, height=4, color_rgba=(255, 255, 255, 255), z_index=1),
+        ]
+        img = rasterize_scene_frame(_frame(nodes))
+        assert int(img[3, 3, 3]) == 255, "opaque fragments stay opaque"
 
 
 class TestLayerAlphaBlending:
