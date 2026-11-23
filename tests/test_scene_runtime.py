@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import tempfile
+import time
 import unittest
 
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
@@ -454,6 +456,147 @@ class SceneRuntimeTests(unittest.TestCase):
             cache_key="mouse_label",
         )
         self.assertEqual(_text_node_texture_key(dynamic, 1.0), _text_node_texture_key(moved, 1.0))
+
+
+class PresentLoopIdleGatingTests(unittest.TestCase):
+    """Round 68 (macOS idle churn, measured on d0504a2): with no vsync fd the
+    present loop ran a 120Hz software timer forever — waking 120×/s on an idle
+    scene and logging the ``tick`` line every iteration whenever the present
+    count sat on a multiple of 120 (which made the idle loop look like the
+    churn driver in the log ring). When nothing animates (repeat_latest=False)
+    the loop must block on the blit-event CV instead, and the tick log must
+    report present milestones, not loop liveness."""
+
+    def _frame(self, x: float = 0.0) -> SceneFrame:
+        return SceneFrame(
+            revision=0,
+            logical_width=2,
+            logical_height=2,
+            display_width=2,
+            display_height=2,
+            ts_ns=1,
+            nodes=(RectNode(x=x, y=0, width=1, height=1, color_rgba=(255, 0, 0, 255)),),
+        )
+
+    def _capture_tick_logs(self, logger_name: str = "luvatrix_core.core.scene_display_runtime"):
+        records: list[logging.LogRecord] = []
+
+        class _ListHandler(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                records.append(record)
+
+        logger = logging.getLogger(logger_name)
+        handler = _ListHandler()
+        logger.addHandler(handler)
+        previous_level = logger.level
+        logger.setLevel(logging.INFO)
+        return logger, handler, records, previous_level
+
+    def test_idle_software_timer_loop_wakes_only_for_liveness(self) -> None:
+        buffer = SceneGraphBuffer()
+        target = _RecordingSceneTarget()
+        runtime = SceneDisplayRuntime(buffer, target)
+        calls = 0
+        original = runtime.run_once
+
+        def counting_run_once(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            return original(*args, **kwargs)
+
+        runtime.run_once = counting_run_once  # type: ignore[method-assign]
+        runtime.start_present_loop(present_fps=120, repeat_latest=False)
+        try:
+            time.sleep(0.4)
+        finally:
+            runtime.stop_present_loop()
+        self.assertLessEqual(
+            calls,
+            3,
+            f"idle present loop woke {calls} times in 0.4s — a 120Hz software-timer spin",
+        )
+
+    def test_submit_wakes_event_driven_loop_promptly(self) -> None:
+        buffer = SceneGraphBuffer()
+        target = _RecordingSceneTarget()
+        runtime = SceneDisplayRuntime(buffer, target)
+        runtime.start_present_loop(present_fps=120, repeat_latest=False)
+        try:
+            buffer.submit(self._frame())
+            deadline = time.monotonic() + 1.0
+            while not target.presented and time.monotonic() < deadline:
+                time.sleep(0.005)
+        finally:
+            runtime.stop_present_loop()
+        self.assertEqual(len(target.presented), 1)
+
+    def test_tick_log_silent_while_present_count_is_stationary(self) -> None:
+        buffer = SceneGraphBuffer()
+        target = _RecordingSceneTarget()
+        runtime = SceneDisplayRuntime(buffer, target)
+        runtime._frames_presented = 240  # parked exactly on a 120 milestone
+        logger, handler, records, previous_level = self._capture_tick_logs()
+        try:
+            runtime.start_present_loop(present_fps=120, repeat_latest=False)
+            try:
+                time.sleep(0.25)
+            finally:
+                runtime.stop_present_loop()
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(previous_level)
+        ticks = [r for r in records if "tick" in r.getMessage()]
+        self.assertEqual(
+            ticks,
+            [],
+            "a stationary present count must not log the tick line every loop iteration",
+        )
+
+    def test_tick_log_fires_once_per_120_presents(self) -> None:
+        buffer = SceneGraphBuffer()
+        target = _RecordingSceneTarget()
+        runtime = SceneDisplayRuntime(buffer, target)
+        runtime._frames_presented = 240
+        logger, handler, records, previous_level = self._capture_tick_logs()
+        try:
+            runtime.start_present_loop(present_fps=120, repeat_latest=False)
+            try:
+                # Submit-then-wait one present at a time: bursts would coalesce
+                # in run_once's drain loop and never reach the 360 milestone.
+                for i in range(120):
+                    buffer.submit(self._frame(x=float(i) + 1.0))
+                    target_count = 241 + i
+                    deadline = time.monotonic() + 1.0
+                    while runtime.frames_presented < target_count and time.monotonic() < deadline:
+                        time.sleep(0.001)
+            finally:
+                runtime.stop_present_loop()
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(previous_level)
+        self.assertEqual(runtime.frames_presented, 360)
+        ticks = [r for r in records if "tick" in r.getMessage()]
+        self.assertEqual(
+            len(ticks),
+            1,
+            f"crossing one 120-present milestone must log exactly once, got {len(ticks)}",
+        )
+
+    def test_repeat_latest_mode_keeps_periodic_pacing(self) -> None:
+        buffer = SceneGraphBuffer()
+        target = _RecordingSceneTarget()
+        runtime = SceneDisplayRuntime(buffer, target)
+        buffer.submit(self._frame())
+        runtime.start_present_loop(present_fps=60, repeat_latest=True)
+        try:
+            time.sleep(0.25)
+        finally:
+            runtime.stop_present_loop()
+        self.assertGreaterEqual(
+            len(target.presented),
+            3,
+            "repeat_latest mode must keep re-presenting on the pacing grid",
+        )
 
 
 class SceneDisplayRuntimeTargetTests(unittest.TestCase):

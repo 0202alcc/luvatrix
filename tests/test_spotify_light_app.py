@@ -5767,6 +5767,67 @@ class TestWindowMaterial:
 # ---------------------------------------------------------------------------
 # SL-41 retained scroll hot path: content-space scene + GPU content offset
 # ---------------------------------------------------------------------------
+class TestCaretIdleGating:
+    """Round 68 (macOS idle churn, measured on d0504a2): the focused-field
+    heartbeat invalidated on EVERY app-loop tick so the caret could blink.
+    With the loop running at present rate (120fps on macOS) a focused field
+    rendered 120 frames/s at idle — the scene dedup caught the identical
+    ones, but the renders themselves are pure battery burn. The heartbeat
+    only needs a redraw when the caret's 2Hz phase flips."""
+
+    @staticmethod
+    def _count_invalidations(app, monkeypatch) -> list[int]:
+        count = [0]
+        original = app.invalidate
+
+        def counting() -> None:
+            count[0] += 1
+            original()
+
+        monkeypatch.setattr(app, "invalidate", counting)
+        return count
+
+    def test_focused_field_invalidates_only_on_caret_phase_flip(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        _tick(app, ctx, 2)
+        count = self._count_invalidations(app, monkeypatch)
+        clock = [1000.0]
+        monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+        app.search_focused = True
+        # 30 timer heartbeats spanning 0.3s — inside a single 0.5s caret phase.
+        for _ in range(30):
+            clock[0] += 0.01
+            app._handle_timers()
+        assert count[0] <= 2, (
+            f"focused idle field invalidated {count[0]}x in 0.3s — "
+            "expected a redraw only on caret phase flips"
+        )
+
+    def test_focused_field_still_blinks_the_caret(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        _tick(app, ctx, 2)
+        count = self._count_invalidations(app, monkeypatch)
+        clock = [1000.0]
+        monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+        app.search_focused = True
+        # 2.0s of heartbeats — the caret phase flips ~4 times; blinking must survive.
+        for _ in range(40):
+            clock[0] += 0.05
+            app._handle_timers()
+        assert count[0] >= 2, "caret blink must keep invalidating at ~2Hz while focused"
+
+    def test_unfocused_idle_has_no_heartbeat_invalidations(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        _tick(app, ctx, 2)
+        count = self._count_invalidations(app, monkeypatch)
+        clock = [1000.0]
+        monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+        for _ in range(30):
+            clock[0] += 0.05
+            app._handle_timers()
+        assert count[0] == 0, f"untouched window must stay at zero invalidations, got {count[0]}"
+
+
 class TestScrollContentBand:
     """Round 64 A/B data exonerated the VEV/blur stack at idle-home: the gap
     phase (~13ms/present) is the app rebuilding every primitive per wheel
