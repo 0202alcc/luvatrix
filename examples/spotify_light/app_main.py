@@ -198,6 +198,11 @@ class SpotifyLightApp(App):
         self._band_engaged = False
         self._last_scroll_published = 0.0
         self._hits_content_space = False
+        # Last caret blink phase that triggered a redraw (-1: none yet). The
+        # focused-field heartbeat invalidates only on phase flips, not every
+        # app-loop tick (round 68: 120fps renders behind the scene dedup are
+        # pure battery burn on macOS).
+        self._caret_phase = -1
 
         # Under-glass pill (SL-36): a real NSGlassEffectView below the render
         # surface replaces the pill's simulated plate on capable hosts.
@@ -832,9 +837,15 @@ class SpotifyLightApp(App):
             self.status_message = ""
             self.invalidate()
 
-        # Caret blink + hover redraws need a slow heartbeat even when idle.
+        # Caret blink needs a redraw only when its 2Hz phase flips; hover
+        # redraws ride the input path's own invalidations. Invalidating on
+        # every heartbeat rendered a focused field at app-loop rate (120fps
+        # on macOS) with the scene dedup absorbing almost all of it.
         if self.search_focused or self.client_id_focused:
-            self.invalidate()
+            caret_phase = int(now * 2) % 2
+            if caret_phase != self._caret_phase:
+                self._caret_phase = caret_phase
+                self.invalidate()
 
         # SL-41: the gesture went quiet — one rebuild recentres the draw
         # window and refreshes hover/thumb, and the band DISENGAGES: the

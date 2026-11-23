@@ -43,6 +43,11 @@ def destroy_vsync_pipe(read_fd: int, write_fd: int) -> None:
 
 LOGGER = logging.getLogger(__name__)
 
+# Event-driven present loops (no vsync fd, repeat_latest=False) block on the
+# blit-event CV with this timeout: submits wake the loop at once, while the
+# beat bounds stop()/active-transition latency on a completely idle scene.
+_IDLE_LIVENESS_BEAT_S = 0.5
+
 
 @dataclass(frozen=True)
 class SceneRenderTick:
@@ -267,6 +272,16 @@ class SceneDisplayRuntime:
         vsync_fd = self._vsync_read_fd
         next_at = time.perf_counter()
         was_active = self.is_active()
+        # The tick log reports present-throughput milestones. Logging on loop
+        # liveness made an idle loop look like the frame source whenever the
+        # count parked on a multiple of 120 (round 68: the line flooded the
+        # log ring on macOS and read as "the software timer drives the scene").
+        next_tick_log_at = (self._frames_presented // 120 + 1) * 120
+        # Without a vsync fd and with nothing to repeat, pacing buys nothing:
+        # block on the blit-event CV so submits wake the loop immediately
+        # (lower latency than the tick grid) and an idle scene idles the
+        # thread. The timeout is a liveness beat for stop/active checks.
+        event_driven = vsync_fd is None and not repeat_latest
         while not self._present_stop.is_set():
             now = time.perf_counter()
             active = self.is_active()
@@ -279,7 +294,9 @@ class SceneDisplayRuntime:
             if not was_active:
                 next_at = now
                 was_active = True
-            if vsync_fd is not None:
+            if event_driven:
+                target_present_time: float | None = None
+            elif vsync_fd is not None:
                 # VSYNC mode: block on CADisplayLink pipe signal or timeout.
                 # select() releases the GIL so the app loop runs freely.
                 ready, _, _ = _select.select([vsync_fd], [], [], min(interval, 0.05))
@@ -311,10 +328,15 @@ class SceneDisplayRuntime:
                 if next_at < now - interval:
                     next_at = now + interval
             try:
-                if self._frames_presented % 120 == 0:
+                self.run_once(
+                    timeout=_IDLE_LIVENESS_BEAT_S if event_driven else 0.0,
+                    repeat_latest=repeat_latest,
+                    target_present_time=target_present_time,
+                )
+                if self._frames_presented >= next_tick_log_at:
                     vsync_status = f"vsync_fd={vsync_fd}" if vsync_fd is not None else "software_timer"
                     LOGGER.info("[scene-runtime] tick %s fps=%d active=%d", vsync_status, present_fps, int(active))
-                self.run_once(timeout=0.0, repeat_latest=repeat_latest, target_present_time=target_present_time)
+                    next_tick_log_at = (self._frames_presented // 120 + 1) * 120
             except Exception as exc:  # noqa: BLE001
                 self._last_error = exc
                 self._present_stop.set()
