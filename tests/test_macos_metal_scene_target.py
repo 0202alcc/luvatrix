@@ -1372,6 +1372,109 @@ class TestFrameTimeProbe(unittest.TestCase):
         time.sleep(0.05)  # let the request arm before the test drives presents
         return result, thread
 
+    def test_drive_publishes_oscillating_transform_revisions(self) -> None:
+        """Round 69 (runner: drive:true captured 0/120 on 274cd64): the bare
+        invalidate nudge renders byte-identical frames that the scene dedup
+        absorbs, so the chain starves. The drive must publish a REAL
+        transform-only revision per tick — a 1px content-offset oscillation,
+        which is also the retained-scroll hot path the probe exists to time —
+        and restore the pre-probe offset when the chain ends."""
+        backend = self._backend()
+        backend._latest_frame = types.SimpleNamespace(content_offset_x=0.0, content_offset_y=40.0)
+        published: list[tuple[float, float]] = []
+        backend.set_frame_probe_drive_hook(lambda x, y: published.append((x, y)))
+        nudges: list[str] = []
+        backend.set_drawable_probe_present_hook(lambda: nudges.append("invalidate"))
+        result, thread = self._request_in_thread(backend, frames=3, timeout_s=2.0)
+        self.assertEqual(published, [(0.0, 41.0)], "arming drives the first transform revision")
+        self._drive(backend, 3)
+        thread.join(timeout=2.0)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(
+            published,
+            [(0.0, 41.0), (0.0, 40.0), (0.0, 41.0), (0.0, 40.0)],
+            "arm + one tick per present except the last + base offset restored",
+        )
+        self.assertEqual(nudges, [], "the drive must not lean on dedup-absorbed invalidates")
+        self.assertTrue(result.get("available"), result)
+        self.assertTrue(result["complete"])
+
+    def test_drive_falls_back_to_invalidate_without_a_presented_frame(self) -> None:
+        """No frame has been presented yet → no transform channel exists;
+        the chain keeps the old invalidate-nudge behavior rather than dying."""
+        backend = self._backend()
+        backend._latest_frame = None
+        drive_calls: list[tuple[float, float]] = []
+        backend.set_frame_probe_drive_hook(lambda x, y: drive_calls.append((x, y)))
+        nudges: list[str] = []
+        backend.set_drawable_probe_present_hook(lambda: nudges.append("invalidate"))
+        result, thread = self._request_in_thread(backend, frames=2, timeout_s=2.0)
+        self._drive(backend, 2)
+        thread.join(timeout=2.0)
+        self.assertEqual(drive_calls, [])
+        self.assertEqual(nudges, ["invalidate", "invalidate"])
+        self.assertTrue(result.get("complete"), result)
+
+    def test_driven_revisions_reach_the_scene_buffer_as_real_blit_events(self) -> None:
+        """End-to-end honesty: driven ticks must land in the scene buffer as
+        poppable blit events — what the present loop actually consumes."""
+        from luvatrix_core.core.scene_graph import SceneGraphBuffer
+
+        buffer = SceneGraphBuffer()
+        buffer.submit(SceneFrame(
+            revision=0,
+            logical_width=2,
+            logical_height=2,
+            display_width=2,
+            display_height=2,
+            ts_ns=1,
+            nodes=(ClearNode((0, 0, 0, 255)),),
+            content_offset_x=0.0,
+            content_offset_y=40.0,
+        ))
+        while buffer.pop_scene_blit(timeout=None) is not None:
+            pass  # drain the base frame's event
+        backend = self._backend()
+        backend._latest_frame = types.SimpleNamespace(content_offset_x=0.0, content_offset_y=40.0)
+        backend.set_frame_probe_drive_hook(buffer.submit_content_offset)
+        result, thread = self._request_in_thread(backend, frames=2, timeout_s=2.0)
+        self._drive(backend, 2)
+        thread.join(timeout=2.0)
+        self.assertTrue(result.get("complete"), result)
+        events = []
+        while True:
+            event = buffer.pop_scene_blit(timeout=None)
+            if event is None:
+                break
+            events.append(event)
+        # arm tick + one chained tick + the base-offset restore: every driven
+        # publish is a real revision, none absorbed by the dedup.
+        self.assertEqual(len(events), 3, f"driven ticks must be real blit events, got {len(events)}")
+
+    def test_drive_timeout_restores_the_base_offset(self) -> None:
+        backend = self._backend()
+        backend._latest_frame = types.SimpleNamespace(content_offset_x=0.0, content_offset_y=40.0)
+        published: list[tuple[float, float]] = []
+        backend.set_frame_probe_drive_hook(lambda x, y: published.append((x, y)))
+        result = backend.request_frame_time_probe(frames=5, timeout_s=0.2, drive=True)
+        self.assertFalse(result["available"])
+        self.assertEqual(
+            published,
+            [(0.0, 41.0), (0.0, 40.0)],
+            "a stalled chain must still restore the pre-probe content offset",
+        )
+
+    def test_passive_probe_never_touches_the_drive_hook(self) -> None:
+        backend = self._backend()
+        backend._latest_frame = types.SimpleNamespace(content_offset_x=0.0, content_offset_y=40.0)
+        published: list[tuple[float, float]] = []
+        backend.set_frame_probe_drive_hook(lambda x, y: published.append((x, y)))
+        result, thread = self._request_in_thread(backend, frames=2, timeout_s=2.0, drive=False)
+        self._drive(backend, 2)
+        thread.join(timeout=2.0)
+        self.assertEqual(published, [])
+        self.assertTrue(result.get("complete"), result)
+
     def test_arm_fires_hook_and_chains_until_the_target_count(self) -> None:
         """The chained drive is what makes this a synthetic scroll: every
         present re-requests a frame (like a wheel-event stream invalidating),

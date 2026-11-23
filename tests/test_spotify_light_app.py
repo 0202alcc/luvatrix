@@ -12,6 +12,7 @@ import math
 import sys
 import threading
 import time
+import types
 import urllib.parse
 from pathlib import Path
 
@@ -5767,6 +5768,119 @@ class TestWindowMaterial:
 # ---------------------------------------------------------------------------
 # SL-41 retained scroll hot path: content-space scene + GPU content offset
 # ---------------------------------------------------------------------------
+class TestCollapseRestoreRouting:
+    """Round 69 (runner wart on 274cd64): collapse restores the pre-expand
+    view — but when that view sits in an error state (the SL-5 403 flake
+    page with its dead Retry), the restore reads broken even though the
+    toggle worked. Restore must route home instead of landing on a dead
+    error page; healthy views still restore exactly."""
+
+    def test_collapse_restore_routes_home_when_restored_view_is_in_error(self, app_ctx):
+        app, ctx, _ = app_ctx
+        app.authenticated = True
+        app._bootstrap_done = True
+        app.view = "playlist"
+        app.playlist_error = "Couldn't load this playlist"
+        _tick(app, ctx, 1)
+        app._expand_search()
+        assert app.view == "search"
+        app._collapse_search(restore=True)
+        assert app.view == "home", (
+            "restoring onto a dead error page reads broken — route home instead"
+        )
+
+    def test_collapse_restore_returns_to_a_healthy_playlist_view(self, app_ctx):
+        app, ctx, _ = app_ctx
+        app.authenticated = True
+        app._bootstrap_done = True
+        app.view = "playlist"
+        app.playlist_error = ""
+        _tick(app, ctx, 1)
+        app._expand_search()
+        app._collapse_search(restore=True)
+        assert app.view == "playlist", "a healthy pre-expand view must restore exactly"
+
+    def test_collapse_without_restore_never_reroutes(self, app_ctx):
+        app, ctx, _ = app_ctx
+        app.authenticated = True
+        app._bootstrap_done = True
+        app.view = "playlist"
+        app.playlist_error = "Couldn't load this playlist"
+        _tick(app, ctx, 1)
+        app._expand_search()
+        app._collapse_search(restore=False)
+        assert app.view == "search", "restore=False leaves the view untouched (caller navigates)"
+
+
+class TestInvalidationAccounting:
+    """Round 69 (runner: ~15.3 dedup-absorbed renders/s on an untouched Mac,
+    presents already zero): the render-side driver was invisible from the
+    telemetry. invalidate() now tallies by reason — input / timers / bridge /
+    worker / other — and mcp_state exposes the counts, so the next Mac
+    measurement names the render driver instead of inferring it."""
+
+    @staticmethod
+    def _counts(app) -> dict:
+        return dict(getattr(app, "_invalidate_counts", {}))
+
+    def test_input_batch_counts_as_input(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        _tick(app, ctx, 2)
+        from luvatrix_core.core.hdi_thread import HDIEvent
+
+        event = HDIEvent(
+            event_id=1,
+            ts_ns=1,
+            window_id="w",
+            device="mouse",
+            event_type="pointer_move",
+            status="OK",
+            payload={"x": 100.0, "y": 100.0},
+        )
+        monkeypatch.setattr(app.input, "raw_events", lambda *a, **k: [event])
+        before = self._counts(app).get("input", 0)
+        app.update(1.0 / 60.0)
+        assert self._counts(app).get("input", 0) == before + 1
+
+    def test_bridge_event_counts_as_bridge(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        _tick(app, ctx, 2)
+        event = types.SimpleNamespace(kind=app_main.PlaybackEventKind.PLAYBACK_ERROR, payload={})
+        fake_device = types.SimpleNamespace(drain_events=lambda: [event])
+        monkeypatch.setattr(app, "_web_device", fake_device)
+        before = self._counts(app).get("bridge", 0)
+        app._pump_web_playback()
+        assert self._counts(app).get("bridge", 0) == before + 1
+
+    def test_timer_heartbeat_counts_as_timers(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        _tick(app, ctx, 2)
+        clock = [1000.0]
+        monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+        app.search_focused = True
+        before = self._counts(app).get("timers", 0)
+        app._handle_timers()
+        assert self._counts(app).get("timers", 0) >= before + 1
+
+    def test_worker_result_counts_as_worker(self, app_ctx, monkeypatch):
+        app, ctx, _ = app_ctx
+        _tick(app, ctx, 2)
+        monkeypatch.setattr(app.worker, "poll", lambda: [("poll-player", Exception("boom"))])
+        before = self._counts(app).get("worker", 0)
+        app._handle_worker_results()
+        assert self._counts(app).get("worker", 0) == before + 1
+
+    def test_mcp_state_exposes_the_reason_counts(self, app_ctx):
+        app, ctx, _ = app_ctx
+        _tick(app, ctx, 1)
+        app.invalidate(_reason="input")
+        app.invalidate(_reason="timers")
+        state = app.mcp_state()
+        assert "invalidations" in state, "mcp_state must carry the invalidation reason tally"
+        assert state["invalidations"]["input"] >= 1
+        assert state["invalidations"]["timers"] >= 1
+
+
 class TestCaretIdleGating:
     """Round 68 (macOS idle churn, measured on d0504a2): the focused-field
     heartbeat invalidated on EVERY app-loop tick so the caret could blink.

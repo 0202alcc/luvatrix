@@ -8,6 +8,54 @@ import unittest
 from luvatrix_core.platform.macos.hdi_source import MacOSWindowHDISource, _read_pressed_mouse_buttons_mask, _to_top_left_y
 
 
+class PointerMoveDeadzoneTests(unittest.TestCase):
+    """Round 69 (runner: ~15.3 dedup-absorbed renders/s on an untouched Mac):
+    the pointer poll dedups on EXACT float equality, so any subpixel flapping
+    in the reported position (Bluetooth laser noise, trackpad proximity
+    sensors, remote-session cursor keepalives) emits a pointer_move per
+    flap — each one invalidating the app into a render the scene dedup then
+    absorbs. Emission must deadzone below half a point from the last
+    EMITTED position (re-anchoring keeps slow drifts exact), while button
+    changes always pass."""
+
+    def _source(self) -> MacOSWindowHDISource:
+        source = object.__new__(MacOSWindowHDISource)
+        source._last_pointer_payload = None
+        return source
+
+    def test_subpixel_flap_does_not_emit(self) -> None:
+        source = self._source()
+        self.assertTrue(source._pointer_payload_changed({"x": 100.0, "y": 100.0, "buttons_mask": 0}))
+        for i in range(20):
+            dx = 0.2 if i % 2 == 0 else -0.2
+            self.assertFalse(
+                source._pointer_payload_changed({"x": 100.0 + dx, "y": 100.0, "buttons_mask": 0}),
+                f"0.2pt flap at iteration {i} must not emit a pointer_move",
+            )
+
+    def test_slow_drift_reanchors_and_stays_exact(self) -> None:
+        source = self._source()
+        self.assertTrue(source._pointer_payload_changed({"x": 100.0, "y": 100.0, "buttons_mask": 0}))
+        # 0.2pt per poll in one direction: the first two stay under the
+        # deadzone relative to the last EMITTED position; the third reaches
+        # 0.6pt cumulative and must emit the EXACT position (no quantization).
+        self.assertFalse(source._pointer_payload_changed({"x": 100.2, "y": 100.0, "buttons_mask": 0}))
+        self.assertFalse(source._pointer_payload_changed({"x": 100.4, "y": 100.0, "buttons_mask": 0}))
+        self.assertTrue(source._pointer_payload_changed({"x": 100.6, "y": 100.0, "buttons_mask": 0}))
+        # The anchor moved to 100.6: another 0.2 step stays quiet.
+        self.assertFalse(source._pointer_payload_changed({"x": 100.8, "y": 100.0, "buttons_mask": 0}))
+
+    def test_button_change_with_still_pointer_still_emits(self) -> None:
+        source = self._source()
+        self.assertTrue(source._pointer_payload_changed({"x": 100.0, "y": 100.0, "buttons_mask": 0}))
+        self.assertTrue(source._pointer_payload_changed({"x": 100.1, "y": 100.1, "buttons_mask": 1}))
+
+    def test_real_move_emits(self) -> None:
+        source = self._source()
+        self.assertTrue(source._pointer_payload_changed({"x": 100.0, "y": 100.0, "buttons_mask": 0}))
+        self.assertTrue(source._pointer_payload_changed({"x": 112.0, "y": 100.0, "buttons_mask": 0}))
+
+
 class MacOSHDISourceTests(unittest.TestCase):
     def test_to_top_left_y_converts_and_clamps(self) -> None:
         self.assertEqual(_to_top_left_y(99.0, 100.0), 0.0)

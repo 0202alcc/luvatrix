@@ -3,7 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import tempfile
+import types
 import unittest
+
+from luvatrix_core.core.scene_graph import ClearNode, SceneFrame, SceneGraphBuffer
 
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIThread
 from luvatrix_core.core.energy_safety import EnergySafetyDecision
@@ -880,6 +883,75 @@ class SceneBackingScaleWiringTests(unittest.TestCase):
             self.assertEqual(target.backing_scale(), 2.0)
         finally:
             target.stop()
+
+
+class ProbeHookWiringTests(unittest.TestCase):
+    """Round 69: the frame-time probe's drive chain publishes real
+    transform-only revisions (1px content-offset oscillation) instead of
+    dedup-absorbed invalidate nudges — the runtime must wire the backend's
+    drive hook to the scene buffer's submit_content_offset."""
+
+    def _runtime_with_fake_backend(self, buffer: SceneGraphBuffer, wired: dict) -> UnifiedRuntime:
+        class _Backend:
+            def set_drawable_probe_present_hook(self, hook) -> None:
+                wired["present"] = hook
+
+            def set_frame_probe_drive_hook(self, hook) -> None:
+                wired["drive"] = hook
+
+        runtime = UnifiedRuntime.__new__(UnifiedRuntime)
+        target = types.SimpleNamespace(backend=_Backend())
+        runtime._scene_display_runtime = types.SimpleNamespace(target=target)
+        runtime._scene_buffer = buffer
+        return runtime
+
+    def _base_frame(self) -> SceneFrame:
+        return SceneFrame(
+            revision=0,
+            logical_width=2,
+            logical_height=2,
+            display_width=2,
+            display_height=2,
+            ts_ns=1,
+            nodes=(ClearNode((0, 0, 0, 255)),),
+        )
+
+    def test_probe_hooks_wire_invalidate_and_scene_buffer_drive(self) -> None:
+        buffer = SceneGraphBuffer()
+        buffer.submit(self._base_frame())
+        wired: dict = {}
+        runtime = self._runtime_with_fake_backend(buffer, wired)
+        invalidations: list[int] = []
+        lifecycle = types.SimpleNamespace(invalidate=lambda: invalidations.append(1))
+
+        runtime._wire_probe_hooks(lifecycle)
+
+        wired["present"]()
+        self.assertEqual(invalidations, [1], "the present hook stays the app's invalidate")
+        event = wired["drive"](0.0, 41.0)
+        self.assertIsNotNone(event, "the drive hook must publish transform-only revisions")
+        self.assertEqual(buffer.revision, 2)
+        frame = buffer.latest_frame()
+        self.assertIsNotNone(frame)
+        assert frame is not None
+        self.assertEqual(frame.content_offset_y, 41.0)
+
+    def test_drive_hook_absent_backend_still_wires_present_hook(self) -> None:
+        buffer = SceneGraphBuffer()
+        wired: dict = {}
+
+        class _PresentOnlyBackend:
+            def set_drawable_probe_present_hook(self, hook) -> None:
+                wired["present"] = hook
+
+        runtime = UnifiedRuntime.__new__(UnifiedRuntime)
+        target = types.SimpleNamespace(backend=_PresentOnlyBackend())
+        runtime._scene_display_runtime = types.SimpleNamespace(target=target)
+        runtime._scene_buffer = buffer
+        lifecycle = types.SimpleNamespace(invalidate=lambda: None)
+        runtime._wire_probe_hooks(lifecycle)
+        self.assertIn("present", wired)
+        self.assertNotIn("drive", wired)
 
 
 if __name__ == "__main__":
