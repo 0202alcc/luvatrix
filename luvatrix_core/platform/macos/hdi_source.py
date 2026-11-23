@@ -5,6 +5,11 @@ import time
 
 from luvatrix_core.core.hdi_thread import HDIEvent, HDIEventSource
 
+# Pointer moves below this distance from the last EMITTED position do not
+# emit events (see _pointer_payload_changed). Half a point = one pixel on a
+# 2x Retina backing store; hover targets are an order of magnitude larger.
+_POINTER_MOVE_DEADZONE_PT = 0.5
+
 
 class MacOSWindowHDISource(HDIEventSource):
     """Collects local keyboard/mouse/trackpad events for a specific AppKit window.
@@ -389,11 +394,28 @@ class MacOSWindowHDISource(HDIEventSource):
         return out
 
     def _pointer_payload_changed(self, payload: dict[str, float | int]) -> bool:
+        """Emit a pointer_move only for real movement or button changes.
+
+        The dedup anchors on the last EMITTED position with a half-point
+        deadzone (round 69): exact-float equality let subpixel flapping
+        through — Bluetooth laser noise, trackpad proximity sensors,
+        remote-session cursor keepalives — and every flap invalidated the
+        app into a render the scene dedup then absorbed (~15/s on an
+        untouched Mac). Anchor re-emission keeps slow drifts exact: no
+        quantization error accumulates because the emitted payload is the
+        raw position, and the deadzone only gates WHEN to emit.
+        """
         last_payload = getattr(self, "_last_pointer_payload", None)
-        if last_payload == payload:
-            return False
-        self._last_pointer_payload = dict(payload)
-        return True
+        if last_payload is None:
+            self._last_pointer_payload = dict(payload)
+            return True
+        buttons_changed = int(last_payload.get("buttons_mask", -1)) != int(payload.get("buttons_mask", -1))
+        dx = abs(float(payload.get("x", 0.0)) - float(last_payload.get("x", 0.0)))
+        dy = abs(float(payload.get("y", 0.0)) - float(last_payload.get("y", 0.0)))
+        if buttons_changed or dx >= _POINTER_MOVE_DEADZONE_PT or dy >= _POINTER_MOVE_DEADZONE_PT:
+            self._last_pointer_payload = dict(payload)
+            return True
+        return False
 
     # ── cleanup ───────────────────────────────────────────────────────────────
 

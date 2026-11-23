@@ -313,7 +313,7 @@ class UnifiedRuntime:
             if before_lifecycle_init is not None:
                 before_lifecycle_init()
             lifecycle.init(ctx)
-            self._wire_drawable_probe_present_hook(lifecycle)
+            self._wire_probe_hooks(lifecycle)
             tick_idx = 0
             while max_ticks is None or tick_idx < max_ticks:
                 for active_target in active_targets:
@@ -515,17 +515,24 @@ class UnifiedRuntime:
             rgba=snapshot.tobytes(),
         )
 
-    def _wire_drawable_probe_present_hook(self, lifecycle) -> None:
-        """Give the Metal backend's probe a way to request a frame (SL-38c):
-        presents are invalidation-driven, so on an idle app an armed probe
-        would otherwise time out waiting for user activity. Wiring the app's
-        invalidate() makes arming itself nudge one present."""
+    def _wire_probe_hooks(self, lifecycle) -> None:
+        """Give the Metal backend's probes their frame channels (SL-38c,
+        round 69): presents are invalidation-driven, so an armed drawable
+        probe nudges one present through the app's invalidate(); and the
+        frame-time probe's drive chain publishes real transform-only
+        revisions through the scene buffer's submit_content_offset, because
+        bare invalidate nudges render byte-identical frames the scene dedup
+        absorbs (the chain starved at 0/120 on an idle app)."""
         runtime = self._scene_display_runtime
         backend = getattr(getattr(runtime, "target", None), "backend", None)
         setter = getattr(backend, "set_drawable_probe_present_hook", None)
         invalidate = getattr(lifecycle, "invalidate", None)
         if setter is not None and invalidate is not None:
             setter(invalidate)
+        drive_setter = getattr(backend, "set_frame_probe_drive_hook", None)
+        scene_buffer = getattr(self, "_scene_buffer", None)
+        if drive_setter is not None and scene_buffer is not None:
+            drive_setter(scene_buffer.submit_content_offset)
 
     def _mcp_window_stack(self) -> dict[str, Any]:
         """Route app_window_stack to the macOS Metal scene backend (the only

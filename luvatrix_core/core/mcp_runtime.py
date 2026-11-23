@@ -538,9 +538,11 @@ class McpRuntimeBridge:
                 description=(
                     "Time the present path under a synthetic scroll (macOS Metal "
                     "scene target only). Input injection is banned for scroll "
-                    "measurement, so this chains invalidations through the app's "
-                    "present hook — each present re-requests the next, like a "
-                    "wheel-event stream — and records per-frame phase timings: "
+                    "measurement, so the drive publishes a real transform-only "
+                    "revision per tick — a 1px content-offset oscillation "
+                    "around the presented frame's offset, mirroring the "
+                    "retained-scroll hot path and restored when the chain "
+                    "ends — and records per-frame phase timings: "
                     "drawable_wait_ms (CA/GPU backpressure from the window "
                     "backdrop material), setup_ms, encode_ms (scene raster), "
                     "commit_ms, and gap_ms (loop turnaround + app scene build "
@@ -548,9 +550,8 @@ class McpRuntimeBridge:
                     "name the scroll-lag cost center instead of guessing. "
                     "Optional 'frames' (1-600, default 120), 'wait_s' "
                     "(0.5-30, default 10), and 'drive' (default true). "
-                    "drive=false records passively — no synthetic invalidate "
-                    "chain — for hand-scrolled before/after measurements on "
-                    "real content."
+                    "drive=false records passively — no synthetic drive — for "
+                    "hand-scrolled before/after measurements on real content."
                 ),
                 input_schema={
                     "type": "object",

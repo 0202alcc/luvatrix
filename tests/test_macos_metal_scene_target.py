@@ -1447,9 +1447,14 @@ class TestFrameTimeProbe(unittest.TestCase):
             if event is None:
                 break
             events.append(event)
-        # arm tick + one chained tick + the base-offset restore: every driven
-        # publish is a real revision, none absorbed by the dedup.
-        self.assertEqual(len(events), 3, f"driven ticks must be real blit events, got {len(events)}")
+        # arm tick (41) + one chained tick (40): every driven publish is a
+        # real revision. The final restore lands on the offset the buffer
+        # already holds, so the dedup correctly absorbs it.
+        self.assertEqual(len(events), 2, f"driven ticks must be real blit events, got {len(events)}")
+        frame = buffer.latest_frame()
+        self.assertIsNotNone(frame)
+        assert frame is not None
+        self.assertEqual(frame.content_offset_y, 40.0, "the chain leaves the base offset restored")
 
     def test_drive_timeout_restores_the_base_offset(self) -> None:
         backend = self._backend()

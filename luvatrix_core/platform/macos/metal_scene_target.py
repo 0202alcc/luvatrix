@@ -410,6 +410,9 @@ class MacOSMetalSceneBackend:
     _frame_probe_done: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
     _frame_probe_last_committed: float | None = field(default=None, init=False, repr=False)
     _frame_probe_first_started: float | None = field(default=None, init=False, repr=False)
+    _frame_probe_drive_hook: object = field(default=None, init=False, repr=False)
+    _frame_probe_base_offset: tuple[float, float] | None = field(default=None, init=False, repr=False)
+    _frame_probe_drive_phase: int = field(default=0, init=False, repr=False)
     # Runner anomaly (SL-38c): "slow frame #1" printed twice in one boot — the
     # counter is per-instance, so two instances in one process would put
     # arm-state and rendering on different objects and misfire the probe.
@@ -1134,6 +1137,55 @@ class MacOSMetalSceneBackend:
         against the wait window."""
         self._drawable_probe_present_hook = hook
 
+    def set_frame_probe_drive_hook(self, hook) -> None:
+        """Wire the transform-revision publisher for the frame-time probe's
+        drive chain (round 69). The runtime sets this to the scene buffer's
+        submit_content_offset: each driven tick is a real blit event the
+        present loop consumes, not an invalidate the scene dedup absorbs."""
+        self._frame_probe_drive_hook = hook
+
+    def _frame_probe_drive_tick(self) -> None:
+        """Publish the next driven revision: a 1px content-offset oscillation
+        around the presented frame's offset (the retained-scroll hot path).
+        Without a drive hook or a presented frame, fall back to the bare
+        invalidate nudge — the chain needs SOME frame request to start."""
+        frame = getattr(self, "_latest_frame", None)
+        hook = self._frame_probe_drive_hook
+        if hook is None or frame is None:
+            nudge = self._drawable_probe_present_hook
+            if nudge is not None:
+                try:
+                    nudge()
+                except Exception:  # noqa: BLE001 — a failed nudge must not fail the probe
+                    pass
+            return
+        base = self._frame_probe_base_offset
+        if base is None:
+            base = (float(frame.content_offset_x), float(frame.content_offset_y))
+            self._frame_probe_base_offset = base
+        phase = self._frame_probe_drive_phase ^ 1
+        self._frame_probe_drive_phase = phase
+        try:
+            hook(base[0], base[1] + float(phase))
+        except Exception:  # noqa: BLE001 — never break the present loop
+            pass
+
+    def _restore_frame_probe_base_offset(self) -> None:
+        """Return the content offset to its pre-probe value. The oscillation
+        leaves the buffer one pixel off on every other tick; the restore is
+        one more transform-only revision, published after disarm so it never
+        lands in the recorded marks."""
+        base = self._frame_probe_base_offset
+        hook = self._frame_probe_drive_hook
+        self._frame_probe_base_offset = None
+        self._frame_probe_drive_phase = 0
+        if base is None or hook is None:
+            return
+        try:
+            hook(base[0], base[1])
+        except Exception:  # noqa: BLE001 — restore is best-effort
+            pass
+
     def request_drawable_probe(self, *, regions: list | None = None, timeout_s: float = 2.0) -> dict:
         """Arm a one-shot drawable alpha capture and wait for the next present.
 
@@ -1276,17 +1328,23 @@ class MacOSMetalSceneBackend:
                                  drive: bool = True) -> dict:
         """SL-41 ("scrolling is really laggy"): time the present path under a
         synthetic scroll. Input injection is banned on the Mac (403-flake
-        policy), so this chains invalidations through the wired present hook
-        — each present re-requests the next, like a wheel-event stream — and
-        records the present path's own perf marks per frame. The phase split
-        names the cost center: drawable_wait_ms (CA/GPU backpressure — the
-        whole-window VEV recomposite holding drawables), encode_ms (scene
-        raster), commit_ms (command submission), and gap_ms (everything
-        between presents: loop turnaround + app scene build). A timeout
-        still returns the partial series — a stalled chain is itself lag
-        evidence. drive=False (Round 65) arms the recorder with NO nudge
-        chain: a human scrolls real content while presents record passively,
-        so the synthetic chain can't fight the gesture stream."""
+        policy), so the drive publishes a REAL transform-only revision per
+        tick — a 1px content-offset oscillation around the presented frame's
+        offset, through the runtime-wired drive hook (scene buffer's
+        submit_content_offset). That mirrors the retained-scroll hot path the
+        probe exists to time, and it survives the scene dedup that starved
+        the old invalidate-nudge chain (round 69: bare nudges render
+        byte-identical frames, the dedup absorbs them, and the chain captures
+        0 frames). Each present chains the next tick until the target count;
+        the pre-probe offset is restored when the chain ends, complete or
+        not. The phase split names the cost center: drawable_wait_ms (CA/GPU
+        backpressure — the whole-window VEV recomposite holding drawables),
+        encode_ms (scene raster), commit_ms (command submission), and gap_ms
+        (everything between presents: loop turnaround + app scene build). A
+        timeout still returns the partial series — a stalled chain is itself
+        lag evidence. drive=False (Round 65) arms the recorder with NO drive:
+        a human scrolls real content while presents record passively, so the
+        synthetic chain can't fight the gesture stream."""
         if self._state is None:
             return {"available": False, "reason": "backend not initialized",
                     "backend_instance": self._instance_index, "captured_frames": 0}
@@ -1303,16 +1361,15 @@ class MacOSMetalSceneBackend:
         self._frame_probe_last_committed = None
         self._frame_probe_first_started = None
         self._frame_probe_drive = bool(drive)
+        self._frame_probe_base_offset = None
+        self._frame_probe_drive_phase = 0
         self._frame_probe_done.clear()
         self._frame_probe_armed = True
-        hook = self._drawable_probe_present_hook
-        if drive and hook is not None:
-            try:
-                hook()
-            except Exception:  # noqa: BLE001 — a failed nudge must not fail the probe
-                pass
+        if drive:
+            self._frame_probe_drive_tick()
         self._frame_probe_done.wait(timeout)
         self._frame_probe_armed = False
+        self._restore_frame_probe_base_offset()
         marks = list(self._frame_probe_marks)
         if not marks:
             return {"available": False,
@@ -1367,12 +1424,7 @@ class MacOSMetalSceneBackend:
             return
         if not getattr(self, "_frame_probe_drive", True):
             return  # passive recording: presents arrive on their own
-        hook = self._drawable_probe_present_hook
-        if hook is not None:
-            try:
-                hook()
-            except Exception:  # noqa: BLE001 — never break the present loop
-                pass
+        self._frame_probe_drive_tick()
 
 
 def _frame_probe_summary(marks: list[dict]) -> dict:

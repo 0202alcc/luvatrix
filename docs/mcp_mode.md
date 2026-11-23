@@ -92,9 +92,11 @@ sinks from `--audit-sqlite`.
   under `notes`/per-view `error` and never crash the app.
 - `app_frame_time_probe {frames?, wait_s?, drive?}` — time the present path
   under a synthetic scroll (macOS Metal scene target only). Scroll injection
-  is banned for measurement, so by default (`drive: true`) the probe chains
-  invalidations through the app's present hook — each present re-requests
-  the next, like a wheel-event stream — and records per-frame phase timings:
+  is banned for measurement, so by default (`drive: true`) the probe
+  publishes a real transform-only revision per tick — a 1px content-offset
+  oscillation around the presented frame's offset, mirroring the
+  retained-scroll hot path and restored when the chain ends — and records
+  per-frame phase timings:
   `drawable_wait_ms` (CA/GPU backpressure, e.g. the window backdrop material
   recompositing), `setup_ms`, `encode_ms` (scene raster), `commit_ms`, and
   `gap_ms` (present-loop turnaround + app scene build between presents).

@@ -203,6 +203,12 @@ class SpotifyLightApp(App):
         # app-loop tick (round 68: 120fps renders behind the scene dedup are
         # pure battery burn on macOS).
         self._caret_phase = -1
+        # Round 69: invalidate() tallies by reason so an idle-churn
+        # measurement can NAME the render driver (input / timers / bridge /
+        # worker / other) from mcp_state instead of inferring it from
+        # dedup-absorbed submission counts.
+        self._invalidate_counts: dict[str, int] = {}
+        self._invalidate_reason_active: str | None = None
 
         # Under-glass pill (SL-36): a real NSGlassEffectView below the render
         # surface replaces the pill's simulated plate on capable hosts.
@@ -390,7 +396,18 @@ class SpotifyLightApp(App):
         if state_arrived and web.last_state is not None and self._web_is_active():
             self.player = web.last_state
             self._player_synced_at = time.monotonic()
-        self.invalidate()
+        self.invalidate(_reason="bridge")
+
+    def invalidate(self, _reason: str | None = None) -> None:
+        """App.invalidate plus a reason tally (round 69): an idle-churn
+        measurement can read which subsystem asked for renders from
+        mcp_state instead of inferring it from dedup counters."""
+        counts = getattr(self, "_invalidate_counts", None)
+        if counts is None:
+            counts = self._invalidate_counts = {}
+        reason = _reason or getattr(self, "_invalidate_reason_active", None) or "other"
+        counts[reason] = counts.get(reason, 0) + 1
+        super().invalidate()
 
     def _end_session(self) -> None:
         self._stop_web_playback()
@@ -634,16 +651,20 @@ class SpotifyLightApp(App):
     # -- worker results (app thread) -------------------------------------------
 
     def _handle_worker_results(self) -> None:
-        if self._embedded_callback is not None:
-            # Spotify redirected inside the embedded web view: dismiss it and
-            # finish PKCE off-thread. The callback URL never left the app.
-            callback_url = self._embedded_callback
-            self._embedded_callback = None
-            self._end_embedded_login()
-            self.worker.submit("login", lambda: self._job_embedded_exchange(callback_url))
-            self.invalidate()
-        for label, outcome in self.worker.poll():
-            self._apply_result(label, outcome)
+        self._invalidate_reason_active = "worker"
+        try:
+            if self._embedded_callback is not None:
+                # Spotify redirected inside the embedded web view: dismiss it and
+                # finish PKCE off-thread. The callback URL never left the app.
+                callback_url = self._embedded_callback
+                self._embedded_callback = None
+                self._end_embedded_login()
+                self.worker.submit("login", lambda: self._job_embedded_exchange(callback_url))
+                self.invalidate()
+            for label, outcome in self.worker.poll():
+                self._apply_result(label, outcome)
+        finally:
+            self._invalidate_reason_active = None
 
     def _apply_result(self, label: str, outcome) -> None:
         if label == "bootstrap":
@@ -827,7 +848,7 @@ class SpotifyLightApp(App):
         # While playing, tick the progress bar once per second between polls.
         if self.player and self.player.is_playing and now >= self._next_progress_tick:
             self._next_progress_tick = now + 1.0
-            self.invalidate()
+            self.invalidate(_reason="timers")
 
         if self._search_dirty_at is not None and now - self._search_dirty_at >= SEARCH_DEBOUNCE_SECS:
             self._search_dirty_at = None
@@ -835,7 +856,7 @@ class SpotifyLightApp(App):
 
         if self.status_message and now >= self._status_until:
             self.status_message = ""
-            self.invalidate()
+            self.invalidate(_reason="timers")
 
         # Caret blink needs a redraw only when its 2Hz phase flips; hover
         # redraws ride the input path's own invalidations. Invalidating on
@@ -845,7 +866,7 @@ class SpotifyLightApp(App):
             caret_phase = int(now * 2) % 2
             if caret_phase != self._caret_phase:
                 self._caret_phase = caret_phase
-                self.invalidate()
+                self.invalidate(_reason="timers")
 
         # SL-41: the gesture went quiet — one rebuild recentres the draw
         # window and refreshes hover/thumb, and the band DISENGAGES: the
@@ -854,7 +875,7 @@ class SpotifyLightApp(App):
         if self._scroll_settle_due is not None and now >= self._scroll_settle_due:
             self._scroll_settle_due = None
             self._band_engaged = False
-            self.invalidate()
+            self.invalidate(_reason="timers")
 
     # -- input --------------------------------------------------------------------
 
@@ -1059,7 +1080,13 @@ class SpotifyLightApp(App):
 
     def _collapse_search(self, *, restore: bool) -> None:
         if restore:
-            self.view = self._search_pre_expand_view
+            target = self._search_pre_expand_view
+            if target == "playlist" and self.playlist_error:
+                # Round 69: restoring onto the dead 403 error page (the SL-5
+                # flake, with its unhelpful Retry) reads broken even though
+                # the toggle worked — land on home instead.
+                target = "home"
+            self.view = target
         self.search_expanded = False
         self.search_focused = False
 
@@ -1567,6 +1594,7 @@ class SpotifyLightApp(App):
             "content_scroll": round(self.content_scroll, 1),
             "hit_actions": sorted({region.action for region in self._hits}),
             "now_playing": now_playing,
+            "invalidations": dict(getattr(self, "_invalidate_counts", {})),
         }
 
     def mcp_tools(self) -> list[dict]:
@@ -1975,7 +2003,7 @@ class SpotifyLightApp(App):
             # Band-mode wheel ticks publish the offset themselves
             # (transform-only, throttled re-window, settle render); every
             # other input invalidates as today.
-            self.invalidate()
+            self.invalidate(_reason="input")
         self._handle_input(events)
         self._handle_worker_results()
         self._pump_web_playback()

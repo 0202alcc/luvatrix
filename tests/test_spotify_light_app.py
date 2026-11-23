@@ -5894,9 +5894,9 @@ class TestCaretIdleGating:
         count = [0]
         original = app.invalidate
 
-        def counting() -> None:
+        def counting(*args, **kwargs) -> None:
             count[0] += 1
-            original()
+            original(*args, **kwargs)
 
         monkeypatch.setattr(app, "invalidate", counting)
         return count
